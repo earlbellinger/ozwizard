@@ -14,6 +14,7 @@ export interface PhaseOptions {
   warmupTau?: number;
   minAmplitude?: number;
   minSeparation?: number;
+  selection?: "first" | "last";
   reference?: PhaseReference | null;
 }
 
@@ -21,7 +22,7 @@ export interface PhaseResult {
   rows: Row[];
   reference: PhaseReference | null;
   period: number | null;
-  reason: "ok" | "not_enough_rows" | "not_enough_maxima" | "amplitude_below_threshold" | "reference_out_of_range";
+  reason: "ok" | "not_enough_rows" | "not_enough_maxima" | "amplitude_below_threshold" | "reference_out_of_range" | "not_stable_limit_cycle";
 }
 
 function defaultWarmupTau(rows: readonly Row[]): number {
@@ -33,7 +34,7 @@ export function phaseWarmupTau(rows: readonly Row[], requested?: number): number
   return requested !== undefined && Number.isFinite(requested) ? requested : defaultWarmupTau(rows);
 }
 
-export function findLuminosityMaxima(rows: readonly Row[], after: number, minSeparation = 0.5): Row[] {
+export function findLuminosityMaxima(rows: readonly Row[], after: number, minSeparation = 0.75): Row[] {
   const maxima: Row[] = [];
   for (let i = 1; i < rows.length - 1; i += 1) {
     const row = rows[i];
@@ -75,7 +76,10 @@ function buildReference(rows: readonly Row[], options: PhaseOptions): PhaseResul
     return { rows: [], reference: null, period: null, reason: "not_enough_maxima" };
   }
 
-  for (let i = 0; i <= maxima.length - 3; i += 1) {
+  const start = options.selection === "last" ? maxima.length - 3 : 0;
+  const end = options.selection === "last" ? -1 : maxima.length - 3;
+  const direction = options.selection === "last" ? -1 : 1;
+  for (let i = start; options.selection === "last" ? i > end : i <= end; i += direction) {
     const peakRows = [maxima[i], maxima[i + 1], maxima[i + 2]] as [Row, Row, Row];
     const [first, second, third] = peakRows;
     const firstCycleAmplitude = cycleAmplitude(rows, first.tau, second.tau);

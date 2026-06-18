@@ -16,6 +16,7 @@
       maxStep: 0.15,
       minStep: 1e-10,
       maxRows: 5e5,
+      maxAcceptedSteps: 5e5,
       errTol: 1e-7,
       ...overrides
     };
@@ -154,10 +155,11 @@
     let maxNormalizedError = 0;
     let status = "complete";
     let message = "complete";
+    let nextOutputTime = options.outputInterval ? t0 + options.outputInterval : 0;
     while (t < tEnd) {
-      if (points.length >= options.maxRows) {
-        status = "row_limit";
-        message = "row_limit";
+      if (acceptedSteps >= options.maxAcceptedSteps) {
+        status = "step_count_limit";
+        message = "step_count_limit";
         break;
       }
       h = Math.min(h, tEnd - t);
@@ -220,10 +222,23 @@
         }
       }
       if (status !== "complete") break;
-      points.push({ t, y: [...y] });
       const stopped = stopCondition?.(t, y);
+      const shouldStore = !options.outputInterval || t >= nextOutputTime - options.outputInterval * 1e-9 || t >= tEnd || Boolean(stopped);
+      if (shouldStore) {
+        if (points.length >= options.maxRows) {
+          status = "row_limit";
+          message = "row_limit";
+          break;
+        }
+        points.push({ t, y: [...y] });
+        if (options.outputInterval) {
+          while (nextOutputTime <= t + options.outputInterval * 1e-9) {
+            nextOutputTime += options.outputInterval;
+          }
+        }
+      }
       if (stopped) {
-        if (stopped === "runaway" || stopped === "equilibrium" || stopped === "limit_cycle") {
+        if (stopped === "runaway" || stopped === "runaway_trend" || stopped === "equilibrium" || stopped === "limit_cycle") {
           status = stopped;
           message = stopped;
         } else {
@@ -246,7 +261,7 @@
     tau: "#9EA7FF",
     R: "#7FA7FF",
     V: "#FF6F91",
-    P: "#65D68A",
+    H: "#65D68A",
     Uc: "#F0BD3D",
     L: "#C084FC",
     Lr: "#FFD166",
@@ -271,7 +286,7 @@
     tau: "\\ozTau{\\tau}",
     R: "\\ozRadius{R}",
     V: "\\ozVelocity{V}",
-    P: "\\ozPressure{P}",
+    H: "\\ozPressure{H}",
     Uc: "\\ozConvective{U_c}",
     L: "\\ozLuminosity{L}",
     Lr: "\\ozRadiative{L_r}",
@@ -291,7 +306,7 @@
       ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", 0.05, 12, 0.05, 1, COLORS.zeta],
       ["zetac", `\\(${TEX.zetac}\\)`, "convective response", 0.05, 12, 0.05, 1, COLORS.zetac],
       ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.2, COLORS.gammac],
-      ["m", `\\(\\ozMass{m}(\\ozRadius{R})\\)`, "shell mass / geometry", 3.2, 20, 0.1, 10, COLORS.m],
+      ["m", `\\(${TEX.m}\\)`, "shell form factor", 3.2, 20, 0.1, 10, COLORS.m],
       ["gamma1", `\\(${TEX.gamma1}\\)`, "adiabatic exponent", 1.01, 1.67, 0.01, 1.1, COLORS.gamma1],
       ["n", `\\(${TEX.n}\\)`, "opacity-density exponent", 0, 3, 0.05, 1, COLORS.n],
       ["s", `\\(${TEX.s}\\)`, "opacity-temperature exponent", 0, 8, 0.1, 3, COLORS.s],
@@ -301,11 +316,11 @@
     initial: [
       ["r0", `\\(${TEX.R}_0\\)`, "initial radius", 0.75, 1.9, 0.01, 1.4, COLORS.R],
       ["v0", `\\(${TEX.V}_0\\)`, "initial radial velocity", -1.2, 1.2, 0.01, 0, COLORS.V],
-      ["p0", `\\(${TEX.P}_0\\)`, "initial pressure factor", 0.3, 1.8, 0.01, 1, COLORS.P],
+      ["h0", `\\(${TEX.H}_0\\)`, "initial H factor", 0.3, 1.8, 0.01, 1, COLORS.H],
       ["uc0", `\\(${TEX.Uc}_{0}\\)`, "initial convective velocity", 0, 1.8, 0.01, 1, COLORS.Uc]
     ],
     integration: [
-      ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "maximum integration time", 4, 240, 1, 120, COLORS.tEnd],
+      ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "maximum integration time", 1, 3, 0.01, 120, COLORS.tEnd],
       ["step", `\\(\\Delta ${TEX.tau}_0\\)`, "initial step", 5e-4, 0.02, 5e-4, 1e-3, COLORS.step],
       ["maxStep", `\\(\\Delta ${TEX.tau}_{\\max}\\)`, "maximum adaptive step", 5e-3, 0.3, 5e-3, 0.15, COLORS.maxStep],
       ["logRtol", "\\(\\ozNeutral{\\log_{10} r_{tol}}\\)", "modern relative tolerance", -11, -5, 0.25, -8, COLORS.rtol],
@@ -316,20 +331,20 @@
     ]
   };
   var PARAMETER_DESCRIPTIONS = {
-    zeta: "Sets the thermal/pressure relaxation time scale.",
-    zetac: "Sets the convective velocity relaxation time scale.",
-    gammac: "Weights how much of the total flux is carried by convection.",
-    m: "Shell-mass/geometric factor in the exponents. With fixed shell mass, \\(m(R)=m\\); with radius-dependent shell mass, \\(m(R)=3/[1-(\\eta/R)^3]\\), where \\(\\eta=(1-3/m)^{1/3}\\).",
-    gamma1: "Adiabatic exponent used in the pressure response.",
-    n: "Opacity-density exponent in the one-zone luminosity law.",
-    s: "Opacity-temperature exponent in the one-zone luminosity law.",
+    zeta: "Ratio of the model free-fall/dynamical time to the thermal time; larger values make \\(H\\) adjust faster per \\(\\tau\\).",
+    zetac: "Ratio of the model free-fall/dynamical time to the convective adjustment time; larger values make \\(U_c\\) relax faster.",
+    gammac: "Equilibrium convective luminosity fraction \\(\\gamma_c=L_{c0}/L_0\\); the radiative weight is \\(\\gamma_r=1-\\gamma_c\\).",
+    m: "Equilibrium shell-thickness form factor \\(m=3/(1-\\eta^3)\\), where \\(\\eta=R_c/R_0\\). Larger \\(m\\) means a thinner shell.",
+    gamma1: "First adiabatic exponent used in the \\(H\\) response.",
+    n: "Density exponent in the opacity convention \\(\\kappa\\propto\\rho^n T^{-s}\\).",
+    s: "Temperature exponent in the opacity convention \\(\\kappa\\propto\\rho^n T^{-s}\\).",
     sourceExp: "Exponent \\(U\\) in the inner luminosity source \\(R^U\\).",
     cq: "Cubic turbulent damping coefficient in the acceleration equation.",
     r0: "Starting radius of the shell.",
     v0: "Starting radial velocity.",
-    p0: "Starting nonadiabatic pressure factor.",
+    h0: "Starting nonadiabatic pressure factor \\(H\\), not the total gas pressure.",
     uc0: "Starting convective velocity.",
-    tEnd: `Maximum integration time \\(${TEX.tau}\\), measured in free-fall/dynamical time units.`,
+    tEnd: `Maximum integration time \\(${TEX.tau}\\), measured in free-fall/dynamical time units. The slider uses a logarithmic scale.`,
     step: `Initial adaptive step size \\(\\Delta ${TEX.tau}_0\\).`,
     maxStep: `Maximum step size \\(\\Delta ${TEX.tau}_{\\max}\\) allowed for adaptive solvers.`,
     logRtol: "Base-10 logarithm of the modern relative tolerance.",
@@ -338,6 +353,48 @@
     logStabilityTol: "Base-10 logarithm of the stability classification tolerance.",
     stableCycles: "Number of repeated cycles required before a limit cycle is classified stable."
   };
+  var DERIVED_DESCRIPTIONS = [
+    {
+      symbol: "\\(m_{\\mathrm{eff}}(R)\\)",
+      color: COLORS.m,
+      description: "Effective form factor used in the exponents: fixed paper-model \\(m\\), or the optional local extension \\(3/[1-(\\eta/R)^3]\\) with \\(\\eta=(1-3/m)^{1/3}\\)."
+    },
+    {
+      symbol: "\\(B_1\\)",
+      color: COLORS.gamma1,
+      description: "Radiative helper exponent \\(B_1=(s+4)(\\Gamma_1-1)\\)."
+    },
+    {
+      symbol: "\\(b(R)\\)",
+      color: COLORS.Lr,
+      description: "Radiative radius exponent \\(b=4+m_{\\mathrm{eff}}(R)[n-B_1]\\), giving \\(L_r=R^{b(R)}H^{s+4}\\)."
+    },
+    {
+      symbol: "\\(q(R)\\)",
+      color: COLORS.H,
+      description: "Pressure-force exponent \\(q=m_{\\mathrm{eff}}(R)\\Gamma_1-2\\), used in the acceleration term \\(H/R^{q(R)}\\)."
+    },
+    {
+      symbol: "\\(c(R)\\)",
+      color: COLORS.Lc,
+      description: "Convective luminosity radius exponent \\(c=m_{\\mathrm{eff}}(R)-2\\), giving \\(L_c=R^{-c(R)}U_c^3\\)."
+    },
+    {
+      symbol: "\\(d(R)\\)",
+      color: COLORS.Uc,
+      description: "Convective velocity radius exponent \\(d=m_{\\mathrm{eff}}(R)(\\Gamma_1-1)/2\\), used in \\(R^{-d(R)}D\\)."
+    },
+    {
+      symbol: "\\(\\gamma_r\\)",
+      color: COLORS.Lr,
+      description: "Radiative luminosity weight \\(\\gamma_r=1-\\gamma_c\\), so \\(L=\\gamma_rL_r+\\gamma_cL_c\\)."
+    },
+    {
+      symbol: "\\(D\\)",
+      color: COLORS.H,
+      description: "Convective driver: the corrected Stellingwerf form is \\(\\sqrt{H}\\); \\(\\sqrt{|V|}\\) is retained only as a diagnostic variant."
+    }
+  ];
   var presetBase = {
     maxStep: 0.15,
     logRtol: -8,
@@ -347,7 +404,8 @@
     runUntilStable: true,
     logStabilityTol: -2.7,
     stableCycles: 5,
-    phaseMinAmplitude: 1e-4
+    phaseMinAmplitude: 1e-4,
+    phaseMode: "reference"
   };
   var paperBase = {
     ...presetBase,
@@ -359,14 +417,14 @@
     referenceFamily: "ozc-corrected"
   };
   var PRESETS = {
-    Strip: { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "p" },
-    Blue: { ...paperBase, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "p" },
-    Red: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "p" },
-    Thick: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "p" },
-    Unstable: { ...paperBase, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "p" },
-    "OZ1 corrected": { ...presetBase, referenceFamily: "oz1-corrected", phaseWarmupTau: 1, zeta: 1, zetac: 1, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 2, r0: 1.2, v0: 0, p0: 0.8, uc0: 1, tEnd: 120, step: 0.012, logErrTol: -5, variableM: true, driver: "p" },
-    "OZC corrected": { ...ozcBase, zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, p0: 0.9, uc0: 0.7, tEnd: 120, step: 1e-3, logErrTol: -5, variableM: true, driver: "p" },
-    "OZC abs(V) diagnostic": { ...ozcBase, referenceFamily: "diagnostic", zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, p0: 0.9, uc0: 0.7, tEnd: 120, step: 1e-3, logErrTol: -5, variableM: true, driver: "abs-v" }
+    Strip: { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "h" },
+    Blue: { ...paperBase, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "h" },
+    Red: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "h" },
+    Thick: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "h" },
+    Unstable: { ...paperBase, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "h" },
+    "OZ1 corrected": { ...presetBase, referenceFamily: "oz1-corrected", phaseWarmupTau: 1, zeta: 1, zetac: 1, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 2, r0: 1.2, v0: 0, h0: 0.8, uc0: 1, tEnd: 120, step: 0.012, logErrTol: -5, variableM: true, driver: "h" },
+    "OZC corrected": { ...ozcBase, zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 120, step: 1e-3, logErrTol: -5, variableM: true, driver: "h" },
+    "OZC abs(V) diagnostic": { ...ozcBase, referenceFamily: "diagnostic", zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 120, step: 1e-3, logErrTol: -5, variableM: true, driver: "abs-v" }
   };
   function mAt(radius, p) {
     if (!p.variableM) return p.m;
@@ -391,18 +449,18 @@
     const lr = radius ** powers.b * pressure ** (p.s + 4);
     const lc = radius ** -powers.c * convectiveVelocity ** 3;
     const gammar = 1 - p.gammac;
-    return { tau, R: radius, V: velocity, P: pressure, Uc: convectiveVelocity, Lr: lr, Lc: lc, L: gammar * lr + p.gammac * lc };
+    return { tau, R: radius, V: velocity, H: pressure, Uc: convectiveVelocity, Lr: lr, Lc: lc, L: gammar * lr + p.gammac * lc };
   }
   function derivatives(_t, y, p) {
     const [radius, velocity, pressure, convectiveVelocity] = y;
     if (radius <= 0 || pressure <= 0 || !Number.isFinite(radius + velocity + pressure + convectiveVelocity)) {
-      throw new Error("model left the positive-radius/positive-pressure domain");
+      throw new Error("model left the positive-radius/positive-H domain");
     }
     const powers = derivedPowers(radius, p);
     const lr = radius ** powers.b * pressure ** (p.s + 4);
     const lc = radius ** -powers.c * convectiveVelocity ** 3;
     const gammar = 1 - p.gammac;
-    const driver = p.driver === "p" ? Math.sqrt(pressure) : Math.sqrt(Math.abs(velocity));
+    const driver = p.driver === "h" ? Math.sqrt(pressure) : Math.sqrt(Math.abs(velocity));
     return [
       velocity,
       pressure / radius ** powers.q - 1 / radius ** 2 - p.cq * velocity ** 3,
@@ -418,7 +476,9 @@
       initialStep: p.step,
       maxStep: p.maxStep,
       minStep: 1e-10,
-      maxRows: 6e4,
+      maxRows: 14e3,
+      maxAcceptedSteps: 6e5,
+      outputInterval: Math.max(5e-3, p.tEnd / 12e3),
       errTol: 10 ** p.logErrTol
     });
   }
@@ -461,7 +521,7 @@
         window2.push(this.rows[i]);
       }
       if (window2.length < 6 || end - window2.at(-1).tau < this.equilibriumWindow * 0.75) return false;
-      for (const key of ["R", "V", "P", "Uc", "L"]) {
+      for (const key of ["R", "V", "H", "Uc", "L"]) {
         const values = window2.map((row) => row[key]);
         const scale = Math.max(1, ...values.map(Math.abs));
         if ((Math.max(...values) - Math.min(...values)) / scale > this.tolerance) return false;
@@ -494,15 +554,16 @@
   };
   function solveModel(p, solver = p.solver) {
     const detector = new StabilityDetector(10 ** p.logStabilityTol, p.stableCycles);
-    detector.observe(sample(0, [p.r0, p.v0, p.p0, p.uc0], p));
+    detector.observe(sample(0, [p.r0, p.v0, p.h0, p.uc0], p));
     const result = integrate(
       (t, y) => derivatives(t, y, p),
-      [p.r0, p.v0, p.p0, p.uc0],
+      [p.r0, p.v0, p.h0, p.uc0],
       p.tEnd,
       solverOptionsFromParameters(p, solver),
       (t, y) => {
         const row = sample(t, y, p);
-        if (Math.abs(row.R) > 30 || Math.abs(row.L) > 1e5 || Math.abs(row.P) > 1e5) return "runaway";
+        if (Math.abs(row.R) > 30 || Math.abs(row.L) > 1e5 || Math.abs(row.H) > 1e5) return "runaway";
+        if (p.runUntilStable && row.R > 20 && row.V > 0) return "runaway_trend";
         return p.runUntilStable ? detector.observe(row) : null;
       }
     );
@@ -528,7 +589,7 @@
     if (a.tau === b.tau) return a;
     const f = (time - a.tau) / (b.tau - a.tau);
     const blend = (key) => a[key] + (b[key] - a[key]) * f;
-    return { tau: time, R: blend("R"), V: blend("V"), P: blend("P"), Uc: blend("Uc"), Lr: blend("Lr"), Lc: blend("Lc"), L: blend("L") };
+    return { tau: time, R: blend("R"), V: blend("V"), H: blend("H"), Uc: blend("Uc"), Lr: blend("Lr"), Lc: blend("Lc"), L: blend("L") };
   }
   function compareRows(selected, baseline, p) {
     let commonPoints = 0;
@@ -541,7 +602,7 @@
       if (!other) continue;
       commonPoints += 1;
       const stateDelta = Math.sqrt(
-        ["R", "V", "P", "Uc"].reduce((sum, key) => {
+        ["R", "V", "H", "Uc"].reduce((sum, key) => {
           const scale = atol + rtol * Math.max(Math.abs(row[key]), Math.abs(other[key]));
           return sum + ((row[key] - other[key]) / scale) ** 2;
         }, 0) / 4
@@ -560,7 +621,7 @@
   function phaseWarmupTau(rows, requested) {
     return requested !== void 0 && Number.isFinite(requested) ? requested : defaultWarmupTau(rows);
   }
-  function findLuminosityMaxima(rows, after, minSeparation = 0.5) {
+  function findLuminosityMaxima(rows, after, minSeparation = 0.75) {
     const maxima = [];
     for (let i = 1; i < rows.length - 1; i += 1) {
       const row = rows[i];
@@ -598,7 +659,10 @@
     if (maxima.length < 3) {
       return { rows: [], reference: null, period: null, reason: "not_enough_maxima" };
     }
-    for (let i = 0; i <= maxima.length - 3; i += 1) {
+    const start = options.selection === "last" ? maxima.length - 3 : 0;
+    const end = options.selection === "last" ? -1 : maxima.length - 3;
+    const direction = options.selection === "last" ? -1 : 1;
+    for (let i = start; options.selection === "last" ? i > end : i <= end; i += direction) {
       const peakRows = [maxima[i], maxima[i + 1], maxima[i + 2]];
       const [first, second, third] = peakRows;
       const firstCycleAmplitude = cycleAmplitude(rows, first.tau, second.tau);
@@ -651,6 +715,7 @@
   var mathTypesetRunning = false;
   var mathTypesetPending = false;
   var controlElements = /* @__PURE__ */ new Map();
+  var TAU_TICKS = [10, 30, 100, 300, 1e3];
   var THEME = {
     axisGrid: "#26334E",
     axisText: "#A8B4C7",
@@ -738,9 +803,17 @@
       refreshActivePreset();
       scheduleSolve();
     });
+    document.querySelectorAll("[data-phase-mode]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.phaseMode = button.dataset.phaseMode === "final" ? "final" : "reference";
+        updatePhaseModeButtons();
+        refreshActivePreset();
+        drawAll();
+      });
+    });
     document.querySelectorAll("[data-driver]").forEach((button) => {
       button.addEventListener("click", () => {
-        state.driver = button.dataset.driver === "abs-v" ? "abs-v" : "p";
+        state.driver = button.dataset.driver === "abs-v" ? "abs-v" : "h";
         updateDriverButtons();
         refreshActivePreset();
         scheduleSolve();
@@ -750,6 +823,7 @@
     el("downloadCsv").addEventListener("click", downloadCsv);
     window.addEventListener("resize", drawAll);
     updateDriverButtons();
+    updatePhaseModeButtons();
     updateSolverButtons();
     updateAllSliderLabels();
     updateResetButtons();
@@ -799,12 +873,13 @@
           <button class="parameter-reset" type="button" data-reset-key="${key}" title="Restore ${name} to the ${selectedPreset} preset value" aria-label="Restore ${name} to the preset value">\u21BA</button>
         </div>
       </div>
-      <input type="range" min="${min}" max="${max}" step="${step2}" value="${String(state[key])}">
+      <input type="range" min="${min}" max="${max}" step="${step2}" value="${String(sliderInputValue(key))}">
+      ${key === "tEnd" ? tauScaleMarkup() : ""}
     `;
       const input = wrapper.querySelector("input");
       if (!input) throw new Error("missing slider input");
       input.addEventListener("input", (event) => {
-        state[key] = Number(event.target.value);
+        state[key] = valueFromSlider(key, Number(event.target.value));
         updateSliderLabel(key);
         refreshActivePreset();
         scheduleSolve();
@@ -814,18 +889,38 @@
       controlElements.set(key, input);
     });
   }
+  function tauScaleMarkup() {
+    return `<div class="slider-scale">${TAU_TICKS.map((tick) => `<span>${tick}</span>`).join("")}</div>`;
+  }
+  function sliderInputValue(key) {
+    return key === "tEnd" ? Math.log10(state.tEnd) : state[key];
+  }
+  function valueFromSlider(key, value) {
+    if (key !== "tEnd") return value;
+    return Math.min(1e3, Math.max(10, 10 ** value));
+  }
+  function controlValueLabel(key, value) {
+    if (key !== "tEnd") return fmt(value, 5);
+    return fmt(value, value >= 100 ? 0 : 1);
+  }
   function buildParameterTable() {
     const table = el("parameterTable");
     const allControls = [...CONTROL_GROUPS.physical, ...CONTROL_GROUPS.initial, ...CONTROL_GROUPS.integration];
-    table.innerHTML = allControls.map(([key, symbol, _name, _min, _max, _step, _defaultValue, color]) => `
+    const controlRows = allControls.map(([key, symbol, _name, _min, _max, _step, _defaultValue, color]) => `
       <tr>
         <td class="symbol-cell" style="--color:${color}">${symbol}</td>
         <td>${PARAMETER_DESCRIPTIONS[key] || ""}</td>
       </tr>
-    `).join("") + `
+    `).join("");
+    const derivedRows = DERIVED_DESCRIPTIONS.map(({ symbol, description, color }) => `
+      <tr>
+        <td class="symbol-cell" style="--color:${color}">${symbol}</td>
+        <td>${description}</td>
+      </tr>
+    `).join("");
+    table.innerHTML = controlRows + derivedRows + `
       <tr><td class="symbol-cell" data-symbol="tau" style="--color:${COLORS.tau}">\\(${TEX.tau}\\)</td><td>Dimensionless clock scaled by the model's free-fall/dynamical time; derivatives such as \\(dR/d\\tau\\) are per dynamical time unit.</td></tr>
       <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">solver</td><td>Numerical method: RK45 default, DOP853 reference, or historical midpoint.</td></tr>
-      <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">D</td><td>Convective driver: \\(\\sqrt{P}\\) or \\(\\sqrt{|V|}\\).</td></tr>
     `;
     queueMathTypeset();
   }
@@ -833,9 +928,9 @@
     const label = document.querySelector(`[data-value-for="${String(key)}"]`);
     if (!label) return;
     const value = state[key];
-    label.textContent = typeof value === "number" ? fmt(value, 5) : String(value);
+    label.textContent = controlValueLabel(key, value);
     const input = controlElements.get(key);
-    if (input && typeof value === "number") input.value = String(value);
+    if (input) input.value = String(sliderInputValue(key));
   }
   function updateAllSliderLabels() {
     controlElements.forEach((_input, key) => updateSliderLabel(key));
@@ -864,6 +959,11 @@
       button.classList.toggle("active", button.dataset.driver === state.driver);
     });
   }
+  function updatePhaseModeButtons() {
+    document.querySelectorAll("[data-phase-mode]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.phaseMode === state.phaseMode);
+    });
+  }
   function updateSolverButtons() {
     document.querySelectorAll("[data-solver]").forEach((button) => {
       button.classList.toggle("active", button.dataset.solver === state.solver);
@@ -875,6 +975,7 @@
     activePreset = name;
     updatePresetButtons();
     updateDriverButtons();
+    updatePhaseModeButtons();
     updateSolverButtons();
     el("variableM").checked = state.variableM;
     el("compareMidpoint").checked = state.compareMidpoint;
@@ -1027,6 +1128,8 @@
         return "stable equilibrium";
       case "max_time":
         return "tau max reached";
+      case "runaway_trend":
+        return "runaway trend";
       case "complete":
         return runUntilStable ? "tau max reached" : "fixed-time complete";
       case "domain_error":
@@ -1035,6 +1138,8 @@
         return "row limit";
       case "step_limit":
         return "step limit";
+      case "step_count_limit":
+        return "step count limit";
       default:
         return message.replaceAll("_", " ");
     }
@@ -1051,10 +1156,28 @@
         return "phase unavailable: luminosity cycles are below threshold";
       case "reference_out_of_range":
         return "phase unavailable: comparison does not cover the reference window";
+      case "not_stable_limit_cycle":
+        return "phase unavailable: no stable final limit cycle";
     }
   }
   function referenceFamilyLabel(value) {
     return value.replaceAll("-", " ");
+  }
+  function phaseModeLabel(value) {
+    return value === "final" ? "final cycles" : "reference cycles";
+  }
+  function unavailablePhase(reason) {
+    return { rows: [], reference: null, period: null, reason };
+  }
+  function phaseForRows(rows, result) {
+    if (state.phaseMode === "final" && result.message !== "limit_cycle") {
+      return unavailablePhase("not_stable_limit_cycle");
+    }
+    return buildTwoCyclePhase(rows, {
+      warmupTau: state.phaseWarmupTau,
+      minAmplitude: state.phaseMinAmplitude,
+      selection: state.phaseMode === "final" ? "last" : "first"
+    });
   }
   function drawAll() {
     const rows = latestRows;
@@ -1065,10 +1188,7 @@
     const okStatus = latestResult.message === "equilibrium" || latestResult.message === "limit_cycle" || !state.runUntilStable && latestResult.status === "complete";
     statusPill.className = `status-pill ${okStatus ? "status-ok" : "status-warn"}`;
     const final = rows[rows.length - 1];
-    const phase = buildTwoCyclePhase(rows, {
-      warmupTau: state.phaseWarmupTau,
-      minAmplitude: state.phaseMinAmplitude
-    });
+    const phase = phaseForRows(rows, latestResult);
     const comparisonPhase = comparisonRows.length && phase.reference ? buildTwoCyclePhase(comparisonRows, { reference: phase.reference }) : null;
     const comparison = comparisonResult && comparisonRows.length ? compareRows(rows, comparisonRows, state) : null;
     const comparisonText = comparison ? `<span class="metric">midpoint \u0394y<b>${fmt(comparison.maxStateDelta, 3)}</b></span><span class="metric">midpoint \u0394L<b>${fmt(comparison.maxLuminosityDelta, 3)}</b></span>` : "";
@@ -1076,7 +1196,8 @@
       ["solver", state.solver.toUpperCase()],
       ["stop reason", stopReason],
       ["reference", referenceFamilyLabel(state.referenceFamily)],
-      ["driver", state.driver === "p" ? "sqrt(P)" : "sqrt(|V|)"],
+      ["phase mode", phaseModeLabel(state.phaseMode)],
+      ["driver", state.driver === "h" ? "sqrt(H)" : "sqrt(|V|)"],
       ["gamma_c", fmt(state.gammac, 3)],
       ["zeta", fmt(state.zeta, 3)],
       ["zeta_c", fmt(state.zetac, 3)],
@@ -1087,7 +1208,7 @@
       ["rejected", latestResult.stats.rejectedSteps],
       ["max err", fmt(latestResult.stats.maxNormalizedError, 3)],
       ["period", phase.period ? fmt(phase.period, 3) : "n/a"],
-      ["phase", phase.reason === "ok" ? "max-to-max" : "unavailable"],
+      ["phase", phase.reason === "ok" ? phaseModeLabel(state.phaseMode) : "unavailable"],
       ["final R", final ? fmt(final.R, 3) : "n/a"],
       ["final L", final ? fmt(final.L, 3) : "n/a"]
     ].map(([label, value]) => `<span class="metric">${label}<b>${value}</b></span>`).join("") + comparisonText;
@@ -1114,13 +1235,13 @@
     drawSeries("timeCanvas", [
       { label: "R", color: COLORS.R, rows: sampled, x: (row) => row.tau, y: (row) => row.R },
       { label: "V", color: COLORS.V, rows: sampled, x: (row) => row.tau, y: (row) => row.V },
-      { label: "P", color: COLORS.P, rows: sampled, x: (row) => row.tau, y: (row) => row.P },
+      { label: "H", color: COLORS.H, rows: sampled, x: (row) => row.tau, y: (row) => row.H },
       { label: "Uc", color: COLORS.Uc, rows: sampled, x: (row) => row.tau, y: (row) => row.Uc }
     ], { xlabel: "time \u03C4", ylabel: "state", xlabelColor: COLORS.tau });
     drawLegend("timeLegend", [
       { label: `\\(${TEX.R}\\) radius`, color: COLORS.R },
       { label: `\\(${TEX.V}\\) radial velocity`, color: COLORS.V },
-      { label: `\\(${TEX.P}\\) pressure`, color: COLORS.P },
+      { label: `\\(${TEX.H}\\) nonadiabatic pressure factor`, color: COLORS.H },
       { label: `\\(${TEX.Uc}\\) convective velocity`, color: COLORS.Uc }
     ]);
     drawSeries("lumCanvas", [
@@ -1137,7 +1258,7 @@
   }
   function downloadCsv() {
     if (!latestRows.length) return;
-    const headers = ["tau", "R", "V", "P", "Uc", "Lr", "Lc", "L"];
+    const headers = ["tau", "R", "V", "H", "Uc", "Lr", "Lc", "L"];
     const body = latestRows.map((row) => headers.map((key) => row[key]).join(",")).join("\n");
     const blob = new Blob([`${headers.join(",")}
 ${body}`], { type: "text/csv" });

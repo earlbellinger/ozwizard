@@ -1,7 +1,8 @@
 import { type OdeResult, type SolverName, type SolverOptions, defaultSolverOptions, integrate } from "./solvers";
 
-export type Driver = "p" | "abs-v";
+export type Driver = "h" | "abs-v";
 export type ReferenceFamily = "paper-corrected" | "oz1-corrected" | "ozc-corrected" | "diagnostic";
+export type PhaseMode = "reference" | "final";
 
 export interface ModelParameters {
   zeta: number;
@@ -15,7 +16,7 @@ export interface ModelParameters {
   cq: number;
   r0: number;
   v0: number;
-  p0: number;
+  h0: number;
   uc0: number;
   tEnd: number;
   step: number;
@@ -33,13 +34,14 @@ export interface ModelParameters {
   referenceFamily: ReferenceFamily;
   phaseWarmupTau?: number;
   phaseMinAmplitude: number;
+  phaseMode: PhaseMode;
 }
 
 export interface Row {
   tau: number;
   R: number;
   V: number;
-  P: number;
+  H: number;
   Uc: number;
   Lr: number;
   Lc: number;
@@ -57,7 +59,7 @@ export const COLORS = {
   tau: "#9EA7FF",
   R: "#7FA7FF",
   V: "#FF6F91",
-  P: "#65D68A",
+  H: "#65D68A",
   Uc: "#F0BD3D",
   L: "#C084FC",
   Lr: "#FFD166",
@@ -83,7 +85,7 @@ export const TEX = {
   tau: "\\ozTau{\\tau}",
   R: "\\ozRadius{R}",
   V: "\\ozVelocity{V}",
-  P: "\\ozPressure{P}",
+  H: "\\ozPressure{H}",
   Uc: "\\ozConvective{U_c}",
   L: "\\ozLuminosity{L}",
   Lr: "\\ozRadiative{L_r}",
@@ -112,7 +114,7 @@ export const CONTROL_GROUPS: Record<"physical" | "initial" | "integration", Cont
     ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", 0.05, 12, 0.05, 1, COLORS.zeta],
     ["zetac", `\\(${TEX.zetac}\\)`, "convective response", 0.05, 12, 0.05, 1, COLORS.zetac],
     ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.2, COLORS.gammac],
-    ["m", `\\(\\ozMass{m}(\\ozRadius{R})\\)`, "shell mass / geometry", 3.2, 20, 0.1, 10, COLORS.m],
+    ["m", `\\(${TEX.m}\\)`, "shell form factor", 3.2, 20, 0.1, 10, COLORS.m],
     ["gamma1", `\\(${TEX.gamma1}\\)`, "adiabatic exponent", 1.01, 1.67, 0.01, 1.1, COLORS.gamma1],
     ["n", `\\(${TEX.n}\\)`, "opacity-density exponent", 0, 3, 0.05, 1, COLORS.n],
     ["s", `\\(${TEX.s}\\)`, "opacity-temperature exponent", 0, 8, 0.1, 3, COLORS.s],
@@ -122,11 +124,11 @@ export const CONTROL_GROUPS: Record<"physical" | "initial" | "integration", Cont
   initial: [
     ["r0", `\\(${TEX.R}_0\\)`, "initial radius", 0.75, 1.9, 0.01, 1.4, COLORS.R],
     ["v0", `\\(${TEX.V}_0\\)`, "initial radial velocity", -1.2, 1.2, 0.01, 0, COLORS.V],
-    ["p0", `\\(${TEX.P}_0\\)`, "initial pressure factor", 0.3, 1.8, 0.01, 1, COLORS.P],
+    ["h0", `\\(${TEX.H}_0\\)`, "initial H factor", 0.3, 1.8, 0.01, 1, COLORS.H],
     ["uc0", `\\(${TEX.Uc}_{0}\\)`, "initial convective velocity", 0, 1.8, 0.01, 1, COLORS.Uc]
   ],
   integration: [
-    ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "maximum integration time", 4, 240, 1, 120, COLORS.tEnd],
+    ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "maximum integration time", 1, 3, 0.01, 120, COLORS.tEnd],
     ["step", `\\(\\Delta ${TEX.tau}_0\\)`, "initial step", 0.0005, 0.02, 0.0005, 0.001, COLORS.step],
     ["maxStep", `\\(\\Delta ${TEX.tau}_{\\max}\\)`, "maximum adaptive step", 0.005, 0.3, 0.005, 0.15, COLORS.maxStep],
     ["logRtol", "\\(\\ozNeutral{\\log_{10} r_{tol}}\\)", "modern relative tolerance", -11, -5, 0.25, -8, COLORS.rtol],
@@ -138,20 +140,20 @@ export const CONTROL_GROUPS: Record<"physical" | "initial" | "integration", Cont
 };
 
 export const PARAMETER_DESCRIPTIONS: Partial<Record<keyof ModelParameters, string>> = {
-  zeta: "Sets the thermal/pressure relaxation time scale.",
-  zetac: "Sets the convective velocity relaxation time scale.",
-  gammac: "Weights how much of the total flux is carried by convection.",
-  m: "Shell-mass/geometric factor in the exponents. With fixed shell mass, \\(m(R)=m\\); with radius-dependent shell mass, \\(m(R)=3/[1-(\\eta/R)^3]\\), where \\(\\eta=(1-3/m)^{1/3}\\).",
-  gamma1: "Adiabatic exponent used in the pressure response.",
-  n: "Opacity-density exponent in the one-zone luminosity law.",
-  s: "Opacity-temperature exponent in the one-zone luminosity law.",
+  zeta: "Ratio of the model free-fall/dynamical time to the thermal time; larger values make \\(H\\) adjust faster per \\(\\tau\\).",
+  zetac: "Ratio of the model free-fall/dynamical time to the convective adjustment time; larger values make \\(U_c\\) relax faster.",
+  gammac: "Equilibrium convective luminosity fraction \\(\\gamma_c=L_{c0}/L_0\\); the radiative weight is \\(\\gamma_r=1-\\gamma_c\\).",
+  m: "Equilibrium shell-thickness form factor \\(m=3/(1-\\eta^3)\\), where \\(\\eta=R_c/R_0\\). Larger \\(m\\) means a thinner shell.",
+  gamma1: "First adiabatic exponent used in the \\(H\\) response.",
+  n: "Density exponent in the opacity convention \\(\\kappa\\propto\\rho^n T^{-s}\\).",
+  s: "Temperature exponent in the opacity convention \\(\\kappa\\propto\\rho^n T^{-s}\\).",
   sourceExp: "Exponent \\(U\\) in the inner luminosity source \\(R^U\\).",
   cq: "Cubic turbulent damping coefficient in the acceleration equation.",
   r0: "Starting radius of the shell.",
   v0: "Starting radial velocity.",
-  p0: "Starting nonadiabatic pressure factor.",
+  h0: "Starting nonadiabatic pressure factor \\(H\\), not the total gas pressure.",
   uc0: "Starting convective velocity.",
-  tEnd: `Maximum integration time \\(${TEX.tau}\\), measured in free-fall/dynamical time units.`,
+  tEnd: `Maximum integration time \\(${TEX.tau}\\), measured in free-fall/dynamical time units. The slider uses a logarithmic scale.`,
   step: `Initial adaptive step size \\(\\Delta ${TEX.tau}_0\\).`,
   maxStep: `Maximum step size \\(\\Delta ${TEX.tau}_{\\max}\\) allowed for adaptive solvers.`,
   logRtol: "Base-10 logarithm of the modern relative tolerance.",
@@ -160,6 +162,49 @@ export const PARAMETER_DESCRIPTIONS: Partial<Record<keyof ModelParameters, strin
   logStabilityTol: "Base-10 logarithm of the stability classification tolerance.",
   stableCycles: "Number of repeated cycles required before a limit cycle is classified stable."
 };
+
+export const DERIVED_DESCRIPTIONS: Array<{ symbol: string; description: string; color: string }> = [
+  {
+    symbol: "\\(m_{\\mathrm{eff}}(R)\\)",
+    color: COLORS.m,
+    description: "Effective form factor used in the exponents: fixed paper-model \\(m\\), or the optional local extension \\(3/[1-(\\eta/R)^3]\\) with \\(\\eta=(1-3/m)^{1/3}\\)."
+  },
+  {
+    symbol: "\\(B_1\\)",
+    color: COLORS.gamma1,
+    description: "Radiative helper exponent \\(B_1=(s+4)(\\Gamma_1-1)\\)."
+  },
+  {
+    symbol: "\\(b(R)\\)",
+    color: COLORS.Lr,
+    description: "Radiative radius exponent \\(b=4+m_{\\mathrm{eff}}(R)[n-B_1]\\), giving \\(L_r=R^{b(R)}H^{s+4}\\)."
+  },
+  {
+    symbol: "\\(q(R)\\)",
+    color: COLORS.H,
+    description: "Pressure-force exponent \\(q=m_{\\mathrm{eff}}(R)\\Gamma_1-2\\), used in the acceleration term \\(H/R^{q(R)}\\)."
+  },
+  {
+    symbol: "\\(c(R)\\)",
+    color: COLORS.Lc,
+    description: "Convective luminosity radius exponent \\(c=m_{\\mathrm{eff}}(R)-2\\), giving \\(L_c=R^{-c(R)}U_c^3\\)."
+  },
+  {
+    symbol: "\\(d(R)\\)",
+    color: COLORS.Uc,
+    description: "Convective velocity radius exponent \\(d=m_{\\mathrm{eff}}(R)(\\Gamma_1-1)/2\\), used in \\(R^{-d(R)}D\\)."
+  },
+  {
+    symbol: "\\(\\gamma_r\\)",
+    color: COLORS.Lr,
+    description: "Radiative luminosity weight \\(\\gamma_r=1-\\gamma_c\\), so \\(L=\\gamma_rL_r+\\gamma_cL_c\\)."
+  },
+  {
+    symbol: "\\(D\\)",
+    color: COLORS.H,
+    description: "Convective driver: the corrected Stellingwerf form is \\(\\sqrt{H}\\); \\(\\sqrt{|V|}\\) is retained only as a diagnostic variant."
+  }
+];
 
 const presetBase = {
   maxStep: 0.15,
@@ -170,7 +215,8 @@ const presetBase = {
   runUntilStable: true,
   logStabilityTol: -2.7,
   stableCycles: 5,
-  phaseMinAmplitude: 1e-4
+  phaseMinAmplitude: 1e-4,
+  phaseMode: "reference" as PhaseMode
 };
 
 const paperBase = {
@@ -185,14 +231,14 @@ const ozcBase = {
 };
 
 export const PRESETS: Record<string, ModelParameters> = {
-  Strip: { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "p" },
-  Blue: { ...paperBase, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "p" },
-  Red: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "p" },
-  Thick: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "p" },
-  Unstable: { ...paperBase, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "p" },
-  "OZ1 corrected": { ...presetBase, referenceFamily: "oz1-corrected", phaseWarmupTau: 1, zeta: 1, zetac: 1, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 2, r0: 1.2, v0: 0, p0: 0.8, uc0: 1, tEnd: 120, step: 0.012, logErrTol: -5, variableM: true, driver: "p" },
-  "OZC corrected": { ...ozcBase, zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, p0: 0.9, uc0: 0.7, tEnd: 120, step: 0.001, logErrTol: -5, variableM: true, driver: "p" },
-  "OZC abs(V) diagnostic": { ...ozcBase, referenceFamily: "diagnostic", zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, p0: 0.9, uc0: 0.7, tEnd: 120, step: 0.001, logErrTol: -5, variableM: true, driver: "abs-v" }
+  Strip: { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "h" },
+  Blue: { ...paperBase, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "h" },
+  Red: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "h" },
+  Thick: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "h" },
+  Unstable: { ...paperBase, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "h" },
+  "OZ1 corrected": { ...presetBase, referenceFamily: "oz1-corrected", phaseWarmupTau: 1, zeta: 1, zetac: 1, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 2, r0: 1.2, v0: 0, h0: 0.8, uc0: 1, tEnd: 120, step: 0.012, logErrTol: -5, variableM: true, driver: "h" },
+  "OZC corrected": { ...ozcBase, zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 120, step: 0.001, logErrTol: -5, variableM: true, driver: "h" },
+  "OZC abs(V) diagnostic": { ...ozcBase, referenceFamily: "diagnostic", zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 120, step: 0.001, logErrTol: -5, variableM: true, driver: "abs-v" }
 };
 
 export function mAt(radius: number, p: ModelParameters): number {
@@ -220,19 +266,19 @@ export function sample(tau: number, y: readonly number[], p: ModelParameters): R
   const lr = radius ** powers.b * pressure ** (p.s + 4);
   const lc = radius ** (-powers.c) * convectiveVelocity ** 3;
   const gammar = 1 - p.gammac;
-  return { tau, R: radius, V: velocity, P: pressure, Uc: convectiveVelocity, Lr: lr, Lc: lc, L: gammar * lr + p.gammac * lc };
+  return { tau, R: radius, V: velocity, H: pressure, Uc: convectiveVelocity, Lr: lr, Lc: lc, L: gammar * lr + p.gammac * lc };
 }
 
 export function derivatives(_t: number, y: readonly number[], p: ModelParameters): number[] {
   const [radius, velocity, pressure, convectiveVelocity] = y;
   if (radius <= 0 || pressure <= 0 || !Number.isFinite(radius + velocity + pressure + convectiveVelocity)) {
-    throw new Error("model left the positive-radius/positive-pressure domain");
+    throw new Error("model left the positive-radius/positive-H domain");
   }
   const powers = derivedPowers(radius, p);
   const lr = radius ** powers.b * pressure ** (p.s + 4);
   const lc = radius ** (-powers.c) * convectiveVelocity ** 3;
   const gammar = 1 - p.gammac;
-  const driver = p.driver === "p" ? Math.sqrt(pressure) : Math.sqrt(Math.abs(velocity));
+  const driver = p.driver === "h" ? Math.sqrt(pressure) : Math.sqrt(Math.abs(velocity));
   return [
     velocity,
     pressure / radius ** powers.q - 1 / radius ** 2 - p.cq * velocity ** 3,
@@ -249,7 +295,9 @@ export function solverOptionsFromParameters(p: ModelParameters, solver = p.solve
     initialStep: p.step,
     maxStep: p.maxStep,
     minStep: 1e-10,
-    maxRows: 60000,
+    maxRows: 14000,
+    maxAcceptedSteps: 600000,
+    outputInterval: Math.max(0.005, p.tEnd / 12000),
     errTol: 10 ** p.logErrTol
   });
 }
@@ -299,7 +347,7 @@ class StabilityDetector {
       window.push(this.rows[i]);
     }
     if (window.length < 6 || end - window.at(-1)!.tau < this.equilibriumWindow * 0.75) return false;
-    for (const key of ["R", "V", "P", "Uc", "L"] as const) {
+    for (const key of ["R", "V", "H", "Uc", "L"] as const) {
       const values = window.map((row) => row[key]);
       const scale = Math.max(1, ...values.map(Math.abs));
       if ((Math.max(...values) - Math.min(...values)) / scale > this.tolerance) return false;
@@ -337,15 +385,16 @@ class StabilityDetector {
 
 export function solveModel(p: ModelParameters, solver = p.solver): SolveResult {
   const detector = new StabilityDetector(10 ** p.logStabilityTol, p.stableCycles);
-  detector.observe(sample(0, [p.r0, p.v0, p.p0, p.uc0], p));
+  detector.observe(sample(0, [p.r0, p.v0, p.h0, p.uc0], p));
   const result = integrate(
     (t, y) => derivatives(t, y, p),
-    [p.r0, p.v0, p.p0, p.uc0],
+    [p.r0, p.v0, p.h0, p.uc0],
     p.tEnd,
     solverOptionsFromParameters(p, solver),
     (t, y) => {
       const row = sample(t, y, p);
-      if (Math.abs(row.R) > 30 || Math.abs(row.L) > 1e5 || Math.abs(row.P) > 1e5) return "runaway";
+      if (Math.abs(row.R) > 30 || Math.abs(row.L) > 1e5 || Math.abs(row.H) > 1e5) return "runaway";
+      if (p.runUntilStable && row.R > 20 && row.V > 0) return "runaway_trend";
       return p.runUntilStable ? detector.observe(row) : null;
     }
   );
@@ -372,7 +421,7 @@ function interpolateRow(rows: readonly Row[], time: number): Row | null {
   if (a.tau === b.tau) return a;
   const f = (time - a.tau) / (b.tau - a.tau);
   const blend = (key: keyof Row) => a[key] + (b[key] - a[key]) * f;
-  return { tau: time, R: blend("R"), V: blend("V"), P: blend("P"), Uc: blend("Uc"), Lr: blend("Lr"), Lc: blend("Lc"), L: blend("L") };
+  return { tau: time, R: blend("R"), V: blend("V"), H: blend("H"), Uc: blend("Uc"), Lr: blend("Lr"), Lc: blend("Lc"), L: blend("L") };
 }
 
 export interface ComparisonMetrics {
@@ -392,7 +441,7 @@ export function compareRows(selected: readonly Row[], baseline: readonly Row[], 
     if (!other) continue;
     commonPoints += 1;
     const stateDelta = Math.sqrt(
-      (["R", "V", "P", "Uc"] as const).reduce((sum, key) => {
+      (["R", "V", "H", "Uc"] as const).reduce((sum, key) => {
         const scale = atol + rtol * Math.max(Math.abs(row[key]), Math.abs(other[key]));
         return sum + ((row[key] - other[key]) / scale) ** 2;
       }, 0) / 4

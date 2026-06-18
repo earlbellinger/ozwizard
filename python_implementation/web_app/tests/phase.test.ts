@@ -22,7 +22,7 @@ function syntheticRows(): Row[] {
       tau,
       R: 1,
       V: Math.sin(2 * Math.PI * tau),
-      P: 1,
+      H: 1,
       Uc: 1,
       Lr: luminosity,
       Lc: 0,
@@ -71,5 +71,14 @@ describe("phase folding", () => {
     expect(midpointPhase.reason).toBe("ok");
     expect(midpointPhase.rows[0].tau).toBeGreaterThanOrEqual(0);
     expect(midpointPhase.rows.at(-1)!.tau).toBeLessThanOrEqual(2);
+  });
+
+  it("can select final cycles separately from the reference cycles", () => {
+    const rows = syntheticRows();
+    const referencePhase = buildTwoCyclePhase(rows, { warmupTau: 0, minAmplitude: 0.1, minSeparation: 0.5 });
+    const finalPhase = buildTwoCyclePhase(rows, { warmupTau: 0, minAmplitude: 0.1, minSeparation: 0.5, selection: "last" });
+    expect(referencePhase.reference?.startTau).toBeCloseTo(1, 12);
+    expect(finalPhase.reference?.startTau).toBeCloseTo(2, 12);
+    expect(finalPhase.period).toBeCloseTo(referencePhase.period ?? 0, 12);
   });
 });

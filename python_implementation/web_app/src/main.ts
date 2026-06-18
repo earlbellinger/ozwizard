@@ -1,12 +1,14 @@
 import {
   COLORS,
   CONTROL_GROUPS,
+  DERIVED_DESCRIPTIONS,
   PARAMETER_DESCRIPTIONS,
   PRESETS,
   TEX,
   type ControlParameterKey,
   type ControlDef,
   type ModelParameters,
+  type PhaseMode,
   type Row,
   compareRows,
   solveModel
@@ -37,6 +39,7 @@ let mathTypesetRunning = false;
 let mathTypesetPending = false;
 
 const controlElements = new Map<ControlParameterKey, HTMLInputElement>();
+const TAU_TICKS = [10, 30, 100, 300, 1000];
 const THEME = {
   axisGrid: "#26334E",
   axisText: "#A8B4C7",
@@ -136,9 +139,18 @@ function buildControls(): void {
     scheduleSolve();
   });
 
+  document.querySelectorAll<HTMLButtonElement>("[data-phase-mode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.phaseMode = button.dataset.phaseMode === "final" ? "final" : "reference";
+      updatePhaseModeButtons();
+      refreshActivePreset();
+      drawAll();
+    });
+  });
+
   document.querySelectorAll<HTMLButtonElement>("[data-driver]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.driver = button.dataset.driver === "abs-v" ? "abs-v" : "p";
+      state.driver = button.dataset.driver === "abs-v" ? "abs-v" : "h";
       updateDriverButtons();
       refreshActivePreset();
       scheduleSolve();
@@ -149,6 +161,7 @@ function buildControls(): void {
   el<HTMLButtonElement>("downloadCsv").addEventListener("click", downloadCsv);
   window.addEventListener("resize", drawAll);
   updateDriverButtons();
+  updatePhaseModeButtons();
   updateSolverButtons();
   updateAllSliderLabels();
   updateResetButtons();
@@ -201,12 +214,13 @@ function buildSliderGroup(containerId: string, controls: ControlDef[]): void {
           <button class="parameter-reset" type="button" data-reset-key="${key}" title="Restore ${name} to the ${selectedPreset} preset value" aria-label="Restore ${name} to the preset value">↺</button>
         </div>
       </div>
-      <input type="range" min="${min}" max="${max}" step="${step}" value="${String(state[key])}">
+      <input type="range" min="${min}" max="${max}" step="${step}" value="${String(sliderInputValue(key))}">
+      ${key === "tEnd" ? tauScaleMarkup() : ""}
     `;
     const input = wrapper.querySelector("input");
     if (!input) throw new Error("missing slider input");
     input.addEventListener("input", (event) => {
-      state[key] = Number((event.target as HTMLInputElement).value) as never;
+      state[key] = valueFromSlider(key, Number((event.target as HTMLInputElement).value));
       updateSliderLabel(key);
       refreshActivePreset();
       scheduleSolve();
@@ -217,20 +231,46 @@ function buildSliderGroup(containerId: string, controls: ControlDef[]): void {
   });
 }
 
+function tauScaleMarkup(): string {
+  return `<div class="slider-scale">${TAU_TICKS.map((tick) => `<span>${tick}</span>`).join("")}</div>`;
+}
+
+function sliderInputValue(key: ControlParameterKey): number {
+  return key === "tEnd" ? Math.log10(state.tEnd) : state[key];
+}
+
+function valueFromSlider(key: ControlParameterKey, value: number): number {
+  if (key !== "tEnd") return value;
+  return Math.min(1000, Math.max(10, 10 ** value));
+}
+
+function controlValueLabel(key: ControlParameterKey, value: number): string {
+  if (key !== "tEnd") return fmt(value, 5);
+  return fmt(value, value >= 100 ? 0 : 1);
+}
+
 function buildParameterTable(): void {
   const table = el<HTMLTableSectionElement>("parameterTable");
   const allControls = [...CONTROL_GROUPS.physical, ...CONTROL_GROUPS.initial, ...CONTROL_GROUPS.integration];
-  table.innerHTML = allControls
+  const controlRows = allControls
     .map(([key, symbol, _name, _min, _max, _step, _defaultValue, color]) => `
       <tr>
         <td class="symbol-cell" style="--color:${color}">${symbol}</td>
         <td>${PARAMETER_DESCRIPTIONS[key] || ""}</td>
       </tr>
     `)
-    .join("") + `
+    .join("");
+  const derivedRows = DERIVED_DESCRIPTIONS
+    .map(({ symbol, description, color }) => `
+      <tr>
+        <td class="symbol-cell" style="--color:${color}">${symbol}</td>
+        <td>${description}</td>
+      </tr>
+    `)
+    .join("");
+  table.innerHTML = controlRows + derivedRows + `
       <tr><td class="symbol-cell" data-symbol="tau" style="--color:${COLORS.tau}">\\(${TEX.tau}\\)</td><td>Dimensionless clock scaled by the model's free-fall/dynamical time; derivatives such as \\(dR/d\\tau\\) are per dynamical time unit.</td></tr>
       <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">solver</td><td>Numerical method: RK45 default, DOP853 reference, or historical midpoint.</td></tr>
-      <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">D</td><td>Convective driver: \\(\\sqrt{P}\\) or \\(\\sqrt{|V|}\\).</td></tr>
     `;
   queueMathTypeset();
 }
@@ -239,9 +279,9 @@ function updateSliderLabel(key: ControlParameterKey): void {
   const label = document.querySelector(`[data-value-for="${String(key)}"]`);
   if (!label) return;
   const value = state[key];
-  label.textContent = typeof value === "number" ? fmt(value, 5) : String(value);
+  label.textContent = controlValueLabel(key, value);
   const input = controlElements.get(key);
-  if (input && typeof value === "number") input.value = String(value);
+  if (input) input.value = String(sliderInputValue(key));
 }
 
 function updateAllSliderLabels(): void {
@@ -276,6 +316,12 @@ function updateDriverButtons(): void {
   });
 }
 
+function updatePhaseModeButtons(): void {
+  document.querySelectorAll<HTMLButtonElement>("[data-phase-mode]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.phaseMode === state.phaseMode);
+  });
+}
+
 function updateSolverButtons(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-solver]").forEach((button) => {
     button.classList.toggle("active", button.dataset.solver === state.solver);
@@ -288,6 +334,7 @@ function applyPreset(name: string): void {
   activePreset = name;
   updatePresetButtons();
   updateDriverButtons();
+  updatePhaseModeButtons();
   updateSolverButtons();
   el<HTMLInputElement>("variableM").checked = state.variableM;
   el<HTMLInputElement>("compareMidpoint").checked = state.compareMidpoint;
@@ -479,6 +526,8 @@ function stopReasonLabel(message: string, runUntilStable: boolean): string {
       return "stable equilibrium";
     case "max_time":
       return "tau max reached";
+    case "runaway_trend":
+      return "runaway trend";
     case "complete":
       return runUntilStable ? "tau max reached" : "fixed-time complete";
     case "domain_error":
@@ -487,6 +536,8 @@ function stopReasonLabel(message: string, runUntilStable: boolean): string {
       return "row limit";
     case "step_limit":
       return "step limit";
+    case "step_count_limit":
+      return "step count limit";
     default:
       return message.replaceAll("_", " ");
   }
@@ -504,11 +555,32 @@ function phaseUnavailableLabel(phase: PhaseResult): string | undefined {
       return "phase unavailable: luminosity cycles are below threshold";
     case "reference_out_of_range":
       return "phase unavailable: comparison does not cover the reference window";
+    case "not_stable_limit_cycle":
+      return "phase unavailable: no stable final limit cycle";
   }
 }
 
 function referenceFamilyLabel(value: ModelParameters["referenceFamily"]): string {
   return value.replaceAll("-", " ");
+}
+
+function phaseModeLabel(value: PhaseMode): string {
+  return value === "final" ? "final cycles" : "reference cycles";
+}
+
+function unavailablePhase(reason: PhaseResult["reason"]): PhaseResult {
+  return { rows: [], reference: null, period: null, reason };
+}
+
+function phaseForRows(rows: Row[], result: ReturnType<typeof solveModel>): PhaseResult {
+  if (state.phaseMode === "final" && result.message !== "limit_cycle") {
+    return unavailablePhase("not_stable_limit_cycle");
+  }
+  return buildTwoCyclePhase(rows, {
+    warmupTau: state.phaseWarmupTau,
+    minAmplitude: state.phaseMinAmplitude,
+    selection: state.phaseMode === "final" ? "last" : "first"
+  });
 }
 
 function drawAll(): void {
@@ -522,10 +594,7 @@ function drawAll(): void {
     || (!state.runUntilStable && latestResult.status === "complete");
   statusPill.className = `status-pill ${okStatus ? "status-ok" : "status-warn"}`;
   const final = rows[rows.length - 1];
-  const phase = buildTwoCyclePhase(rows, {
-    warmupTau: state.phaseWarmupTau,
-    minAmplitude: state.phaseMinAmplitude
-  });
+  const phase = phaseForRows(rows, latestResult);
   const comparisonPhase = comparisonRows.length && phase.reference
     ? buildTwoCyclePhase(comparisonRows, { reference: phase.reference })
     : null;
@@ -537,7 +606,8 @@ function drawAll(): void {
     ["solver", state.solver.toUpperCase()],
     ["stop reason", stopReason],
     ["reference", referenceFamilyLabel(state.referenceFamily)],
-    ["driver", state.driver === "p" ? "sqrt(P)" : "sqrt(|V|)"],
+    ["phase mode", phaseModeLabel(state.phaseMode)],
+    ["driver", state.driver === "h" ? "sqrt(H)" : "sqrt(|V|)"],
     ["gamma_c", fmt(state.gammac, 3)],
     ["zeta", fmt(state.zeta, 3)],
     ["zeta_c", fmt(state.zetac, 3)],
@@ -548,7 +618,7 @@ function drawAll(): void {
     ["rejected", latestResult.stats.rejectedSteps],
     ["max err", fmt(latestResult.stats.maxNormalizedError, 3)],
     ["period", phase.period ? fmt(phase.period, 3) : "n/a"],
-    ["phase", phase.reason === "ok" ? "max-to-max" : "unavailable"],
+    ["phase", phase.reason === "ok" ? phaseModeLabel(state.phaseMode) : "unavailable"],
     ["final R", final ? fmt(final.R, 3) : "n/a"],
     ["final L", final ? fmt(final.L, 3) : "n/a"]
   ].map(([label, value]) => `<span class="metric">${label}<b>${value}</b></span>`).join("") + comparisonText;
@@ -579,13 +649,13 @@ function drawAll(): void {
   drawSeries("timeCanvas", [
     { label: "R", color: COLORS.R, rows: sampled, x: (row) => row.tau, y: (row) => row.R },
     { label: "V", color: COLORS.V, rows: sampled, x: (row) => row.tau, y: (row) => row.V },
-    { label: "P", color: COLORS.P, rows: sampled, x: (row) => row.tau, y: (row) => row.P },
+    { label: "H", color: COLORS.H, rows: sampled, x: (row) => row.tau, y: (row) => row.H },
     { label: "Uc", color: COLORS.Uc, rows: sampled, x: (row) => row.tau, y: (row) => row.Uc }
   ], { xlabel: "time τ", ylabel: "state", xlabelColor: COLORS.tau });
   drawLegend("timeLegend", [
     { label: `\\(${TEX.R}\\) radius`, color: COLORS.R },
     { label: `\\(${TEX.V}\\) radial velocity`, color: COLORS.V },
-    { label: `\\(${TEX.P}\\) pressure`, color: COLORS.P },
+    { label: `\\(${TEX.H}\\) nonadiabatic pressure factor`, color: COLORS.H },
     { label: `\\(${TEX.Uc}\\) convective velocity`, color: COLORS.Uc }
   ]);
 
@@ -604,7 +674,7 @@ function drawAll(): void {
 
 function downloadCsv(): void {
   if (!latestRows.length) return;
-  const headers: Array<keyof Row> = ["tau", "R", "V", "P", "Uc", "Lr", "Lc", "L"];
+  const headers: Array<keyof Row> = ["tau", "R", "V", "H", "Uc", "Lr", "Lc", "L"];
   const body = latestRows.map((row) => headers.map((key) => row[key]).join(",")).join("\n");
   const blob = new Blob([`${headers.join(",")}\n${body}`], { type: "text/csv" });
   const url = URL.createObjectURL(blob);

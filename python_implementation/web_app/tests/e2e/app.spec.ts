@@ -21,10 +21,10 @@ test("app renders solver controls, canvases, and comparison metrics", async ({ p
   await expect(tauRow).toContainText("free-fall/dynamical time");
   await expect(tauCell).toHaveCSS("color", "rgb(158, 167, 255)");
   await expect(page.locator("#timeLegend")).toContainText("radius");
-  await expect(page.locator("#timeLegend")).toContainText("pressure");
+  await expect(page.locator("#timeLegend")).toContainText("nonadiabatic pressure factor");
   const legendHtml = await page.locator("#timeLegend").innerHTML();
   expect(legendHtml).toContain("R");
-  expect(legendHtml).toContain("P");
+  expect(legendHtml).toContain("H");
   const hasPaint = await page.locator("#lightCanvas").evaluate((canvas) => {
     const node = canvas as HTMLCanvasElement;
     const ctx = node.getContext("2d");
@@ -35,6 +35,9 @@ test("app renders solver controls, canvases, and comparison metrics", async ({ p
 
   await page.getByRole("button", { name: "DOP853" }).click();
   await expect(page.getByRole("button", { name: "DOP853" })).toHaveClass(/active/);
+  await page.getByRole("button", { name: "Final cycles" }).click();
+  await expect(page.getByRole("button", { name: "Final cycles" })).toHaveClass(/active/);
+  await expect(page.locator("#metrics")).toContainText("final cycles");
   await page.getByLabel("Compare selected solver to midpoint").check();
   await expect(page.getByText("midpoint Δy")).toBeVisible();
 
@@ -44,6 +47,6 @@ test("app renders solver controls, canvases, and comparison metrics", async ({ p
   const path = await download.path();
   expect(path).toBeTruthy();
   const csv = await readFile(path!, "utf8");
-  expect(csv.split(/\r?\n/, 1)[0]).toBe("tau,R,V,P,Uc,Lr,Lc,L");
+  expect(csv.split(/\r?\n/, 1)[0]).toBe("tau,R,V,H,Uc,Lr,Lc,L");
   expect(pageErrors).toEqual([]);
 });

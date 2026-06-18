@@ -2,7 +2,7 @@ export type State = number[];
 export type Derivative = (t: number, y: readonly number[]) => State;
 export type StopCondition = (t: number, y: readonly number[]) => string | null;
 export type SolverName = "midpoint" | "rk45" | "dop853";
-export type SolverStatus = "complete" | "runaway" | "domain_error" | "step_limit" | "row_limit" | "equilibrium" | "limit_cycle";
+export type SolverStatus = "complete" | "runaway" | "runaway_trend" | "domain_error" | "step_limit" | "step_count_limit" | "row_limit" | "equilibrium" | "limit_cycle";
 
 export const DEFAULT_SOLVER: SolverName = "rk45";
 export const SOLVER_NAMES: SolverName[] = ["rk45", "dop853", "midpoint"];
@@ -15,6 +15,8 @@ export interface SolverOptions {
   maxStep: number;
   minStep: number;
   maxRows: number;
+  maxAcceptedSteps: number;
+  outputInterval?: number;
   errTol?: number;
 }
 
@@ -49,6 +51,7 @@ export function defaultSolverOptions(overrides: Partial<SolverOptions> = {}): So
     maxStep: 0.15,
     minStep: 1e-10,
     maxRows: 500000,
+    maxAcceptedSteps: 500000,
     errTol: 1e-7,
     ...overrides
   };
@@ -208,11 +211,12 @@ export function integrate(
   let maxNormalizedError = 0;
   let status: SolverStatus = "complete";
   let message = "complete";
+  let nextOutputTime = options.outputInterval ? t0 + options.outputInterval : 0;
 
   while (t < tEnd) {
-    if (points.length >= options.maxRows) {
-      status = "row_limit";
-      message = "row_limit";
+    if (acceptedSteps >= options.maxAcceptedSteps) {
+      status = "step_count_limit";
+      message = "step_count_limit";
       break;
     }
     h = Math.min(h, tEnd - t);
@@ -281,10 +285,26 @@ export function integrate(
     }
 
     if (status !== "complete") break;
-    points.push({ t, y: [...y] });
     const stopped = stopCondition?.(t, y);
+    const shouldStore = !options.outputInterval
+      || t >= nextOutputTime - options.outputInterval * 1e-9
+      || t >= tEnd
+      || Boolean(stopped);
+    if (shouldStore) {
+      if (points.length >= options.maxRows) {
+        status = "row_limit";
+        message = "row_limit";
+        break;
+      }
+      points.push({ t, y: [...y] });
+      if (options.outputInterval) {
+        while (nextOutputTime <= t + options.outputInterval * 1e-9) {
+          nextOutputTime += options.outputInterval;
+        }
+      }
+    }
     if (stopped) {
-      if (stopped === "runaway" || stopped === "equilibrium" || stopped === "limit_cycle") {
+      if (stopped === "runaway" || stopped === "runaway_trend" || stopped === "equilibrium" || stopped === "limit_cycle") {
         status = stopped;
         message = stopped;
       } else {

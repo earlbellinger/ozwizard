@@ -415,6 +415,15 @@
       accent-color: var(--accent, var(--focus));
     }
 
+    .slider-scale {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 2px;
+      color: var(--subtle);
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+
     .plots-header {
       display: grid;
       grid-template-columns: 1fr;
@@ -724,7 +733,7 @@
 
       <div class="section-title">Convective Driver</div>
       <div class="driver-row">
-        <button type="button" data-driver="p" class="active">\(\sqrt{P}\)</button>
+        <button type="button" data-driver="h" class="active">\(\sqrt{H}\)</button>
         <button type="button" data-driver="abs-v">\(\sqrt{|V|}\)</button>
       </div>
 
@@ -739,8 +748,14 @@
         <input id="runUntilStable" type="checkbox" checked>
       </label>
 
+      <div class="section-title">Phase Window</div>
+      <div class="driver-row">
+        <button type="button" data-phase-mode="reference" class="active">Reference cycles</button>
+        <button type="button" data-phase-mode="final">Final cycles</button>
+      </div>
+
       <label class="toggle-line">
-        <span>Use radius-dependent shell mass \(m(R)\)</span>
+        <span>Use radius-dependent geometry \(m_{\mathrm{eff}}(R)\)</span>
         <input id="variableM" type="checkbox">
       </label>
 
@@ -815,8 +830,8 @@
             <span class="symbol-cell" style="--color:var(--velocity)">\(\ozVelocity{V}\)</span> describe the mechanical motion.
             The independent clock <span class="symbol-cell" style="--color:var(--tau)">\(\ozTau{\tau}\)</span>
             is scaled by the model's free-fall/dynamical time.
-            The nonadiabatic pressure factor <span class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{P}\)</span>
-            stores thermal energy, while the convective velocity
+            The nonadiabatic pressure factor <span class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{H}\)</span>
+            carries the thermal/pressure response, while the convective velocity
             <span class="symbol-cell" style="--color:var(--convective)">\(\ozConvective{U_c}\)</span> relaxes toward a
             mixing-length-like value on the convective time scale.
           </p>
@@ -847,7 +862,7 @@
               <tr><td class="symbol-cell" data-symbol="tau" style="--color:var(--tau)">\(\ozTau{\tau}\)</td><td>Independent time</td><td>Dimensionless clock scaled by the model's free-fall/dynamical time; derivatives such as \(dR/d\tau\) are per dynamical time unit.</td></tr>
               <tr><td class="symbol-cell" style="--color:var(--radius)">\(\ozRadius{R}\)</td><td>Radius</td><td>Dimensionless radius of the moving shell.</td></tr>
               <tr><td class="symbol-cell" style="--color:var(--velocity)">\(\ozVelocity{V}\)</td><td>Radial velocity</td><td>Time derivative of the shell radius.</td></tr>
-              <tr><td class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{P}\)</td><td>Pressure factor</td><td>Nonadiabatic pressure or thermal state variable.</td></tr>
+              <tr><td class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{H}\)</td><td>Nonadiabatic pressure factor</td><td>Normalized factor carrying nonadiabatic pressure/thermal response, not total gas pressure.</td></tr>
               <tr><td class="symbol-cell" style="--color:var(--convective)">\(\ozConvective{U_c}\)</td><td>Convective velocity</td><td>Time-dependent turbulent/convective velocity scale.</td></tr>
               <tr><td class="symbol-cell" style="--color:var(--radiative)">\(\ozRadiative{L_r}\)</td><td>Radiative luminosity</td><td>Radiative luminosity-like flux leaving the shell.</td></tr>
               <tr><td class="symbol-cell" style="--color:var(--conv-lum)">\(\ozConvLum{L_c}\)</td><td>Convective luminosity</td><td>Convective luminosity-like flux proportional to \(U_c^3\).</td></tr>
@@ -864,12 +879,12 @@
             \frac{d\ozRadius{R}}{d\ozTau{\tau}} &=
               \ozVelocity{V},\\[0.35em]
             \frac{d\ozVelocity{V}}{d\ozTau{\tau}} &=
-              \frac{\ozPressure{P}}{\ozRadius{R}^{q(\ozRadius{R})}}
+              \frac{\ozPressure{H}}{\ozRadius{R}^{q(\ozRadius{R})}}
               - \frac{1}{\ozRadius{R}^{2}}
               - \ozDamping{C_q}\ozVelocity{V}^{3},\\[0.35em]
-            \frac{d\ozPressure{P}}{d\ozTau{\tau}} &=
+            \frac{d\ozPressure{H}}{d\ozTau{\tau}} &=
               \ozZeta{\zeta}\,
-              \ozRadius{R}^{\ozMass{m}(\ozRadius{R})(\ozGamma{\Gamma_1}-1)}
+              \ozRadius{R}^{m_{\mathrm{eff}}(\ozRadius{R})(\ozGamma{\Gamma_1}-1)}
               \left[
                 \ozRadius{R}^{\ozSource{U}}
                 - \ozNeutral{\gamma_r}\ozRadiative{L_r}
@@ -889,22 +904,22 @@
             \begin{aligned}
             \ozRadiative{L_r} &=
               \ozRadius{R}^{b(\ozRadius{R})}
-              \ozPressure{P}^{\ozPink{s}+4},\\[0.35em]
+              \ozPressure{H}^{\ozPink{s}+4},\\[0.35em]
             \ozConvLum{L_c} &=
               \ozRadius{R}^{-c(\ozRadius{R})}
               \ozConvective{U_c}^{3},\\[0.35em]
             \ozLuminosity{L} &=
               \ozNeutral{\gamma_r}\ozRadiative{L_r}
               + \ozGammac{\gamma_c}\ozConvLum{L_c},\\[0.35em]
-            D &= \sqrt{\ozPressure{P}}
+            D &= \sqrt{\ozPressure{H}}
               \quad\text{or}\quad
               \sqrt{|\ozVelocity{V}|}.
             \end{aligned}
             \]
           </div>
           <p class="small-note">
-            With fixed shell mass, \(m(R)=m\). With the toggle enabled,
-            \(m(R)=3/[1-(\eta/R)^3]\), where \(\eta=(1-3/m)^{1/3}\).
+            With fixed geometry, \(m_{\mathrm{eff}}(R)=m=3/(1-\eta^3)\). With the toggle enabled,
+            \(m_{\mathrm{eff}}(R)=3/[1-(\eta/R)^3]\), where \(\eta=(1-3/m)^{1/3}\).
           </p>
         </div>
 

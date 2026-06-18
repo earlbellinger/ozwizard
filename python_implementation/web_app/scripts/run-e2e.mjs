@@ -87,7 +87,10 @@ async function runPlaywrightChecks() {
     assertOk(hasPaint, "light curve canvas was blank");
 
     const timeLegend = await page.locator("#timeLegend").textContent();
-    assertOk(timeLegend?.includes("radius") && timeLegend.includes("pressure"), "time legend did not render expected entries");
+    assertOk(
+      timeLegend?.includes("radius") && timeLegend.includes("nonadiabatic pressure factor"),
+      "time legend did not render expected entries"
+    );
 
     await page.getByRole("button", { name: "DOP853" }).click();
     assertOk((await page.getByRole("button", { name: "DOP853" }).getAttribute("class"))?.includes("active"), "DOP853 was not active after click");
@@ -102,7 +105,7 @@ async function runPlaywrightChecks() {
     const path = await download.path();
     assertOk(Boolean(path), "download path was missing");
     const csv = await readFile(path, "utf8");
-    assertOk(csv.split(/\r?\n/, 1)[0] === "tau,R,V,P,Uc,Lr,Lc,L", "downloaded CSV header was incorrect");
+    assertOk(csv.split(/\r?\n/, 1)[0] === "tau,R,V,H,Uc,Lr,Lc,L", "downloaded CSV header was incorrect");
     assertOk(pageErrors.length === 0, `page errors: ${pageErrors.join("; ")}`);
     console.log("download passed");
   } finally {
