@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="470" viewBox="0 0 860 470">
+<defs>
+<marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+<path d="M0,0 L8,4 L0,8 Z" fill="#111"/>
+</marker>
+<pattern id="dots" width="8" height="8" patternUnits="userSpaceOnUse">
+<circle cx="2" cy="2" r="1.1" fill="#111"/>
+</pattern>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(135)">
+<line x1="0" y1="0" x2="0" y2="7" stroke="#111" stroke-width="1"/>
+</pattern>
+</defs>
+<rect width="100%" height="100%" fill="#fff"/>
+<rect x="62.00" y="32.00" width="360.00" height="180.00" fill="none" stroke="#111" stroke-width="1.4"/>
+<line x1="62.00" y1="32.00" x2="62.00" y2="40.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="62.00" y1="212.00" x2="62.00" y2="204.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="152.00" y1="32.00" x2="152.00" y2="40.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="152.00" y1="212.00" x2="152.00" y2="204.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="242.00" y1="32.00" x2="242.00" y2="40.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="242.00" y1="212.00" x2="242.00" y2="204.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="332.00" y1="32.00" x2="332.00" y2="40.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="332.00" y1="212.00" x2="332.00" y2="204.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="422.00" y1="32.00" x2="422.00" y2="40.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="422.00" y1="212.00" x2="422.00" y2="204.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="62.00" y1="212.00" x2="70.00" y2="212.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="422.00" y1="212.00" x2="414.00" y2="212.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="50.00" y="216.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">0.86</text>
+<line x1="62.00" y1="152.00" x2="70.00" y2="152.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="422.00" y1="152.00" x2="414.00" y2="152.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="50.00" y="156.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">0.95</text>
+<line x1="62.00" y1="92.00" x2="70.00" y2="92.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="422.00" y1="92.00" x2="414.00" y2="92.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="50.00" y="96.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">1.04</text>
+<line x1="62.00" y1="32.00" x2="70.00" y2="32.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="422.00" y1="32.00" x2="414.00" y2="32.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="50.00" y="36.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">1.13</text>
+<polyline points="64.48,60.40 67.11,59.13 69.76,58.00 72.44,57.03 75.15,56.19 77.91,55.50 80.72,54.94 83.63,54.51 86.70,54.21 90.17,54.04 93.02,54.02 95.80,54.08 98.36,54.19 100.83,54.35 103.24,54.54 105.60,54.75 107.93,54.96 110.22,55.18 112.48,55.40 114.71,55.61 116.92,55.80 119.10,55.97 121.26,56.11 123.40,56.23 125.50,56.32 127.59,56.38 129.64,56.40 131.66,56.40 133.68,56.36 135.76,56.28 137.92,56.16 140.16,56.00 142.48,55.79 144.90,55.53 147.43,55.20 150.08,54.82 152.89,54.36 155.91,53.82 159.22,53.18 163.11,52.38 166.90,51.57 170.21,50.85 173.50,50.14 176.63,49.48 179.65,48.86 182.60,48.29 185.50,47.75 188.36,47.27 191.19,46.83 194.00,46.44 196.79,46.11 199.56,45.82 202.33,45.59 205.08,45.41 207.83,45.29 210.57,45.22 213.31,45.21 216.06,45.25 218.94,45.34 222.04,45.51 225.42,45.75 229.22,46.12 234.06,46.69 237.90,47.23 241.70,47.83 245.25,48.44 248.66,49.06 251.99,49.70 255.27,50.37 258.52,51.05 261.76,51.75 265.01,52.47 268.28,53.20 271.58,53.97 274.94,54.76 278.37,55.59 281.90,56.45 285.58,57.38 289.47,58.40 293.73,59.54 298.79,60.97 303.19,62.28 307.52,63.65 311.50,64.98 315.28,66.32 318.96,67.70 322.58,69.14 326.18,70.66 329.77,72.27 333.37,73.99 336.98,75.82 340.64,77.80 344.33,79.92 348.07,82.22 351.86,84.71 355.71,87.40 359.61,90.31 363.55,93.46 367.50,96.85 371.43,100.47 375.31,104.31 379.10,108.36 382.79,112.60 386.37,117.03 389.81,121.66 393.15,126.49 396.37,131.56 399.48,136.90 402.51,142.56 405.45,148.59 408.32,155.06 411.12,162.05 413.49,168.56 415.43,174.43 417.01,179.58 418.29,184.03 419.30,187.77 420.10,190.86 420.71,193.33 421.17,195.23 421.50,196.63 421.73,197.61 421.87,198.21 421.89,198.33 421.92,198.45 421.94,198.54 421.96,198.64 421.98,198.70 421.99,198.76 421.99,198.77 422.00,198.78 422.00,198.78 422.00,198.79 422.00,198.79 422.00,198.79 422.00,198.79 422.00,198.79 422.00,198.79 422.00,198.79 422.00,198.79 422.00,198.79" fill="none" stroke="#111" stroke-width="1.7" />
+<text x="384.00" y="60.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="13" font-weight="bold">a</text>
+<text x="191.60" y="131.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="15" font-weight="bold">R</text>
+<rect x="62.00" y="212.00" width="360.00" height="180.00" fill="none" stroke="#111" stroke-width="1.4"/>
+<line x1="62.00" y1="212.00" x2="62.00" y2="220.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="62.00" y1="392.00" x2="62.00" y2="384.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="62.00" y="415.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">0</text>
+<line x1="152.00" y1="212.00" x2="152.00" y2="220.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="152.00" y1="392.00" x2="152.00" y2="384.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="152.00" y="415.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">1.56</text>
+<line x1="242.00" y1="212.00" x2="242.00" y2="220.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="242.00" y1="392.00" x2="242.00" y2="384.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="242.00" y="415.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">3.12</text>
+<line x1="332.00" y1="212.00" x2="332.00" y2="220.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="332.00" y1="392.00" x2="332.00" y2="384.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="332.00" y="415.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">4.67</text>
+<line x1="422.00" y1="212.00" x2="422.00" y2="220.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="422.00" y1="392.00" x2="422.00" y2="384.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="422.00" y="415.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">6.23</text>
+<line x1="62.00" y1="392.00" x2="70.00" y2="392.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="422.00" y1="392.00" x2="414.00" y2="392.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="50.00" y="396.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">-0.41</text>
+<line x1="62.00" y1="332.00" x2="70.00" y2="332.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="422.00" y1="332.00" x2="414.00" y2="332.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="50.00" y="336.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">-0.25</text>
+<line x1="62.00" y1="272.00" x2="70.00" y2="272.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="422.00" y1="272.00" x2="414.00" y2="272.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="50.00" y="276.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">-0.09</text>
+<line x1="62.00" y1="212.00" x2="70.00" y2="212.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="422.00" y1="212.00" x2="414.00" y2="212.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="50.00" y="216.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">0.07</text>
+<polyline points="64.48,223.03 67.11,224.94 69.76,226.84 72.44,228.71 75.15,230.54 77.91,232.30 80.72,234.00 83.63,235.62 86.70,237.16 90.17,238.70 93.02,239.77 95.80,240.66 98.36,241.33 100.83,241.84 103.24,242.22 105.60,242.47 107.93,242.60 110.22,242.63 112.48,242.57 114.71,242.41 116.92,242.18 119.10,241.88 121.26,241.52 123.40,241.12 125.50,240.67 127.59,240.19 129.64,239.68 131.66,239.17 133.68,238.64 135.76,238.09 137.92,237.51 140.16,236.92 142.48,236.32 144.90,235.73 147.43,235.14 150.08,234.58 152.89,234.04 155.91,233.55 159.22,233.12 163.11,232.76 166.90,232.58 170.21,232.55 173.50,232.64 176.63,232.83 179.65,233.10 182.60,233.45 185.50,233.85 188.36,234.32 191.19,234.82 194.00,235.37 196.79,235.94 199.56,236.54 202.33,237.16 205.08,237.78 207.83,238.41 210.57,239.04 213.31,239.67 216.06,240.28 218.94,240.91 222.04,241.56 225.42,242.24 229.22,242.95 234.06,243.76 237.90,244.33 241.70,244.84 245.25,245.25 248.66,245.60 251.99,245.89 255.27,246.15 258.52,246.37 261.76,246.56 265.01,246.73 268.28,246.89 271.58,247.04 274.94,247.20 278.37,247.36 281.90,247.55 285.58,247.76 289.47,248.03 293.73,248.38 298.79,248.87 303.19,249.38 307.52,249.97 311.50,250.59 315.28,251.25 318.96,251.96 322.58,252.72 326.18,253.54 329.77,254.42 333.37,255.36 336.98,256.38 340.64,257.47 344.33,258.64 348.07,259.91 351.86,261.28 355.71,262.77 359.61,264.40 363.55,266.17 367.50,268.11 371.43,270.24 375.31,272.57 379.10,275.12 382.79,277.91 386.37,280.98 389.81,284.37 393.15,288.12 396.37,292.32 399.48,297.05 402.51,302.41 405.45,308.56 408.32,315.70 411.12,324.06 413.49,332.50 415.43,340.66 417.01,348.31 418.29,355.26 419.30,361.40 420.10,366.65 420.71,370.97 421.17,374.39 421.50,376.95 421.73,378.75 421.87,379.88 421.89,380.10 421.92,380.33 421.94,380.50 421.96,380.68 421.98,380.80 421.99,380.92 421.99,380.93 422.00,380.94 422.00,380.95 422.00,380.96 422.00,380.96 422.00,380.97 422.00,380.97 422.00,380.97 422.00,380.97 422.00,380.97 422.00,380.97 422.00,380.97" fill="none" stroke="#111" stroke-width="1.7" />
+<text x="384.00" y="240.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="13" font-weight="bold">b</text>
+<text x="191.60" y="311.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="15" font-weight="bold">V</text>
+<rect x="432.00" y="32.00" width="360.00" height="180.00" fill="none" stroke="#111" stroke-width="1.4"/>
+<line x1="432.00" y1="32.00" x2="432.00" y2="40.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="432.00" y1="212.00" x2="432.00" y2="204.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="522.00" y1="32.00" x2="522.00" y2="40.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="522.00" y1="212.00" x2="522.00" y2="204.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="612.00" y1="32.00" x2="612.00" y2="40.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="612.00" y1="212.00" x2="612.00" y2="204.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="702.00" y1="32.00" x2="702.00" y2="40.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="702.00" y1="212.00" x2="702.00" y2="204.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="792.00" y1="32.00" x2="792.00" y2="40.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="792.00" y1="212.00" x2="792.00" y2="204.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="432.00" y1="212.00" x2="440.00" y2="212.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="792.00" y1="212.00" x2="784.00" y2="212.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="420.00" y="216.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">-0.04</text>
+<line x1="432.00" y1="152.00" x2="440.00" y2="152.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="792.00" y1="152.00" x2="784.00" y2="152.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="420.00" y="156.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">0.65</text>
+<line x1="432.00" y1="92.00" x2="440.00" y2="92.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="792.00" y1="92.00" x2="784.00" y2="92.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="420.00" y="96.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">1.33</text>
+<line x1="432.00" y1="32.00" x2="440.00" y2="32.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="792.00" y1="32.00" x2="784.00" y2="32.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="420.00" y="36.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">2.02</text>
+<polyline points="759.21,73.56 761.08,71.78 762.74,69.93 764.18,68.01 765.41,66.04 766.44,64.03 767.26,61.97 767.89,59.87 768.33,57.69 768.58,55.30 768.62,53.41 768.53,51.65 768.36,50.11 768.12,48.70 767.85,47.40 767.54,46.21 767.22,45.11 766.90,44.10 766.58,43.19 766.28,42.37 766.00,41.62 765.75,40.96 765.53,40.37 765.36,39.85 765.22,39.41 765.14,39.02 765.10,38.69 765.11,38.41 765.17,38.18 765.28,37.99 765.45,37.82 765.69,37.70 766.00,37.61 766.39,37.54 766.87,37.51 767.44,37.51 768.11,37.52 768.90,37.56 769.85,37.60 771.02,37.65 772.22,37.68 773.28,37.68 774.33,37.65 775.30,37.60 776.21,37.53 777.06,37.43 777.84,37.31 778.56,37.18 779.20,37.03 779.77,36.86 780.27,36.69 780.69,36.52 781.03,36.34 781.29,36.17 781.47,36.01 781.57,35.86 781.59,35.73 781.54,35.63 781.40,35.55 781.16,35.50 780.79,35.50 780.26,35.57 779.41,35.81 778.61,36.11 777.73,36.51 776.84,37.00 775.92,37.56 774.97,38.20 773.99,38.93 772.99,39.74 771.96,40.63 770.90,41.62 769.81,42.69 768.69,43.87 767.52,45.15 766.31,46.54 765.02,48.06 763.66,49.74 762.16,51.61 760.47,53.76 758.37,56.45 756.44,58.91 754.42,61.43 752.47,63.83 750.49,66.20 748.46,68.57 746.33,70.99 744.10,73.46 741.72,76.01 739.19,78.65 736.49,81.40 733.58,84.28 730.45,87.30 727.06,90.49 723.40,93.86 719.43,97.44 715.14,101.24 710.50,105.27 705.51,109.52 700.17,113.98 694.51,118.63 688.55,123.44 682.30,128.37 675.77,133.43 668.96,138.59 661.84,143.87 654.37,149.27 646.50,154.81 638.17,160.51 629.29,166.41 619.75,172.54 609.45,178.93 599.85,184.66 591.21,189.64 583.62,193.88 577.07,197.43 571.55,200.35 567.00,202.70 563.37,204.55 560.56,205.95 558.49,206.96 557.06,207.66 556.17,208.09 555.99,208.18 555.82,208.26 555.68,208.33 555.54,208.39 555.45,208.44 555.36,208.48 555.35,208.49 555.34,208.49 555.33,208.50 555.32,208.50 555.32,208.50 555.32,208.50 555.32,208.50 555.31,208.50 555.31,208.50 555.31,208.50 555.31,208.50 555.31,208.50" fill="none" stroke="#111" stroke-width="1.7" />
+<text x="754.00" y="60.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="13" font-weight="bold">c</text>
+<text x="561.60" y="131.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="15" font-weight="bold">P</text>
+<line x1="694.51" y1="118.63" x2="682.30" y2="128.37" stroke="#111" stroke-width="1.1" fill="none" marker-end="url(#arrow)"/>
+<rect x="432.00" y="212.00" width="360.00" height="180.00" fill="none" stroke="#111" stroke-width="1.4"/>
+<line x1="432.00" y1="212.00" x2="432.00" y2="220.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="432.00" y1="392.00" x2="432.00" y2="384.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="432.00" y="415.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">0.75</text>
+<line x1="522.00" y1="212.00" x2="522.00" y2="220.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="522.00" y1="392.00" x2="522.00" y2="384.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="522.00" y="415.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">0.84</text>
+<line x1="612.00" y1="212.00" x2="612.00" y2="220.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="612.00" y1="392.00" x2="612.00" y2="384.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="612.00" y="415.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">0.94</text>
+<line x1="702.00" y1="212.00" x2="702.00" y2="220.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="702.00" y1="392.00" x2="702.00" y2="384.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="702.00" y="415.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">1.03</text>
+<line x1="792.00" y1="212.00" x2="792.00" y2="220.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="792.00" y1="392.00" x2="792.00" y2="384.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="792.00" y="415.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">1.12</text>
+<line x1="432.00" y1="392.00" x2="440.00" y2="392.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="792.00" y1="392.00" x2="784.00" y2="392.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="420.00" y="396.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">0.88</text>
+<line x1="432.00" y1="332.00" x2="440.00" y2="332.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="792.00" y1="332.00" x2="784.00" y2="332.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="420.00" y="336.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">1.04</text>
+<line x1="432.00" y1="272.00" x2="440.00" y2="272.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="792.00" y1="272.00" x2="784.00" y2="272.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="420.00" y="276.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">1.2</text>
+<line x1="432.00" y1="212.00" x2="440.00" y2="212.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<line x1="792.00" y1="212.00" x2="784.00" y2="212.00" stroke="#111" stroke-width="1.1" fill="none"/>
+<text x="420.00" y="216.00" text-anchor="end" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">1.35</text>
+<polyline points="759.21,287.00 761.08,286.35 762.74,285.60 764.18,284.75 765.41,283.80 766.44,282.74 767.26,281.56 767.89,280.24 768.33,278.74 768.58,276.94 768.62,275.38 768.53,273.79 768.36,272.28 768.12,270.80 767.85,269.32 767.54,267.84 767.22,266.38 766.90,264.93 766.58,263.49 766.28,262.08 766.00,260.68 765.75,259.31 765.53,257.97 765.36,256.67 765.22,255.39 765.14,254.16 765.10,252.96 765.11,251.81 765.17,250.69 765.28,249.56 765.45,248.42 765.69,247.28 766.00,246.14 766.39,245.00 766.87,243.86 767.44,242.71 768.11,241.57 768.90,240.41 769.85,239.22 771.02,237.93 772.22,236.77 773.28,235.84 774.33,234.97 775.30,234.21 776.21,233.51 777.06,232.87 777.84,232.27 778.56,231.71 779.20,231.18 779.77,230.68 780.27,230.19 780.69,229.72 781.03,229.27 781.29,228.84 781.47,228.41 781.57,228.00 781.59,227.60 781.54,227.21 781.40,226.80 781.16,226.39 780.79,225.95 780.26,225.49 779.41,224.95 778.61,224.56 777.73,224.22 776.84,223.95 775.92,223.74 774.97,223.59 773.99,223.48 772.99,223.44 771.96,223.45 770.90,223.53 769.81,223.67 768.69,223.89 767.52,224.19 766.31,224.58 765.02,225.07 763.66,225.69 762.16,226.45 760.47,227.43 758.37,228.79 756.44,230.14 754.42,231.64 752.47,233.14 750.49,234.70 748.46,236.34 746.33,238.07 744.10,239.89 741.72,241.83 739.19,243.90 736.49,246.10 733.58,248.45 730.45,250.96 727.06,253.66 723.40,256.56 719.43,259.67 715.14,263.02 710.50,266.62 705.51,270.47 700.17,274.56 694.51,278.87 688.55,283.39 682.30,288.10 675.77,292.99 668.96,298.06 661.84,303.33 654.37,308.80 646.50,314.53 638.17,320.54 629.29,326.90 619.75,333.67 609.45,340.94 599.85,347.69 591.21,353.78 583.62,359.16 577.07,363.86 571.55,367.88 567.00,371.26 563.37,374.02 560.56,376.21 558.49,377.87 557.06,379.05 556.17,379.80 555.99,379.96 555.82,380.11 555.68,380.24 555.54,380.36 555.45,380.44 555.36,380.52 555.35,380.53 555.34,380.54 555.33,380.55 555.32,380.56 555.32,380.56 555.32,380.56 555.32,380.56 555.31,380.56 555.31,380.56 555.31,380.56 555.31,380.56 555.31,380.56" fill="none" stroke="#111" stroke-width="1.7" />
+<text x="754.00" y="240.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="13" font-weight="bold">d</text>
+<text x="561.60" y="311.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="15" font-weight="bold">U_c</text>
+<line x1="694.51" y1="278.87" x2="682.30" y2="288.10" stroke="#111" stroke-width="1.1" fill="none" marker-end="url(#arrow)"/>
+<text x="245.00" y="438.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="15" font-weight="bold">tau</text>
+<text x="615.00" y="438.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="15" font-weight="bold">R</text>
+<text x="430.00" y="462.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">Fig. 7 - Dynamic instability, fully convective standard shell</text>
+</svg>

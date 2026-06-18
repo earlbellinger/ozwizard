@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stellingwerf One-Zone Model Equations</title>
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [["\\(", "\\)"]],
+        displayMath: [["\\[", "\\]"]]
+      },
+      svg: { fontCache: "global" }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1e2429;
+      --muted: #65717d;
+      --line: #d8dee5;
+      --soft: #f4f7fa;
+      --accent: #225f91;
+      --accent-2: #7a4b2b;
+      --warn: #8a4b08;
+      --paper: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #eef2f5;
+      color: var(--ink);
+      font-family: "Segoe UI", Arial, sans-serif;
+      line-height: 1.55;
+    }
+
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 28px 20px 56px;
+    }
+
+    header {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 20px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 5vw, 46px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 36px 0 14px;
+      font-size: 25px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 26px 0 10px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    code {
+      background: #e8edf2;
+      border: 1px solid #d2d9e0;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 0.94em;
+    }
+
+    .subtitle {
+      max-width: 820px;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    nav {
+      position: sticky;
+      top: 16px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    nav strong {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+
+    nav a {
+      display: block;
+      padding: 6px 0;
+      font-size: 14px;
+    }
+
+    section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 22px;
+      margin-bottom: 18px;
+    }
+
+    .equation {
+      overflow-x: auto;
+      background: #fbfcfd;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 16px 0;
+    }
+
+    .equation mjx-container[jax="SVG"][display="true"] {
+      margin: 0.55em 0 !important;
+      text-align: left !important;
+    }
+
+    .note {
+      border-left: 4px solid var(--warn);
+      background: #fff7ed;
+      padding: 12px 14px;
+      margin: 16px 0;
+      color: #5f3508;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .mini {
+      background: var(--soft);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .mini h3 {
+      margin-top: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 15px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 9px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--soft);
+      color: #36424d;
+      font-weight: 650;
+    }
+
+    .source {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    .plot-strip {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    figure {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    figcaption {
+      border-top: 1px solid var(--line);
+      padding: 9px 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .footer {
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+      margin-top: 22px;
+    }
+
+    @media (max-width: 860px) {
+      main {
+        padding: 18px 12px 40px;
+      }
+
+      .layout,
+      .grid,
+      .plot-strip {
+        grid-template-columns: 1fr;
+      }
+
+      nav {
+        position: static;
+      }
+
+      section {
+        padding: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Stellingwerf One-Zone Pulsation Codes</h1>
+      <p class="subtitle">
+        A MathJax-formatted map of the equations implemented by <code>OZ1.S</code>,
+        <code>OZC.S</code>, and <code>0MidPoint.s</code>. The maintained Python
+        and web outputs use \( \tau \), \(R\), and \(P\) for time, radius, and
+        pressure.
+      </p>
+    </header>
+
+    <div class="layout">
+      <article>
+        <section id="symbol-guide">
+          <h2>Symbol Guide</h2>
+          <p>
+            The table below collects the symbols used throughout the maintained
+            equations and CSV outputs. Historical note: the original S_Tran
+            sources used <code>X</code> for the integration time, <code>Y[1]</code>
+            for the old radius-like variable, and <code>Y[3]</code> for the old
+            pressure-like variable; preserved original sources keep that notation.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>English name</th>
+                <th>Code name</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>\(\tau\)</td>
+                <td>Time</td>
+                <td><code>tau</code></td>
+                <td>Independent integration variable, measured in free-fall time units.</td>
+              </tr>
+              <tr>
+                <td>\(R\)</td>
+                <td>Shell radius</td>
+                <td><code>R</code></td>
+                <td>Dimensionless radius of the one-zone shell.</td>
+              </tr>
+              <tr>
+                <td>\(V\)</td>
+                <td>Shell velocity</td>
+                <td><code>V</code></td>
+                <td>Dimensionless radial velocity, \(V=dR/d\tau\).</td>
+              </tr>
+              <tr>
+                <td>\(P\)</td>
+                <td>Pressure factor</td>
+                <td><code>P</code></td>
+                <td>Nonadiabatic contribution to the pressure.</td>
+              </tr>
+              <tr>
+                <td>\(U_c\)</td>
+                <td>Convective velocity</td>
+                <td><code>Uc</code></td>
+                <td>Time-dependent convective velocity variable in <code>OZC.S</code>.</td>
+              </tr>
+              <tr>
+                <td>\(m_0\)</td>
+                <td>Reference form factor</td>
+                <td><code>Mgeo</code></td>
+                <td>Geometric shell form-factor parameter used to define the core radius.</td>
+              </tr>
+              <tr>
+                <td>\(\eta\)</td>
+                <td>Core radius fraction</td>
+                <td><code>Eta</code></td>
+                <td>Dimensionless core radius, defined by \(\eta^3=1-3/m_0\).</td>
+              </tr>
+              <tr>
+                <td>\(m(R)\)</td>
+                <td>Variable form factor</td>
+                <td><code>Mvar()</code></td>
+                <td>Radius-dependent shell form factor used by both S_Tran models.</td>
+              </tr>
+              <tr>
+                <td>\(\Gamma_1\)</td>
+                <td>Adiabatic exponent</td>
+                <td><code>G1</code></td>
+                <td>Equation-of-state exponent; the files set \(\Gamma_1=1.1\).</td>
+              </tr>
+              <tr>
+                <td>\(\Gamma_{11}\)</td>
+                <td>Reduced adiabatic exponent</td>
+                <td><code>G11</code></td>
+                <td>Convenience value \(\Gamma_{11}=\Gamma_1-1\).</td>
+              </tr>
+              <tr>
+                <td>\(n\)</td>
+                <td>Opacity density exponent</td>
+                <td><code>Nk</code></td>
+                <td>Kramers-law opacity exponent used in the radiative luminosity term.</td>
+              </tr>
+              <tr>
+                <td>\(s\)</td>
+                <td>Opacity temperature exponent</td>
+                <td><code>Sk</code></td>
+                <td>Kramers-law temperature exponent used in \(P^{s+4}\).</td>
+              </tr>
+              <tr>
+                <td>\(B_1\)</td>
+                <td>Luminosity helper exponent</td>
+                <td><code>B1</code></td>
+                <td>Short-hand value \(B_1=(s+4)(\Gamma_1-1)\).</td>
+              </tr>
+              <tr>
+                <td>\(b(R)\)</td>
+                <td>Radiative radius exponent</td>
+                <td><code>Bvar()</code></td>
+                <td>Exponent of \(R\) in the radiative luminosity \(L_r\).</td>
+              </tr>
+              <tr>
+                <td>\(q(R)\)</td>
+                <td>Pressure-force exponent</td>
+                <td><code>Qvar()</code></td>
+                <td>Exponent controlling the pressure acceleration term \(P/R^{q(R)}\).</td>
+              </tr>
+              <tr>
+                <td>\(U\)</td>
+                <td>Inner luminosity exponent</td>
+                <td><code>U</code></td>
+                <td>Exponent in the source term \(R^U\); both local S_Tran files use \(U=-1\).</td>
+              </tr>
+              <tr>
+                <td>\(\zeta\)</td>
+                <td>Thermal adjustment coefficient</td>
+                <td><code>Zeta</code></td>
+                <td>Scales the rate of pressure/thermal response.</td>
+              </tr>
+              <tr>
+                <td>\(C_q\)</td>
+                <td>Turbulent dissipation coefficient</td>
+                <td><code>Cq</code></td>
+                <td>Coefficient of the cubic damping term \(-C_q V^3\) in the acceleration equation.</td>
+              </tr>
+              <tr>
+                <td>\(c(R)\)</td>
+                <td>Convective luminosity radius exponent</td>
+                <td><code>Cvar()</code></td>
+                <td>Exponent used in \(L_c=R^{-c(R)}U_c^3\).</td>
+              </tr>
+              <tr>
+                <td>\(d(R)\)</td>
+                <td>Convective velocity radius exponent</td>
+                <td><code>Dvar()</code></td>
+                <td>Exponent used in the convective velocity driver \(R^{-d(R)}\).</td>
+              </tr>
+              <tr>
+                <td>\(\zeta_c\)</td>
+                <td>Convective adjustment coefficient</td>
+                <td><code>Zetac</code></td>
+                <td>Scales the relaxation rate of \(U_c\) toward the mixing-length value.</td>
+              </tr>
+              <tr>
+                <td>\(\gamma_c\)</td>
+                <td>Convective luminosity fraction</td>
+                <td><code>Gammac</code></td>
+                <td>Fractional weight of the convective luminosity in the energy equation.</td>
+              </tr>
+              <tr>
+                <td>\(\gamma_r\)</td>
+                <td>Radiative luminosity fraction</td>
+                <td><code>Gammar</code></td>
+                <td>Radiative fraction, \(\gamma_r=1-\gamma_c\).</td>
+              </tr>
+              <tr>
+                <td>\(L_r\)</td>
+                <td>Radiative luminosity</td>
+                <td><code>Lum()</code></td>
+                <td>Radiative luminosity-like term \(L_r=R^{b(R)}P^{s+4}\).</td>
+              </tr>
+              <tr>
+                <td>\(L_c\)</td>
+                <td>Convective luminosity</td>
+                <td><code>Lumc()</code></td>
+                <td>Convective luminosity-like term \(L_c=R^{-c(R)}U_c^3\).</td>
+              </tr>
+              <tr>
+                <td>\(L\)</td>
+                <td>Total luminosity</td>
+                <td>CSV column <code>L</code></td>
+                <td>Combined luminosity \(L=\gamma_rL_r+\gamma_cL_c\) in <code>OZC.S</code>.</td>
+              </tr>
+              <tr>
+                <td>\(\Delta\tau\)</td>
+                <td>Integrator step size</td>
+                <td><code>Step</code></td>
+                <td>Adaptive time step used by <code>0MidPoint.s</code>.</td>
+              </tr>
+              <tr>
+                <td>\(\mathrm{Err\_tol}\)</td>
+                <td>Error tolerance</td>
+                <td><code>Err_tol</code></td>
+                <td>Optional tolerance used to shrink or grow the midpoint step.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="overview">
+          <h2>What The Files Do</h2>
+          <div class="grid">
+            <div class="mini">
+              <h3><code>OZ1.S</code></h3>
+              <p>
+                A three-variable radiative one-zone model. It evolves radius \(R\),
+                velocity \(V\), and nonadiabatic pressure factor \(P\).
+              </p>
+              <p class="source">
+                Source equations: <a href="OZ1.S">OZ1.S</a>, derivative definitions near lines 39-41.
+              </p>
+            </div>
+            <div class="mini">
+              <h3><code>OZC.S</code></h3>
+              <p>
+                A four-variable convective one-zone model. It adds convective velocity
+                \(U_c\), radiative luminosity \(L_r\), convective luminosity \(L_c\),
+                and a convective/radiative luminosity split.
+              </p>
+              <p class="source">
+                Source equations: <a href="OZC.S">OZC.S</a>, derivative definitions near lines 55-58.
+              </p>
+            </div>
+          </div>
+          <p>
+            The original S_Tran model files call <code>0MidPoint.s</code>, a
+            second-order midpoint Runge-Kutta integrator with simple adaptive
+            step control. The Python scripts and interactive web app now default
+            to an adaptive Dormand-Prince RK45 method and run until the model is
+            classified as equilibrium or a stable limit cycle, with the requested
+            final time serving as a maximum cap. Midpoint is retained as
+            <code>--solver midpoint</code> and as an in-app comparison mode.
+            A DOP853 8(5,3) reference solver is also available as
+            <code>--solver dop853</code>.
+          </p>
+        </section>
+
+        <section id="notation">
+          <h2>Notation</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Maintained field</th>
+                <th>Meaning</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>\( \tau \)</td>
+                <td><code>tau</code></td>
+                <td>Independent integration variable, interpreted as time.</td>
+              </tr>
+              <tr>
+                <td>\( R \)</td>
+                <td><code>R</code></td>
+                <td>Dimensionless shell radius.</td>
+              </tr>
+              <tr>
+                <td>\( V \)</td>
+                <td><code>V</code></td>
+                <td>Dimensionless radial velocity, \(V = dR/d\tau\).</td>
+              </tr>
+              <tr>
+                <td>\( P \)</td>
+                <td><code>P</code></td>
+                <td>Nonadiabatic pressure factor.</td>
+              </tr>
+              <tr>
+                <td>\( U_c \)</td>
+                <td><code>Uc</code></td>
+                <td>Convective velocity variable in <code>OZC.S</code>.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="shared">
+          <h2>Shared Geometry And Exponents</h2>
+          <p>
+            Both S_Tran model files use a variable form factor \(m(R)\). The setup
+            values are \(m_0=10\), \(\Gamma_1=1.1\), \(n=1\), \(s=3\), and \(U=-1\).
+          </p>
+          <div class="equation">
+            \[
+              \begin{alignedat}{2}
+                \eta^3 &= 1 - \frac{3}{m_0},
+                &\qquad \eta &= \left(1 - \frac{3}{m_0}\right)^{1/3},\\[0.45em]
+                m(R) &= \frac{3}{1 - \left(\eta/R\right)^3},
+                &\qquad & \\[0.45em]
+                \Gamma_{11} &= \Gamma_1 - 1,
+                &\qquad B_1 &= (s+4)\Gamma_{11},\\[0.45em]
+                b(R) &= 4 + m(R)\left(n - B_1\right),
+                &\qquad q(R) &= m(R)\Gamma_1 - 2.
+              \end{alignedat}
+            \]
+          </div>
+          <p>
+            The radiative luminosity-like quantity used by both codes is
+          </p>
+          <div class="equation">
+            \[
+              L_r(R,P) = R^{b(R)} P^{s+4}.
+            \]
+          </div>
+          <p>
+            Because \(U=-1\), the inner luminosity/source term appearing in the
+            energy equation is \(R^U=R^{-1}\).
+          </p>
+        </section>
+
+        <section id="oz1">
+          <h2>Radiative Model: <code>OZ1.S</code></h2>
+          <p>
+            <code>OZ1.S</code> evolves \(R\), \(V\), and \(P\). It uses
+            \(\zeta=1\) and a turbulent dissipation coefficient \(C_q=2\).
+          </p>
+          <div class="equation">
+            \[
+              \begin{aligned}
+                \frac{dR}{d\tau}
+                  &= V,\\[0.45em]
+                \frac{dV}{d\tau}
+                  &= \frac{P}{R^{q(R)}} - \frac{1}{R^2} - C_q V^3,\\[0.45em]
+                \frac{dP}{d\tau}
+                  &=
+                  \zeta R^{m(R)(\Gamma_1-1)}
+                  \left(R^U - L_r(R,P)\right).
+              \end{aligned}
+            \]
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Quantity</th>
+                <th>Value in <code>OZ1.S</code></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Initial radius</td><td>\(R(0)=1.2\)</td></tr>
+              <tr><td>Initial velocity</td><td>\(V(0)=0\)</td></tr>
+              <tr><td>Initial pressure factor</td><td>\(P(0)=0.8\)</td></tr>
+              <tr><td>Thermal coefficient</td><td>\(\zeta=1\)</td></tr>
+              <tr><td>Dissipation</td><td>\(C_q=2\)</td></tr>
+            </tbody>
+          </table>
+          <p>
+            The CSV columns written by this model are
+            <code>tau, R, V, P, L</code>, where \(L=L_r\) after the initial row.
+          </p>
+        </section>
+
+        <section id="ozc">
+          <h2>Convective Model: <code>OZC.S</code></h2>
+          <p>
+            <code>OZC.S</code> adds convective transport. It defines
+          </p>
+          <div class="equation">
+            \[
+              \begin{alignedat}{2}
+                c(R) &= m(R) - 2,
+                &\qquad d(R) &= \frac{m(R)(\Gamma_1-1)}{2},\\[0.45em]
+                L_c(R,U_c) &= R^{-c(R)}U_c^3.
+                &\qquad &
+              \end{alignedat}
+            \]
+          </div>
+          <p>
+            With \(\gamma_c=0.5\), \(\gamma_r=1-\gamma_c=0.5\), \(\zeta=1\),
+            \(\zeta_c=1\), and \(C_q=1\), the literal S_Tran system is
+          </p>
+          <div class="equation">
+            \[
+              \begin{aligned}
+                \frac{dR}{d\tau}
+                  &= V,\\[0.45em]
+                \frac{dV}{d\tau}
+                  &= \frac{P}{R^{q(R)}} - \frac{1}{R^2} - C_q V^3,\\[0.45em]
+                \frac{dP}{d\tau}
+                  &=
+                  \zeta R^{m(R)(\Gamma_1-1)}
+                  \left(
+                    R^U
+                    - \gamma_r L_r(R,P)
+                    - \gamma_c L_c(R,U_c)
+                  \right),\\[0.45em]
+                \frac{dU_c}{d\tau}
+                  &=
+                  \zeta_c
+                  \left(
+                    R^{-d(R)}\sqrt{V} - U_c
+                  \right).
+              \end{aligned}
+            \]
+          </div>
+          <div class="note">
+            <strong>Important:</strong> the final equation above is what
+            <code>OZC.S</code> literally contains: <code>sqrt(Y[2])</code>, or
+            \(\sqrt{V}\). The printed Stellingwerf 1986 convective equation uses
+            \(\sqrt{P}\):
+            \[
+              \begin{aligned}
+                \frac{dU_c}{d\tau}
+                  &=
+                  \zeta_c\left(R^{-d(R)}\sqrt{P} - U_c\right).
+              \end{aligned}
+            \]
+            In ordinary real arithmetic, the literal \(\sqrt{V}\) version becomes
+            non-real whenever the velocity is negative.
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Quantity</th>
+                <th>Value in <code>OZC.S</code></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Initial radius</td><td>\(R(0)=1.4\)</td></tr>
+              <tr><td>Initial velocity</td><td>\(V(0)=0\)</td></tr>
+              <tr><td>Initial pressure factor</td><td>\(P(0)=0.9\)</td></tr>
+              <tr><td>Initial convective velocity</td><td>\(U_c(0)=0.7\)</td></tr>
+              <tr><td>Thermal coefficient</td><td>\(\zeta=1\)</td></tr>
+              <tr><td>Convective adjustment coefficient</td><td>\(\zeta_c=1\)</td></tr>
+              <tr><td>Convective luminosity fraction</td><td>\(\gamma_c=0.5\)</td></tr>
+              <tr><td>Radiative luminosity fraction</td><td>\(\gamma_r=0.5\)</td></tr>
+              <tr><td>Dissipation</td><td>\(C_q=1\)</td></tr>
+            </tbody>
+          </table>
+          <p>
+            The CSV columns written by this model are
+            <code>tau, R, V, P, L, Lr, Lc, Uc</code>, where
+            \(L=\gamma_r L_r+\gamma_c L_c\).
+          </p>
+        </section>
+
+        <section id="integrator">
+          <h2>Legacy Midpoint Integrator: <code>0MidPoint.s</code></h2>
+          <p>
+            The subroutine advances a system \(y' = F(\tau,y)\) using a centered
+            second-order Runge-Kutta step. For a current state \(y_n\), time
+            \(\tau_n\), and step \(\Delta\tau\):
+          </p>
+          <div class="equation">
+            \[
+              \begin{alignedat}{2}
+                k_1
+                  &= \frac{\Delta\tau}{2}F(\tau_n,y_n),
+                &\qquad & \\[0.45em]
+                y_{n+1/2}
+                  &= y_n + k_1,
+                &\qquad \tau_{n+1/2}
+                  &= \tau_n + \frac{\Delta\tau}{2},\\[0.45em]
+                k_2
+                  &= \Delta\tau F(\tau_{n+1/2}, y_{n+1/2}),
+                &\qquad & \\[0.45em]
+                y_{n+1}
+                  &= y_n + k_2,
+                &\qquad \tau_{n+1}
+                  &= \tau_n + \Delta\tau.
+              \end{alignedat}
+            \]
+          </div>
+          <p>
+            Its adaptive error estimate compares the half-step delta \(k_1\) with
+            half of the centered full-step delta \(k_2/2\):
+          </p>
+          <div class="equation">
+            \[
+              \begin{aligned}
+                E
+                  &=
+                  \frac{\Delta\tau}{2}
+                  \sqrt{
+                    \sum_j
+                    \left(
+                      \frac{k_{2,j}}{2} - k_{1,j}
+                    \right)^2
+                  }.
+              \end{aligned}
+            \]
+          </div>
+          <p>
+            If \(E > 10\,\mathrm{Err\_tol}\), the step is reset and retried with
+            \(\Delta\tau/10\). Otherwise the next step is gently adjusted:
+          </p>
+          <div class="equation">
+            \[
+              \begin{aligned}
+                \Delta\tau
+                  &\leftarrow
+                  \begin{cases}
+                    0.9\,\Delta\tau, & E > \mathrm{Err\_tol},\\
+                    1.1\,\Delta\tau, & E < \mathrm{Err\_tol}/2,\\
+                    \Delta\tau, & \text{otherwise.}
+                  \end{cases}
+              \end{aligned}
+            \]
+          </div>
+          <p>
+            In the upgraded Python and TypeScript implementations, RK45 uses
+            the embedded Dormand-Prince 5(4) error estimate with relative and
+            absolute tolerances, and DOP853 uses the standard 8(5,3) tableau as
+            a higher-accuracy reference. The model-level stop condition looks
+            for either a flat equilibrium window or converged luminosity cycles.
+            The default limit-cycle requirement is five full cycles, represented
+            internally by six detected luminosity peaks. Use
+            <code>--fixed-time</code> to disable this early stability stop. The
+            midpoint equations above remain available for historical comparisons
+            and exact legacy-style runs.
+          </p>
+        </section>
+
+        <section id="plots">
+          <h2>Generated Plot Outputs</h2>
+          <p>
+            The Python translation in this directory writes CSV output and SVG plot
+            files using the same data columns as the S_Tran/Thor workflow.
+          </p>
+          <div class="plot-strip">
+            <figure>
+              <img src="../outputs/ozc/ozc_timeseries.svg" alt="OZC translated time-series plot">
+              <figcaption>Time series generated from the translated convective model.</figcaption>
+            </figure>
+            <figure>
+              <img src="../outputs/ozc/ozc_phase.svg" alt="OZC translated phase plot">
+              <figcaption>Radius-velocity sequence plot from the same CSV output.</figcaption>
+            </figure>
+          </div>
+        </section>
+      </article>
+
+      <nav aria-label="Page sections">
+        <strong>Sections</strong>
+        <a href="#symbol-guide">Symbol guide</a>
+        <a href="#overview">What the files do</a>
+        <a href="#notation">Notation</a>
+        <a href="#shared">Shared definitions</a>
+        <a href="#oz1">Radiative model</a>
+        <a href="#ozc">Convective model</a>
+        <a href="#integrator">Midpoint integrator</a>
+        <a href="#plots">Generated plots</a>
+      </nav>
+    </div>
+
+    <p class="footer">
+      Documentation generated from the local files <code>OZ1.S</code>,
+      <code>OZC.S</code>, and <code>0MidPoint.s</code>.
+    </p>
+  </main>
+</body>
+</html>

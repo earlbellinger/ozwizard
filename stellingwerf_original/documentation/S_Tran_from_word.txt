@@ -1,0 +1,1314 @@
+Stellingwerf Consulting
+Complex Systems Analysis
+Huntsville, AL
+
+
+
+
+The
+
+S_tran
+
+Programming Language
+Version 1.82 - 12/12/2011 - Revised 5/10/2021
+R. Stellingwerf
+
+
+
+
+
+
+
+STELLINGWERF CONSULTING
+11033 Mathis Mountain Rd SE, Huntsville, AL 35803
+ 256-880-9789		rfs@stellingwerf.com
+
+
+
+
+Table of Contents
+
+1	S_tran Computations and Programming	4
+1.1	Overview	4
+1.2	A Brief Tutorial	5
+1.3	Expressions and User Variables	7
+1.3.1	Unary Operators	7
+1.3.2	Binary Operations	7
+1.3.3	Constants	7
+1.3.4	Functions	8
+1.3.5	List Functions	9
+1.3.6	User Variables and String Variables	9
+1.3.7	Expression Examples	12
+1.3.8	User Defined Functions	12
+1.3.9	Arrays	13
+1.3.10	Multiple Commands on a Line	14
+1.3.11	Multiple Lines per Command	14
+1.3.12	Expression Debugging	14
+1.4	Display  Commands	15
+1.5	Input Commands	16
+1.6	Programming	17
+1.6.1	Loops	17
+1.6.2	If Tests	18
+1.6.3	Goto	20
+1.6.4	End/Exit Statements	21
+1.6.5	Subroutines:  Call / Return	21
+1.6.6	Read_file	22
+1.6.7	Debugging	22
+1.6.8	Error Handling	22
+1.6.9	Custom Commands: "exec", "system" (generate a data plot)	23
+1.7	File Input / Output	23
+1.8	Data Processing	24
+2	Programming Examples	26
+2.1	Fibonacci	26
+2.2	Cubic Equation Solver:	27
+2.3	Computations and Data Files	29
+2.4	Data Entry	30
+2.5	Interactive Programming	31
+3	System Generated Variable Names	33
+4	S_tran Language Summary   2.00 (c) Stellingwerf Consulting - 2021	34
+1 S_tran Computations and Programming
+
+1.1 Overview
+
+S_tran is a command interpreter that is designed to perform numerical computations. Its philosophy is to permit a general computation with a minimum of effort. It can be viewed as a simplified form of C, without the complications that make a C program difficult to get up and running.
+
+S_tran is an interpreted language. This means that code is quickly written and debugging is easily done with the supplied "debug" and "step" commands plus a detailed expression debugger. It also means that an S program is not intended for large "number-crunching" applications, although modern processors can perform quite large computations in this type of environment.
+
+There are no headers, data declarations, or data types.  There are no end line semicolons or curly brackets. All code lines follow exactly the same format. This makes an S program very simple and readable, and allows quick computations with no programming overhead or fuss.
+
+Installation Notes:
+
+1. Download s_tran.exe and put it in a fixed location on your main disk. I use \home\sdat for my default location. The actual file name is not important, but this is the time to fix any changes that the web site may have made to the name, or to distinguish different versions of s_tran. 
+
+2.  Now, your pdm2 run will be done with a file that ends in ".s". See the PDM_manual or the S_tran Applicaltions Guide for examples. This file will have to load the pdm data arrays ("read_pdm_data" command has been added recently to make this easier, see the Application Guide, PDM chapter), set the pdm parameters and call pdm2. 
+
+3. The actual running of the .s script is done by double clicking on the .s file. The first time (here is the trick!) the system will complain about an unknown file type, and you have to "Browse" to pick the s_tran.exe program as the default application for .s files. If the .s extension has been accidentally assigned to another program (like Notepad), things get a little tricky to fix. On XP it is possible to reassign the .s files using the Folder Properties tool. On Windows 7 this doesn't work, and the correction has to be made using regedit. If you are not familiar with regedit, find someone who is, because it has to be done very carefully to avoid messing up your system.
+
+4. Double click on the ".s" file icon to run. Drag the ".s" file icon to a Wordpad shortcut to edit the scripts, or use "Opern With.." and select Wordpad.
+
+
+
+Program Style:  Each line in an S_tran program consists of a "command" plus zero or more "arguments". Each field is normally separated by spaces, but an "=" or a "+" sign may be inserted (flanked by spaces) between the command and the arguments, or between arguments, for clarity. Arguments containing spaces or backslashes must be enclosed by "quotes". The expression "A=3" (no spaces) is a logical test and evaluates to either 0 or 1. The expressions "A =3" or "A= 3" (one space) are illegal.
+
+Comments:  Any occurrence of the symbols  # or  // makes the rest of the line a comment field. The pattern /* makes all subsequent input a comment until the pattern */ is encountered (as in C).  Use  # for normal comments, // for temporary comments, and /*...*/ for comment blocks. 
+
+Escapes:   The C-style escape sequences \n, \t, \\, \', \", \0 for newline, tab, backslash, single, double quotes, and null are supported in all unquoted arguments. In quoted strings \ can be used as an ordinary character (e.g. in file names). 
+
+Computations are carried out in algebraic "expressions", such as 2+2, and stored in "user variables", such as X. The first use of a user variable must be of the form X = expr, which causes the value of the expression to be associated with the variable name X. X can then be used in other expressions. 
+
+1.2 A Brief Tutorial
+
+A short S program:	 show_line  "Hello, World!"
+
+Screen output:		Hello, World!
+
+S commands consist of three main types: 1) assignments, 2) display commands, and 3) program control commands. Some examples are given here. See below for full details.
+
+Assignments
+
+These commands assign a value to a variable. User variable names always start with an upper case letter, and are defined when first assigned a value. Hence:
+
+X1 = 45
+Y_value = 67.
+
+The value on the right can be a mathematical or logical "expression". Expressions generally follow accepted algebraic syntax, but must not contain blanks, unless enclosed in double quotes. So...
+
+UpperValue = 45-cos(60./7.)
+LowerValue = max(UpperValue,43-Othervalue,0)
+LogicalTest = "UpperValue > 45"           // =1 if true, =0 if false
+
+User variable names can be in the form of an array, such as X[1], Y[2][X1], etc. In S each array element is defined in its first assignment, as is any other variable, so array declarations are not needed, and only the defined elements are stored.
+
+
+
+Display Commands
+
+These allow output of values and strings to the screen. The simplest is "show" followed by a list of variable names or expressions:
+
+show UpperValue LowerValue OtherValue
+
+The screen output is simple and informative:
+
+UpperValue = 0   LowerValue = -1   OtherValue = 45
+
+
+Program Control Commands
+
+The control command set is simple, but complete. It consists of loop, if, and (rarely used) goto statements. In addition a call / return statement pair allows the use of subroutines. Program statements can be nested in the usual way:
+
+if LoopNeeded
+  begin_loop_i = 1 10
+    X[i] = i-4/(45-8)
+  end_loop_i
+end_if
+1.3 
+Expressions and User Variables
+
+ The expression syntax is generally the normal algebraic form. Details follow:
+
+1.3.1 Unary Operators
+
+-	numerical negation - negative of a number  (e.g.  -5)
+~	logical negation - evaluates to 0 if non-zero, 1 if zero   (e.g.  ~A) ( "not A")
+
+1.3.2 Binary Operations
+
++	addition  =  x + y
+-	subtraction  =  x - y
+*	multiplication  =  x * y
+/	division  =  x / y
+^	exponentiation:  x^y   =  xy
+%	modulus  =  ((x/y) - floor(x/y))*y  =  remainder after divide
+=	evaluates to 1 (true) if both sides are equal, 0 (false) otherwise
+>	evaluates to 1 (true) if left expression is greater, else 0
+<	evaluates to 1 (true) if left expression is smaller, else 0
+&	(and) - evaluates to 1 (true) if both sides are non-zero, else 0
+|	(or) - evaluates to 1 (true) if either side is non-zero, else 0
+~	(not) - (x ~ y) evaluates to (x & (~y))  (as in x-y = x+(-y))
+
+All operations apply to real numbers and produce real number results. This includes "modulus", which in C applies only to integers.  e.g.  5.5%4 = 1.5.
+
+Evaluation hierarchy (order of evaluation) is:   -  ~ (unary ops), then  ^  %  then  *  /  then  +  -  then  =  >  <  then  &  |  ~ . Equal level operations are evaluated left to right. This usually produces the expected result, but parentheses can be used to clarify or override this order
+
+Logical negation plus the last six operations can be used to construct Boolean expressions for use in true/false functions. Examples:
+1) To construct "x not equal y", write  ~(x = y). The (C style) alternative (x ~ = y) is not a valid expression in this system.
+2) To construct "x greater than or equal to y", write ~(x<y) 
+3) To construct  "xor" (true if either x or y is true, but not both), write  (x|y)&(~(x&y))  or  (x&~y)|(y&~x)  or  (x~y)|(y~x) 
+4) To construct  "nor"  (true if both x and y are false), write ~x~y , or  ~(x|y) 
+5) To construct  "nand"  (true if either x or y is false), write  ~x|~y , or  ~(x&y) 
+6) To construct "x implies y" (false if x is true and y false), write  ~(x~y) ,  or  ~x|y
+
+1.3.3 Constants
+
+true / false	= 1 and 0,  respectively
+pi	= 3.14159....  =  ratio of circumference to diameter of a circle
+ee	= 2.71828...   =  base of natural logarithms
+deg 	= pi / 180...    =  radians / degree (e.g.  sin(45*deg) )
+ran 	=  random number, 0->1, uniform distribution
+ran2	=  same as ran, but ranges  -1  ->  1
+rang	=  random number, Gaussian distribution, mean 0, stdev. 0.5
+ranw	=  Weibull random deviate (see Weibull/Apps Manual)
+i, j, k	=  loop indices (see loops)
+eof 	=  (t/f) end of file flag (see data processing)
+err	=  (t/f) data error, either i/o or compute
+qq	=  (t/f)  result of a query or str_eq (see input commands, strings)
+ver	=  current version of S_tran (e.g. 1.32)
+dec 	=  current setting of the "decimals" formatting parameter
+wid	=  current setting of the "field_width" formatting paramete
+
+The random number sequences generated by ran, ran2, rang and ranw can be controlled with the following command:
+
+seed  #|ran  	  reset the seed for all random number sequences. Only the integer part of # is used.  The argument "ran" uses a variable seed from the system clock.
+
+1.3.4 Functions
+
+abs(x)	= absolute value = |x|
+sign(x) = -1, +1, depending on the sign of x, returns 0 if x=0
+int(x) 	=  round to nearest integer
+floor(x)  =  round to next lowest integer
+ceil(x)	= round to next highest integer
+ip(x)	=  integer part of x  (truncate)
+fp(x)	=  fractional part of x (will be <0 if x<0)
+sq(x)	= square = x^2
+sqrt(x)	= square root of x = x^(1/2)
+cub(x)	= cube of x = x^3
+cbrt(x)	= cube root of x = x^(1/3) 
+sin(x)	= sin(x), x is in radians,  sin(y*deg)  if y is in degrees
+asin(x)	= arcsin(x), result in radians, asin()/deg is in degrees
+cos(x), acos(x), tan(x), atan(x) = other trig fns
+atan2(x,y)
+log(x) 	= log to base 10
+ln(x)	= log to base e
+      exp(x)	= e^x
+exp10(x) = 10^x
+fact(x)	= int(x)! - factorial of the nearest integer to x
+spl(x)  =  cubic b-spline, total width +/- 2 (unit smoothing length) , peak = 2/3, value  at +/- 1 = 1/6, integral = 1, center at 0.
+
+For all cases, "x" can be any valid expression. This includes numbers, constants, variables, functions, or any combination of these. A valid expression must evaluate to a number. 
+
+1.3.5 List Functions 
+
+Max and Min (note use of commas):
+
+min(exp1,exp2,exp3, ... ) = minimum of the list of expressions
+max(exp1,exp2,exp3, ...) = maximum of the list of expressions
+
+"IF" function (note use of commas):
+
+if(exp0,exp1,exp2,exp3)    	where expn = valid expressions
+
+If exp0 < 0, then the result is exp1
+If exp0 = 0, then the result is exp2
+If exp0 > 0, then the result is exp3
+
+To avoid duplicating expressions, the following forms are allowed:
+
+if(exp0,exp1,*,exp3) = if(exp0,exp1,exp1,exp3)   i.e. this does <= 
+if(exp0,exp1,exp2,*) = if(exp0,exp1,exp2,exp2)   i.e. this does >= 
+
+This function is included for portability from similar expression in other languages ("computed if"). In practice, the following form is clearer and is exactly equivalent (remember that the tests evaluate to either 0 or 1 when used in ordinary mathematical expressions):
+
+exp1*(exp0<0)+exp2*(exp0=0)+exp3*(exp0>0)
+
+This alternate approach is also clearly more general. To construct an expression that evaluates to exp1 if J=1, exp2 if J=2, etc., write  
+
+Var = exp1*(J=1)+exp2*(J=2)+exp3*(J=3)+.....,
+
+where the exps are any valid expressions.
+
+
+1.3.6 User Variables and String Variables
+
+Any variable name that begins with an upper case letter or $ is treated as a user defined variable. User variable names may contain upper case letters, lower case letters, numbers, underscores, and the character '$'. Numeric variables are double precision real numbers.
+
+User variables must be defined by equating to a valid expression (e.g. A = 3). They can be defined in terms of other user variables, and their values can be changed later in the input stream (except for constants, see below).  X = X+3  is allowed if X has been defined.
+
+The command
+
+init_var  Var_name  = #
+
+checks to see if the user variable "Var_name" exists, if not, it creates it and initializes it to "#" (or 0 if only one argument is present). If the variable exists, no action is taken. "init_var" is useful in subroutines where a parameter may or may not have been initialized before the call. If not, default values (#s) are assigned. It can also be used to keep track of how many times a section of code has been executed:
+
+init_var  Count  = 0        //  Count is set to zero first time through
+Count = Count+1             //  Count =  # times through this code
+
+Local Variables:  
+
+Variable names that end in $ are local to the routine in which they are defined, and cannot be accessed from another routine or file. Values persist over multiple similar calls (same recursion level) to the same function. Changing "Count" to "Count$" in the previous example will work. Other variables named "Count$" in other routines will be treated as different variables with differing values. Also, if the function calls itself, or is called via a different number of other routine calls, the local variables will be treated as distinct. This allows functions that are called many times to keep track of their data without fear of another function with the same variable names changing the values.
+
+String Variables: 
+
+Variable names beginning with a $ are used to store strings. String variables must be initialized with strings or other string variables. All commands with string arguments will accept string variables. Strings assignments can have multiple fields to build the desired string:
+
+$Str1 = "Start ";   $Str2 = End;  	//  inits
+$Str =  $Str1 + Middle + " " + $Str2	//  the pluses are optional
+show $Str
+
+	$Str = Start Middle End
+
+String functions:
+
+str_len  string		(length = # of characters, is stored in S_len).
+str_char  string  #	($S_char will contain the #th character of "string". End of string =  "" ) 
+str_sub  string substr	(searches for the first occurrence of the substring "substr" in "string", sets S_found = true if found, $S_head = portion of "string" preceding "substr", $S_tail = portion after)
+str_tofloat Var string	(convert the contents of the "string" to a float, store in variable "Var". e.g.  $Str = "3.14"; str_tofloat  Var = $Str )
+str_cap  $Str	capitalize the string $Str, if possible, (first character) perhaps for use as a variable name
+str_upper  $Str	convert all alphabetic characters in $Str to upper case
+str_lower  $Str	convert all alphabetic characters in $Str to lower case
+Strings can be compared with 
+
+str_eq  string1 string2	 [window]	(sets qq=1 if strings are equal, qq=0 
+otherwise. Also, S_eq = the number of matching characters, S_off = the number 
+of diagonal matches, (correct char, but wrong position within "window" chars), S_comp = <0, 0, >0 if first string is less, equal, greater than second).
+
+It is also possible to compare strings directly, as in 
+
+if  $Str1=$Str2      or     if  $Str="nogo"	or	if  $Str1=$Str2&$Str="nogo"
+
+The left-hand part of a string comparison must be a string variable name. Each comparison is a logical expression and produces a result of 0 or 1. See below for details.
+
+For complex string manipulations, it is sometimes convenient to store the string in an array. The following code fragment converts the string $string to the array $str[].
+
+  str_len $string
+  for_i = 1 S_len
+    str_char $string i
+    $str[i] = $S_char
+  end_i
+
+or,
+  for_i = 1 100
+    str_char $string i
+    break_if $S_char=""
+    $str[i] = $S_char
+  end_i
+
+To insert the value of an expression in a string field, precede the expression with an "@", as in @Var or @(5*3+5). The expression will be evaluated by the parser if not in a quoted field, and the value will replace the expression in the string. Hence:
+
+X = 3
+$Xlabel = "X = " + @X 	  // $Xlabel contains "X = 3"
+
+Commands will automatically evaluate string variables where appropriate. Finally, a random string is sometimes needed. This does it:
+
+	str_ran  $Str  len   low_char  high_char        or
+	str_ran  $Str  len   pswd			($Str returns a random string)
+
+where len = length of the random string, low_char = first char to be used, high_char = last char ( 0 9 = numbers, A Z = alphabet,  a z = lower case, A z = both plus [\]^_',  etc). If the "pswd" form is used, lower case, upper case and 0-9 are used.
+
+Constants:
+
+Any user variable can be designated a "constant" whose value is fixed and cannot be changed by any routine. To do this, the flag "constant" is set via the command:
+
+	constant  [true]		sets the "constant" flag
+
+All variables that are defined with this flag set are designated as "constants". It is an error to attempt to change their values. To clear the flag, enter the command:
+
+	constant  false		clears the "constant" flag
+
+Constants are normally declared in blocks at the start of a program or routine. An existing variable can be declared "constant" during execution of a program. From this point on, its value cannot be changed. The "constant" state is always irrevocable. 
+
+1.3.7 Expression Examples
+
+Here are some examples of user variables and expressions:
+
+Np = 300/4                        //  = 75
+Np = "300 / 4"                    //  = 75, not a string
+Dim$ = 4-2                        //  = 2, local variable
+Dim$ = "4 - 2"                    //  = 2, not a string
+$Dim = 4-2                        //  = "4-2", is a string
+$Dim$ = 4 - 2                     //  = "4-2", local string variable
+$Dim$ = "4 - 2"                   //  = "4 - 2", local string variable
+Usec = 1.e-6 
+Max_time = 10*Usec                //  time in micro-seconds
+
+More examples:
+
+Np = if(Dim-2,500,5000,50000)	 //  Np for Dim = 1, 2, 3 
+Rd = sqrt(Np)-20			 //  function of Np
+Ds = 180*deg				 //  pi radians
+
+One thing to keep in mind is that a blank space is usually considered a separator of arguments in the command line, so when using strings and algebraic formulae, either do not use any blanks, or enclose the entire expression for each argument in quotes. The exception is a string variable assignment. Since string assignment arguments are combined, any blanks, "+"s or "="s will be dropped if unquoted.
+
+1.3.8 User Defined Functions
+
+Functions can be defined using a "function" command of the form:
+
+function  Fn_name(Arg1$,Arg2$,...) = expression 
+
+where "Fn_name" (the function name) is a valid user variable name, Argi$ (0-10 arguments) are local variable names, and "expression" is any valid expression  involving Argi$, or a string variable containing such an expression. There must not be any blanks before the closed parenthesis. Once so defined the function can be used in any expression such as:
+
+X = sqrt(Fn_name(expr)/4+3)
+
+In this case the expr can be any valid expression, which will be evaluated and its value will replace Arg$  in the function definition. The value of the function expression will then replace the Fn_name() reference in the assignment for X. For example:
+
+function Sec(X$) = 1/cos(X$*deg)    // X$ is in degrees
+...
+Y = Sec(45)-Sec(30)
+show Y
+run...
+Y = 0.259513
+
+The local argument variables are assigned values when the function is evaluated, and are not accessible outside of the function itself. A zero argument function can be used as an abbreviation for a complex expression. It is equivalent to assigning the expression to a variable, then immediately using the variable in another expression.
+
+A function definition must precede its use, but once defined it can be accessed from any routine, subroutine, or external file.
+
+Functions can be defined in terms of other (previously defined) functions, and functions of functions are handled correctly.
+
+function F0() = 42
+U = F0()
+show U
+function FF(X$) = X$/2+F0()
+show FF(10) FF(FF(10))
+run...
+U = 42
+FF(10) = 47   FF(FF(10)) = 65.5
+
+If a function is defined in a loop, any occurrences of "i", "j", or "k" will be evaluated in the defining loop. A function definition not in a loop can have these indices in the function expression, and in this case they will be evaluated in the evaluation loop.
+
+String functions are not implemented at this time.
+
+1.3.9 Arrays
+
+Indexed names can be generated using a string and an expression value.  The syntax is:   string[exp]    where "string" is any string of characters, and "exp" is a valid expression.. The result is the string with the integer value of the expression inserted. For example, the expression
+
+Item[Var]
+
+would evaluate to "Item[1]", "Item[2]", , etc., if the values for "Var" are 1, 2, .... Indexed variable names act the same as array elements in other languages. Note that multiple subscripts also work with the format Var[i][j], but nested brackets are not allowed. Labels can also be indexed in the same way (see "goto" and "Subroutines", below).
+
+Special cases: 1) multi-dimensional array; Mat[i][j][k],  2) an array of strings:  $Str[i]  3) a local array:  Vect[i]$  4) a local array of stings:  $Str[i]$  5) indexed labels:  label[i]:  (could be used to construct a "case"  structure or an array of subroutines), 6) an array of functions:  Func[i](X$,Y$)  - the function can make use of the loop indices and can be defined, as well as used, in a loop. Use "init_var" to create new array elements as needed.
+
+1.3.10 Multiple Commands on a Line
+
+Several commands can be on the same line if separated by semi-colons.  No semi-colon is required at the end of a line, but is not an error. 
+
+Examples:
+
+        P_rad = 0.4765 ;    P_vel = 6.75e5;    P_angle = 60
+        T_rad = 0.8;        T_thick = 0.030226;
+        If i=2;  A = 3;  end_if
+
+Warning: do not use semi-colons on any lines containing a "jump" process, such as beginning and ending lines of a loop, subroutine calls, etc. These conditions are not detected by the interpreter, and could cause unpredictable results.
+
+1.3.11 Multiple Lines per Command
+
+Long commands can be split over several lines. Insert a \ at the end of each split line. Spaces after the \ will be dropped, and all leading spaces in the next line will be dropped. Example:
+
+if Variable1&Variable2&\
+   Variable3|Variable4|\
+   Variable5&Variable6
+  do_something
+end_if
+or,
+if Variable1&Variable2&\
+   Variable3|Variable4|\
+   Variable5&Variable6 \
+  do_something
+
+The space before the final "\" is mandatory in this construction of a single line "if" statement.
+
+1.3.12 Expression Debugging
+
+By adding an exclamation point to the end of any expression, a detailed structured trace of the evaluation procedure is produced.
+
+The order of evaluation is imposed by a pre-process pass that inserts extra parentheses when needed. This could be the source of unexpected results. The debug output will show these parentheses and allow verification that the evaluation was done correctly. For example, 
+
+A = 1;  B = 2;  C = 3
+D = A+B^4/sqrt(C)!		// note debug flag on expression
+show_nl; show D		// see next section
+
+produces:
+
+pf: A+B^4/sqrt(C)
+   pe: A+((B^4)/sqrt(C))  plev=0, lev=1
+   uvar: 1
+      pe: (B^4)/sqrt(C))  plev=1, lev=2
+         pe: B^4)/sqrt(C))  plev=2, lev=3
+         uvar: 2
+         op: 2 ^ 4 = 16
+      <--pe: plev=1 lev=2
+      pfun: sqrt(C))
+         pe: C))  plev=2, lev=3
+         uvar: 3
+      <--pe: plev=1 lev=2
+      fn: 1.73205
+      op: 16 / 1.73205 = 9.2376
+   <--pe: plev=0 lev=1
+   op: 1 + 9.2376 = 10.2376
+<--pe: plev=0 lev=0
+
+D = 10.2376
+
+Here the first line shows the expression as written, the second line shows the expression with extra parentheses inserted to set the precedence of the operations. In this case two extra sets of parentheses are needed to ensure that the exponentiation is done first, and the divide second. The following lines trace the evaluation procedure. "pf" means "parse function", "pe" means "parse expression",  "plev" is the level of parentheses being processed, while "lev" shows the level of recursion being used in the evaluation. As the expression is dissected, eventually lines labeled "fn:" (function), "uvar" (user variable), or "op:" (operation) indicate the actual values of the terms being evaluated. This debug output shows all of the details of the algebraic evaluation process and should enable the detection of any problems.
+
+It is advisable to insert a "step" just before, or an "end" just after the dissected line to force a pause in the display scrolling after the diagnosis.
+
+1.4 Display  Commands
+
+These are commands that can be used to display results:
+
+show exp1 exp2 ....	(args are a list of expressions, usually user variables)
+Displays the value of the variables in the format exp1 = val1,  exp2 = val2... 
+
+show_line  field1 field2  + @exp ...	(args are printed on the line as strings, no spaces between arguments. Use quoted fields for formatting, + is optional.. String variable names and @Vars are replaced by values.)
+
+show_field  field1 field2  @exp ...	(same as above, except that no newline is appended at the end)
+
+show_nl	(print a newline character)
+
+decimals  # [width]	(sets the number of decimal places to display, float format. Default is a general format that works in most cases. Set # = -1 to restore the default. If # < -1, then exponential format is used, with abs(#) decimals. "width" sets the width of the field, if present. 
+
+      decimals 2 6  is equivalent to the C format  %6.2f
+      decimals -2 6 is equivalent to the C format %6.2e
+      decimals -1 6 is equivalent to the C format  %6g.)
+
+Table commands (see section 2.1 for an example):
+
+show_lab lab1 lab2 ....	(show_lab0 - same but no newline)
+Displays a list of labels (any strings) in column format  
+
+show_tab exp1 exp2 ....	(args are a list of expressions) (show_tab0 - same but no newline)  Displays the values of the expressions in column format. 
+
+set_tab  #			(# = width of columns, default = 12)
+Sets the column width for a tabular display.
+
+
+Some examples:
+
+A message:      show_line "Hello World"
+
+Hello World
+
+A list of variables:    show Var1 Var2 Var3
+
+Var1 = 8   Var2 = 13   Var3 = 13
+
+An example of a formatted line - a quadratic equation:
+
+B = -6;  C = 11;  D = -6
+show_line "Quadratic:  "  @B  " X^2 +"  @C  " X +" @D
+show_nl
+
+results in the output:
+
+Quadratic:   -6 X^2 + 11 X + -6
+
+A better format for quadratics is shown in the "if" test section, below.
+
+1.5 Input Commands
+
+Variables can be initialized from the screen prompt using the command:
+
+input  Var1  Var2  Var3 ...
+
+An example:
+
+input A B C D
+show_nl;  show A  B  C  D
+
+Displays (with the values typed in):
+
+    A =?   1.1234		(Type/Enter)
+    B =?   2*sqrt(10)	(Type/Enter)
+
+ A = 1.1234   B = 6.32456 
+
+The responses can be any valid expression, including functions of the variable being input.. Follow each response by a carriage return (Enter). If the variables have been defined, their current values are shown in parentheses. In this case, a simple <Enter> with no other input will retain the current value. The variables will be initialized if not already defined. The entries "done" or "end" or "eof" will return an end-of-file condition (eof = true), which can be tested (see "Data Processing"). To suppress the variable name prompt, use  input0 Var1 Var2....
+
+The Boolean counterpart to "input" is the following:
+
+	query  "question string"   [y/n/Var]	(second arg is optional, used for default)
+
+The question string should be a yes/no question, the response is either "y" or "n". The result is stored in the system constant "qq", either 1 (true) for "y", or 0 (false) for "n".
+Example:    query "Do Another Case?";      break_if  ~qq   . If the second argument is a logical variable, its value is used for the default, and its final value = qq.
+
+Query can also be used to simply insert a pause in the program: query "<cr> to continue".
+
+
+1.6 Programming 
+
+Just a few commands are needed to completely control the flow of a computation.
+
+1.6.1 Loops 
+
+Occasionally a large number of repetitions are required perform a computation, and some sort of iterative construct is needed. This is provided in the form of three "loop" commands.  The commands are:
+
+begin_loop_i 	begin  end  [increment(1)]   		args refer to index   i
+            (commands that use the index  i)
+    begin_loop_j 	begin  end   [increment(1)]	 	args refer to index   j
+     (commands that use the indices i,  j)
+begin_loop_k	begin  end   [increment(1)]	args refer to index   k
+                    (commands that use the indcies i, j, k)
+end_loop_k
+    end_loop_j
+end_loop_i
+
+The third argument (increment) is optional, and is set to 1 if not present. The three indices  i, j, k  can be used, but cannot be changed or redefined.  The indices are real numbers, so the "begin", "end", and "increment" values can be non-integers, and can be negative.  The arguments can also be valid algebraic expressions. The end condition is tested at loop creation as well as after each application of the increment, so it is possible for a loop to iterate zero times, in which case the interior commands are skipped.
+
+If the i/j/k notation is inconvenient, simply equate a user variable to the loop index as the first command in the loop. This allows a more descriptive index name, and avoids problems if additional loop levels are added at a later time.
+
+Early termination of a loop on a test is done with:
+
+continue 			skip to end of loop
+continue_if   test 		same, if "test is true"
+
+break 				skip to end of loop and exit
+break_if   test			same, if "test is true"
+
+These commands are ignored if not in an active loop, and always apply to the innermost loop. The alternate forms   if  test  break    and     if  test  continue   also work.
+
+The three different loop structures are provided to allow nesting (e.g. for x, y, z constructions). The nesting must be in i-j-k order. In nested loops, the inner loops may use any of the currently defined indices, even in the arguments (variation limits of inner indices can thus depend on the values of the outer indices). If more than three levels of loops are required, this can be done by using subroutines or external data files (see "Subroutines", and "External Data Files", below).
+
+A loop command is the only way to repeat execution of blocks of commands in this system.  See the "Examples" section for practical applications.
+
+A sample loop structure:
+
+begin_loop_i = 1 20
+    begin_loop_j = 1 35
+        A[i][j] = 4*i-log(j)
+        break_if A[i][j]>42
+    end_loop_j
+end_loop_i
+
+For quick work, the following abbreviations are defined: for_i = do_i = begin_loop_i, end_i = end_loop_i, for_j = do_j = begin_loop_j, end_j = end_loop_j,  for_k = do_k = begin_loop_k, end_k = end_loop_k. 
+
+
+1.6.2 If Tests
+
+Simple "if" statements can be used when only a single command follows the test clause.  Type the test and the command on the same line:
+
+if  test  command  [args ...]
+
+This form does not require an "end_if" statement. It can be used to make any command appear or disappear. Use responsibly.
+
+More general "if" structures are constructed as usual as follows. 
+
+if  test		test clause must be present, test = 0, false, else true
+	[commands to do if "test" is true]
+else_if  test2 		optional,        note underscore
+[commands to do if "test2" is true]
+else_if  test3		optional
+[...etc....any number of else_if clauses are allowed]
+else		else is also optional, but good practice
+	[commands to do if all tests are false]
+end_if		ends the if command block
+
+The possible forms are thus:
+
+if  test  
+    [commands to do if "test" is true];\
+end_if	
+or..
+if  test
+    [commands to do if "test" is true]
+else  
+    [commands to do if "test" is false] 
+end_if
+or...
+if  test  
+    [commands to do if "test" is true] 
+else_if  test2 
+    [commands to do if "test2" is true] 
+else  
+    [commands to do if all tests are false] 
+end_if
+etc.
+
+Note that this "if" syntax is subtly different than "C", which lacks an else_if statement.
+The "test" is an ordinary expression involving algebraic and Boolean operators.  "If" clauses can be nested, and the "if" clauses can include loops, or can be in a loop. They cannot extend across begin_loop or end_loop statements, however.
+
+Here is a test of the string conversion functions, using simple and ordinary if statements.
+
+/*  string conversion tests  */
+Case = 1
+input Case
+$A = zzzABcd
+if Case=1  str_cap $A
+if Case=2  str_upper $A
+if Case=3  str_lower $A
+if Case=4
+  str_lower $A
+  str_cap $A
+end_if
+show $A
+end
+
+This produces (1) ZzzABcd,  (2) ZZZABCD, (3) zzzabcd, (4) Zzzabcd, (else) zzzABcd.
+
+Returning to the quadratic equation, use some tests to clean up the display:
+
+        B = -6;  C = 11;  D = -6
+show_nl;   show_field "==> Quadratic:  "
+
+if B=1;        show_field "x^2"
+else_if B=-1;  show_field "-x^2"
+else_if B;     show_field @B " x^2"
+end_if
+
+if C=1;        show_field " + x"
+else_if C=-1;  show_field " - x"
+else_if C>0;   show_field " + " @C " x"
+else_if C;     show_field " - " @-C " x"
+end_if
+
+if D>0;        show_field " + " @D
+else_if D;     show_field " - " @-D
+end_if
+show_nl; show_nl
+
+resulting in the cleaner output:
+
+==> Quadratic:  -6 x^2 + 11 x - 6
+
+Note that the "=" associated with the "if" statements are Boolean tests, while the "=" associated with the B, C and D definitions are flanked by spaces, and are treated as white space.
+
+"If" structures have no labels, so extreme care should be taken to assure that the if...else...end_if   patterns are all aligned, do not extend across loop boundaries, etc. If not properly aligned, an error condition will be generated, but tracking the problem may be difficult.
+
+1.6.3 Goto
+
+Although not ever strictly needed, a "goto" command can occasionally be used to avoid a cumbersome cascade of tests, breaks or "if" clauses. To prevent "spaghetti code" this implementation will only jump forward in the file. The syntax is:
+
+goto   label:				or	goto  command
+........		[code block]			.......
+      label:						command
+
+The result will be an unconditional jump to the next line with the string "label:" or "command" in the command field. This can be an actual command in the file (such as end_loop_j), or a descriptive label that does not correspond to any actual command. To distinguish a label from a command, follow the label by a colon (i.e. "label:"), as in C. Jumping to a command causes that command to be the next one executed. Hence, a "goto" to an "end_loop_i" statement is equivalent to a  "continue" command.
+
+Usually, a "goto" command will appear in an "if" clause:
+
+if    test_on_something
+      goto  somewhere:
+end_if
+................            //  code block
+somewhere:
+
+Great care should be used in the application of "goto" commands. For example, it is legal to use a "goto" to jump out of an "if" clause or a loop, but it is illegal to jump into an "if" construction or a loop. Common sense should be used. The processor will catch most errors of this sort.
+
+1.6.4 End/Exit Statements
+
+The end of the program can be specified by the simple command "end". This is usually used to separate the main program from subroutine definitions. It causes exactly the same condition as an "End-of-File" normally does.
+
+The command 
+
+exit  [string]		"string" is an optional argument
+
+causes a termination of the program. If an argument is present, it is displayed as a string before exiting. Error messages may be built using strings, string variables, "@" expressions, as in string variable definitions.
+
+1.6.5 Subroutines:  Call / Return
+
+A subroutine is called with the following command:
+
+	call  label:  [file_name]		(file_name is optional)
+
+where the file name is needed if the subroutine is in an external file in the local folder or directory. The subroutine is usually in the same file as the main code. In this case end the main code section with an end command. In either case the subroutine generally ends with a return command, and may contain other return commands for early exits. 
+
+The "call" command transfers control to the "label:" statement. "label:" can be any appropriate descriptive string. The first "return" encountered returns control to the statement following the call command. Subroutines have access to all user-defined variables, but have their own unique loop indices. Thus a subroutine call increases the effective depth of the loops by three additional indices.
+Subroutine calls can be in loop, and subroutines can call other subroutines. If loop indices from a calling routine are needed in a subroutine, define a user variable in the loop as equal to the value of the loop index, as in   begin_loop_i = 1,10; I = i;  call compute: .
+
+Any user variable ending with a "$" is a local variable, and will be available within the subroutine only. Thus "Var" is global, but "Var$" is local. Subroutines in external files can also call subroutines. In this case, if the file_name is missing, the second routine is assumed to be in the same (external) file as the first.
+
+1.6.6 Read_file
+
+External command files can also be "read" by the command
+
+read_file  file_name
+
+The file is processed in the usual fashion, with the values of the user variables available, but with unique loop indices, and variables ending in "$", as in subroutines. External files are useful to "package" a preset process or set of data initializations. The end of file acts as a return command. The file is assumed to be in the same folder as the S file being run. 
+
+A convenient way to "package" a subroutine or set of subroutines is to place them in an external file and precede the subroutines with a test, driver, or interface program that calls the routines. The command "read_file" then accesses the routines via the interface program. See "regress.s" as an example (in the math package). In this case the interface provides an interactive setup option. If setup is not desired, the regress subroutine can be called directly.
+
+If the file is not found, or another error occurs, the parameter "err" is set to true.
+
+1.6.7 Debugging
+
+The command "debug" generates processing information for each command. The command "step" will in addition cause a pause after each command (type Enter to continue). Insert in code near a suspected bug. For example:
+
+        if i=5 step			// turn step debug on
+
+	if i=10  step = false	// turn step debug off
+
+Either "step" or "step = true" will turn on the condition. "step = false turns it off.
+
+There are also the following specialized debug commands, usually used only during system testing: debug_inp (details of command parsing), debug_if (details of if tests), and debug_loop (details of the loop commands).
+
+1.6.8 Error Handling
+
+If an error is detected, the default action is to pause and then exit. For some applications, it may be preferable to display an error message and continue. The command   noexit  sets this condition. It can be turned on an off with an optional (true/false) expression argument. If an error is detected with noexit = true, the parameter "err" is set to true, and the program continues. "err" is cleared when tested.
+
+1.6.9 Custom Commands: "exec", "system" (generate a data plot)
+
+It is possible to load a command into a string variable, say "$Cmd" and then execute this command with the (meta) command:
+
+exec  $Cmd
+
+Some commands have a variable number of  arguments. "show_lab" and "show_tab" are examples. To build a table with a variable number of columns, build a string to load a command line of the form "show_lab lab1 lab2 lab3 ..." into a string variable. Then execute this command line using "exec":
+
+$str1 = show_lab    // start label command
+do_i = 1 M
+  $str1 = $str1 + " " + var @i
+end_i
+exec $str1	      // print label line
+
+A related command for executing system commands is:
+
+      system  $Cmd
+
+For example, if a data set has been written to \home\sdat\data.csv, and the Thor plot package is located at \home\sdat\thor.exe, and a Thor Workspace file to plot data.csv is located in \home\sdat\data.thor, then a plot of the data can automatically be produced via the following commands:
+
+/*  write data to data.csv file  */
+close_file data.csv		//  needed
+
+       system "c:\home\sdat\thor c:\home\sdat\data.thor"
+       
+
+1.7 File Input / Output
+
+These are general file i/o commands.  To write to a file, use the command:
+
+write_line  file  field1 field2   @exp ...	(same as show_line, except that the line is written to the specified file,  no delimiters between fields)
+
+If the file is not open for writing, it is opened, and subsequent writes are appended to the file. The arguments are combined as in the show_line command, and can be a series of strings, quoted strings, string variables, or expressions (use @ to evaluate).  write_field... is the same, but without the newline. Use "decimals" to format. To read from a file, use: 
+
+read_line  file  Var1 Var2 ...	(read one line, assign values to the variable list, number of variables must match the number of fields on the line unless a single string variable appears, then it gets the whole line.  Fields are assumed delimited by blanks unless the delimiter has been reset (see "set_delim"). The number of fields found is placed in the variable Nfields.)
+
+read_list  file	(this variation  reads fields delimited by spaces and places the number of fields in Nfields, the text in  $Field[i], i = 1, Nfields)
+
+err			(set to true if too few fields (= Nfields) are found in the data line)
+eof	(set to true if an end of file is encountered - file is closed)
+
+close_file  file_name  		(close the file and flush the buffer)
+
+Use read_list for files with many columns or fields, and/or very long line lengths. Lines longer than about 1000 characters will fail using read_line, but read_list will work.
+
+After all the data is read or written, it is good practice to close the file. This is required if another application needs access to the data immediately, but in most cases this command is optional since all files are closed at the termination of the routine.
+
+
+1.8 Data Processing
+
+These are specialized commands to read and write data sets. Both reading and writing a file consists of a single "_lab" command to open the file, followed by multiple "_dat" commands to read or write the data line by line.  The commands are:
+
+write_lab  file  lab1 lab2 lab3 ...	(file will be opened and written to local directory. Labels are strings that will be written to the first line in the file. If lab1 = <append>, the data will be appended to an existing file.)
+
+write_dat  exp1 exp2 exp3 ...	(appends one record of data to file defined by a previous call to "write_lab". Use "skip" to write an empty field.)
+
+read_lab  file  [$lab1 $lab2...]	(file in local directory, is opened, labels are placed in $lab vars if present, else in $Labels[])
+
+read_dat  [Var1 Var2 Var3....]	(reads one record of data from the file designated in a previous call to read_lab and assigns the values to the variable names in the calling list. eof and err are set as in read_line, if no args, then put values in Vars[i])
+
+set_delim  comma|space|tab|slash	(assigns a delimiter for subsequent reading or writing data files. Default is "comma")
+
+These commands are designed to read and write ".csv" (comma separated variable) files. File names are set by write_lab and read_lab, and should end in .csv to be read by other applications. The number of fields found by read_lab and read_dat are placed in the variable Nfields. The "set_delim" command is provided to allow reading and writing of files with other formats for special applications, and specifies the delimiter used between the labels and between the data values. The delimiter is also placed in $Dlm. The file format consists of one line with a list of column labels, followed by any number of data lines, each containing the same number of entries as labels on the first line of the file. The data entries can be numeric or strings.
+
+If a file is in .csv format, but has one or more title lines above the labels, these lines should be read with a read_line command before using read_lab. The file pointer will be advanced correctly.
+
+For writing only, several data files can be opened simultaneously. Use a sequence of "write_lab" commands to open the files, and then write the data using a sequence of "write_dat" commands. The data will be written to each file in sequence. Be sure that the number of "dat" commands always agrees with number of the "lab" commands.
+
+When an end-of-file is encountered, the system variable "eof" is set and the file is closed. This is the cleanest way to end a data input loop.
+
+read_lab $file        //  this opens the data file, reads the first line
+begin_loop_i = 1 Big
+    read_dat   U[i]  V[i]  W[i]                  // read the data
+    break_if  eof     //  file closes on eof, next read will fail
+end_loop_i
+N_entries = i-1       //  allow for the extra eof line
+
+An alternative read data file command is:
+
+read_dat_2 file	(reads a standard .csv data file. Stores the number of columns in M, the number of rows in N, the labels in the string array $Labels[col], and the data values in the 2D data array X[row][col].)
+
+This reads any data file with a single call. To set or reset the file-type extension of a file name in a string variable, use
+
+set_file_type  $file  ext	(e.g.   set_file_type  $datfile  csv   - if $datfile contains data.txt, it is changed to data.csv)
+
+Variable definitions, similar to Fortran Namelist output can be saved and read with the commands:
+
+write_var  file Var1 Var2 Var3 ...	(writes variable definitions to "file", of the form "Var = value", one per line)
+read_var  file Var1 Var2 ...	(reads and initializes variables, checks the names against those in the file)
+
+If a series of variable definitions, such as those generated with write_var commands, are stored in a separate file, "read_file" can also be used to read and store the values.
+2 Programming Examples
+
+2.1 Fibonacci
+
+This is a simple calculation with a tabular output. The "Ratio" approaches the Golden Mean.
+
+/*----FIBONACCI---*/
+
+show_line "          ========Fibonacci========"
+show_nl
+
+Var1 = 1
+Var2 = 1
+
+show_lab Num Next Prev Ratio
+show_lab "======" "======" "======" "========="
+
+begin_loop_i = 1 10
+   Var3 = Var1+Var2
+   Var1 = Var2
+   Var2 = Var3
+   Ratio = Var1/Var3
+   show_tab i Var3 Var1 Ratio
+end_loop_i
+
+show_lab "======" "======" "======" "========="
+
+The result is:
+          ========Fibonacci========
+
+       Num      Next      Prev       Ratio
+    ======    ======    ======   =========
+         1         2         1         0.5
+         2         3         2    0.666667
+         3         5         3         0.6
+         4         8         5       0.625
+         5        13         8    0.615385
+         6        21        13    0.619048
+         7        34        21    0.617647
+         8        55        34    0.618182
+         9        89        55    0.617978
+        10       144        89    0.618056
+    ======    ======    ======   =========
+
+With a little added formatting, such as:
+
+set_tab 6
+show_lab0 Num Next Prev
+set_tab 10
+show_lab Ratio
+set_tab 6
+show_lab0 "======" "======" "======"
+set_tab 10
+show_lab  "=========="
+
+the display can be cleaned up to produce:
+   Num  Next  Prev     Ratio
+============================
+     1     2     1    0.5000
+     2     3     2    0.6667
+     3     5     3    0.6000
+     4     8     5    0.6250
+     5    13     8    0.6154
+     6    21    13    0.6190
+     7    34    21    0.6176
+     8    55    34    0.6182
+     9    89    55    0.6180
+    10   144    89    0.6181
+============================
+
+
+2.2 Cubic Equation Solver:
+
+This routine shows some of the display options and subroutine use, as well as the mathematical techniques of iteration and error checking. The special cases checker and the cubic display generator are set up as subroutines. The cubic solver algorithm is shown at the top in the comments. Just change the A, B, C, D and X1 definitions to init_var commands to run this as a subroutine.
+
+#---cubic equation solver---
+# 11/03 - rfs
+#  find roots of a cubic equation
+#  ax^3 + bx^2 + cx + d = 0
+#  NR iteration to real root:
+#  xnew = (2ax^3 + bx^2 - d) / (3ax^2 + 2bx + c)
+#  if r1 is the real root, and q = (b/a + r1)
+#    then the other two roots are given by:
+#  r2,3 = -q/2 +/- sqrt( (q/2)^2 - (q*r1 + c/a) )
+
+#----define the problem-----
+//A = 1;  B = -1;  C = 1;  D = -1
+A = 1;  B = 3;  C = 3;  D = 1
+
+call show_cubic:      //  display routine
+call check_special:   //  special cases routine
+
+X1 = 1.    //  guess
+
+#---find a good guess---
+begin_loop_i = 1 5
+    break_if 3*A*sq(X1)+2*B*X1+C
+    X1 = X1+0.1
+end_loop_i
+
+#---iterate to first root---
+begin_loop_i = 1 100
+    Denom = 3*A*sq(X1)+2*B*X1+C
+    break_if abs(Denom)<1.e-15
+    X2 = (2*A*cub(X1)+B*sq(X1)-D)/Denom
+    break_if ~(abs(X2)+abs(X1))
+    Delta = abs((X2-X1))/(abs(X2)+abs(X1))
+    X1 = X2
+    break_if Delta<1.e-8
+    if i=100
+      show_lab "No convergence in iteration"; show_nl
+    end_if
+end_loop_i
+
+show_line "Real Root... " @i " iterations";  show_nl
+show X1; show_nl
+
+#---compute other two roots---
+Q = B/A+X1
+Dis = sq(Q/2)-(Q*X1+C/A)
+
+if Dis>0|Dis=0
+    X2 = -Q/2-sqrt(Dis)
+    X3 = -Q/2+sqrt(Dis)
+    show X2;    show_nl;    show X3
+else
+    Re = -Q/2
+    Im = sqrt(-Dis)
+    show_line "---Complex Roots---"; show_nl
+    show_line "X2 = (" @Re ", +" @Im ); show_nl
+    show_line "X3 = (" @Re ", -" @Im )
+end_if  
+end
+#---------------------------------------------------#
+
+#---pretty print subroutine---
+show_cubic:
+show_nl;  show_field "==> Cubic:  "
+
+if A=1;        show_field "x^3"
+else_if A=-1;  show_field "-x^3"
+else_if A;     show_field @A " x^3"
+end_if
+
+if B=1;        show_field " + x^2"
+else_if B=-1;  show_field " - x^2"
+else_if B>0;   show_field " + " @B " x^2"
+else_if B;     show_field " - " @-B " x^2"
+end_if
+
+if C=1;        show_field " + x"
+else_if C=-1;  show_field " - x"
+else_if C>0;   show_field " + " @C " x"
+else_if C;     show_field " - " @-C " x"
+end_if
+
+if D>0;        show_field " + " @D
+else_if D;     show_field " - " @-D
+end_if
+
+show_line " = 0"; show_nl
+return
+#---------------------------------------------------#
+
+#---special cases subroutine---
+check_special:
+
+if ~A&~B&~C;  //  too many zeros!
+    exit "No solution!"
+end_if
+
+if ~A&~B     //  linear case
+    show_line "X1 = " @-D/C; show_nl
+    exit "X2 = X3 = no solutions (linear case)"
+end_if
+
+if ~A&B      // quadratic case
+    Q = sq(C)-4*B*D
+    if Q>0|Q=0
+        show_line "X1 = " @(-C+sqrt(Q))/2; show_nl
+        show_line "X2 = " @(-C-sqrt(Q))/2; show_nl
+    else
+        show_line "---Complex Roots---"; show_nl
+        Re = -C/2
+        Im = sqrt(-Q)/2
+        show_line "X1 = (" @Re ", +" @Im ); show_nl
+        show_line "X2 = (" @Re ", -" @Im ); show_nl
+    end_if
+    exit "X3 = no solution (quadratic case)"
+end_if
+return
+#---------------------------------------------------#
+
+As shown, the output is:
+
+==> Cubic:  x^3 + 3 x^2 + 3 x + 1 = 0
+Real Root... 33 iterations
+X1 = -1
+X2 = -1
+X3 = -1
+
+
+2.3 Computations and Data Files
+
+This is a typical application routine that computes mathematical quantities and writes the result to a file for analysis.
+
+#----compute kernel quantities----
+
+set_tab 15
+show_lab H 1/N1 1/N2 1/N3
+
+$datf = ker.csv
+write_lab $datf H N1 N2 N3
+
+begin_loop_i = .01 1.1 .1
+    H = i
+    N1 = 1.5*H
+    N2 = 0.7*pi*sq(H)
+    N3 = pi*cub(H)
+    show_tab H 1/N1 1/N2 1/N3
+    write_dat H N1 N2 N3
+end_loop_i
+
+show_nl
+
+N1N2 = 1/(1.5/(0.7*pi))
+
+N1N3 = 1/(1.5/(pi))
+
+show N1 N2 N3; show_nl
+show_line "N2/N1= " @N1N2 "  N3/N1= " @N1N3
+
+The screen output is:
+
+              H           1/N1           1/N2           1/N3
+           0.01        66.6667        4547.28         318310
+           0.11        6.06061        37.5809        239.151
+           0.21         3.1746        10.3113         34.371
+           0.31        2.15054        4.73183        10.6848
+           0.41        1.62602        2.70511        4.61847
+           0.51        1.30719        1.74828         2.3996
+           0.61         1.0929        1.22206        1.40236
+           0.71       0.938967        0.90206       0.889355
+           0.81       0.823045       0.693078       0.598956
+           0.91       0.732601       0.549123       0.422402
+           1.01       0.660066       0.445768       0.308948
+
+N1 = 1.515   N2 = 2.24332   N3 = 3.23679
+
+N2/N1= 1.46608  N3/N1= 2.0944
+
+The file ker.csv contains:
+
+H,N1,N2,N3
+0.01,0.015,0.000219911,3.14159e-006
+0.11,0.165,0.0266093,0.00418146
+0.21,0.315,0.096981,0.0290943
+0.31,0.465,0.211335,0.0935912
+0.41,0.615,0.369671,0.216522
+0.51,0.765,0.57199,0.416735
+0.61,0.915,0.818291,0.713082
+0.71,1.065,1.10857,1.12441
+0.81,1.215,1.44284,1.66957
+0.91,1.365,1.82109,2.36741
+1.01,1.515,2.24332,3.23679
+
+Excel can read the file and produces this data plot:
+
+
+
+2.4 Data Entry
+
+This is a generic code for data entry for either keyboard or file (data.s). If the data is entered from the keyboard, it is then written to a file. Here the arrays X and Y are entered; modify as needed. 
+
+#---default data file---
+$datf = dat.csv               // default data file
+
+#---data entry if desired---
+Enter = false
+query "Enter Data?" Enter
+if Enter
+  show_nl;
+  show_line "Enter Data, type 'done' when finished"
+  show_nl;
+  begin_loop_i = 1 400
+    input X[i] Y[i]           //<---customize
+    break_if eof
+  end_loop_i
+  N = i-1
+  if N=0; exit "Zero points in table"; end_if
+end_if
+
+input $datf              // change data file name?
+
+#---read or store data---
+if Enter
+  write_lab $datf X Y         //<---customize
+  begin_loop_i = 1 N
+    write_dat X[i] Y[i]       //<---customize
+  end_loop_i
+  show_line "File " $datf " written"
+else
+  read_lab $datf
+  begin_loop_i = 1 400
+    read_dat X[i] Y[i]          //<---customize
+    break_if eof
+  end_loop_i
+  N = i-1
+  if N=0; exit "Zero points in table"; end_if
+  show_line "File " $datf " read"
+end_if
+show_line "--> " @N " points in table"
+
+After this code segment is run, the data are available for use in an application. In some cases, it may not be necessary to store the data in arrays, but do the computations "on the fly". For these cases insert the computation section in the appropriate loop. 
+
+2.5 Interactive Programming
+
+This example computes a 3-dimensional random walk with Gaussian intervals. The number of steps is an input quantity. After the first computation, the program repeats with the option of either extending the previous result or starting a new path. The result is written to the file "walk.csv". Note how the I/O is separated from the computation.
+ 
+
+show_line "----3D Random Walk----"
+show_nl
+N = 5000
+Reinit = true
+do_i = 1 100    // multiple passes
+  show_field "Steps?"
+  input N
+  if i>1
+    query "Reinit?" Reinit
+  end_if
+  call walk:    // do it here
+  show_line "...done, continue/repeat?"
+end_i
+end
+#-----------------------------#
+
+walk:
+#---inits---
+init_var N = 1000
+init_var Reinit = true
+if Reinit
+   do_i = 1 3
+      D[i] = 0
+   end_i
+   write_lab walk.csv Num Dx Dy Dz
+end_if
+
+#---compute---
+do_i = 1 N    //  compute here
+  do_j = 1 3
+    D[j] = D[j]+rang
+  end_j
+  write_dat i D[1] D[2] D[3]
+end_i
+return
+
+Here is a typical result, colored on Num, plotted with Thor:
+
+
+3 System Generated Variable Names
+
+The S_tran language uses two sorts of reserved variable names. The first type consists of system functions and constants. These items are part of the language, begin with a lower case letter, and are listed in sections 1.3 of this manual. The second type of reserved name is used for user variables that begin with an upper case letter, but are generated by the system for various specialized applications. Although it is unlikely that this will cause problems, it is necessary to be aware of the variable names so defined to avoid duplication and possible conflicts. Note that if this type of problem is suspected, the local variable can be defined as "constant" and any system references will be flagged as errors. The following is a list of the currently defined variable names.
+
+Data input:
+
+Nfields - number of fields found in a read_dat, or read_line command.
+Nfields, $Field[] - used by read_list command.
+Nfields, $Labels[] - used by read_lab command.
+Nfields, Vars[] - used by read_dat command.
+N, M, $Labels[], X[][] - used by read_dat_2.
+
+Strings:
+
+$Dlm - delimiter set by set_delim command.
+S_len - string length in str_len.
+$S_char - charcter found in an str_char command.
+S_comp, S_eq, S_off - used by str_eq command.
+S_found, $S_head, $S_tail - used by str_sub.
+
+Applications:
+
+N, M, X[][] - used by sort.
+N, M, X[][], Y[], Z[] - used by solve.
+X_s, F_s(), Tol_s, Uc_fact, Converge_s, Max_passes_s - used by update_X_s (secant).
+X_g, F_g(), Tol_g, Converge_g, Gsearch - used by update_X_g (extremum).
+F_eig[], Nfact, F_load[][]  - used by factor.
+M, N, $Label[] , X[][] , NVars, B0, Vars[], Coeffs[], SY, SB[] - used by mult_regress.
+N_clust, Var_clust - used by cluster.
+N, Xdat[], Ydat[], F_min[], Th_min[], Signf[], SN_ratio - used by pdm, pdm2.
+N, Xdat[], Ydat[], NHdat,  Hdat[], Fdat[] - used by lomb.
+4 S_tran Language Summary  	2.00	(c) Stellingwerf Consulting - 2021
+Math Operators:  		+    -    *    /    ^    %		Unary:  -  ~  
+
+Boolean Operators:	=    >    <    ~    &    |		(true = non-zero,    false = 0)
+
+Constants:		true  false  pi  ee  deg  ran  ran2  rang  ranw i  j  k  eof  err  qq  ver  dec  wid  $date
+
+Math Functions:	abs()  sign()  int()  floor()  ceil()  ip()  fp()  sq()  sqrt()  cub()  cbrt()  sin()  asin()  cos()  acos()  tan()  atan()  log()  ln()  exp()  exp10()  spl()  max(explist)   min(explist)   if(test, ans1, ans2, ans3) 
+
+User Variables:		Var = exp      Var[exp1] = exp      Var[exp1][]... = exp       Var$ = exp    (loc)    	
+    			$Var = str	 str_len  $str	str_char  $str  #	      str_cap  $str
+			str_eq  $str1 $str2	 str_ran  $str len  beg  end	      str_tofloat  Var = $Str
+
+User Functions		function  Fn_name(Arg1$,Arg2$,...) = expression
+
+Init Commands:  		seed  #|ran  	init_var Var = #    (set if not defined) 	constant  [t/f]
+
+Display Commands:	show  exp1 exp2...    		show_line "string1"  @exp1  "string2"  ...
+show_nl	       decimals # [width]      show_field "string1"  @exp1  "string2"  ...
+
+Table Commands:	set_tab #    	show_lab(0) lab1 lab2 ...    	show_tab(0) exp1 exp2  ...   
+
+Input Commands	:	input Var1 Var2 ...    		input0 Var1 Var2 ...  (no prompt)
+       query  "query string" [y/n/Var]	(result in qq [and Var])
+
+Program Flow:	begin_loop_i  = beg end [incr]   	end_loop_i	(for_i / do_i / end_i)
+ 	begin_loop_j  = beg end [incr]  	end_loop_j	(for_j / do_j / end_j)
+begin_loop_k = beg end [incr]  	end_loop_k 	(for_k / do_k / end_k) 
+continue    	continue_if  test    	break    	break_if  test
+	if  test  		else_if  test 	else    	end_if    
+goto label:  		end 		exit "string"
+call  label:  [file]  	return     	read_file  file
+
+Meta Commands:		exec  $CmdString		system  "system command"
+
+Debug Commands:	debug  [test]	step [test]         exp!  (debug expression)	    noexit [t/f]
+	
+Data I/O:		write_line  file "string1"  @exp1  "string2"...   write_field....	close_file  file
+			read_line file  Var1 Var2 ...      read_line  file  $Line		read_list   file
+write_lab  file  lab1  lab2  ...		write_dat  exp1 exp2 ....
+			read_lab  file  [$lab2 $lab2 ...]          	read_dat  [Var1  Var2  ....]    
+set_delim  comma|space|tab|slash		read_dat_2  file	
+write_var  file  Var1  Var2  ...	read_var  file  Var1  Var2  ..
+
+Math Applications:	solve	(solve a set of linear equations)	sort      (sort an array)
+			pdm2		lomb	  [plus control commands for both]
+			set_weib  lower center N shape
+
+Statistics Package:    	mult_regress [ file]  [log]	set_mr_vars # #.. 	 set_mr_tols F1 F2 tol
+			coranal  [file]		set_ca_params  threshold
+			factor  [file]		set_fa_params  threshold highlight
+			cluster  [file]		set_cl_params  sensitivity
+
+
+
+21
+
+

@@ -1,0 +1,19 @@
+{
+  "name": "ozwizard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build && npm run build:file",
+    "build:file": "esbuild src/main.ts --bundle --format=iife --target=es2020 --outfile=dist/assets/wizard_of_oz-file.js",
+    "test": "vitest run",
+    "test:e2e": "node scripts/run-e2e.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.53.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vitest": "^3.2.3"
+  }
+}

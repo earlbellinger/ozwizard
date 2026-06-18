@@ -1,0 +1,925 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OZwizard</title>
+  <script>
+    window.MathJax = {
+      loader: { load: ["[tex]/color"] },
+      tex: {
+        packages: { "[+]": ["color"] },
+        inlineMath: [["\\(", "\\)"], ["$", "$"]],
+        displayMath: [["\\[", "\\]"]],
+        macros: {
+          ozTau: ["{\\color[RGB]{158,167,255}#1}", 1],
+          ozRadius: ["{\\color[RGB]{127,167,255}#1}", 1],
+          ozVelocity: ["{\\color[RGB]{255,111,145}#1}", 1],
+          ozPressure: ["{\\color[RGB]{101,214,138}#1}", 1],
+          ozConvective: ["{\\color[RGB]{240,189,61}#1}", 1],
+          ozLuminosity: ["{\\color[RGB]{192,132,252}#1}", 1],
+          ozRadiative: ["{\\color[RGB]{255,209,102}#1}", 1],
+          ozConvLum: ["{\\color[RGB]{85,214,210}#1}", 1],
+          ozZeta: ["{\\color[RGB]{167,139,250}#1}", 1],
+          ozZetac: ["{\\color[RGB]{255,126,182}#1}", 1],
+          ozGammac: ["{\\color[RGB]{57,212,184}#1}", 1],
+          ozMass: ["{\\color[RGB]{154,168,189}#1}", 1],
+          ozGamma: ["{\\color[RGB]{185,148,255}#1}", 1],
+          ozBlue: ["{\\color[RGB]{114,183,255}#1}", 1],
+          ozPink: ["{\\color[RGB]{247,120,186}#1}", 1],
+          ozSource: ["{\\color[RGB]{217,154,80}#1}", 1],
+          ozDamping: ["{\\color[RGB]{137,148,166}#1}", 1],
+          ozNeutral: ["{\\color[RGB]{192,202,232}#1}", 1]
+        }
+      },
+      svg: { fontCache: "global" }
+    };
+  </script>
+  <script>
+    (function () {
+      var script = document.createElement("script");
+      var path = window.location.pathname.replace(/\\/g, "/");
+      if (window.location.protocol === "file:") {
+        script.src = path.indexOf("/dist/") >= 0
+          ? "./assets/wizard_of_oz-file.js"
+          : "./dist/assets/wizard_of_oz-file.js";
+      } else if (path.indexOf("/dist/") >= 0) {
+        script.src = "./assets/wizard_of_oz-file.js";
+      } else {
+        script.type = "module";
+        script.src = "/src/main.ts";
+      }
+      window.addEventListener("DOMContentLoaded", function () {
+        var logo = document.querySelector("[data-ozwizard-logo]");
+        if (logo && window.location.protocol === "file:" && path.indexOf("/dist/") < 0) {
+          logo.src = "./public/assets/ozwizard-logo.png";
+        }
+        document.head.appendChild(script);
+      });
+    }());
+  </script>
+  <script type="application/json" id="legacy-web-app-source">
+    window.MathJax = {
+      loader: { load: ["[tex]/color"] },
+      tex: {
+        packages: { "[+]": ["color"] },
+        inlineMath: [["\\(", "\\)"], ["$", "$"]],
+        displayMath: [["\\[", "\\]"]],
+        macros: {
+          ozTau: ["{\\color[RGB]{158,167,255}#1}", 1],
+          ozRadius: ["{\\color[RGB]{127,167,255}#1}", 1],
+          ozVelocity: ["{\\color[RGB]{255,111,145}#1}", 1],
+          ozPressure: ["{\\color[RGB]{101,214,138}#1}", 1],
+          ozConvective: ["{\\color[RGB]{240,189,61}#1}", 1],
+          ozLuminosity: ["{\\color[RGB]{192,132,252}#1}", 1],
+          ozRadiative: ["{\\color[RGB]{255,209,102}#1}", 1],
+          ozConvLum: ["{\\color[RGB]{85,214,210}#1}", 1],
+          ozZeta: ["{\\color[RGB]{167,139,250}#1}", 1],
+          ozZetac: ["{\\color[RGB]{255,126,182}#1}", 1],
+          ozGammac: ["{\\color[RGB]{57,212,184}#1}", 1],
+          ozMass: ["{\\color[RGB]{154,168,189}#1}", 1],
+          ozGamma: ["{\\color[RGB]{185,148,255}#1}", 1],
+          ozBlue: ["{\\color[RGB]{114,183,255}#1}", 1],
+          ozPink: ["{\\color[RGB]{247,120,186}#1}", 1],
+          ozSource: ["{\\color[RGB]{217,154,80}#1}", 1],
+          ozDamping: ["{\\color[RGB]{137,148,166}#1}", 1],
+          ozNeutral: ["{\\color[RGB]{192,202,232}#1}", 1]
+        }
+      },
+      svg: { fontCache: "global" }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #050814;
+      --bg-deep: #02040a;
+      --paper: #0c1324;
+      --paper-raised: #111b33;
+      --paper-high: #17233d;
+      --paper-warm: #18140c;
+      --ink: #eef5ff;
+      --muted: #a8b4c7;
+      --subtle: #75839a;
+      --line: #26334e;
+      --line-strong: #3f5180;
+      --line-warm: #5a461a;
+      --canvas: #07101f;
+      --canvas-grid: #26334e;
+      --focus: #9ea7ff;
+      --shadow: rgba(0, 0, 0, 0.42);
+      --logo-night: #08102f;
+      --logo-blue: #6080d0;
+      --logo-blue-bright: #9ea7ff;
+      --logo-ice: #d9e7ff;
+      --logo-gold: #f0bd3d;
+      --logo-gold-bright: #ffd166;
+      --logo-violet: #8b7cff;
+      --logo-leaf: #65d68a;
+      --tau: #9ea7ff;
+      --radius: #7fa7ff;
+      --velocity: #ff6f91;
+      --pressure: #65d68a;
+      --convective: #f0bd3d;
+      --luminosity: #c084fc;
+      --radiative: #ffd166;
+      --conv-lum: #55d6d2;
+      --zeta: #a78bfa;
+      --zetac: #ff7eb6;
+      --gammac: #39d4b8;
+      --m: #9aa8bd;
+      --gamma1: #b994ff;
+      --n: #72b7ff;
+      --s: #f778ba;
+      --source: #d99a50;
+      --cq: #8994a6;
+      --neutral-symbol: #c0cae8;
+      --warn: #f0bd3d;
+      --bad: #ff6f91;
+      --good: #65d68a;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg-deep);
+      color: var(--ink);
+      overflow-x: hidden;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .app-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(310px, 365px) minmax(0, 1fr);
+    }
+
+    aside {
+      background: linear-gradient(180deg, var(--paper-raised), var(--paper));
+      border-right: 1px solid var(--line);
+      padding: 18px;
+      overflow-y: auto;
+      max-height: 100vh;
+      position: sticky;
+      top: 0;
+      box-shadow: 12px 0 28px rgba(0, 0, 0, 0.18);
+    }
+
+    main {
+      background:
+        linear-gradient(180deg, rgba(96, 128, 208, 0.08), rgba(5, 8, 20, 0) 220px),
+        var(--bg);
+      padding: 18px 22px 30px;
+      min-width: 0;
+    }
+
+    .brand {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 16px;
+      min-width: 0;
+    }
+
+    .brand-top {
+      display: block;
+      min-width: 0;
+    }
+
+    .brand-main {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-logo {
+      width: 62px;
+      height: 72px;
+      object-fit: contain;
+      image-rendering: auto;
+      filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.34));
+      flex: 0 0 auto;
+    }
+
+    .brand-copy {
+      min-width: 0;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 26px;
+      letter-spacing: 0;
+      line-height: 1.05;
+      color: var(--ink);
+    }
+
+    .subtitle {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .subtitle:empty {
+      display: none;
+    }
+
+    .status-pill {
+      border: 1px solid var(--line);
+      background: rgba(7, 16, 31, 0.72);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 12px;
+      white-space: nowrap;
+      box-shadow: inset 0 0 0 1px rgba(158, 167, 255, 0.04);
+      display: inline-block;
+      margin: 8px 0 0 74px;
+    }
+
+    .section-title {
+      margin: 18px 0 8px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      font-weight: 760;
+    }
+
+    .preset-grid,
+    .driver-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .preset-grid button,
+    .driver-row button,
+    .action-row button {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--paper-raised);
+      color: var(--ink);
+      padding: 8px 9px;
+      cursor: pointer;
+      font-size: 13px;
+      min-height: 36px;
+      box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.04);
+    }
+
+    .preset-grid button:hover,
+    .driver-row button:hover,
+    .action-row button:hover {
+      border-color: var(--line-strong);
+      background: var(--paper-high);
+    }
+
+    .preset-grid button.active,
+    .driver-row button.active {
+      border-color: rgba(240, 189, 61, 0.74);
+      background: linear-gradient(180deg, rgba(240, 189, 61, 0.24), rgba(96, 128, 208, 0.16)), var(--paper-high);
+      color: var(--logo-gold-bright);
+      box-shadow: inset 0 1px 0 rgba(255, 209, 102, 0.2), 0 0 0 1px rgba(240, 189, 61, 0.08);
+    }
+
+    .action-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .toggle-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 8px 10px;
+      background: var(--paper-raised);
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .toggle-line input {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--logo-gold);
+    }
+
+    .slider-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .slider-control {
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--accent, var(--focus));
+      border-radius: 8px;
+      padding: 9px 10px 8px;
+      background: var(--paper-raised);
+      box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.03);
+    }
+
+    .slider-control:hover {
+      border-color: color-mix(in srgb, var(--accent, var(--focus)) 46%, var(--line));
+      background: var(--paper-high);
+    }
+
+    .slider-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 5px;
+      min-width: 0;
+    }
+
+    .slider-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .slider-symbol {
+      font-weight: 800;
+      color: var(--accent, var(--focus));
+      font-size: 14px;
+    }
+
+    .slider-name {
+      color: var(--muted);
+      font-size: 12px;
+      margin-left: 4px;
+    }
+
+    .slider-value {
+      font-variant-numeric: tabular-nums;
+      color: var(--ink);
+      font-size: 12px;
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+
+    .slider-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      flex: 0 0 auto;
+    }
+
+    .parameter-reset {
+      width: 24px;
+      height: 24px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--canvas);
+      color: var(--accent, var(--focus));
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+    }
+
+    .parameter-reset:disabled {
+      color: var(--subtle);
+      cursor: default;
+      opacity: 0.55;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent, var(--focus));
+    }
+
+    .plots-header {
+      display: grid;
+      grid-template-columns: 1fr;
+      align-items: start;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .plots-header h2 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: 0;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+
+    .metrics {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      gap: 7px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(17, 27, 51, 0.92);
+      padding: 6px 9px;
+      font-size: 12px;
+      color: var(--muted);
+      box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.03);
+    }
+
+    .metric b {
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+      margin-left: 4px;
+    }
+
+    .plot-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .plot-panel,
+    .content-panel {
+      border: 1px solid var(--line);
+      background: var(--paper);
+      border-radius: 8px;
+      padding: 12px;
+      min-width: 0;
+      box-shadow: 0 14px 34px var(--shadow), inset 0 1px 0 rgba(238, 245, 255, 0.03);
+    }
+
+    .plot-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+      min-height: 22px;
+    }
+
+    .plot-title h3,
+    .content-panel h3 {
+      margin: 0;
+      font-size: 15px;
+      letter-spacing: 0;
+      color: var(--ink);
+    }
+
+    .plot-title span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    canvas {
+      width: 100%;
+      height: 260px;
+      display: block;
+      border: 1px solid var(--line);
+      background: var(--canvas);
+      border-radius: 6px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .swatch {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--color);
+      flex: 0 0 auto;
+    }
+
+    .notes-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .content-panel p,
+    .content-panel li {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.58;
+    }
+
+    .content-panel p {
+      margin: 8px 0;
+    }
+
+    .content-panel a {
+      color: var(--logo-gold-bright);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(255, 209, 102, 0.38);
+    }
+
+    .content-panel a:hover {
+      color: var(--logo-ice);
+      border-bottom-color: rgba(217, 231, 255, 0.62);
+    }
+
+    .variable-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    .variable-table th,
+    .variable-table td {
+      border-top: 1px solid var(--line);
+      padding: 8px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .variable-table th {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .variable-table td:not(.symbol-cell) {
+      color: var(--muted);
+    }
+
+    .symbol-cell {
+      font-weight: 800;
+      color: var(--color);
+      white-space: nowrap;
+    }
+
+    .equation-block {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--canvas);
+      padding: 10px 12px;
+      margin: 10px 0;
+      color: var(--ink);
+    }
+
+    .equation-block mjx-container[jax="SVG"][display="true"] {
+      text-align: left !important;
+      margin: 0.5em 0 !important;
+    }
+
+    .small-note {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    .status-ok {
+      color: var(--good);
+    }
+
+    .status-warn {
+      color: var(--warn);
+    }
+
+    .status-bad {
+      color: var(--bad);
+    }
+
+    @media (max-width: 1050px) {
+      .app-shell {
+        grid-template-columns: 1fr;
+      }
+
+      aside {
+        position: static;
+        max-height: none;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+        min-width: 0;
+        overflow-x: hidden;
+      }
+
+      .slider-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      main {
+        padding: 14px;
+      }
+
+      .slider-list,
+      .plot-grid,
+      .notes-grid,
+      .plots-header {
+        grid-template-columns: 1fr;
+      }
+
+      .brand {
+        display: grid;
+      }
+
+      .brand-top {
+        display: block;
+      }
+
+      .brand-logo {
+        width: 56px;
+        height: 64px;
+      }
+
+      .status-pill {
+        display: inline-block;
+        margin-left: 68px;
+      }
+
+      .preset-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .driver-row {
+        grid-template-columns: 1fr;
+      }
+
+      .slider-head {
+        display: block;
+      }
+
+      .slider-label {
+        white-space: normal;
+      }
+
+      .slider-actions {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 4px;
+      }
+
+      .slider-value {
+        display: block;
+      }
+
+      .metrics {
+        justify-content: flex-start;
+      }
+
+      canvas {
+        height: 230px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside>
+      <div class="brand">
+        <div class="brand-top">
+          <div class="brand-main">
+            <img class="brand-logo" src="/assets/ozwizard-logo.png" alt="OZwizard logo" data-ozwizard-logo>
+            <div class="brand-copy">
+              <h1>OZwizard</h1>
+              <p class="subtitle">Interactive one-zone convection and pulsation explorer.</p>
+            </div>
+          </div>
+          <div id="statusPill" class="status-pill">Ready</div>
+        </div>
+      </div>
+
+      <div class="section-title">Presets</div>
+      <div class="preset-grid" id="presetButtons"></div>
+
+      <div class="section-title">Convective Driver</div>
+      <div class="driver-row">
+        <button type="button" data-driver="p" class="active">\(\sqrt{P}\)</button>
+        <button type="button" data-driver="abs-v">\(\sqrt{|V|}\)</button>
+      </div>
+
+      <div class="section-title">Solver</div>
+      <div class="driver-row" id="solverButtons"></div>
+      <label class="toggle-line">
+        <span>Compare selected solver to midpoint</span>
+        <input id="compareMidpoint" type="checkbox">
+      </label>
+      <label class="toggle-line">
+        <span>Run until stable</span>
+        <input id="runUntilStable" type="checkbox" checked>
+      </label>
+
+      <label class="toggle-line">
+        <span>Use radius-dependent shell mass \(m(R)\)</span>
+        <input id="variableM" type="checkbox">
+      </label>
+
+      <div class="section-title">Physical Parameters</div>
+      <div class="slider-list" id="physicalControls"></div>
+
+      <div class="section-title">Initial Conditions</div>
+      <div class="slider-list" id="initialControls"></div>
+
+      <div class="section-title">Integration</div>
+      <div class="slider-list" id="integrationControls"></div>
+      <div class="action-row">
+        <button type="button" id="resetPreset">Reset preset</button>
+        <button type="button" id="downloadCsv">Download CSV</button>
+      </div>
+    </aside>
+
+    <main>
+      <div class="plots-header">
+        <div>
+          <h2>Model Output</h2>
+          <p class="subtitle" id="modelSubtitle">Solving the four-equation convective one-zone model.</p>
+        </div>
+        <div class="metrics" id="metrics"></div>
+      </div>
+
+      <section class="plot-grid">
+        <div class="plot-panel">
+          <div class="plot-title">
+            <h3>Luminosity vs Phase</h3>
+            <span>last two cycles</span>
+          </div>
+          <canvas id="lightCanvas"></canvas>
+          <div class="legend" id="lightLegend"></div>
+        </div>
+
+        <div class="plot-panel">
+          <div class="plot-title">
+            <h3>Radial Velocity vs Phase</h3>
+            <span>last two cycles</span>
+          </div>
+          <canvas id="velocityCanvas"></canvas>
+          <div class="legend" id="velocityLegend"></div>
+        </div>
+
+        <div class="plot-panel">
+          <div class="plot-title">
+            <h3>Time Evolution</h3>
+            <span>state variables</span>
+          </div>
+          <canvas id="timeCanvas"></canvas>
+          <div class="legend" id="timeLegend"></div>
+        </div>
+
+        <div class="plot-panel">
+          <div class="plot-title">
+            <h3>Luminosity Split</h3>
+            <span>total, radiative, convective</span>
+          </div>
+          <canvas id="lumCanvas"></canvas>
+          <div class="legend" id="lumLegend"></div>
+        </div>
+
+      </section>
+
+      <section class="notes-grid">
+        <div class="content-panel">
+          <h3>Physical Model</h3>
+          <p>
+            The one-zone model compresses a pulsating stellar envelope into one moving shell. The shell radius
+            <span class="symbol-cell" style="--color:var(--radius)">\(\ozRadius{R}\)</span> and radial velocity
+            <span class="symbol-cell" style="--color:var(--velocity)">\(\ozVelocity{V}\)</span> describe the mechanical motion.
+            The independent clock <span class="symbol-cell" style="--color:var(--tau)">\(\ozTau{\tau}\)</span>
+            is scaled by the model's free-fall/dynamical time.
+            The nonadiabatic pressure factor <span class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{P}\)</span>
+            stores thermal energy, while the convective velocity
+            <span class="symbol-cell" style="--color:var(--convective)">\(\ozConvective{U_c}\)</span> relaxes toward a
+            mixing-length-like value on the convective time scale.
+          </p>
+          <p>
+            The star brightens through a combined luminosity
+            <span class="symbol-cell" style="--color:var(--luminosity)">\(\ozLuminosity{L}\)</span>, built from radiative
+            <span class="symbol-cell" style="--color:var(--radiative)">\(\ozRadiative{L_r}\)</span> and convective
+            <span class="symbol-cell" style="--color:var(--conv-lum)">\(\ozConvLum{L_c}\)</span> channels. Varying
+            the time scales and convective fraction changes whether the pulse damps, settles into a limit cycle,
+            or runs into a dynamic instability.
+          </p>
+          <p>
+            Historically, this app follows R. F. Stellingwerf's 1986 ApJ paper
+            <a href="https://adsabs.harvard.edu/pdf/1986ApJ...303..119S">“A Simple Model for Coupled Convection and Pulsation”</a>,
+            which generalized Baker's one-zone pulsation model with a time-dependent convection equation.
+            The local S_Tran files also mention the overtone work connected to
+            <a href="https://adsabs.harvard.edu/pdf/1987ApJ...313L..75S">Stellingwerf, Gautschy, and Dickens 1987</a>.
+          </p>
+        </div>
+
+        <div class="content-panel">
+          <h3>Variables</h3>
+          <table class="variable-table">
+            <thead>
+              <tr><th>Symbol</th><th>Name</th><th>Meaning</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="symbol-cell" data-symbol="tau" style="--color:var(--tau)">\(\ozTau{\tau}\)</td><td>Independent time</td><td>Dimensionless clock scaled by the model's free-fall/dynamical time; derivatives such as \(dR/d\tau\) are per dynamical time unit.</td></tr>
+              <tr><td class="symbol-cell" style="--color:var(--radius)">\(\ozRadius{R}\)</td><td>Radius</td><td>Dimensionless radius of the moving shell.</td></tr>
+              <tr><td class="symbol-cell" style="--color:var(--velocity)">\(\ozVelocity{V}\)</td><td>Radial velocity</td><td>Time derivative of the shell radius.</td></tr>
+              <tr><td class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{P}\)</td><td>Pressure factor</td><td>Nonadiabatic pressure or thermal state variable.</td></tr>
+              <tr><td class="symbol-cell" style="--color:var(--convective)">\(\ozConvective{U_c}\)</td><td>Convective velocity</td><td>Time-dependent turbulent/convective velocity scale.</td></tr>
+              <tr><td class="symbol-cell" style="--color:var(--radiative)">\(\ozRadiative{L_r}\)</td><td>Radiative luminosity</td><td>Radiative luminosity-like flux leaving the shell.</td></tr>
+              <tr><td class="symbol-cell" style="--color:var(--conv-lum)">\(\ozConvLum{L_c}\)</td><td>Convective luminosity</td><td>Convective luminosity-like flux proportional to \(U_c^3\).</td></tr>
+              <tr><td class="symbol-cell" style="--color:var(--luminosity)">\(\ozLuminosity{L}\)</td><td>Total luminosity</td><td>Weighted sum \(L=\gamma_rL_r+\gamma_cL_c\).</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="content-panel">
+          <h3>Equations Solved</h3>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+            \frac{d\ozRadius{R}}{d\ozTau{\tau}} &=
+              \ozVelocity{V},\\[0.35em]
+            \frac{d\ozVelocity{V}}{d\ozTau{\tau}} &=
+              \frac{\ozPressure{P}}{\ozRadius{R}^{q(\ozRadius{R})}}
+              - \frac{1}{\ozRadius{R}^{2}}
+              - \ozDamping{C_q}\ozVelocity{V}^{3},\\[0.35em]
+            \frac{d\ozPressure{P}}{d\ozTau{\tau}} &=
+              \ozZeta{\zeta}\,
+              \ozRadius{R}^{\ozMass{m}(\ozRadius{R})(\ozGamma{\Gamma_1}-1)}
+              \left[
+                \ozRadius{R}^{\ozSource{U}}
+                - \ozNeutral{\gamma_r}\ozRadiative{L_r}
+                - \ozGammac{\gamma_c}\ozConvLum{L_c}
+              \right],\\[0.35em]
+            \frac{d\ozConvective{U_c}}{d\ozTau{\tau}} &=
+              \ozZetac{\zeta_c}
+              \left[
+                \ozRadius{R}^{-d(\ozRadius{R})}D
+                - \ozConvective{U_c}
+              \right].
+            \end{aligned}
+            \]
+          </div>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+            \ozRadiative{L_r} &=
+              \ozRadius{R}^{b(\ozRadius{R})}
+              \ozPressure{P}^{\ozPink{s}+4},\\[0.35em]
+            \ozConvLum{L_c} &=
+              \ozRadius{R}^{-c(\ozRadius{R})}
+              \ozConvective{U_c}^{3},\\[0.35em]
+            \ozLuminosity{L} &=
+              \ozNeutral{\gamma_r}\ozRadiative{L_r}
+              + \ozGammac{\gamma_c}\ozConvLum{L_c},\\[0.35em]
+            D &= \sqrt{\ozPressure{P}}
+              \quad\text{or}\quad
+              \sqrt{|\ozVelocity{V}|}.
+            \end{aligned}
+            \]
+          </div>
+          <p class="small-note">
+            With fixed shell mass, \(m(R)=m\). With the toggle enabled,
+            \(m(R)=3/[1-(\eta/R)^3]\), where \(\eta=(1-3/m)^{1/3}\).
+          </p>
+        </div>
+
+        <div class="content-panel">
+          <h3>Parameter Guide</h3>
+          <table class="variable-table">
+            <thead>
+              <tr><th>Control</th><th>Meaning</th></tr>
+            </thead>
+            <tbody id="parameterTable"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+</body>
+</html>

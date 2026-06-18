@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# JavaScript and Playwright output
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+playwright-report/
+test-results/
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local environment and editor state
+.env
+.env.*
+.vscode/
+.idea/
+
+# OS noise
+.DS_Store
+Thumbs.db
