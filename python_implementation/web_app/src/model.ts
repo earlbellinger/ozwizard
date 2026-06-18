@@ -1,6 +1,7 @@
 import { type OdeResult, type SolverName, type SolverOptions, defaultSolverOptions, integrate } from "./solvers";
 
 export type Driver = "p" | "abs-v";
+export type ReferenceFamily = "paper-corrected" | "oz1-corrected" | "ozc-corrected" | "diagnostic";
 
 export interface ModelParameters {
   zeta: number;
@@ -29,6 +30,9 @@ export interface ModelParameters {
   runUntilStable: boolean;
   logStabilityTol: number;
   stableCycles: number;
+  referenceFamily: ReferenceFamily;
+  phaseWarmupTau?: number;
+  phaseMinAmplitude: number;
 }
 
 export interface Row {
@@ -95,7 +99,13 @@ export const TEX = {
   cq: "\\ozDamping{C_q}"
 } as const;
 
-export type ControlDef = [keyof ModelParameters, string, string, number, number, number, number, string];
+export type NumericParameterKey = {
+  [K in keyof ModelParameters]-?: NonNullable<ModelParameters[K]> extends number ? K : never
+}[keyof ModelParameters];
+
+export type ControlParameterKey = Exclude<NumericParameterKey, "phaseWarmupTau" | "phaseMinAmplitude">;
+
+export type ControlDef = [ControlParameterKey, string, string, number, number, number, number, string];
 
 export const CONTROL_GROUPS: Record<"physical" | "initial" | "integration", ControlDef[]> = {
   physical: [
@@ -159,16 +169,30 @@ const presetBase = {
   compareMidpoint: false,
   runUntilStable: true,
   logStabilityTol: -2.7,
-  stableCycles: 5
+  stableCycles: 5,
+  phaseMinAmplitude: 1e-4
+};
+
+const paperBase = {
+  ...presetBase,
+  referenceFamily: "paper-corrected" as const,
+  phaseWarmupTau: 4
+};
+
+const ozcBase = {
+  ...presetBase,
+  referenceFamily: "ozc-corrected" as const
 };
 
 export const PRESETS: Record<string, ModelParameters> = {
-  Strip: { ...presetBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "p" },
-  Blue: { ...presetBase, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "p" },
-  Red: { ...presetBase, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "p" },
-  "OZC local": { ...presetBase, zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, p0: 0.9, uc0: 0.7, tEnd: 120, step: 0.001, logErrTol: -5, variableM: true, driver: "abs-v" },
-  Thick: { ...presetBase, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "p" },
-  Unstable: { ...presetBase, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "p" }
+  Strip: { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "p" },
+  Blue: { ...paperBase, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "p" },
+  Red: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "p" },
+  Thick: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "p" },
+  Unstable: { ...paperBase, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "p" },
+  "OZ1 corrected": { ...presetBase, referenceFamily: "oz1-corrected", phaseWarmupTau: 1, zeta: 1, zetac: 1, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 2, r0: 1.2, v0: 0, p0: 0.8, uc0: 1, tEnd: 120, step: 0.012, logErrTol: -5, variableM: true, driver: "p" },
+  "OZC corrected": { ...ozcBase, zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, p0: 0.9, uc0: 0.7, tEnd: 120, step: 0.001, logErrTol: -5, variableM: true, driver: "p" },
+  "OZC abs(V) diagnostic": { ...ozcBase, referenceFamily: "diagnostic", zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, p0: 0.9, uc0: 0.7, tEnd: 120, step: 0.001, logErrTol: -5, variableM: true, driver: "abs-v" }
 };
 
 export function mAt(radius: number, p: ModelParameters): number {

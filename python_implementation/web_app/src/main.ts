@@ -4,12 +4,14 @@ import {
   PARAMETER_DESCRIPTIONS,
   PRESETS,
   TEX,
+  type ControlParameterKey,
   type ControlDef,
   type ModelParameters,
   type Row,
   compareRows,
   solveModel
 } from "./model";
+import { buildTwoCyclePhase, type PhaseResult } from "./phase";
 import { SOLVER_NAMES, type SolverName } from "./solvers";
 
 declare global {
@@ -34,7 +36,7 @@ let mathTypesetTimer = 0;
 let mathTypesetRunning = false;
 let mathTypesetPending = false;
 
-const controlElements = new Map<keyof ModelParameters, HTMLInputElement>();
+const controlElements = new Map<ControlParameterKey, HTMLInputElement>();
 const THEME = {
   axisGrid: "#26334E",
   axisText: "#A8B4C7",
@@ -233,7 +235,7 @@ function buildParameterTable(): void {
   queueMathTypeset();
 }
 
-function updateSliderLabel(key: keyof ModelParameters): void {
+function updateSliderLabel(key: ControlParameterKey): void {
   const label = document.querySelector(`[data-value-for="${String(key)}"]`);
   if (!label) return;
   const value = state[key];
@@ -247,8 +249,8 @@ function updateAllSliderLabels(): void {
   updateResetButtons();
 }
 
-function restoreParameterDefault(key: keyof ModelParameters): void {
-  state[key] = PRESETS[selectedPreset][key] as never;
+function restoreParameterDefault(key: ControlParameterKey): void {
+  state[key] = PRESETS[selectedPreset][key];
   updateSliderLabel(key);
   refreshActivePreset();
   scheduleSolve();
@@ -256,7 +258,7 @@ function restoreParameterDefault(key: keyof ModelParameters): void {
 
 function updateResetButtons(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-reset-key]").forEach((button) => {
-    const key = button.dataset.resetKey as keyof ModelParameters;
+    const key = button.dataset.resetKey as ControlParameterKey;
     button.disabled = valuesMatch(state[key], PRESETS[selectedPreset][key]);
     button.title = `Restore to ${selectedPreset} preset value: ${fmt(Number(PRESETS[selectedPreset][key]), 5)}`;
   });
@@ -354,8 +356,8 @@ function drawAxes(
   ylim: [number, number],
   xlabel: string,
   ylabel: string,
-  xlabelColor = THEME.axisText,
-  ylabelColor = THEME.axisText
+  xlabelColor: string = THEME.axisText,
+  ylabelColor: string = THEME.axisText
 ): void {
   ctx.strokeStyle = THEME.axisGrid;
   ctx.lineWidth = 1;
@@ -406,6 +408,7 @@ function drawSeries(
     ylim?: [number, number];
     xlabelColor?: string;
     ylabelColor?: string;
+    message?: string;
   }
 ): void {
   const canvas = el<HTMLCanvasElement>(canvasId);
@@ -431,6 +434,13 @@ function drawSeries(
   const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
   const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
   drawAxes(ctx, plot, xlim, ylim, options.xlabel, options.ylabel, options.xlabelColor, options.ylabelColor);
+  if (options.message && !series.some((item) => item.rows.length)) {
+    ctx.fillStyle = THEME.axisText;
+    ctx.font = "13px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(options.message, plot.left + plot.width / 2, plot.top + plot.height / 2);
+  }
   series.forEach((item) => {
     ctx.beginPath();
     let started = false;
@@ -461,84 +471,6 @@ function drawLegend(id: string, items: { label: string; color: string }[]): void
   queueMathTypeset();
 }
 
-function findMaxima(rows: Row[], key: keyof Row, after: number, minSeparation: number): Row[] {
-  const maxima: Row[] = [];
-  for (let i = 1; i < rows.length - 1; i += 1) {
-    if (rows[i].tau < after) continue;
-    if (rows[i - 1][key] < rows[i][key] && rows[i][key] >= rows[i + 1][key]) {
-      const last = maxima[maxima.length - 1];
-      if (last && rows[i].tau - last.tau < minSeparation) {
-        if (rows[i][key] > last[key]) maxima[maxima.length - 1] = rows[i];
-      } else {
-        maxima.push(rows[i]);
-      }
-    }
-  }
-  return maxima;
-}
-
-function zeroCrossingTimes(rows: Row[], key: keyof Row, direction: "up" | "down", after: number): number[] {
-  const out: number[] = [];
-  for (let i = 1; i < rows.length; i += 1) {
-    if (rows[i].tau < after) continue;
-    const prev = rows[i - 1][key];
-    const next = rows[i][key];
-    const crossedUp = direction === "up" && prev <= 0 && next > 0;
-    const crossedDown = direction === "down" && prev >= 0 && next < 0;
-    if (!crossedUp && !crossedDown) continue;
-    const fraction = (0 - prev) / (next - prev);
-    out.push(rows[i - 1].tau + fraction * (rows[i].tau - rows[i - 1].tau));
-  }
-  return out;
-}
-
-function median(values: number[]): number | null {
-  if (!values.length) return null;
-  const sorted = values.slice().sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-function periodCandidate(times: number[], finalTime: number, priority: number): { period: number; priority: number } | null {
-  if (times.length < 3) return null;
-  const intervals: number[] = [];
-  for (let i = 1; i < times.length; i += 1) {
-    const interval = times[i] - times[i - 1];
-    if (interval > 0 && Number.isFinite(interval)) intervals.push(interval);
-  }
-  const recent = intervals.slice(priority === 2 ? -4 : -2);
-  const period = priority === 2 ? median(recent) : recent[recent.length - 1];
-  if (!period || period <= 0 || finalTime - times[times.length - 1] > period * 2.5) return null;
-  return { period, priority };
-}
-
-function estimatePulsationPeriod(rows: Row[]): number | null {
-  const finalTime = rows[rows.length - 1]?.tau;
-  if (!finalTime || rows.length < 8) return null;
-  const after = finalTime * 0.15;
-  const minPeakSeparation = Math.max(0.2, finalTime / 200);
-  const candidates = [
-    periodCandidate(findMaxima(rows, "L", after, minPeakSeparation).map((row) => row.tau), finalTime, 2),
-    periodCandidate(findMaxima(rows, "R", after, minPeakSeparation).map((row) => row.tau), finalTime, 1),
-    periodCandidate(zeroCrossingTimes(rows, "V", "up", after), finalTime, 0)
-  ].filter((candidate): candidate is { period: number; priority: number } => Boolean(candidate));
-  candidates.sort((a, b) => b.priority - a.priority);
-  return candidates[0]?.period || null;
-}
-
-function phasedRows(rows: Row[]): { rows: Row[]; period: number | null } {
-  const finalTime = rows[rows.length - 1]?.tau;
-  const period = estimatePulsationPeriod(rows);
-  if (!finalTime || !period) return { rows: [], period };
-  const startTime = finalTime - 2 * period;
-  const out: Row[] = [];
-  rows.forEach((row) => {
-    const phase = (row.tau - startTime) / period;
-    if (phase >= 0 && phase <= 2) out.push({ ...row, tau: phase });
-  });
-  return { rows: out, period };
-}
-
 function stopReasonLabel(message: string, runUntilStable: boolean): string {
   switch (message) {
     case "limit_cycle":
@@ -560,6 +492,25 @@ function stopReasonLabel(message: string, runUntilStable: boolean): string {
   }
 }
 
+function phaseUnavailableLabel(phase: PhaseResult): string | undefined {
+  switch (phase.reason) {
+    case "ok":
+      return undefined;
+    case "not_enough_rows":
+      return "phase unavailable: not enough samples";
+    case "not_enough_maxima":
+      return "phase unavailable: fewer than three luminosity maxima";
+    case "amplitude_below_threshold":
+      return "phase unavailable: luminosity cycles are below threshold";
+    case "reference_out_of_range":
+      return "phase unavailable: comparison does not cover the reference window";
+  }
+}
+
+function referenceFamilyLabel(value: ModelParameters["referenceFamily"]): string {
+  return value.replaceAll("-", " ");
+}
+
 function drawAll(): void {
   const rows = latestRows;
   const sampled = downsample(rows);
@@ -571,7 +522,13 @@ function drawAll(): void {
     || (!state.runUntilStable && latestResult.status === "complete");
   statusPill.className = `status-pill ${okStatus ? "status-ok" : "status-warn"}`;
   const final = rows[rows.length - 1];
-  const phase = phasedRows(rows);
+  const phase = buildTwoCyclePhase(rows, {
+    warmupTau: state.phaseWarmupTau,
+    minAmplitude: state.phaseMinAmplitude
+  });
+  const comparisonPhase = comparisonRows.length && phase.reference
+    ? buildTwoCyclePhase(comparisonRows, { reference: phase.reference })
+    : null;
   const comparison = comparisonResult && comparisonRows.length ? compareRows(rows, comparisonRows, state) : null;
   const comparisonText = comparison
     ? `<span class="metric">midpoint Δy<b>${fmt(comparison.maxStateDelta, 3)}</b></span><span class="metric">midpoint ΔL<b>${fmt(comparison.maxLuminosityDelta, 3)}</b></span>`
@@ -579,6 +536,7 @@ function drawAll(): void {
   el<HTMLDivElement>("metrics").innerHTML = [
     ["solver", state.solver.toUpperCase()],
     ["stop reason", stopReason],
+    ["reference", referenceFamilyLabel(state.referenceFamily)],
     ["driver", state.driver === "p" ? "sqrt(P)" : "sqrt(|V|)"],
     ["gamma_c", fmt(state.gammac, 3)],
     ["zeta", fmt(state.zeta, 3)],
@@ -590,6 +548,7 @@ function drawAll(): void {
     ["rejected", latestResult.stats.rejectedSteps],
     ["max err", fmt(latestResult.stats.maxNormalizedError, 3)],
     ["period", phase.period ? fmt(phase.period, 3) : "n/a"],
+    ["phase", phase.reason === "ok" ? "max-to-max" : "unavailable"],
     ["final R", final ? fmt(final.R, 3) : "n/a"],
     ["final L", final ? fmt(final.L, 3) : "n/a"]
   ].map(([label, value]) => `<span class="metric">${label}<b>${value}</b></span>`).join("") + comparisonText;
@@ -597,11 +556,12 @@ function drawAll(): void {
   el<HTMLParagraphElement>("modelSubtitle").textContent = "";
 
   const phaseSample = phase.rows.length ? downsample(phase.rows, 1800) : [];
-  const phaseComparison = comparisonRows.length ? downsample(phasedRows(comparisonRows).rows, 1800) : [];
+  const phaseComparison = comparisonPhase?.rows.length ? downsample(comparisonPhase.rows, 1800) : [];
+  const phaseMessage = phaseUnavailableLabel(phase);
   drawSeries("lightCanvas", [
     { label: "L", color: COLORS.L, rows: phaseSample, x: (row) => row.tau, y: (row) => row.L },
     { label: "midpoint L", color: THEME.comparison, rows: phaseComparison, x: (row) => row.tau, y: (row) => row.L, dash: [5, 4], width: 1.5 }
-  ], { xlabel: "phase", ylabel: "luminosity", xlim: [0, 2], ylim: phaseSample.length ? undefined : [0, 1] });
+  ], { xlabel: "phase", ylabel: "luminosity", xlim: [0, 2], ylim: phaseSample.length ? undefined : [0, 1], message: phaseMessage });
   drawLegend("lightLegend", [
     { label: `\\(${TEX.L}\\) selected solver`, color: COLORS.L },
     ...(phaseComparison.length ? [{ label: `\\(${TEX.L}\\) midpoint comparison`, color: THEME.comparison }] : [])
@@ -610,7 +570,7 @@ function drawAll(): void {
   drawSeries("velocityCanvas", [
     { label: "V", color: COLORS.V, rows: phaseSample, x: (row) => row.tau, y: (row) => row.V },
     { label: "midpoint V", color: THEME.comparison, rows: phaseComparison, x: (row) => row.tau, y: (row) => row.V, dash: [5, 4], width: 1.5 }
-  ], { xlabel: "phase", ylabel: "radial velocity", xlim: [0, 2], ylim: phaseSample.length ? undefined : [0, 1] });
+  ], { xlabel: "phase", ylabel: "radial velocity", xlim: [0, 2], ylim: phaseSample.length ? undefined : [0, 1], message: phaseMessage });
   drawLegend("velocityLegend", [
     { label: `\\(${TEX.V}\\) selected solver`, color: COLORS.V },
     ...(phaseComparison.length ? [{ label: `\\(${TEX.V}\\) midpoint comparison`, color: THEME.comparison }] : [])

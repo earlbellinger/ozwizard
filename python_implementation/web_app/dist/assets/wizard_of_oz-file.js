@@ -346,15 +346,27 @@
     compareMidpoint: false,
     runUntilStable: true,
     logStabilityTol: -2.7,
-    stableCycles: 5
+    stableCycles: 5,
+    phaseMinAmplitude: 1e-4
+  };
+  var paperBase = {
+    ...presetBase,
+    referenceFamily: "paper-corrected",
+    phaseWarmupTau: 4
+  };
+  var ozcBase = {
+    ...presetBase,
+    referenceFamily: "ozc-corrected"
   };
   var PRESETS = {
-    Strip: { ...presetBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "p" },
-    Blue: { ...presetBase, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "p" },
-    Red: { ...presetBase, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "p" },
-    "OZC local": { ...presetBase, zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, p0: 0.9, uc0: 0.7, tEnd: 120, step: 1e-3, logErrTol: -5, variableM: true, driver: "abs-v" },
-    Thick: { ...presetBase, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "p" },
-    Unstable: { ...presetBase, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "p" }
+    Strip: { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "p" },
+    Blue: { ...paperBase, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "p" },
+    Red: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "p" },
+    Thick: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "p" },
+    Unstable: { ...paperBase, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, p0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "p" },
+    "OZ1 corrected": { ...presetBase, referenceFamily: "oz1-corrected", phaseWarmupTau: 1, zeta: 1, zetac: 1, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 2, r0: 1.2, v0: 0, p0: 0.8, uc0: 1, tEnd: 120, step: 0.012, logErrTol: -5, variableM: true, driver: "p" },
+    "OZC corrected": { ...ozcBase, zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, p0: 0.9, uc0: 0.7, tEnd: 120, step: 1e-3, logErrTol: -5, variableM: true, driver: "p" },
+    "OZC abs(V) diagnostic": { ...ozcBase, referenceFamily: "diagnostic", zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, p0: 0.9, uc0: 0.7, tEnd: 120, step: 1e-3, logErrTol: -5, variableM: true, driver: "abs-v" }
   };
   function mAt(radius, p) {
     if (!p.variableM) return p.m;
@@ -538,6 +550,92 @@
       maxLuminosityDelta = Math.max(maxLuminosityDelta, Math.abs(row.L - other.L));
     }
     return { commonPoints, maxStateDelta, maxLuminosityDelta };
+  }
+
+  // src/phase.ts
+  function defaultWarmupTau(rows) {
+    const finalTau = rows.at(-1)?.tau ?? 0;
+    return Math.max(1, Math.min(4, 0.05 * finalTau));
+  }
+  function phaseWarmupTau(rows, requested) {
+    return requested !== void 0 && Number.isFinite(requested) ? requested : defaultWarmupTau(rows);
+  }
+  function findLuminosityMaxima(rows, after, minSeparation = 0.5) {
+    const maxima = [];
+    for (let i = 1; i < rows.length - 1; i += 1) {
+      const row = rows[i];
+      if (row.tau < after) continue;
+      if (rows[i - 1].L < row.L && row.L >= rows[i + 1].L) {
+        const last = maxima.at(-1);
+        if (last && row.tau - last.tau < minSeparation) {
+          if (row.L > last.L) maxima[maxima.length - 1] = row;
+        } else {
+          maxima.push(row);
+        }
+      }
+    }
+    return maxima;
+  }
+  function cycleAmplitude(rows, startTau, endTau) {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const row of rows) {
+      if (row.tau < startTau || row.tau > endTau) continue;
+      min = Math.min(min, row.L);
+      max = Math.max(max, row.L);
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return 0;
+    const scale = Math.max(1, Math.abs(max), Math.abs(min));
+    return (max - min) / scale;
+  }
+  function buildReference(rows, options) {
+    if (rows.length < 3) {
+      return { rows: [], reference: null, period: null, reason: "not_enough_rows" };
+    }
+    const warmupTau = phaseWarmupTau(rows, options.warmupTau);
+    const minAmplitude = options.minAmplitude ?? 1e-4;
+    const maxima = findLuminosityMaxima(rows, warmupTau, options.minSeparation);
+    if (maxima.length < 3) {
+      return { rows: [], reference: null, period: null, reason: "not_enough_maxima" };
+    }
+    for (let i = 0; i <= maxima.length - 3; i += 1) {
+      const peakRows = [maxima[i], maxima[i + 1], maxima[i + 2]];
+      const [first, second, third] = peakRows;
+      const firstCycleAmplitude = cycleAmplitude(rows, first.tau, second.tau);
+      const secondCycleAmplitude = cycleAmplitude(rows, second.tau, third.tau);
+      if (firstCycleAmplitude < minAmplitude || secondCycleAmplitude < minAmplitude) continue;
+      const period = (third.tau - first.tau) / 2;
+      if (period <= 0 || !Number.isFinite(period)) continue;
+      const reference = {
+        startTau: first.tau,
+        midTau: second.tau,
+        endTau: third.tau,
+        period,
+        warmupTau,
+        minAmplitude,
+        peakRows
+      };
+      return foldRowsToReference(rows, reference);
+    }
+    return { rows: [], reference: null, period: null, reason: "amplitude_below_threshold" };
+  }
+  function foldRowsToReference(rows, reference) {
+    const folded = [];
+    for (const row of rows) {
+      if (row.tau < reference.startTau || row.tau > reference.endTau) continue;
+      const phase = (row.tau - reference.startTau) / reference.period;
+      if (phase >= 0 && phase <= 2) folded.push({ ...row, tau: phase });
+    }
+    return {
+      rows: folded,
+      reference,
+      period: reference.period,
+      reason: folded.length ? "ok" : "reference_out_of_range"
+    };
+  }
+  function buildTwoCyclePhase(rows, options = {}) {
+    if (options.reference) return foldRowsToReference(rows, options.reference);
+    return buildReference(rows, options);
   }
 
   // src/main.ts
@@ -886,6 +984,13 @@
     const sx = (x) => plot.left + (x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
     const sy = (y) => plot.top + plot.height - (y - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
     drawAxes(ctx, plot, xlim, ylim, options.xlabel, options.ylabel, options.xlabelColor, options.ylabelColor);
+    if (options.message && !series.some((item) => item.rows.length)) {
+      ctx.fillStyle = THEME.axisText;
+      ctx.font = "13px Inter, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(options.message, plot.left + plot.width / 2, plot.top + plot.height / 2);
+    }
     series.forEach((item) => {
       ctx.beginPath();
       let started = false;
@@ -914,78 +1019,6 @@
     node.innerHTML = items.map((item) => `<span class="legend-item"><span class="swatch" style="--color:${item.color}"></span>${item.label}</span>`).join("");
     queueMathTypeset();
   }
-  function findMaxima(rows, key, after, minSeparation) {
-    const maxima = [];
-    for (let i = 1; i < rows.length - 1; i += 1) {
-      if (rows[i].tau < after) continue;
-      if (rows[i - 1][key] < rows[i][key] && rows[i][key] >= rows[i + 1][key]) {
-        const last = maxima[maxima.length - 1];
-        if (last && rows[i].tau - last.tau < minSeparation) {
-          if (rows[i][key] > last[key]) maxima[maxima.length - 1] = rows[i];
-        } else {
-          maxima.push(rows[i]);
-        }
-      }
-    }
-    return maxima;
-  }
-  function zeroCrossingTimes(rows, key, direction, after) {
-    const out = [];
-    for (let i = 1; i < rows.length; i += 1) {
-      if (rows[i].tau < after) continue;
-      const prev = rows[i - 1][key];
-      const next = rows[i][key];
-      const crossedUp = direction === "up" && prev <= 0 && next > 0;
-      const crossedDown = direction === "down" && prev >= 0 && next < 0;
-      if (!crossedUp && !crossedDown) continue;
-      const fraction = (0 - prev) / (next - prev);
-      out.push(rows[i - 1].tau + fraction * (rows[i].tau - rows[i - 1].tau));
-    }
-    return out;
-  }
-  function median(values) {
-    if (!values.length) return null;
-    const sorted = values.slice().sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-  }
-  function periodCandidate(times, finalTime, priority) {
-    if (times.length < 3) return null;
-    const intervals = [];
-    for (let i = 1; i < times.length; i += 1) {
-      const interval = times[i] - times[i - 1];
-      if (interval > 0 && Number.isFinite(interval)) intervals.push(interval);
-    }
-    const recent = intervals.slice(priority === 2 ? -4 : -2);
-    const period = priority === 2 ? median(recent) : recent[recent.length - 1];
-    if (!period || period <= 0 || finalTime - times[times.length - 1] > period * 2.5) return null;
-    return { period, priority };
-  }
-  function estimatePulsationPeriod(rows) {
-    const finalTime = rows[rows.length - 1]?.tau;
-    if (!finalTime || rows.length < 8) return null;
-    const after = finalTime * 0.15;
-    const minPeakSeparation = Math.max(0.2, finalTime / 200);
-    const candidates = [
-      periodCandidate(findMaxima(rows, "L", after, minPeakSeparation).map((row) => row.tau), finalTime, 2),
-      periodCandidate(findMaxima(rows, "R", after, minPeakSeparation).map((row) => row.tau), finalTime, 1),
-      periodCandidate(zeroCrossingTimes(rows, "V", "up", after), finalTime, 0)
-    ].filter((candidate) => Boolean(candidate));
-    candidates.sort((a, b) => b.priority - a.priority);
-    return candidates[0]?.period || null;
-  }
-  function phasedRows(rows) {
-    const finalTime = rows[rows.length - 1]?.tau;
-    const period = estimatePulsationPeriod(rows);
-    if (!finalTime || !period) return { rows: [], period };
-    const startTime = finalTime - 2 * period;
-    const out = [];
-    rows.forEach((row) => {
-      const phase = (row.tau - startTime) / period;
-      if (phase >= 0 && phase <= 2) out.push({ ...row, tau: phase });
-    });
-    return { rows: out, period };
-  }
   function stopReasonLabel(message, runUntilStable) {
     switch (message) {
       case "limit_cycle":
@@ -1006,6 +1039,23 @@
         return message.replaceAll("_", " ");
     }
   }
+  function phaseUnavailableLabel(phase) {
+    switch (phase.reason) {
+      case "ok":
+        return void 0;
+      case "not_enough_rows":
+        return "phase unavailable: not enough samples";
+      case "not_enough_maxima":
+        return "phase unavailable: fewer than three luminosity maxima";
+      case "amplitude_below_threshold":
+        return "phase unavailable: luminosity cycles are below threshold";
+      case "reference_out_of_range":
+        return "phase unavailable: comparison does not cover the reference window";
+    }
+  }
+  function referenceFamilyLabel(value) {
+    return value.replaceAll("-", " ");
+  }
   function drawAll() {
     const rows = latestRows;
     const sampled = downsample(rows);
@@ -1015,12 +1065,17 @@
     const okStatus = latestResult.message === "equilibrium" || latestResult.message === "limit_cycle" || !state.runUntilStable && latestResult.status === "complete";
     statusPill.className = `status-pill ${okStatus ? "status-ok" : "status-warn"}`;
     const final = rows[rows.length - 1];
-    const phase = phasedRows(rows);
+    const phase = buildTwoCyclePhase(rows, {
+      warmupTau: state.phaseWarmupTau,
+      minAmplitude: state.phaseMinAmplitude
+    });
+    const comparisonPhase = comparisonRows.length && phase.reference ? buildTwoCyclePhase(comparisonRows, { reference: phase.reference }) : null;
     const comparison = comparisonResult && comparisonRows.length ? compareRows(rows, comparisonRows, state) : null;
     const comparisonText = comparison ? `<span class="metric">midpoint \u0394y<b>${fmt(comparison.maxStateDelta, 3)}</b></span><span class="metric">midpoint \u0394L<b>${fmt(comparison.maxLuminosityDelta, 3)}</b></span>` : "";
     el("metrics").innerHTML = [
       ["solver", state.solver.toUpperCase()],
       ["stop reason", stopReason],
+      ["reference", referenceFamilyLabel(state.referenceFamily)],
       ["driver", state.driver === "p" ? "sqrt(P)" : "sqrt(|V|)"],
       ["gamma_c", fmt(state.gammac, 3)],
       ["zeta", fmt(state.zeta, 3)],
@@ -1032,16 +1087,18 @@
       ["rejected", latestResult.stats.rejectedSteps],
       ["max err", fmt(latestResult.stats.maxNormalizedError, 3)],
       ["period", phase.period ? fmt(phase.period, 3) : "n/a"],
+      ["phase", phase.reason === "ok" ? "max-to-max" : "unavailable"],
       ["final R", final ? fmt(final.R, 3) : "n/a"],
       ["final L", final ? fmt(final.L, 3) : "n/a"]
     ].map(([label, value]) => `<span class="metric">${label}<b>${value}</b></span>`).join("") + comparisonText;
     el("modelSubtitle").textContent = "";
     const phaseSample = phase.rows.length ? downsample(phase.rows, 1800) : [];
-    const phaseComparison = comparisonRows.length ? downsample(phasedRows(comparisonRows).rows, 1800) : [];
+    const phaseComparison = comparisonPhase?.rows.length ? downsample(comparisonPhase.rows, 1800) : [];
+    const phaseMessage = phaseUnavailableLabel(phase);
     drawSeries("lightCanvas", [
       { label: "L", color: COLORS.L, rows: phaseSample, x: (row) => row.tau, y: (row) => row.L },
       { label: "midpoint L", color: THEME.comparison, rows: phaseComparison, x: (row) => row.tau, y: (row) => row.L, dash: [5, 4], width: 1.5 }
-    ], { xlabel: "phase", ylabel: "luminosity", xlim: [0, 2], ylim: phaseSample.length ? void 0 : [0, 1] });
+    ], { xlabel: "phase", ylabel: "luminosity", xlim: [0, 2], ylim: phaseSample.length ? void 0 : [0, 1], message: phaseMessage });
     drawLegend("lightLegend", [
       { label: `\\(${TEX.L}\\) selected solver`, color: COLORS.L },
       ...phaseComparison.length ? [{ label: `\\(${TEX.L}\\) midpoint comparison`, color: THEME.comparison }] : []
@@ -1049,7 +1106,7 @@
     drawSeries("velocityCanvas", [
       { label: "V", color: COLORS.V, rows: phaseSample, x: (row) => row.tau, y: (row) => row.V },
       { label: "midpoint V", color: THEME.comparison, rows: phaseComparison, x: (row) => row.tau, y: (row) => row.V, dash: [5, 4], width: 1.5 }
-    ], { xlabel: "phase", ylabel: "radial velocity", xlim: [0, 2], ylim: phaseSample.length ? void 0 : [0, 1] });
+    ], { xlabel: "phase", ylabel: "radial velocity", xlim: [0, 2], ylim: phaseSample.length ? void 0 : [0, 1], message: phaseMessage });
     drawLegend("velocityLegend", [
       { label: `\\(${TEX.V}\\) selected solver`, color: COLORS.V },
       ...phaseComparison.length ? [{ label: `\\(${TEX.V}\\) midpoint comparison`, color: THEME.comparison }] : []
