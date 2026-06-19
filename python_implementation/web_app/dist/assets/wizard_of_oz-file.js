@@ -629,6 +629,22 @@
   function phaseWarmupTau(rows, requested) {
     return requested !== void 0 && Number.isFinite(requested) ? requested : defaultWarmupTau(rows);
   }
+  function findLuminosityMaxima(rows, after, minSeparation = 0.75) {
+    const maxima = [];
+    for (let i = 1; i < rows.length - 1; i += 1) {
+      const row = rows[i];
+      if (row.tau < after) continue;
+      if (rows[i - 1].L < row.L && row.L >= rows[i + 1].L) {
+        const last = maxima.at(-1);
+        if (last && row.tau - last.tau < minSeparation) {
+          if (row.L > last.L) maxima[maxima.length - 1] = row;
+        } else {
+          maxima.push(row);
+        }
+      }
+    }
+    return maxima;
+  }
   function findLuminosityMinima(rows, after, minSeparation = 0.75) {
     const minima = [];
     for (let i = 1; i < rows.length - 1; i += 1) {
@@ -657,13 +673,66 @@
     const scale = Math.max(1, Math.abs(max), Math.abs(min));
     return (max - min) / scale;
   }
+  function minimumBetween(rows, startTau, endTau) {
+    let minimum = null;
+    for (const row of rows) {
+      if (row.tau <= startTau || row.tau >= endTau) continue;
+      if (!minimum || row.L < minimum.L) minimum = row;
+    }
+    return minimum;
+  }
+  function median(values) {
+    const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+    if (!sorted.length) return null;
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+  }
+  function minimumSeparationFromMaxima(maxima, requested) {
+    if (requested !== void 0) return requested;
+    const gaps = [];
+    for (let i = 0; i < maxima.length - 1; i += 1) gaps.push(maxima[i + 1].tau - maxima[i].tau);
+    const period = median(gaps);
+    return period ? Math.max(0.75, period * 0.55) : 0.75;
+  }
+  function buildReferenceFromMinima(rows, minimumRows, warmupTau, minAmplitude) {
+    const [first, second, third] = minimumRows;
+    const firstCycleAmplitude = cycleAmplitude(rows, first.tau, second.tau);
+    const secondCycleAmplitude = cycleAmplitude(rows, second.tau, third.tau);
+    if (firstCycleAmplitude < minAmplitude || secondCycleAmplitude < minAmplitude) return null;
+    const period = (third.tau - first.tau) / 2;
+    if (period <= 0 || !Number.isFinite(period)) return null;
+    const reference = {
+      startTau: first.tau,
+      midTau: second.tau,
+      endTau: third.tau,
+      period,
+      warmupTau,
+      minAmplitude,
+      minimumRows
+    };
+    return foldRowsToReference(rows, reference);
+  }
   function buildReference(rows, options) {
     if (rows.length < 3) {
       return { rows: [], reference: null, period: null, reason: "not_enough_rows" };
     }
     const warmupTau = phaseWarmupTau(rows, options.warmupTau);
     const minAmplitude = options.minAmplitude ?? 1e-4;
-    const minima = findLuminosityMinima(rows, warmupTau, options.minSeparation);
+    const maxima = findLuminosityMaxima(rows, warmupTau, options.minSeparation);
+    if (maxima.length >= 4) {
+      const start2 = options.selection === "last" ? maxima.length - 4 : 0;
+      const end2 = options.selection === "last" ? -1 : maxima.length - 4;
+      const direction2 = options.selection === "last" ? -1 : 1;
+      for (let i = start2; options.selection === "last" ? i > end2 : i <= end2; i += direction2) {
+        const firstMinimum = minimumBetween(rows, maxima[i].tau, maxima[i + 1].tau);
+        const secondMinimum = minimumBetween(rows, maxima[i + 1].tau, maxima[i + 2].tau);
+        const thirdMinimum = minimumBetween(rows, maxima[i + 2].tau, maxima[i + 3].tau);
+        if (!firstMinimum || !secondMinimum || !thirdMinimum) continue;
+        const result = buildReferenceFromMinima(rows, [firstMinimum, secondMinimum, thirdMinimum], warmupTau, minAmplitude);
+        if (result) return result;
+      }
+    }
+    const minima = findLuminosityMinima(rows, warmupTau, minimumSeparationFromMaxima(maxima, options.minSeparation));
     if (minima.length < 3) {
       return { rows: [], reference: null, period: null, reason: "not_enough_minima" };
     }
@@ -671,23 +740,8 @@
     const end = options.selection === "last" ? -1 : minima.length - 3;
     const direction = options.selection === "last" ? -1 : 1;
     for (let i = start; options.selection === "last" ? i > end : i <= end; i += direction) {
-      const minimumRows = [minima[i], minima[i + 1], minima[i + 2]];
-      const [first, second, third] = minimumRows;
-      const firstCycleAmplitude = cycleAmplitude(rows, first.tau, second.tau);
-      const secondCycleAmplitude = cycleAmplitude(rows, second.tau, third.tau);
-      if (firstCycleAmplitude < minAmplitude || secondCycleAmplitude < minAmplitude) continue;
-      const period = (third.tau - first.tau) / 2;
-      if (period <= 0 || !Number.isFinite(period)) continue;
-      const reference = {
-        startTau: first.tau,
-        midTau: second.tau,
-        endTau: third.tau,
-        period,
-        warmupTau,
-        minAmplitude,
-        minimumRows
-      };
-      return foldRowsToReference(rows, reference);
+      const result = buildReferenceFromMinima(rows, [minima[i], minima[i + 1], minima[i + 2]], warmupTau, minAmplitude);
+      if (result) return result;
     }
     return { rows: [], reference: null, period: null, reason: "amplitude_below_threshold" };
   }

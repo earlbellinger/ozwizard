@@ -81,6 +81,55 @@ function cycleAmplitude(rows: readonly Row[], startTau: number, endTau: number):
   return (max - min) / scale;
 }
 
+function minimumBetween(rows: readonly Row[], startTau: number, endTau: number): Row | null {
+  let minimum: Row | null = null;
+  for (const row of rows) {
+    if (row.tau <= startTau || row.tau >= endTau) continue;
+    if (!minimum || row.L < minimum.L) minimum = row;
+  }
+  return minimum;
+}
+
+function median(values: number[]): number | null {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function minimumSeparationFromMaxima(maxima: readonly Row[], requested?: number): number {
+  if (requested !== undefined) return requested;
+  const gaps: number[] = [];
+  for (let i = 0; i < maxima.length - 1; i += 1) gaps.push(maxima[i + 1].tau - maxima[i].tau);
+  const period = median(gaps);
+  return period ? Math.max(0.75, period * 0.55) : 0.75;
+}
+
+function buildReferenceFromMinima(
+  rows: readonly Row[],
+  minimumRows: [Row, Row, Row],
+  warmupTau: number,
+  minAmplitude: number
+): PhaseResult | null {
+  const [first, second, third] = minimumRows;
+  const firstCycleAmplitude = cycleAmplitude(rows, first.tau, second.tau);
+  const secondCycleAmplitude = cycleAmplitude(rows, second.tau, third.tau);
+  if (firstCycleAmplitude < minAmplitude || secondCycleAmplitude < minAmplitude) return null;
+
+  const period = (third.tau - first.tau) / 2;
+  if (period <= 0 || !Number.isFinite(period)) return null;
+  const reference: PhaseReference = {
+    startTau: first.tau,
+    midTau: second.tau,
+    endTau: third.tau,
+    period,
+    warmupTau,
+    minAmplitude,
+    minimumRows
+  };
+  return foldRowsToReference(rows, reference);
+}
+
 function buildReference(rows: readonly Row[], options: PhaseOptions): PhaseResult {
   if (rows.length < 3) {
     return { rows: [], reference: null, period: null, reason: "not_enough_rows" };
@@ -88,7 +137,23 @@ function buildReference(rows: readonly Row[], options: PhaseOptions): PhaseResul
 
   const warmupTau = phaseWarmupTau(rows, options.warmupTau);
   const minAmplitude = options.minAmplitude ?? 1e-4;
-  const minima = findLuminosityMinima(rows, warmupTau, options.minSeparation);
+  const maxima = findLuminosityMaxima(rows, warmupTau, options.minSeparation);
+
+  if (maxima.length >= 4) {
+    const start = options.selection === "last" ? maxima.length - 4 : 0;
+    const end = options.selection === "last" ? -1 : maxima.length - 4;
+    const direction = options.selection === "last" ? -1 : 1;
+    for (let i = start; options.selection === "last" ? i > end : i <= end; i += direction) {
+      const firstMinimum = minimumBetween(rows, maxima[i].tau, maxima[i + 1].tau);
+      const secondMinimum = minimumBetween(rows, maxima[i + 1].tau, maxima[i + 2].tau);
+      const thirdMinimum = minimumBetween(rows, maxima[i + 2].tau, maxima[i + 3].tau);
+      if (!firstMinimum || !secondMinimum || !thirdMinimum) continue;
+      const result = buildReferenceFromMinima(rows, [firstMinimum, secondMinimum, thirdMinimum], warmupTau, minAmplitude);
+      if (result) return result;
+    }
+  }
+
+  const minima = findLuminosityMinima(rows, warmupTau, minimumSeparationFromMaxima(maxima, options.minSeparation));
   if (minima.length < 3) {
     return { rows: [], reference: null, period: null, reason: "not_enough_minima" };
   }
@@ -97,24 +162,8 @@ function buildReference(rows: readonly Row[], options: PhaseOptions): PhaseResul
   const end = options.selection === "last" ? -1 : minima.length - 3;
   const direction = options.selection === "last" ? -1 : 1;
   for (let i = start; options.selection === "last" ? i > end : i <= end; i += direction) {
-    const minimumRows = [minima[i], minima[i + 1], minima[i + 2]] as [Row, Row, Row];
-    const [first, second, third] = minimumRows;
-    const firstCycleAmplitude = cycleAmplitude(rows, first.tau, second.tau);
-    const secondCycleAmplitude = cycleAmplitude(rows, second.tau, third.tau);
-    if (firstCycleAmplitude < minAmplitude || secondCycleAmplitude < minAmplitude) continue;
-
-    const period = (third.tau - first.tau) / 2;
-    if (period <= 0 || !Number.isFinite(period)) continue;
-    const reference: PhaseReference = {
-      startTau: first.tau,
-      midTau: second.tau,
-      endTau: third.tau,
-      period,
-      warmupTau,
-      minAmplitude,
-      minimumRows
-    };
-    return foldRowsToReference(rows, reference);
+    const result = buildReferenceFromMinima(rows, [minima[i], minima[i + 1], minima[i + 2]], warmupTau, minAmplitude);
+    if (result) return result;
   }
 
   return { rows: [], reference: null, period: null, reason: "amplitude_below_threshold" };

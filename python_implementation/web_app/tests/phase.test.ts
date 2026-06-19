@@ -17,9 +17,29 @@ function referenceCsvPeriod(path: string): number {
 }
 
 function syntheticRows(): Row[] {
-  return Array.from({ length: 451 }, (_value, index) => {
+  return Array.from({ length: 601 }, (_value, index) => {
     const tau = index / 100;
     const luminosity = 1 + Math.cos(2 * Math.PI * tau);
+    return {
+      tau,
+      R: 1,
+      V: Math.sin(2 * Math.PI * tau),
+      H: 1,
+      Uc: 1,
+      Lr: luminosity,
+      Lc: 0,
+      L: luminosity
+    };
+  });
+}
+
+function rowsWithSpuriousMinimum(): Row[] {
+  return Array.from({ length: 601 }, (_value, index) => {
+    const tau = index / 100;
+    const primary = 1 + Math.cos(2 * Math.PI * tau);
+    const shoulderOffset = (tau % 1 - 0.22) / 0.035;
+    const shoulder = 0.25 * Math.exp(-(shoulderOffset ** 2));
+    const luminosity = primary - shoulder;
     return {
       tau,
       R: 1,
@@ -39,9 +59,18 @@ describe("phase folding", () => {
     expect(phase.reason).toBe("ok");
     const reference = phase.reference!;
     expect(reference.period).toBeCloseTo(1, 12);
+    expect(reference.startTau).toBeCloseTo(1.5, 12);
     reference.minimumRows.forEach((row, index) => {
       expect((row.tau - reference.startTau) / reference.period).toBeCloseTo(index, 12);
     });
+    expect(phase.rows[0].tau).toBeCloseTo(0, 12);
+    expect(phase.rows.at(-1)!.tau).toBeCloseTo(2, 12);
+  });
+
+  it("uses max-to-max cycle boundaries when selecting minimum-light anchors", () => {
+    const phase = buildTwoCyclePhase(rowsWithSpuriousMinimum(), { warmupTau: 0, minAmplitude: 0.1, minSeparation: 0.5 });
+    expect(phase.reason).toBe("ok");
+    expect(phase.reference?.minimumRows.map((row) => row.tau)).toEqual([1.5, 2.5, 3.5]);
     expect(phase.rows[0].tau).toBeCloseTo(0, 12);
     expect(phase.rows.at(-1)!.tau).toBeCloseTo(2, 12);
   });
@@ -79,8 +108,8 @@ describe("phase folding", () => {
     const rows = syntheticRows();
     const referencePhase = buildTwoCyclePhase(rows, { warmupTau: 0, minAmplitude: 0.1, minSeparation: 0.5 });
     const finalPhase = buildTwoCyclePhase(rows, { warmupTau: 0, minAmplitude: 0.1, minSeparation: 0.5, selection: "last" });
-    expect(referencePhase.reference?.startTau).toBeCloseTo(0.5, 12);
-    expect(finalPhase.reference?.startTau).toBeCloseTo(1.5, 12);
+    expect(referencePhase.reference?.startTau).toBeCloseTo(1.5, 12);
+    expect(finalPhase.reference?.startTau).toBeCloseTo(2.5, 12);
     expect(finalPhase.period).toBeCloseTo(referencePhase.period ?? 0, 12);
   });
 });

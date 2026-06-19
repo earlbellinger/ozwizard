@@ -126,6 +126,7 @@ describe("one-zone model", () => {
         expect(phase.reason, name).not.toBe("ok");
       } else {
         expect(phase.reason, name).toBe("ok");
+        expect(findLuminosityMaxima(phase.rows, 0, 0.35).length, name).toBeGreaterThanOrEqual(2);
       }
     }
   });
