@@ -16,7 +16,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#presetButtons")).toBeVisible();
   await expect(page.getByRole("button", { name: "RR Lyrae low-amplitude fundamental, damped" })).toHaveClass(/active/);
   await expect(page.getByRole("button", { name: "Baker radiative pulsator" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "RR Lyrae first overtone" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "RR Lyrae first overtone", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "RR Lyrae first overtone, damped" })).toBeVisible();
   await expect(page.getByRole("button", { name: "RR Lyrae high-amplitude first overtone" })).toBeVisible();
   await expect(page.getByRole("button", { name: "RR Lyrae low-amplitude fundamental, damped" })).toBeVisible();
@@ -46,6 +46,10 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#initialR")).toBeVisible();
   await expect(page.locator("#initialLr")).toBeVisible();
   await expect(page.locator("#initialL")).toBeVisible();
+  await expect(page.locator(".equation-label")).toContainText("Closure Relations");
+  await expect(page.locator("#closureRelations")).toHaveAttribute("data-geometry-mode", "radius-dependent");
+  await expect(page.locator("#odeEquations")).toHaveAttribute("data-driver-mode", "h");
+  await expect(page.getByRole("heading", { name: "Derived" })).toHaveCount(0);
   await expect(page.locator("#timeLegend")).toContainText("radius");
   await expect(page.locator("#timeLegend")).toContainText("nonadiabatic pressure factor");
   const legendHtml = await page.locator("#timeLegend").innerHTML();
@@ -58,6 +62,14 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
   });
   expect(hasPaint).toBe(true);
+  await page.locator("#variableM").uncheck();
+  await expect(page.locator("#closureRelations")).toHaveAttribute("data-geometry-mode", "fixed");
+  await page.locator("#variableM").check();
+  await expect(page.locator("#closureRelations")).toHaveAttribute("data-geometry-mode", "radius-dependent");
+  await page.locator("[data-driver='abs-v']").click();
+  await expect(page.locator("#odeEquations")).toHaveAttribute("data-driver-mode", "abs-v");
+  await page.locator("[data-driver='h']").click();
+  await expect(page.locator("#odeEquations")).toHaveAttribute("data-driver-mode", "h");
 
   await page.locator("input[aria-label='maximum integration time']").evaluate((input) => {
     const slider = input as HTMLInputElement;

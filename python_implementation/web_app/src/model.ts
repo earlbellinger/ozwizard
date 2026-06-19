@@ -108,7 +108,6 @@ const TEX_EXTRA = {
   q: "\\ozPressure{q}",
   c: "\\ozConvLum{c}",
   d: "\\ozConvective{d}",
-  driver: "\\ozPressure{D}",
   kappa: "\\ozNeutral{\\kappa}",
   rho: "\\ozNeutral{\\rho}",
   temp: "\\ozNeutral{T}"
@@ -175,49 +174,6 @@ export const PARAMETER_DESCRIPTIONS: Partial<Record<keyof ModelParameters, strin
   logStabilityTol: "Base-10 logarithm of the stability classification tolerance.",
   stableCycles: "Number of repeated cycles required before a limit cycle is classified stable."
 };
-
-export const DERIVED_DESCRIPTIONS: Array<{ symbol: string; description: string; color: string }> = [
-  {
-    symbol: `\\(${TEX.m}_{\\mathrm{eff}}(${TEX.R})\\)`,
-    color: COLORS.m,
-    description: `Effective form factor used in the exponents: fixed paper-model \\(${TEX.m}\\), or the optional local extension \\(3/[1-(${TEX_EXTRA.eta}/${TEX.R})^3]\\) with \\(${TEX_EXTRA.eta}=(1-3/${TEX.m})^{1/3}\\).`
-  },
-  {
-    symbol: `\\(${TEX_EXTRA.b1}\\)`,
-    color: COLORS.gamma1,
-    description: `Radiative helper exponent \\(${TEX_EXTRA.b1}=(${TEX.s}+4)(${TEX.gamma1}-1)\\).`
-  },
-  {
-    symbol: `\\(${TEX_EXTRA.b}(${TEX.R})\\)`,
-    color: COLORS.Lr,
-    description: `Radiative radius exponent \\(${TEX_EXTRA.b}=4+${TEX.m}_{\\mathrm{eff}}(${TEX.R})[${TEX.n}-${TEX_EXTRA.b1}]\\), giving \\(${TEX.Lr}=${TEX.R}^{${TEX_EXTRA.b}(${TEX.R})}${TEX.H}^{${TEX.s}+4}\\).`
-  },
-  {
-    symbol: `\\(${TEX_EXTRA.q}(${TEX.R})\\)`,
-    color: COLORS.H,
-    description: `Pressure-force exponent \\(${TEX_EXTRA.q}=${TEX.m}_{\\mathrm{eff}}(${TEX.R})${TEX.gamma1}-2\\), used in the acceleration term \\(${TEX.H}/${TEX.R}^{${TEX_EXTRA.q}(${TEX.R})}\\).`
-  },
-  {
-    symbol: `\\(${TEX_EXTRA.c}(${TEX.R})\\)`,
-    color: COLORS.Lc,
-    description: `Convective luminosity radius exponent \\(${TEX_EXTRA.c}=${TEX.m}_{\\mathrm{eff}}(${TEX.R})-2\\), giving \\(${TEX.Lc}=${TEX.R}^{-${TEX_EXTRA.c}(${TEX.R})}${TEX.Uc}^{3}\\).`
-  },
-  {
-    symbol: `\\(${TEX_EXTRA.d}(${TEX.R})\\)`,
-    color: COLORS.Uc,
-    description: `Convective velocity radius exponent \\(${TEX_EXTRA.d}=${TEX.m}_{\\mathrm{eff}}(${TEX.R})(${TEX.gamma1}-1)/2\\), used in \\(${TEX.R}^{-${TEX_EXTRA.d}(${TEX.R})}${TEX_EXTRA.driver}\\).`
-  },
-  {
-    symbol: `\\(${TEX_EXTRA.gammaR}\\)`,
-    color: COLORS.Lr,
-    description: `Radiative luminosity weight \\(${TEX_EXTRA.gammaR}=1-${TEX.gammac}\\), so \\(${TEX.L}=${TEX_EXTRA.gammaR}${TEX.Lr}+${TEX.gammac}${TEX.Lc}\\).`
-  },
-  {
-    symbol: `\\(${TEX_EXTRA.driver}\\)`,
-    color: COLORS.H,
-    description: `Convective driver: the standard Stellingwerf pressure form is \\(\\sqrt{${TEX.H}}\\); \\(\\sqrt{|${TEX.V}|}\\) is retained only as a diagnostic variant.`
-  }
-];
 
 const presetBase = {
   maxStep: 0.15,

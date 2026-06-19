@@ -85,11 +85,14 @@ async function runPlaywrightChecks() {
     assertOk(await page.getByRole("heading", { name: "Equations Solved" }).isVisible(), "equations panel was not visible");
     assertOk(await page.getByRole("heading", { name: "Variables" }).isVisible(), "variables panel was not visible");
     assertOk(await page.getByRole("heading", { name: "Parameters" }).isVisible(), "parameters panel was not visible");
+    assertOk((await page.locator(".equation-label").textContent())?.includes("Closure Relations"), "closure relations label was not visible");
+    assertOk((await page.locator("#closureRelations").getAttribute("data-geometry-mode")) === "radius-dependent", "closure geometry should start radius-dependent");
+    assertOk((await page.locator("#odeEquations").getAttribute("data-driver-mode")) === "h", "ODE driver should start with sqrt(H)");
     assertOk(await page.locator("#initialR").isVisible(), "initial R cell was not visible");
     assertOk(await page.locator("#initialLr").isVisible(), "computed initial Lr cell was not visible");
     assertOk(await page.locator("#initialL").isVisible(), "computed initial L cell was not visible");
     assertOk(await page.getByRole("heading", { name: "Tunable" }).isVisible(), "tunable parameter section was not visible");
-    assertOk(await page.getByRole("heading", { name: "Derived" }).isVisible(), "derived parameter section was not visible");
+    assertOk((await page.getByRole("heading", { name: "Derived" }).count()) === 0, "derived parameter section should be removed");
     assertOk(await page.getByRole("heading", { name: "Numerical" }).isVisible(), "numerical parameter section was not visible");
     const parameterOverflow = await page.locator(".parameters-panel").evaluate((node) => getComputedStyle(node).overflowY);
     assertOk(parameterOverflow === "auto", `parameters panel should scroll vertically, saw ${parameterOverflow}`);
@@ -114,6 +117,14 @@ async function runPlaywrightChecks() {
     assertOk((await radiusToggle.getAttribute("aria-pressed")) === "false", "radius toggle did not hide the radius series");
     await radiusToggle.click();
     assertOk((await radiusToggle.getAttribute("aria-pressed")) === "true", "radius toggle did not restore the radius series");
+    await page.locator("#variableM").uncheck();
+    assertOk((await page.locator("#closureRelations").getAttribute("data-geometry-mode")) === "fixed", "closure geometry did not switch back to fixed");
+    await page.locator("#variableM").check();
+    assertOk((await page.locator("#closureRelations").getAttribute("data-geometry-mode")) === "radius-dependent", "closure geometry did not switch to radius-dependent");
+    await page.locator("[data-driver='abs-v']").click();
+    assertOk((await page.locator("#odeEquations").getAttribute("data-driver-mode")) === "abs-v", "ODE driver did not switch to sqrt(abs(V))");
+    await page.locator("[data-driver='h']").click();
+    assertOk((await page.locator("#odeEquations").getAttribute("data-driver-mode")) === "h", "ODE driver did not switch back to sqrt(H)");
 
     const timeCanvas = page.locator("#timeCanvas");
     const timeBox = await timeCanvas.boundingBox();

@@ -779,6 +779,15 @@
       margin: 0.5em 0 !important;
     }
 
+    .equation-label {
+      margin: 12px 0 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
     .small-note {
       font-size: 12px;
       color: var(--muted);
@@ -1002,32 +1011,7 @@
         <div class="reference-grid">
           <div class="content-panel reference-panel equations-panel">
             <h3>Equations Solved</h3>
-            <div class="equation-block">
-              \[
-              \begin{aligned}
-              \frac{d\ozRadius{R}}{d\ozTau{\tau}} &=
-                \ozVelocity{V}\\[0.35em]
-              \frac{d\ozVelocity{V}}{d\ozTau{\tau}} &=
-                \frac{\ozPressure{H}}{\ozRadius{R}^{\ozPressure{q}(\ozRadius{R})}}
-                - \frac{1}{\ozRadius{R}^{2}}
-                - \ozDamping{C_q}\ozVelocity{V}^{3}\\[0.35em]
-              \frac{d\ozPressure{H}}{d\ozTau{\tau}} &=
-                \ozZeta{\zeta}\,
-                \ozRadius{R}^{\ozMass{m}_{\mathrm{eff}}(\ozRadius{R})(\ozGamma{\Gamma_1}-1)}
-                \left[
-                  \ozRadius{R}^{\ozSource{U}}
-                  - \ozNeutral{\gamma_r}\ozRadiative{L_r}
-                  - \ozGammac{\gamma_c}\ozConvLum{L_c}
-                \right]\\[0.35em]
-              \frac{d\ozConvective{U_c}}{d\ozTau{\tau}} &=
-                \ozZetac{\zeta_c}
-                \left[
-                  \ozRadius{R}^{-\ozConvective{d}(\ozRadius{R})}\ozPressure{D}
-                  - \ozConvective{U_c}
-                \right]
-              \end{aligned}
-              \]
-            </div>
+            <div class="equation-block" id="odeEquations"></div>
             <div class="equation-block">
               \[
               \begin{aligned}
@@ -1040,12 +1024,11 @@
               \ozLuminosity{L} &=
                 \ozNeutral{\gamma_r}\ozRadiative{L_r}
                 + \ozGammac{\gamma_c}\ozConvLum{L_c}\\[0.35em]
-              \ozPressure{D} &= \sqrt{\ozPressure{H}}
-                \quad\text{or}\quad
-                \sqrt{|\ozVelocity{V}|}
               \end{aligned}
               \]
             </div>
+            <div class="equation-label">Closure Relations</div>
+            <div class="equation-block" id="closureRelations"></div>
           </div>
 
           <div class="content-panel reference-panel">
@@ -1058,7 +1041,7 @@
                 <tr><td class="symbol-cell" data-symbol="tau" style="--color:var(--tau)">\(\ozTau{\tau}\)</td><td>Independent time</td><td class="initial-cell" id="initialTau"></td><td>Dimensionless clock scaled by the model's free-fall/dynamical time; derivatives such as \(d\ozRadius{R}/d\ozTau{\tau}\) are per dynamical time unit</td></tr>
                 <tr><td class="symbol-cell" style="--color:var(--radius)">\(\ozRadius{R}\)</td><td>Radius</td><td class="initial-cell" id="initialR"></td><td>Dimensionless radius of the moving shell</td></tr>
                 <tr><td class="symbol-cell" style="--color:var(--velocity)">\(\ozVelocity{V}\)</td><td>Radial velocity</td><td class="initial-cell" id="initialV"></td><td>Time derivative of the shell radius</td></tr>
-                <tr><td class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{H}\)</td><td>Nonadiabatic pressure factor</td><td class="initial-cell" id="initialH"></td><td>Normalized factor carrying nonadiabatic pressure/thermal response, not total gas pressure</td></tr>
+                <tr><td class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{H}\)</td><td>Thermal-pressure state</td><td class="initial-cell" id="initialH"></td><td>Dimensionless thermal-pressure state; raises pressure support and radiative luminosity</td></tr>
                 <tr><td class="symbol-cell" style="--color:var(--convective)">\(\ozConvective{U_c}\)</td><td>Convective velocity</td><td class="initial-cell" id="initialUc"></td><td>Time-dependent turbulent/convective velocity scale</td></tr>
                 <tr><td class="symbol-cell" style="--color:var(--radiative)">\(\ozRadiative{L_r}\)</td><td>Radiative luminosity</td><td class="initial-cell" id="initialLr"></td><td>Radiative luminosity-like flux leaving the shell</td></tr>
                 <tr><td class="symbol-cell" style="--color:var(--conv-lum)">\(\ozConvLum{L_c}\)</td><td>Convective luminosity</td><td class="initial-cell" id="initialLc"></td><td>Convective luminosity-like flux proportional to \(\ozConvective{U_c}^{3}\)</td></tr>
@@ -1076,15 +1059,6 @@
                   <tr><th>Control</th><th>Meaning</th></tr>
                 </thead>
                 <tbody id="tunableParameterTable"></tbody>
-              </table>
-            </div>
-            <div class="parameter-section">
-              <h4>Derived</h4>
-              <table class="variable-table">
-                <thead>
-                  <tr><th>Quantity</th><th>Meaning</th></tr>
-                </thead>
-                <tbody id="derivedParameterTable"></tbody>
               </table>
             </div>
             <div class="parameter-section">

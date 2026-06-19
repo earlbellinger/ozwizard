@@ -309,7 +309,6 @@
     q: "\\ozPressure{q}",
     c: "\\ozConvLum{c}",
     d: "\\ozConvective{d}",
-    driver: "\\ozPressure{D}",
     kappa: "\\ozNeutral{\\kappa}",
     rho: "\\ozNeutral{\\rho}",
     temp: "\\ozNeutral{T}"
@@ -366,48 +365,6 @@
     logStabilityTol: "Base-10 logarithm of the stability classification tolerance.",
     stableCycles: "Number of repeated cycles required before a limit cycle is classified stable."
   };
-  var DERIVED_DESCRIPTIONS = [
-    {
-      symbol: `\\(${TEX.m}_{\\mathrm{eff}}(${TEX.R})\\)`,
-      color: COLORS.m,
-      description: `Effective form factor used in the exponents: fixed paper-model \\(${TEX.m}\\), or the optional local extension \\(3/[1-(${TEX_EXTRA.eta}/${TEX.R})^3]\\) with \\(${TEX_EXTRA.eta}=(1-3/${TEX.m})^{1/3}\\).`
-    },
-    {
-      symbol: `\\(${TEX_EXTRA.b1}\\)`,
-      color: COLORS.gamma1,
-      description: `Radiative helper exponent \\(${TEX_EXTRA.b1}=(${TEX.s}+4)(${TEX.gamma1}-1)\\).`
-    },
-    {
-      symbol: `\\(${TEX_EXTRA.b}(${TEX.R})\\)`,
-      color: COLORS.Lr,
-      description: `Radiative radius exponent \\(${TEX_EXTRA.b}=4+${TEX.m}_{\\mathrm{eff}}(${TEX.R})[${TEX.n}-${TEX_EXTRA.b1}]\\), giving \\(${TEX.Lr}=${TEX.R}^{${TEX_EXTRA.b}(${TEX.R})}${TEX.H}^{${TEX.s}+4}\\).`
-    },
-    {
-      symbol: `\\(${TEX_EXTRA.q}(${TEX.R})\\)`,
-      color: COLORS.H,
-      description: `Pressure-force exponent \\(${TEX_EXTRA.q}=${TEX.m}_{\\mathrm{eff}}(${TEX.R})${TEX.gamma1}-2\\), used in the acceleration term \\(${TEX.H}/${TEX.R}^{${TEX_EXTRA.q}(${TEX.R})}\\).`
-    },
-    {
-      symbol: `\\(${TEX_EXTRA.c}(${TEX.R})\\)`,
-      color: COLORS.Lc,
-      description: `Convective luminosity radius exponent \\(${TEX_EXTRA.c}=${TEX.m}_{\\mathrm{eff}}(${TEX.R})-2\\), giving \\(${TEX.Lc}=${TEX.R}^{-${TEX_EXTRA.c}(${TEX.R})}${TEX.Uc}^{3}\\).`
-    },
-    {
-      symbol: `\\(${TEX_EXTRA.d}(${TEX.R})\\)`,
-      color: COLORS.Uc,
-      description: `Convective velocity radius exponent \\(${TEX_EXTRA.d}=${TEX.m}_{\\mathrm{eff}}(${TEX.R})(${TEX.gamma1}-1)/2\\), used in \\(${TEX.R}^{-${TEX_EXTRA.d}(${TEX.R})}${TEX_EXTRA.driver}\\).`
-    },
-    {
-      symbol: `\\(${TEX_EXTRA.gammaR}\\)`,
-      color: COLORS.Lr,
-      description: `Radiative luminosity weight \\(${TEX_EXTRA.gammaR}=1-${TEX.gammac}\\), so \\(${TEX.L}=${TEX_EXTRA.gammaR}${TEX.Lr}+${TEX.gammac}${TEX.Lc}\\).`
-    },
-    {
-      symbol: `\\(${TEX_EXTRA.driver}\\)`,
-      color: COLORS.H,
-      description: `Convective driver: the standard Stellingwerf pressure form is \\(\\sqrt{${TEX.H}}\\); \\(\\sqrt{|${TEX.V}|}\\) is retained only as a diagnostic variant.`
-    }
-  ];
   var presetBase = {
     maxStep: 0.15,
     logRtol: -8,
@@ -862,6 +819,7 @@
     variableM.checked = state.variableM;
     variableM.addEventListener("change", (event) => {
       state.variableM = event.target.checked;
+      updateEquationBlocks();
       refreshActivePreset();
       scheduleSolve();
     });
@@ -884,6 +842,7 @@
       button.addEventListener("click", () => {
         state.driver = button.dataset.driver === "abs-v" ? "abs-v" : "h";
         updateDriverButtons();
+        updateEquationBlocks();
         refreshActivePreset();
         scheduleSolve();
       });
@@ -895,6 +854,7 @@
     updateDriverButtons();
     updatePhaseModeButtons();
     updateSolverButtons();
+    updateEquationBlocks();
     updateAllSliderLabels();
     updateResetButtons();
   }
@@ -1122,7 +1082,6 @@
   }
   function buildParameterTable() {
     const tunableTable = el("tunableParameterTable");
-    const derivedTable = el("derivedParameterTable");
     const numericalTable = el("numericalParameterTable");
     const meaning = (text) => text.trim().replace(/\.$/, "");
     const controlRows = (controls) => controls.map(([key, symbol, _name, _min, _max, _step, _defaultValue, color]) => `
@@ -1135,16 +1094,62 @@
       <tr><td class="symbol-cell" style="--color:${COLORS.H}">driver</td><td>${meaning(`Convective driving choice: the standard Stellingwerf pressure form is \\(\\sqrt{${TEX.H}}\\); \\(\\sqrt{|${TEX.V}|}\\) is retained as a diagnostic variant.`)}</td></tr>
       <tr><td class="symbol-cell" style="--color:${COLORS.m}">geometry</td><td>${meaning(`Switch between fixed paper-model \\(${TEX.m}\\) and radius-dependent local geometry \\(${TEX.m}_{\\mathrm{eff}}(${TEX.R})\\).`)}</td></tr>
     `;
-    derivedTable.innerHTML = DERIVED_DESCRIPTIONS.map(({ symbol, description, color }) => `
-      <tr>
-        <td class="symbol-cell" style="--color:${color}">${symbol}</td>
-        <td>${meaning(description)}</td>
-      </tr>
-    `).join("");
     numericalTable.innerHTML = controlRows(CONTROL_GROUPS.integration) + `
       <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">solver</td><td>${meaning("Numerical method: RK45 default, DOP853 reference, or historical midpoint.")}</td></tr>
       <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">phase window</td><td>${meaning("Reference cycles use the first valid minimum-light luminosity window; final cycles use the latest valid window.")}</td></tr>
     `;
+    queueMathTypeset();
+  }
+  function updateEquationBlocks() {
+    const geometry = state.variableM ? `\\ozMass{m}_{\\mathrm{eff}}(\\ozRadius{R}) &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}
+       \\qquad \\ozNeutral{\\eta}=\\left(1-\\frac{3}{\\ozMass{m}}\\right)^{1/3}` : `\\ozMass{m}_{\\mathrm{eff}}(\\ozRadius{R}) &= \\ozMass{m}`;
+    const driver = state.driver === "abs-v" ? "\\sqrt{|\\ozVelocity{V}|}" : "\\sqrt{\\ozPressure{H}}";
+    const odeNode = el("odeEquations");
+    odeNode.dataset.driverMode = state.driver;
+    odeNode.innerHTML = `
+    \\[
+    \\begin{aligned}
+    \\frac{d\\ozRadius{R}}{d\\ozTau{\\tau}} &=
+      \\ozVelocity{V}\\\\[0.35em]
+    \\frac{d\\ozVelocity{V}}{d\\ozTau{\\tau}} &=
+      \\frac{\\ozPressure{H}}{\\ozRadius{R}^{\\ozPressure{q}(\\ozRadius{R})}}
+      - \\frac{1}{\\ozRadius{R}^{2}}
+      - \\ozDamping{C_q}\\ozVelocity{V}^{3}\\\\[0.35em]
+    \\frac{d\\ozPressure{H}}{d\\ozTau{\\tau}} &=
+      \\ozZeta{\\zeta}\\,
+      \\ozRadius{R}^{\\ozMass{m}_{\\mathrm{eff}}(\\ozRadius{R})(\\ozGamma{\\Gamma_1}-1)}
+      \\left[
+        \\ozRadius{R}^{\\ozSource{U}}
+        - \\ozNeutral{\\gamma_r}\\ozRadiative{L_r}
+        - \\ozGammac{\\gamma_c}\\ozConvLum{L_c}
+      \\right]\\\\[0.35em]
+    \\frac{d\\ozConvective{U_c}}{d\\ozTau{\\tau}} &=
+      \\ozZetac{\\zeta_c}
+      \\left[
+        \\ozRadius{R}^{-\\ozConvective{d}(\\ozRadius{R})}\\,${driver}
+        - \\ozConvective{U_c}
+      \\right]
+    \\end{aligned}
+    \\]
+  `;
+    const closureNode = el("closureRelations");
+    closureNode.dataset.geometryMode = state.variableM ? "radius-dependent" : "fixed";
+    closureNode.innerHTML = `
+    \\[
+    \\begin{aligned}
+    ${geometry}\\\\[0.35em]
+    \\ozGamma{B_1} &= (\\ozPink{s}+4)(\\ozGamma{\\Gamma_1}-1)\\\\[0.35em]
+    \\ozRadiative{b}(\\ozRadius{R}) &=
+      4+\\ozMass{m}_{\\mathrm{eff}}(\\ozRadius{R})\\left[\\ozBlue{n}-\\ozGamma{B_1}\\right]\\\\[0.35em]
+    \\ozPressure{q}(\\ozRadius{R}) &=
+      \\ozMass{m}_{\\mathrm{eff}}(\\ozRadius{R})\\ozGamma{\\Gamma_1}-2\\\\[0.35em]
+    \\ozConvLum{c}(\\ozRadius{R}) &=
+      \\ozMass{m}_{\\mathrm{eff}}(\\ozRadius{R})-2\\\\[0.35em]
+    \\ozConvective{d}(\\ozRadius{R}) &=
+      \\frac{\\ozMass{m}_{\\mathrm{eff}}(\\ozRadius{R})(\\ozGamma{\\Gamma_1}-1)}{2}
+    \\end{aligned}
+    \\]
+  `;
     queueMathTypeset();
   }
   function updateVariableInitials() {
@@ -1219,6 +1224,7 @@
     updateSolverButtons();
     el("variableM").checked = state.variableM;
     el("runUntilStable").checked = state.runUntilStable;
+    updateEquationBlocks();
     updateAllSliderLabels();
     updateResetButtons();
     scheduleSolve();
