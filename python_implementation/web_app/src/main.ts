@@ -537,6 +537,7 @@ function updatePresetButtons(): void {
   document.querySelectorAll<HTMLButtonElement>("#presetButtons button").forEach((button) => {
     button.classList.toggle("active", button.textContent === activePreset);
   });
+  el<HTMLSpanElement>("presetSummaryLabel").textContent = activePreset;
 }
 
 function updateDriverButtons(): void {

@@ -374,6 +374,7 @@ class StabilityDetector {
     const prev = this.rows[this.rows.length - 3];
     const peak = this.rows[this.rows.length - 2];
     const current = this.rows[this.rows.length - 1];
+    if (peak.tau < this.minTime) return;
     if (prev.L < peak.L && peak.L >= current.L) {
       const previousPeakIndex = this.peakIndices.at(-1);
       if (previousPeakIndex !== undefined && peak.tau - this.rows[previousPeakIndex].tau < 0.05) {
@@ -429,7 +430,8 @@ class StabilityDetector {
 }
 
 export function solveModel(p: ModelParameters, solver = p.solver): SolveResult {
-  const detector = new StabilityDetector(10 ** p.logStabilityTol, p.stableCycles);
+  const stabilityMinTime = Math.max(2, p.phaseWarmupTau ?? 2);
+  const detector = new StabilityDetector(10 ** p.logStabilityTol, p.stableCycles, stabilityMinTime);
   detector.observe(sample(0, [p.r0, p.v0, p.h0, p.uc0], p));
   const result = integrate(
     (t, y) => derivatives(t, y, p),

@@ -10,6 +10,10 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.getByAltText("OZwizard logo")).toHaveJSProperty("naturalWidth", 498);
   await expect(page.getByRole("button", { name: "RK45" })).toHaveClass(/active/);
   await expect(page.locator("#solverButtons button")).toHaveCount(3);
+  await expect(page.locator("#presetButtons")).not.toBeVisible();
+  await expect(page.locator("#presetSummaryLabel")).toContainText("RR Lyrae low-amplitude fundamental, damped");
+  await page.locator("#presetPanel summary").click();
+  await expect(page.locator("#presetButtons")).toBeVisible();
   await expect(page.getByRole("button", { name: "RR Lyrae low-amplitude fundamental, damped" })).toHaveClass(/active/);
   await expect(page.getByRole("button", { name: "Baker radiative pulsator" })).toBeVisible();
   await expect(page.getByRole("button", { name: "RR Lyrae first overtone" })).toBeVisible();
@@ -19,6 +23,15 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.getByRole("button", { name: "Local radiative OZ1" })).toBeVisible();
   await expect(page.getByRole("button", { name: /corrected/i })).toHaveCount(0);
   await expect(page.getByLabel("Compare selected solver to midpoint")).toHaveCount(0);
+  await expect(page.locator("#runUntilStable")).not.toBeChecked();
+  const physicalControlsBox = await page.locator("#physicalControls").boundingBox();
+  const geometryBox = await page.locator("#variableM").boundingBox();
+  const driverBox = await page.locator("[data-driver='h']").boundingBox();
+  expect(physicalControlsBox).not.toBeNull();
+  expect(geometryBox).not.toBeNull();
+  expect(driverBox).not.toBeNull();
+  expect(physicalControlsBox!.y).toBeLessThan(geometryBox!.y);
+  expect(geometryBox!.y).toBeLessThan(driverBox!.y);
   await expect(page.locator("#statusPill")).toContainText("stop:");
   await expect(page.locator("#metrics")).toContainText("stop reason");
   await expect.poll(async () => (await page.locator("body").innerText()).includes("\\(")).toBe(false);
@@ -46,8 +59,15 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   });
   expect(hasPaint).toBe(true);
 
+  await page.locator("input[aria-label='maximum integration time']").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "3";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#metrics")).toContainText("1.00e+3", { timeout: 15000 });
   await page.getByRole("button", { name: "DOP853" }).click();
   await expect(page.getByRole("button", { name: "DOP853" })).toHaveClass(/active/);
+  await expect(page.locator("#metrics")).toContainText("1.00e+3", { timeout: 15000 });
   await page.getByRole("button", { name: "Final cycles" }).click();
   await expect(page.getByRole("button", { name: "Final cycles" })).toHaveClass(/active/);
   await expect(page.locator("#metrics")).toContainText("final cycles");

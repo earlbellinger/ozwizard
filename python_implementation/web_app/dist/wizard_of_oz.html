@@ -263,6 +263,44 @@
       font-weight: 760;
     }
 
+    .preset-panel {
+      border-top: 1px solid var(--line);
+      margin-top: 18px;
+      padding-top: 14px;
+    }
+
+    .preset-summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .preset-summary:hover {
+      color: var(--ink);
+    }
+
+    .preset-summary-label {
+      color: var(--ink);
+      display: block;
+      font-size: 12px;
+      font-weight: 680;
+      letter-spacing: 0;
+      line-height: 1.35;
+      margin: 5px 0 0 19px;
+      max-width: 240px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-transform: none;
+      white-space: nowrap;
+    }
+
+    .preset-grid {
+      margin-top: 8px;
+    }
+
     .preset-grid,
     .driver-row {
       display: grid;
@@ -852,22 +890,25 @@
         </div>
       </div>
 
-      <div class="section-title">Presets</div>
-      <div class="preset-grid" id="presetButtons"></div>
+      <details class="preset-panel" id="presetPanel">
+        <summary class="preset-summary">
+          Presets
+          <span class="preset-summary-label" id="presetSummaryLabel"></span>
+        </summary>
+        <div class="preset-grid" id="presetButtons"></div>
+      </details>
 
+      <div class="section-title">Physical Parameters</div>
+      <div class="slider-list" id="physicalControls"></div>
+      <label class="toggle-line">
+        <span>Use radius-dependent geometry \(\ozMass{m}_{\mathrm{eff}}(\ozRadius{R})\)</span>
+        <input id="variableM" type="checkbox">
+      </label>
       <div class="section-title">Convective Driver</div>
       <div class="driver-row">
         <button type="button" data-driver="h" class="active">\(\sqrt{\ozPressure{H}}\)</button>
         <button type="button" data-driver="abs-v">\(\sqrt{|\ozVelocity{V}|}\)</button>
       </div>
-
-      <label class="toggle-line">
-        <span>Use radius-dependent geometry \(\ozMass{m}_{\mathrm{eff}}(\ozRadius{R})\)</span>
-        <input id="variableM" type="checkbox">
-      </label>
-
-      <div class="section-title">Physical Parameters</div>
-      <div class="slider-list" id="physicalControls"></div>
 
       <div class="section-title">Initial Conditions</div>
       <div class="slider-list" id="initialControls"></div>
@@ -876,7 +917,7 @@
       <div class="driver-row solver-row" id="solverButtons"></div>
       <label class="toggle-line">
         <span>Run until stable</span>
-        <input id="runUntilStable" type="checkbox" checked>
+        <input id="runUntilStable" type="checkbox">
       </label>
       <div class="slider-list" id="integrationControls"></div>
 

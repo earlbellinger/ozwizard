@@ -160,6 +160,31 @@ describe("one-zone model", () => {
     expect(options.outputInterval).toBeLessThanOrEqual(0.02);
     expect(options.maxRows).toBeGreaterThanOrEqual(Math.ceil(1000 / options.outputInterval!) + 2);
   });
+
+  it("runs the default long integration to tau max with every solver when auto-stop is off", () => {
+    for (const solver of ["rk45", "dop853", "midpoint"] as const) {
+      const result = solveModel({
+        ...PRESETS["RR Lyrae low-amplitude fundamental, damped"],
+        solver,
+        tEnd: 1000,
+        runUntilStable: false
+      });
+      expect(result.status, solver).toBe("complete");
+      expect(result.rows.at(-1)?.tau, solver).toBeCloseTo(1000, 12);
+    }
+  });
+
+  it("does not classify stability before the preset phase warmup window", () => {
+    const preset = PRESETS["RR Lyrae low-amplitude fundamental, damped"];
+    const result = solveModel({
+      ...preset,
+      solver: "midpoint",
+      tEnd: preset.phaseWarmupTau! - 5,
+      runUntilStable: true
+    });
+    expect(result.message).toBe("max_time");
+    expect(result.rows.at(-1)?.tau).toBeCloseTo(preset.phaseWarmupTau! - 5, 12);
+  });
 });
 
 describe("adaptive solvers", () => {
