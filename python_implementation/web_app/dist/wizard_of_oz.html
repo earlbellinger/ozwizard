@@ -844,6 +844,24 @@
             or runs into a dynamic instability.
           </p>
           <p>
+            Mechanically, the shell behaves like a nonlinear oscillator: pressure support pushes outward,
+            gravity pulls inward, and turbulent damping removes kinetic energy. The thermal equation updates
+            <span class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{H}\)</span> by comparing the inner
+            luminosity source with the radiative and convective luminosity leaking out of the shell. If energy is
+            trapped and released at the right phase of the motion, the pulse grows; if leakage and damping win,
+            it decays.
+          </p>
+          <p>
+            Convection adds a delayed cooling channel. The convective velocity
+            <span class="symbol-cell" style="--color:var(--convective)">\(\ozConvective{U_c}\)</span> relaxes toward a
+            local value set mainly by radius and
+            <span class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{H}\)</span>, while the convective
+            luminosity scales like \(U_c^3\). That delay is why changing \(\zeta\), \(\zeta_c\), and \(\gamma_c\)
+            can move the model between damping, a stable limit cycle, and dynamic instability. Phase-folded plots
+            are most meaningful once the model has reached a repeatable cycle; a still-growing pulse should be read
+            as transient evolution, not a final waveform.
+          </p>
+          <p>
             Historically, this app follows R. F. Stellingwerf's 1986 ApJ paper
             <a href="https://adsabs.harvard.edu/pdf/1986ApJ...303..119S">“A Simple Model for Coupled Convection and Pulsation”</a>,
             which generalized Baker's one-zone pulsation model with a time-dependent convection equation.
