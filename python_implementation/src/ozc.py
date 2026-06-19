@@ -16,7 +16,7 @@ from stability import StabilityDetector, StabilityOptions
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "ozc"
-CSV_COLUMNS = ("tau", "R", "V", "P", "L", "Lr", "Lc", "Uc")
+CSV_COLUMNS = ("tau", "R", "V", "H", "L", "Lr", "Lc", "Uc")
 
 
 @dataclass
@@ -99,7 +99,7 @@ class Sample:
             "tau": self.t,
             "R": self.radius,
             "V": self.velocity,
-            "P": self.pressure,
+            "H": self.pressure,
             "L": self.luminosity,
             "Lr": self.radiative_luminosity,
             "Lc": self.convective_luminosity,
@@ -108,9 +108,9 @@ class Sample:
 
 
 class ConvectiveOneZoneModel:
-    def __init__(self, params: OZCParameters, convective_driver: str = "p") -> None:
-        if convective_driver not in {"p", "v", "abs-v"}:
-            raise ValueError("convective_driver must be 'p', 'v', or 'abs-v'")
+    def __init__(self, params: OZCParameters, convective_driver: str = "h") -> None:
+        if convective_driver not in {"h", "v", "abs-v"}:
+            raise ValueError("convective_driver must be 'h', 'v', or 'abs-v'")
         self.params = params
         self.convective_driver = convective_driver
 
@@ -143,11 +143,11 @@ class ConvectiveOneZoneModel:
     def derivatives(self, _time: float, state: Sequence[float]) -> list[float]:
         radius, velocity, pressure, convective_velocity = state
         if radius <= 0.0 or pressure <= 0.0:
-            raise ValueError("model left the positive-radius/positive-pressure domain")
+            raise ValueError("model left the positive-radius/positive-H domain")
         radiative = self.radiative_luminosity(radius, pressure)
         convective = self.convective_luminosity(radius, convective_velocity)
 
-        if self.convective_driver == "p":
+        if self.convective_driver == "h":
             driver = pressure
         elif self.convective_driver == "abs-v":
             driver = abs(velocity)
@@ -156,7 +156,7 @@ class ConvectiveOneZoneModel:
         if driver < 0.0:
             raise ValueError(
                 f"Cannot take a real square root of {self.convective_driver}={driver:g}; "
-                "use the default P driver for the Stellingwerf equation."
+                "use the default H driver for the Stellingwerf equation."
             )
 
         return [
@@ -273,9 +273,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--no-plots", action="store_true", help="Only write the CSV")
     parser.add_argument(
         "--convective-driver",
-        choices=("p", "v", "abs-v"),
-        default="p",
-        help="Use P^(1/2), literal sqrt(V), or the bugged sqrt(abs(V)) driver",
+        choices=("h", "v", "abs-v"),
+        default="h",
+        help="Use H^(1/2), literal sqrt(V), or the bugged sqrt(abs(V)) driver",
     )
     parser.add_argument("--quiet", action="store_true", help="Suppress setup/progress output")
     parser.add_argument("--solver", choices=SOLVER_NAMES, default=DEFAULT_SOLVER)

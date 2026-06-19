@@ -1,7 +1,7 @@
 import { type OdeResult, type SolverName, type SolverOptions, defaultSolverOptions, integrate } from "./solvers";
 
 export type Driver = "h" | "abs-v";
-export type ReferenceFamily = "paper-corrected" | "oz1-corrected" | "ozc-corrected" | "diagnostic";
+export type ReferenceFamily = "baker" | "stellingwerf-1986" | "stellingwerf-1987" | "local-s-tran" | "diagnostic";
 export type PhaseMode = "reference" | "final";
 
 export interface ModelParameters {
@@ -27,7 +27,6 @@ export interface ModelParameters {
   variableM: boolean;
   driver: Driver;
   solver: SolverName;
-  compareMidpoint: boolean;
   runUntilStable: boolean;
   logStabilityTol: number;
   stableCycles: number;
@@ -101,6 +100,20 @@ export const TEX = {
   cq: "\\ozDamping{C_q}"
 } as const;
 
+const TEX_EXTRA = {
+  gammaR: "\\ozNeutral{\\gamma_r}",
+  eta: "\\ozMass{\\eta}",
+  b1: "\\ozGamma{B_1}",
+  b: "\\ozRadiative{b}",
+  q: "\\ozPressure{q}",
+  c: "\\ozConvLum{c}",
+  d: "\\ozConvective{d}",
+  driver: "\\ozPressure{D}",
+  kappa: "\\ozNeutral{\\kappa}",
+  rho: "\\ozNeutral{\\rho}",
+  temp: "\\ozNeutral{T}"
+} as const;
+
 export type NumericParameterKey = {
   [K in keyof ModelParameters]-?: NonNullable<ModelParameters[K]> extends number ? K : never
 }[keyof ModelParameters];
@@ -112,14 +125,14 @@ export type ControlDef = [ControlParameterKey, string, string, number, number, n
 export const CONTROL_GROUPS: Record<"physical" | "initial" | "integration", ControlDef[]> = {
   physical: [
     ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", 0.05, 12, 0.05, 1, COLORS.zeta],
-    ["zetac", `\\(${TEX.zetac}\\)`, "convective response", 0.05, 12, 0.05, 1, COLORS.zetac],
+    ["zetac", `\\(${TEX.zetac}\\)`, "convective response", 0, 12, 0.05, 1, COLORS.zetac],
     ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.2, COLORS.gammac],
-    ["m", `\\(${TEX.m}\\)`, "shell form factor", 3.2, 20, 0.1, 10, COLORS.m],
+    ["m", `\\(${TEX.m}\\)`, "shell form factor", 3, 20, 0.1, 10, COLORS.m],
     ["gamma1", `\\(${TEX.gamma1}\\)`, "adiabatic exponent", 1.01, 1.67, 0.01, 1.1, COLORS.gamma1],
     ["n", `\\(${TEX.n}\\)`, "opacity-density exponent", 0, 3, 0.05, 1, COLORS.n],
     ["s", `\\(${TEX.s}\\)`, "opacity-temperature exponent", 0, 8, 0.1, 3, COLORS.s],
-    ["sourceExp", `\\(${TEX.sourceExp}\\)`, "inner luminosity exponent", -2, 1, 0.05, 0, COLORS.sourceExp],
-    ["cq", `\\(${TEX.cq}\\)`, "turbulent damping", 0, 3, 0.05, 0, COLORS.cq]
+    ["sourceExp", `\\(${TEX.sourceExp}\\)`, "inner luminosity exponent", -2, 2, 0.05, 0, COLORS.sourceExp],
+    ["cq", `\\(${TEX.cq}\\)`, "turbulent damping", 0, 10, 0.05, 0, COLORS.cq]
   ],
   initial: [
     ["r0", `\\(${TEX.R}_0\\)`, "initial radius", 0.75, 1.9, 0.01, 1.4, COLORS.R],
@@ -128,7 +141,7 @@ export const CONTROL_GROUPS: Record<"physical" | "initial" | "integration", Cont
     ["uc0", `\\(${TEX.Uc}_{0}\\)`, "initial convective velocity", 0, 1.8, 0.01, 1, COLORS.Uc]
   ],
   integration: [
-    ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "maximum integration time", 1, 3, 0.01, 120, COLORS.tEnd],
+    ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "maximum integration time", 0, 3, 0.01, 120, COLORS.tEnd],
     ["step", `\\(\\Delta ${TEX.tau}_0\\)`, "initial step", 0.0005, 0.02, 0.0005, 0.001, COLORS.step],
     ["maxStep", `\\(\\Delta ${TEX.tau}_{\\max}\\)`, "maximum adaptive step", 0.005, 0.3, 0.005, 0.15, COLORS.maxStep],
     ["logRtol", "\\(\\ozNeutral{\\log_{10} r_{tol}}\\)", "modern relative tolerance", -11, -5, 0.25, -8, COLORS.rtol],
@@ -140,19 +153,19 @@ export const CONTROL_GROUPS: Record<"physical" | "initial" | "integration", Cont
 };
 
 export const PARAMETER_DESCRIPTIONS: Partial<Record<keyof ModelParameters, string>> = {
-  zeta: "Ratio of the model free-fall/dynamical time to the thermal time; larger values make \\(H\\) adjust faster per \\(\\tau\\).",
-  zetac: "Ratio of the model free-fall/dynamical time to the convective adjustment time; larger values make \\(U_c\\) relax faster.",
-  gammac: "Equilibrium convective luminosity fraction \\(\\gamma_c=L_{c0}/L_0\\); the radiative weight is \\(\\gamma_r=1-\\gamma_c\\).",
-  m: "Equilibrium shell-thickness form factor \\(m=3/(1-\\eta^3)\\), where \\(\\eta=R_c/R_0\\). Larger \\(m\\) means a thinner shell.",
-  gamma1: "First adiabatic exponent used in the \\(H\\) response.",
-  n: "Density exponent in the opacity convention \\(\\kappa\\propto\\rho^n T^{-s}\\).",
-  s: "Temperature exponent in the opacity convention \\(\\kappa\\propto\\rho^n T^{-s}\\).",
-  sourceExp: "Exponent \\(U\\) in the inner luminosity source \\(R^U\\).",
+  zeta: `Ratio of the model free-fall/dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\).`,
+  zetac: `Ratio of the model free-fall/dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\).`,
+  gammac: `Equilibrium convective luminosity fraction \\(${TEX.gammac}=${TEX.Lc}_{0}/${TEX.L}_{0}\\); the radiative weight is \\(${TEX_EXTRA.gammaR}=1-${TEX.gammac}\\).`,
+  m: `Equilibrium shell-thickness form factor \\(${TEX.m}=3/(1-${TEX_EXTRA.eta}^{3})\\), where \\(${TEX_EXTRA.eta}=${TEX.R}_{c}/${TEX.R}_{0}\\). Larger \\(${TEX.m}\\) means a thinner shell.`,
+  gamma1: `First adiabatic exponent used in the \\(${TEX.H}\\) response.`,
+  n: `Density exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
+  s: `Temperature exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
+  sourceExp: `Exponent \\(${TEX.sourceExp}\\) in the inner luminosity source \\(${TEX.R}^{${TEX.sourceExp}}\\).`,
   cq: "Cubic turbulent damping coefficient in the acceleration equation.",
-  r0: "Starting radius of the shell.",
-  v0: "Starting radial velocity.",
-  h0: "Starting nonadiabatic pressure factor \\(H\\), not the total gas pressure.",
-  uc0: "Starting convective velocity.",
+  r0: `Starting shell radius \\(${TEX.R}_{0}\\).`,
+  v0: `Starting radial velocity \\(${TEX.V}_{0}\\).`,
+  h0: `Starting nonadiabatic pressure factor \\(${TEX.H}_{0}\\), not the total gas pressure.`,
+  uc0: `Starting convective velocity \\(${TEX.Uc}_{0}\\).`,
   tEnd: `Maximum integration time \\(${TEX.tau}\\), measured in free-fall/dynamical time units. The slider uses a logarithmic scale.`,
   step: `Initial adaptive step size \\(\\Delta ${TEX.tau}_0\\).`,
   maxStep: `Maximum step size \\(\\Delta ${TEX.tau}_{\\max}\\) allowed for adaptive solvers.`,
@@ -165,44 +178,44 @@ export const PARAMETER_DESCRIPTIONS: Partial<Record<keyof ModelParameters, strin
 
 export const DERIVED_DESCRIPTIONS: Array<{ symbol: string; description: string; color: string }> = [
   {
-    symbol: "\\(m_{\\mathrm{eff}}(R)\\)",
+    symbol: `\\(${TEX.m}_{\\mathrm{eff}}(${TEX.R})\\)`,
     color: COLORS.m,
-    description: "Effective form factor used in the exponents: fixed paper-model \\(m\\), or the optional local extension \\(3/[1-(\\eta/R)^3]\\) with \\(\\eta=(1-3/m)^{1/3}\\)."
+    description: `Effective form factor used in the exponents: fixed paper-model \\(${TEX.m}\\), or the optional local extension \\(3/[1-(${TEX_EXTRA.eta}/${TEX.R})^3]\\) with \\(${TEX_EXTRA.eta}=(1-3/${TEX.m})^{1/3}\\).`
   },
   {
-    symbol: "\\(B_1\\)",
+    symbol: `\\(${TEX_EXTRA.b1}\\)`,
     color: COLORS.gamma1,
-    description: "Radiative helper exponent \\(B_1=(s+4)(\\Gamma_1-1)\\)."
+    description: `Radiative helper exponent \\(${TEX_EXTRA.b1}=(${TEX.s}+4)(${TEX.gamma1}-1)\\).`
   },
   {
-    symbol: "\\(b(R)\\)",
+    symbol: `\\(${TEX_EXTRA.b}(${TEX.R})\\)`,
     color: COLORS.Lr,
-    description: "Radiative radius exponent \\(b=4+m_{\\mathrm{eff}}(R)[n-B_1]\\), giving \\(L_r=R^{b(R)}H^{s+4}\\)."
+    description: `Radiative radius exponent \\(${TEX_EXTRA.b}=4+${TEX.m}_{\\mathrm{eff}}(${TEX.R})[${TEX.n}-${TEX_EXTRA.b1}]\\), giving \\(${TEX.Lr}=${TEX.R}^{${TEX_EXTRA.b}(${TEX.R})}${TEX.H}^{${TEX.s}+4}\\).`
   },
   {
-    symbol: "\\(q(R)\\)",
+    symbol: `\\(${TEX_EXTRA.q}(${TEX.R})\\)`,
     color: COLORS.H,
-    description: "Pressure-force exponent \\(q=m_{\\mathrm{eff}}(R)\\Gamma_1-2\\), used in the acceleration term \\(H/R^{q(R)}\\)."
+    description: `Pressure-force exponent \\(${TEX_EXTRA.q}=${TEX.m}_{\\mathrm{eff}}(${TEX.R})${TEX.gamma1}-2\\), used in the acceleration term \\(${TEX.H}/${TEX.R}^{${TEX_EXTRA.q}(${TEX.R})}\\).`
   },
   {
-    symbol: "\\(c(R)\\)",
+    symbol: `\\(${TEX_EXTRA.c}(${TEX.R})\\)`,
     color: COLORS.Lc,
-    description: "Convective luminosity radius exponent \\(c=m_{\\mathrm{eff}}(R)-2\\), giving \\(L_c=R^{-c(R)}U_c^3\\)."
+    description: `Convective luminosity radius exponent \\(${TEX_EXTRA.c}=${TEX.m}_{\\mathrm{eff}}(${TEX.R})-2\\), giving \\(${TEX.Lc}=${TEX.R}^{-${TEX_EXTRA.c}(${TEX.R})}${TEX.Uc}^{3}\\).`
   },
   {
-    symbol: "\\(d(R)\\)",
+    symbol: `\\(${TEX_EXTRA.d}(${TEX.R})\\)`,
     color: COLORS.Uc,
-    description: "Convective velocity radius exponent \\(d=m_{\\mathrm{eff}}(R)(\\Gamma_1-1)/2\\), used in \\(R^{-d(R)}D\\)."
+    description: `Convective velocity radius exponent \\(${TEX_EXTRA.d}=${TEX.m}_{\\mathrm{eff}}(${TEX.R})(${TEX.gamma1}-1)/2\\), used in \\(${TEX.R}^{-${TEX_EXTRA.d}(${TEX.R})}${TEX_EXTRA.driver}\\).`
   },
   {
-    symbol: "\\(\\gamma_r\\)",
+    symbol: `\\(${TEX_EXTRA.gammaR}\\)`,
     color: COLORS.Lr,
-    description: "Radiative luminosity weight \\(\\gamma_r=1-\\gamma_c\\), so \\(L=\\gamma_rL_r+\\gamma_cL_c\\)."
+    description: `Radiative luminosity weight \\(${TEX_EXTRA.gammaR}=1-${TEX.gammac}\\), so \\(${TEX.L}=${TEX_EXTRA.gammaR}${TEX.Lr}+${TEX.gammac}${TEX.Lc}\\).`
   },
   {
-    symbol: "\\(D\\)",
+    symbol: `\\(${TEX_EXTRA.driver}\\)`,
     color: COLORS.H,
-    description: "Convective driver: the corrected Stellingwerf form is \\(\\sqrt{H}\\); \\(\\sqrt{|V|}\\) is retained only as a diagnostic variant."
+    description: `Convective driver: the standard Stellingwerf pressure form is \\(\\sqrt{${TEX.H}}\\); \\(\\sqrt{|${TEX.V}|}\\) is retained only as a diagnostic variant.`
   }
 ];
 
@@ -211,7 +224,6 @@ const presetBase = {
   logRtol: -8,
   logAtol: -10,
   solver: "rk45" as SolverName,
-  compareMidpoint: false,
   runUntilStable: true,
   logStabilityTol: -2.7,
   stableCycles: 5,
@@ -221,24 +233,57 @@ const presetBase = {
 
 const paperBase = {
   ...presetBase,
-  referenceFamily: "paper-corrected" as const,
+  referenceFamily: "stellingwerf-1986" as const,
   phaseWarmupTau: 4
 };
 
 const ozcBase = {
   ...presetBase,
-  referenceFamily: "ozc-corrected" as const
+  referenceFamily: "local-s-tran" as const
 };
 
+const overtoneBase = {
+  ...presetBase,
+  referenceFamily: "stellingwerf-1987" as const,
+  phaseWarmupTau: 1,
+  zeta: 1,
+  zetac: 0,
+  gammac: 0,
+  gamma1: 1.1,
+  n: 1,
+  s: 3,
+  cq: 0,
+  v0: 0,
+  h0: 0.9,
+  uc0: 0,
+  tEnd: 10,
+  step: 0.001,
+  logErrTol: -7,
+  variableM: true,
+  driver: "h" as Driver,
+  runUntilStable: false
+};
+
+export const DEFAULT_PRESET_NAME = "RR Lyrae low-amplitude fundamental, damped";
+
 export const PRESETS: Record<string, ModelParameters> = {
-  Strip: { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "h" },
-  Blue: { ...paperBase, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "h" },
-  Red: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "h" },
-  Thick: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "h" },
-  Unstable: { ...paperBase, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 0.001, logErrTol: -7, variableM: false, driver: "h" },
-  "OZ1 corrected": { ...presetBase, referenceFamily: "oz1-corrected", phaseWarmupTau: 1, zeta: 1, zetac: 1, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 2, r0: 1.2, v0: 0, h0: 0.8, uc0: 1, tEnd: 120, step: 0.012, logErrTol: -5, variableM: true, driver: "h" },
-  "OZC corrected": { ...ozcBase, zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 120, step: 0.001, logErrTol: -5, variableM: true, driver: "h" },
-  "OZC abs(V) diagnostic": { ...ozcBase, referenceFamily: "diagnostic", zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 120, step: 0.001, logErrTol: -5, variableM: true, driver: "abs-v" }
+  "Baker radiative pulsator": { ...presetBase, referenceFamily: "baker", phaseWarmupTau: 4, zeta: 1, zetac: 0, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 0, tEnd: 24, step: 0.001, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
+  "Blue-edge convection": { ...paperBase, phaseWarmupTau: 24, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 40, step: 0.001, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
+  "Instability-strip convection": { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 15, step: 0.001, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
+  "Red-edge convection": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 14, step: 0.001, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
+  "Radius-dependent strip": { ...paperBase, phaseWarmupTau: 6, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 0.001, logErrTol: -7, variableM: true, driver: "h", runUntilStable: false },
+  "Fully convective runaway": { ...paperBase, phaseWarmupTau: 1, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 8, step: 0.001, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
+  "Thick convective shell": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 0.001, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
+  "RR Lyrae fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.2 },
+  "RR Lyrae low-amplitude fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.1 },
+  "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 80 },
+  "RR Lyrae first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.05 },
+  "RR Lyrae first overtone, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 15, sourceExp: 2, cq: 7, r0: 1.05, tEnd: 80 },
+  "RR Lyrae high-amplitude first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.1 },
+  "RR Lyrae second overtone": { ...overtoneBase, m: 20, sourceExp: 1, r0: 1.05 },
+  "Local radiative OZ1": { ...presetBase, referenceFamily: "local-s-tran", phaseWarmupTau: 1, zeta: 1, zetac: 0, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 2, r0: 1.2, v0: 0, h0: 0.8, uc0: 0, tEnd: 20, step: 0.012, logErrTol: -5, variableM: true, driver: "h", runUntilStable: false },
+  "Local convective OZC": { ...ozcBase, zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 20, step: 0.001, logErrTol: -5, variableM: true, driver: "h", runUntilStable: false },
+  "OZC abs(V) driver diagnostic": { ...ozcBase, referenceFamily: "diagnostic", zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 20, step: 0.001, logErrTol: -5, variableM: true, driver: "abs-v", runUntilStable: false }
 };
 
 export function mAt(radius: number, p: ModelParameters): number {
@@ -295,9 +340,9 @@ export function solverOptionsFromParameters(p: ModelParameters, solver = p.solve
     initialStep: p.step,
     maxStep: p.maxStep,
     minStep: 1e-10,
-    maxRows: 14000,
+    maxRows: 60000,
     maxAcceptedSteps: 600000,
-    outputInterval: Math.max(0.005, p.tEnd / 12000),
+    outputInterval: Math.max(0.005, Math.min(0.02, p.tEnd / 12000)),
     errTol: 10 ** p.logErrTol
   });
 }

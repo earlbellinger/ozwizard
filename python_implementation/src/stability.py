@@ -57,7 +57,7 @@ class StabilityDetector:
         window = [row for row in reversed(self.rows) if end - row["tau"] <= self.options.equilibrium_window]
         if len(window) < 6 or end - window[-1]["tau"] < self.options.equilibrium_window * 0.75:
             return False
-        keys = [key for key in ("R", "V", "P", "Uc", "L") if key in window[0]]
+        keys = [key for key in ("R", "V", "H", "Uc", "L") if key in window[0]]
         for key in keys:
             values = [row[key] for row in window]
             scale = max(1.0, max(abs(value) for value in values))

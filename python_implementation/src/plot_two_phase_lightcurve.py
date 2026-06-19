@@ -168,7 +168,7 @@ def write_two_panel_svg(rows: Sequence[Row], output_path: Path) -> None:
 
 def write_csv(path: Path, rows: Sequence[Row]) -> None:
     with path.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=("Phase", "tau", "R", "V", "P", "L"), extrasaction="ignore")
+        writer = csv.DictWriter(handle, fieldnames=("Phase", "tau", "R", "V", "H", "L"), extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 

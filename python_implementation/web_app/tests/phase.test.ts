@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { PRESETS, solveModel, type ModelParameters, type Row } from "../src/model";
 import { buildTwoCyclePhase } from "../src/phase";
 
+const STRIP_PRESET = "Instability-strip convection";
+
 function phaseOptions(p: ModelParameters) {
   return { warmupTau: p.phaseWarmupTau, minAmplitude: p.phaseMinAmplitude };
 }
@@ -44,8 +46,8 @@ describe("phase folding", () => {
     expect(phase.rows.at(-1)!.tau).toBeCloseTo(2, 12);
   });
 
-  it("matches the Python Strip two-phase reference period", () => {
-    const p = { ...PRESETS.Strip, tEnd: 15, runUntilStable: false };
+  it("matches the Python instability-strip two-phase reference period", () => {
+    const p = { ...PRESETS[STRIP_PRESET], tEnd: 15, runUntilStable: false };
     const phase = buildTwoCyclePhase(solveModel(p).rows, phaseOptions(p));
     const expected = referenceCsvPeriod("../../outputs/two_phase/python_paper_strip_two_phase_lightcurve.csv");
     expect(phase.reason).toBe("ok");
@@ -53,7 +55,7 @@ describe("phase folding", () => {
   });
 
   it("matches the Python OZ1 two-phase reference period", () => {
-    const p = { ...PRESETS["OZ1 corrected"], tEnd: 9, runUntilStable: false };
+    const p = { ...PRESETS["Local radiative OZ1"], tEnd: 9, runUntilStable: false };
     const phase = buildTwoCyclePhase(solveModel(p).rows, phaseOptions(p));
     const expected = referenceCsvPeriod("../../outputs/two_phase/stellingwerf_oz1_two_phase_lightcurve.csv");
     expect(phase.reason).toBe("ok");
@@ -61,7 +63,7 @@ describe("phase folding", () => {
   });
 
   it("can fold midpoint comparison rows with the selected solver reference", () => {
-    const p = { ...PRESETS.Strip, tEnd: 15, runUntilStable: false };
+    const p = { ...PRESETS[STRIP_PRESET], tEnd: 15, runUntilStable: false };
     const selectedPhase = buildTwoCyclePhase(solveModel({ ...p, solver: "rk45" }).rows, phaseOptions(p));
     expect(selectedPhase.reason).toBe("ok");
     const midpointPhase = buildTwoCyclePhase(solveModel({ ...p, solver: "midpoint" }).rows, {

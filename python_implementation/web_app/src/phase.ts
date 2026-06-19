@@ -22,7 +22,7 @@ export interface PhaseResult {
   rows: Row[];
   reference: PhaseReference | null;
   period: number | null;
-  reason: "ok" | "not_enough_rows" | "not_enough_maxima" | "amplitude_below_threshold" | "reference_out_of_range" | "not_stable_limit_cycle";
+  reason: "ok" | "not_enough_rows" | "not_enough_maxima" | "amplitude_below_threshold" | "reference_out_of_range";
 }
 
 function defaultWarmupTau(rows: readonly Row[]): number {

@@ -44,7 +44,7 @@ midpoint also honors the legacy `--err-tol`. `stellingwerf1986.py` keeps its
 paper figure windows by default and uses `--max-time` only when
 `--run-until-stable` is supplied.
 
-The normal Strip phase plot uses `sqrt(P)` in the convective velocity equation.
+The normal Strip phase plot uses `sqrt(H)` in the convective velocity equation.
 The `paper-strip-abs-v` variant changes only that driver to `sqrt(abs(V))`.
 
 The interactive explorer is now a Vite + TypeScript app:

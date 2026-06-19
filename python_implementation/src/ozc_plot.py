@@ -14,7 +14,7 @@ OUTPUT_DIR = PROJECT_ROOT / "outputs" / "ozc"
 COLOR_BY_COLUMN = {
     "R": "#2f6fbb",
     "V": "#b23a48",
-    "P": "#4f8a3f",
+    "H": "#4f8a3f",
     "L": "#7a4fb3",
     "Lr": "#d1882f",
     "Lc": "#238c8c",
@@ -195,7 +195,7 @@ def plot_ozc(csv_path: Path, output_dir: Path) -> list[Path]:
         output_dir / "ozc_timeseries.svg",
         output_dir / "ozc_phase.svg",
     ]
-    write_timeseries_svg(rows, outputs[0], ("R", "V", "P", "L", "Lr", "Lc", "Uc"), "OZc translated Thor plot")
+    write_timeseries_svg(rows, outputs[0], ("R", "V", "H", "L", "Lr", "Lc", "Uc"), "OZc translated Thor plot")
     write_xy_svg(rows, outputs[1], "R", "V", "OZc sequence plot")
     return outputs
 

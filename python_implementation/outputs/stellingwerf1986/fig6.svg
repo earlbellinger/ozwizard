@@ -40,7 +40,7 @@
 <line x1="242.35" y1="159.78" x2="234.50" y2="159.72" stroke="#111" stroke-width="1.1" fill="none" marker-end="url(#arrow)"/>
 <text x="545.00" y="67.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="13" font-weight="bold">a</text>
 <text x="515.00" y="90.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="15" font-weight="bold">BLUE</text>
-<text x="165.00" y="83.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="14" font-weight="bold">P</text>
+<text x="165.00" y="83.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="14" font-weight="bold">H</text>
 <text x="215.00" y="198.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="14" font-weight="bold">U_c</text>
 <rect x="70.00" y="240.00" width="500.00" height="205.00" fill="none" stroke="#111" stroke-width="1.4"/>
 <line x1="70.00" y1="240.00" x2="70.00" y2="248.00" stroke="#111" stroke-width="1.1" fill="none"/>
@@ -71,7 +71,7 @@
 <line x1="85.85" y1="341.04" x2="85.76" y2="338.92" stroke="#111" stroke-width="1.1" fill="none" marker-end="url(#arrow)"/>
 <text x="545.00" y="272.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="13" font-weight="bold">b</text>
 <text x="515.00" y="295.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="15" font-weight="bold">STRIP</text>
-<text x="165.00" y="288.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="14" font-weight="bold">P</text>
+<text x="165.00" y="288.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="14" font-weight="bold">H</text>
 <text x="215.00" y="403.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="14" font-weight="bold">U_c</text>
 <rect x="70.00" y="445.00" width="500.00" height="205.00" fill="none" stroke="#111" stroke-width="1.4"/>
 <line x1="70.00" y1="445.00" x2="70.00" y2="453.00" stroke="#111" stroke-width="1.1" fill="none"/>
@@ -107,7 +107,7 @@
 <line x1="89.66" y1="461.06" x2="93.02" y2="460.72" stroke="#111" stroke-width="1.1" fill="none" marker-end="url(#arrow)"/>
 <text x="545.00" y="477.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="13" font-weight="bold">c</text>
 <text x="515.00" y="500.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="15" font-weight="bold">RED</text>
-<text x="165.00" y="493.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="14" font-weight="bold">P</text>
+<text x="165.00" y="493.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="14" font-weight="bold">H</text>
 <text x="215.00" y="608.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="14" font-weight="bold">U_c</text>
 <text x="320.00" y="706.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="16" font-weight="bold">R</text>
 <text x="320.00" y="735.00" text-anchor="middle" font-family="Georgia, Times New Roman, serif" font-size="12" font-weight="normal">Fig. 6 - Phase plots for the Blue, Strip, and Red cases</text>

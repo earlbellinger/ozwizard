@@ -44,7 +44,7 @@ class SolverTests(unittest.TestCase):
         rk45 = PaperModel(params).run(4.0, solver="rk45", rtol=1.0e-9, atol=1.0e-11)
         dop853 = PaperModel(params).run(4.0, solver="dop853", rtol=1.0e-10, atol=1.0e-12)
         self.assertAlmostEqual(rk45[-1]["R"], dop853[-1]["R"], delta=5.0e-6)
-        self.assertAlmostEqual(rk45[-1]["P"], dop853[-1]["P"], delta=5.0e-6)
+        self.assertAlmostEqual(rk45[-1]["H"], dop853[-1]["H"], delta=5.0e-6)
 
     def test_domain_failure_returns_status(self) -> None:
         result = integrate(
@@ -59,30 +59,30 @@ class SolverTests(unittest.TestCase):
         detector = StabilityDetector(StabilityOptions(tolerance=1.0e-3))
         status = None
         for index in range(30):
-            status = detector.observe({"tau": index * 0.1, "R": 1.0, "V": 0.0, "P": 1.0, "Uc": 1.0, "L": 1.0})
+            status = detector.observe({"tau": index * 0.1, "R": 1.0, "V": 0.0, "H": 1.0, "Uc": 1.0, "L": 1.0})
         self.assertEqual(status, "equilibrium")
 
     def test_stability_default_requires_five_cycles(self) -> None:
         self.assertEqual(StabilityOptions().stable_cycles, 5)
 
-    def test_csv_headers_use_tau_r_p(self) -> None:
-        expected = ("tau", "R", "V", "P")
+    def test_csv_headers_use_tau_r_h(self) -> None:
+        expected = ("tau", "R", "V", "H")
         self.assertEqual(OZ1_CSV_COLUMNS[:4], expected)
         self.assertEqual(OZC_CSV_COLUMNS[:4], expected)
         for header in (OZ1_CSV_COLUMNS, OZC_CSV_COLUMNS):
-            self.assertFalse({"T", "X", "H"} & set(header))
+            self.assertFalse({"T", "X", "P"} & set(header))
 
-        paper_row = {"tau": 0.0, "R": 1.0, "V": 0.0, "P": 1.0, "Uc": 1.0, "Lr": 1.0, "Lc": 0.0, "L": 1.0}
-        phase_row = {"Phase": 0.0, "tau": 0.0, "R": 1.0, "V": 0.0, "P": 1.0, "L": 1.0}
+        paper_row = {"tau": 0.0, "R": 1.0, "V": 0.0, "H": 1.0, "Uc": 1.0, "Lr": 1.0, "Lc": 0.0, "L": 1.0}
+        phase_row = {"Phase": 0.0, "tau": 0.0, "R": 1.0, "V": 0.0, "H": 1.0, "L": 1.0}
         with TemporaryDirectory() as tmp:
             paper_path = Path(tmp) / "paper.csv"
             phase_path = Path(tmp) / "phase.csv"
             write_paper_csv(paper_path, [paper_row])
             write_two_phase_csv(phase_path, [phase_row])
-            self.assertEqual(paper_path.read_text().splitlines()[0], "tau,R,V,P,Uc,Lr,Lc,L")
-            self.assertEqual(phase_path.read_text().splitlines()[0], "Phase,tau,R,V,P,L")
-            self.assertFalse({"T", "X", "H"} & set(paper_path.read_text().splitlines()[0].split(",")))
-            self.assertFalse({"T", "X", "H"} & set(phase_path.read_text().splitlines()[0].split(",")))
+            self.assertEqual(paper_path.read_text().splitlines()[0], "tau,R,V,H,Uc,Lr,Lc,L")
+            self.assertEqual(phase_path.read_text().splitlines()[0], "Phase,tau,R,V,H,L")
+            self.assertFalse({"T", "X", "P"} & set(paper_path.read_text().splitlines()[0].split(",")))
+            self.assertFalse({"T", "X", "P"} & set(phase_path.read_text().splitlines()[0].split(",")))
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
-test("app renders solver controls, canvases, and comparison metrics", async ({ page }) => {
+test("app renders solver controls, canvases, and output metrics", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto("/wizard_of_oz.html");
@@ -9,6 +9,16 @@ test("app renders solver controls, canvases, and comparison metrics", async ({ p
   await expect(page.getByAltText("OZwizard logo")).toBeVisible();
   await expect(page.getByAltText("OZwizard logo")).toHaveJSProperty("naturalWidth", 498);
   await expect(page.getByRole("button", { name: "RK45" })).toHaveClass(/active/);
+  await expect(page.locator("#solverButtons button")).toHaveCount(3);
+  await expect(page.getByRole("button", { name: "RR Lyrae low-amplitude fundamental, damped" })).toHaveClass(/active/);
+  await expect(page.getByRole("button", { name: "Baker radiative pulsator" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "RR Lyrae first overtone" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "RR Lyrae first overtone, damped" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "RR Lyrae high-amplitude first overtone" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "RR Lyrae low-amplitude fundamental, damped" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Local radiative OZ1" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /corrected/i })).toHaveCount(0);
+  await expect(page.getByLabel("Compare selected solver to midpoint")).toHaveCount(0);
   await expect(page.locator("#statusPill")).toContainText("stop:");
   await expect(page.locator("#metrics")).toContainText("stop reason");
   await expect.poll(async () => (await page.locator("body").innerText()).includes("\\(")).toBe(false);
@@ -20,6 +30,9 @@ test("app renders solver controls, canvases, and comparison metrics", async ({ p
   await expect(tauCell).toBeVisible();
   await expect(tauRow).toContainText("free-fall/dynamical time");
   await expect(tauCell).toHaveCSS("color", "rgb(158, 167, 255)");
+  await expect(page.locator("#initialR")).toBeVisible();
+  await expect(page.locator("#initialLr")).toBeVisible();
+  await expect(page.locator("#initialL")).toBeVisible();
   await expect(page.locator("#timeLegend")).toContainText("radius");
   await expect(page.locator("#timeLegend")).toContainText("nonadiabatic pressure factor");
   const legendHtml = await page.locator("#timeLegend").innerHTML();
@@ -38,8 +51,7 @@ test("app renders solver controls, canvases, and comparison metrics", async ({ p
   await page.getByRole("button", { name: "Final cycles" }).click();
   await expect(page.getByRole("button", { name: "Final cycles" })).toHaveClass(/active/);
   await expect(page.locator("#metrics")).toContainText("final cycles");
-  await page.getByLabel("Compare selected solver to midpoint").check();
-  await expect(page.getByText("midpoint Δy")).toBeVisible();
+  await expect(page.locator("#metrics")).not.toContainText("unavailable");
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download CSV" }).click();

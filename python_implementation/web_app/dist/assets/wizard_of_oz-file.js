@@ -301,17 +301,30 @@
     sourceExp: "\\ozSource{U}",
     cq: "\\ozDamping{C_q}"
   };
+  var TEX_EXTRA = {
+    gammaR: "\\ozNeutral{\\gamma_r}",
+    eta: "\\ozMass{\\eta}",
+    b1: "\\ozGamma{B_1}",
+    b: "\\ozRadiative{b}",
+    q: "\\ozPressure{q}",
+    c: "\\ozConvLum{c}",
+    d: "\\ozConvective{d}",
+    driver: "\\ozPressure{D}",
+    kappa: "\\ozNeutral{\\kappa}",
+    rho: "\\ozNeutral{\\rho}",
+    temp: "\\ozNeutral{T}"
+  };
   var CONTROL_GROUPS = {
     physical: [
       ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", 0.05, 12, 0.05, 1, COLORS.zeta],
-      ["zetac", `\\(${TEX.zetac}\\)`, "convective response", 0.05, 12, 0.05, 1, COLORS.zetac],
+      ["zetac", `\\(${TEX.zetac}\\)`, "convective response", 0, 12, 0.05, 1, COLORS.zetac],
       ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.2, COLORS.gammac],
-      ["m", `\\(${TEX.m}\\)`, "shell form factor", 3.2, 20, 0.1, 10, COLORS.m],
+      ["m", `\\(${TEX.m}\\)`, "shell form factor", 3, 20, 0.1, 10, COLORS.m],
       ["gamma1", `\\(${TEX.gamma1}\\)`, "adiabatic exponent", 1.01, 1.67, 0.01, 1.1, COLORS.gamma1],
       ["n", `\\(${TEX.n}\\)`, "opacity-density exponent", 0, 3, 0.05, 1, COLORS.n],
       ["s", `\\(${TEX.s}\\)`, "opacity-temperature exponent", 0, 8, 0.1, 3, COLORS.s],
-      ["sourceExp", `\\(${TEX.sourceExp}\\)`, "inner luminosity exponent", -2, 1, 0.05, 0, COLORS.sourceExp],
-      ["cq", `\\(${TEX.cq}\\)`, "turbulent damping", 0, 3, 0.05, 0, COLORS.cq]
+      ["sourceExp", `\\(${TEX.sourceExp}\\)`, "inner luminosity exponent", -2, 2, 0.05, 0, COLORS.sourceExp],
+      ["cq", `\\(${TEX.cq}\\)`, "turbulent damping", 0, 10, 0.05, 0, COLORS.cq]
     ],
     initial: [
       ["r0", `\\(${TEX.R}_0\\)`, "initial radius", 0.75, 1.9, 0.01, 1.4, COLORS.R],
@@ -320,7 +333,7 @@
       ["uc0", `\\(${TEX.Uc}_{0}\\)`, "initial convective velocity", 0, 1.8, 0.01, 1, COLORS.Uc]
     ],
     integration: [
-      ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "maximum integration time", 1, 3, 0.01, 120, COLORS.tEnd],
+      ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "maximum integration time", 0, 3, 0.01, 120, COLORS.tEnd],
       ["step", `\\(\\Delta ${TEX.tau}_0\\)`, "initial step", 5e-4, 0.02, 5e-4, 1e-3, COLORS.step],
       ["maxStep", `\\(\\Delta ${TEX.tau}_{\\max}\\)`, "maximum adaptive step", 5e-3, 0.3, 5e-3, 0.15, COLORS.maxStep],
       ["logRtol", "\\(\\ozNeutral{\\log_{10} r_{tol}}\\)", "modern relative tolerance", -11, -5, 0.25, -8, COLORS.rtol],
@@ -331,19 +344,19 @@
     ]
   };
   var PARAMETER_DESCRIPTIONS = {
-    zeta: "Ratio of the model free-fall/dynamical time to the thermal time; larger values make \\(H\\) adjust faster per \\(\\tau\\).",
-    zetac: "Ratio of the model free-fall/dynamical time to the convective adjustment time; larger values make \\(U_c\\) relax faster.",
-    gammac: "Equilibrium convective luminosity fraction \\(\\gamma_c=L_{c0}/L_0\\); the radiative weight is \\(\\gamma_r=1-\\gamma_c\\).",
-    m: "Equilibrium shell-thickness form factor \\(m=3/(1-\\eta^3)\\), where \\(\\eta=R_c/R_0\\). Larger \\(m\\) means a thinner shell.",
-    gamma1: "First adiabatic exponent used in the \\(H\\) response.",
-    n: "Density exponent in the opacity convention \\(\\kappa\\propto\\rho^n T^{-s}\\).",
-    s: "Temperature exponent in the opacity convention \\(\\kappa\\propto\\rho^n T^{-s}\\).",
-    sourceExp: "Exponent \\(U\\) in the inner luminosity source \\(R^U\\).",
+    zeta: `Ratio of the model free-fall/dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\).`,
+    zetac: `Ratio of the model free-fall/dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\).`,
+    gammac: `Equilibrium convective luminosity fraction \\(${TEX.gammac}=${TEX.Lc}_{0}/${TEX.L}_{0}\\); the radiative weight is \\(${TEX_EXTRA.gammaR}=1-${TEX.gammac}\\).`,
+    m: `Equilibrium shell-thickness form factor \\(${TEX.m}=3/(1-${TEX_EXTRA.eta}^{3})\\), where \\(${TEX_EXTRA.eta}=${TEX.R}_{c}/${TEX.R}_{0}\\). Larger \\(${TEX.m}\\) means a thinner shell.`,
+    gamma1: `First adiabatic exponent used in the \\(${TEX.H}\\) response.`,
+    n: `Density exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
+    s: `Temperature exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
+    sourceExp: `Exponent \\(${TEX.sourceExp}\\) in the inner luminosity source \\(${TEX.R}^{${TEX.sourceExp}}\\).`,
     cq: "Cubic turbulent damping coefficient in the acceleration equation.",
-    r0: "Starting radius of the shell.",
-    v0: "Starting radial velocity.",
-    h0: "Starting nonadiabatic pressure factor \\(H\\), not the total gas pressure.",
-    uc0: "Starting convective velocity.",
+    r0: `Starting shell radius \\(${TEX.R}_{0}\\).`,
+    v0: `Starting radial velocity \\(${TEX.V}_{0}\\).`,
+    h0: `Starting nonadiabatic pressure factor \\(${TEX.H}_{0}\\), not the total gas pressure.`,
+    uc0: `Starting convective velocity \\(${TEX.Uc}_{0}\\).`,
     tEnd: `Maximum integration time \\(${TEX.tau}\\), measured in free-fall/dynamical time units. The slider uses a logarithmic scale.`,
     step: `Initial adaptive step size \\(\\Delta ${TEX.tau}_0\\).`,
     maxStep: `Maximum step size \\(\\Delta ${TEX.tau}_{\\max}\\) allowed for adaptive solvers.`,
@@ -355,44 +368,44 @@
   };
   var DERIVED_DESCRIPTIONS = [
     {
-      symbol: "\\(m_{\\mathrm{eff}}(R)\\)",
+      symbol: `\\(${TEX.m}_{\\mathrm{eff}}(${TEX.R})\\)`,
       color: COLORS.m,
-      description: "Effective form factor used in the exponents: fixed paper-model \\(m\\), or the optional local extension \\(3/[1-(\\eta/R)^3]\\) with \\(\\eta=(1-3/m)^{1/3}\\)."
+      description: `Effective form factor used in the exponents: fixed paper-model \\(${TEX.m}\\), or the optional local extension \\(3/[1-(${TEX_EXTRA.eta}/${TEX.R})^3]\\) with \\(${TEX_EXTRA.eta}=(1-3/${TEX.m})^{1/3}\\).`
     },
     {
-      symbol: "\\(B_1\\)",
+      symbol: `\\(${TEX_EXTRA.b1}\\)`,
       color: COLORS.gamma1,
-      description: "Radiative helper exponent \\(B_1=(s+4)(\\Gamma_1-1)\\)."
+      description: `Radiative helper exponent \\(${TEX_EXTRA.b1}=(${TEX.s}+4)(${TEX.gamma1}-1)\\).`
     },
     {
-      symbol: "\\(b(R)\\)",
+      symbol: `\\(${TEX_EXTRA.b}(${TEX.R})\\)`,
       color: COLORS.Lr,
-      description: "Radiative radius exponent \\(b=4+m_{\\mathrm{eff}}(R)[n-B_1]\\), giving \\(L_r=R^{b(R)}H^{s+4}\\)."
+      description: `Radiative radius exponent \\(${TEX_EXTRA.b}=4+${TEX.m}_{\\mathrm{eff}}(${TEX.R})[${TEX.n}-${TEX_EXTRA.b1}]\\), giving \\(${TEX.Lr}=${TEX.R}^{${TEX_EXTRA.b}(${TEX.R})}${TEX.H}^{${TEX.s}+4}\\).`
     },
     {
-      symbol: "\\(q(R)\\)",
+      symbol: `\\(${TEX_EXTRA.q}(${TEX.R})\\)`,
       color: COLORS.H,
-      description: "Pressure-force exponent \\(q=m_{\\mathrm{eff}}(R)\\Gamma_1-2\\), used in the acceleration term \\(H/R^{q(R)}\\)."
+      description: `Pressure-force exponent \\(${TEX_EXTRA.q}=${TEX.m}_{\\mathrm{eff}}(${TEX.R})${TEX.gamma1}-2\\), used in the acceleration term \\(${TEX.H}/${TEX.R}^{${TEX_EXTRA.q}(${TEX.R})}\\).`
     },
     {
-      symbol: "\\(c(R)\\)",
+      symbol: `\\(${TEX_EXTRA.c}(${TEX.R})\\)`,
       color: COLORS.Lc,
-      description: "Convective luminosity radius exponent \\(c=m_{\\mathrm{eff}}(R)-2\\), giving \\(L_c=R^{-c(R)}U_c^3\\)."
+      description: `Convective luminosity radius exponent \\(${TEX_EXTRA.c}=${TEX.m}_{\\mathrm{eff}}(${TEX.R})-2\\), giving \\(${TEX.Lc}=${TEX.R}^{-${TEX_EXTRA.c}(${TEX.R})}${TEX.Uc}^{3}\\).`
     },
     {
-      symbol: "\\(d(R)\\)",
+      symbol: `\\(${TEX_EXTRA.d}(${TEX.R})\\)`,
       color: COLORS.Uc,
-      description: "Convective velocity radius exponent \\(d=m_{\\mathrm{eff}}(R)(\\Gamma_1-1)/2\\), used in \\(R^{-d(R)}D\\)."
+      description: `Convective velocity radius exponent \\(${TEX_EXTRA.d}=${TEX.m}_{\\mathrm{eff}}(${TEX.R})(${TEX.gamma1}-1)/2\\), used in \\(${TEX.R}^{-${TEX_EXTRA.d}(${TEX.R})}${TEX_EXTRA.driver}\\).`
     },
     {
-      symbol: "\\(\\gamma_r\\)",
+      symbol: `\\(${TEX_EXTRA.gammaR}\\)`,
       color: COLORS.Lr,
-      description: "Radiative luminosity weight \\(\\gamma_r=1-\\gamma_c\\), so \\(L=\\gamma_rL_r+\\gamma_cL_c\\)."
+      description: `Radiative luminosity weight \\(${TEX_EXTRA.gammaR}=1-${TEX.gammac}\\), so \\(${TEX.L}=${TEX_EXTRA.gammaR}${TEX.Lr}+${TEX.gammac}${TEX.Lc}\\).`
     },
     {
-      symbol: "\\(D\\)",
+      symbol: `\\(${TEX_EXTRA.driver}\\)`,
       color: COLORS.H,
-      description: "Convective driver: the corrected Stellingwerf form is \\(\\sqrt{H}\\); \\(\\sqrt{|V|}\\) is retained only as a diagnostic variant."
+      description: `Convective driver: the standard Stellingwerf pressure form is \\(\\sqrt{${TEX.H}}\\); \\(\\sqrt{|${TEX.V}|}\\) is retained only as a diagnostic variant.`
     }
   ];
   var presetBase = {
@@ -400,7 +413,6 @@
     logRtol: -8,
     logAtol: -10,
     solver: "rk45",
-    compareMidpoint: false,
     runUntilStable: true,
     logStabilityTol: -2.7,
     stableCycles: 5,
@@ -409,22 +421,53 @@
   };
   var paperBase = {
     ...presetBase,
-    referenceFamily: "paper-corrected",
+    referenceFamily: "stellingwerf-1986",
     phaseWarmupTau: 4
   };
   var ozcBase = {
     ...presetBase,
-    referenceFamily: "ozc-corrected"
+    referenceFamily: "local-s-tran"
   };
+  var overtoneBase = {
+    ...presetBase,
+    referenceFamily: "stellingwerf-1987",
+    phaseWarmupTau: 1,
+    zeta: 1,
+    zetac: 0,
+    gammac: 0,
+    gamma1: 1.1,
+    n: 1,
+    s: 3,
+    cq: 0,
+    v0: 0,
+    h0: 0.9,
+    uc0: 0,
+    tEnd: 10,
+    step: 1e-3,
+    logErrTol: -7,
+    variableM: true,
+    driver: "h",
+    runUntilStable: false
+  };
+  var DEFAULT_PRESET_NAME = "RR Lyrae low-amplitude fundamental, damped";
   var PRESETS = {
-    Strip: { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "h" },
-    Blue: { ...paperBase, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "h" },
-    Red: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "h" },
-    Thick: { ...paperBase, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "h" },
-    Unstable: { ...paperBase, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 120, step: 1e-3, logErrTol: -7, variableM: false, driver: "h" },
-    "OZ1 corrected": { ...presetBase, referenceFamily: "oz1-corrected", phaseWarmupTau: 1, zeta: 1, zetac: 1, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 2, r0: 1.2, v0: 0, h0: 0.8, uc0: 1, tEnd: 120, step: 0.012, logErrTol: -5, variableM: true, driver: "h" },
-    "OZC corrected": { ...ozcBase, zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 120, step: 1e-3, logErrTol: -5, variableM: true, driver: "h" },
-    "OZC abs(V) diagnostic": { ...ozcBase, referenceFamily: "diagnostic", zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 120, step: 1e-3, logErrTol: -5, variableM: true, driver: "abs-v" }
+    "Baker radiative pulsator": { ...presetBase, referenceFamily: "baker", phaseWarmupTau: 4, zeta: 1, zetac: 0, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 0, tEnd: 24, step: 1e-3, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
+    "Blue-edge convection": { ...paperBase, phaseWarmupTau: 24, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 40, step: 1e-3, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
+    "Instability-strip convection": { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 15, step: 1e-3, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
+    "Red-edge convection": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 14, step: 1e-3, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
+    "Radius-dependent strip": { ...paperBase, phaseWarmupTau: 6, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 1e-3, logErrTol: -7, variableM: true, driver: "h", runUntilStable: false },
+    "Fully convective runaway": { ...paperBase, phaseWarmupTau: 1, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 8, step: 1e-3, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
+    "Thick convective shell": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 1e-3, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
+    "RR Lyrae fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.2 },
+    "RR Lyrae low-amplitude fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.1 },
+    "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 80 },
+    "RR Lyrae first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.05 },
+    "RR Lyrae first overtone, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 15, sourceExp: 2, cq: 7, r0: 1.05, tEnd: 80 },
+    "RR Lyrae high-amplitude first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.1 },
+    "RR Lyrae second overtone": { ...overtoneBase, m: 20, sourceExp: 1, r0: 1.05 },
+    "Local radiative OZ1": { ...presetBase, referenceFamily: "local-s-tran", phaseWarmupTau: 1, zeta: 1, zetac: 0, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 2, r0: 1.2, v0: 0, h0: 0.8, uc0: 0, tEnd: 20, step: 0.012, logErrTol: -5, variableM: true, driver: "h", runUntilStable: false },
+    "Local convective OZC": { ...ozcBase, zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 20, step: 1e-3, logErrTol: -5, variableM: true, driver: "h", runUntilStable: false },
+    "OZC abs(V) driver diagnostic": { ...ozcBase, referenceFamily: "diagnostic", zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 20, step: 1e-3, logErrTol: -5, variableM: true, driver: "abs-v", runUntilStable: false }
   };
   function mAt(radius, p) {
     if (!p.variableM) return p.m;
@@ -476,9 +519,9 @@
       initialStep: p.step,
       maxStep: p.maxStep,
       minStep: 1e-10,
-      maxRows: 14e3,
+      maxRows: 6e4,
       maxAcceptedSteps: 6e5,
-      outputInterval: Math.max(5e-3, p.tEnd / 12e3),
+      outputInterval: Math.max(5e-3, Math.min(0.02, p.tEnd / 12e3)),
       errTol: 10 ** p.logErrTol
     });
   }
@@ -575,43 +618,6 @@
       stats: result.stats
     };
   }
-  function interpolateRow(rows, time) {
-    if (!rows.length || time < rows[0].tau || time > rows[rows.length - 1].tau) return null;
-    let lo = 0;
-    let hi = rows.length - 1;
-    while (hi - lo > 1) {
-      const mid = Math.floor((lo + hi) / 2);
-      if (rows[mid].tau <= time) lo = mid;
-      else hi = mid;
-    }
-    const a = rows[lo];
-    const b = rows[Math.min(hi, rows.length - 1)];
-    if (a.tau === b.tau) return a;
-    const f = (time - a.tau) / (b.tau - a.tau);
-    const blend = (key) => a[key] + (b[key] - a[key]) * f;
-    return { tau: time, R: blend("R"), V: blend("V"), H: blend("H"), Uc: blend("Uc"), Lr: blend("Lr"), Lc: blend("Lc"), L: blend("L") };
-  }
-  function compareRows(selected, baseline, p) {
-    let commonPoints = 0;
-    let maxStateDelta = 0;
-    let maxLuminosityDelta = 0;
-    const rtol = 10 ** p.logRtol;
-    const atol = 10 ** p.logAtol;
-    for (const row of selected) {
-      const other = interpolateRow(baseline, row.tau);
-      if (!other) continue;
-      commonPoints += 1;
-      const stateDelta = Math.sqrt(
-        ["R", "V", "H", "Uc"].reduce((sum, key) => {
-          const scale = atol + rtol * Math.max(Math.abs(row[key]), Math.abs(other[key]));
-          return sum + ((row[key] - other[key]) / scale) ** 2;
-        }, 0) / 4
-      );
-      maxStateDelta = Math.max(maxStateDelta, stateDelta);
-      maxLuminosityDelta = Math.max(maxLuminosityDelta, Math.abs(row.L - other.L));
-    }
-    return { commonPoints, maxStateDelta, maxLuminosityDelta };
-  }
 
   // src/phase.ts
   function defaultWarmupTau(rows) {
@@ -703,26 +709,40 @@
   }
 
   // src/main.ts
-  var state = { ...PRESETS.Strip };
-  var selectedPreset = "Strip";
-  var activePreset = "Strip";
+  var state = { ...PRESETS[DEFAULT_PRESET_NAME] };
+  var selectedPreset = DEFAULT_PRESET_NAME;
+  var activePreset = DEFAULT_PRESET_NAME;
   var latestRows = [];
-  var comparisonRows = [];
   var latestResult = solveModel(state);
-  var comparisonResult = null;
   var debounceTimer = 0;
   var mathTypesetTimer = 0;
   var mathTypesetRunning = false;
   var mathTypesetPending = false;
   var controlElements = /* @__PURE__ */ new Map();
-  var TAU_TICKS = [10, 30, 100, 300, 1e3];
+  var TAU_TICKS = [1, 3, 10, 30, 100, 300, 1e3];
   var THEME = {
     axisGrid: "#26334E",
     axisText: "#A8B4C7",
     axisBorder: "#526489",
-    comparison: "#8994A6",
+    selectionFill: "rgba(158, 167, 255, 0.16)",
+    selectionStroke: "#9EA7FF",
     neutralSymbol: "#C0CAE8"
   };
+  var INTERACTIVE_CANVASES = {
+    timeCanvas: "time",
+    lumCanvas: "lum"
+  };
+  var plotViews = {
+    time: {},
+    lum: {}
+  };
+  var plotVisibility = {
+    time: { R: true, V: true, H: true, Uc: true },
+    lum: { L: true, Lr: true, Lc: true }
+  };
+  var plotRenderStates = /* @__PURE__ */ new Map();
+  var activeSelection = null;
+  var DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
   function fmt(value, digits = 4) {
     if (!Number.isFinite(value)) return "n/a";
     if (Math.abs(value) >= 1e3 || Math.abs(value) > 0 && Math.abs(value) < 1e-3) return value.toExponential(2);
@@ -789,13 +809,6 @@
       refreshActivePreset();
       scheduleSolve();
     });
-    const compare = el("compareMidpoint");
-    compare.checked = state.compareMidpoint;
-    compare.addEventListener("change", (event) => {
-      state.compareMidpoint = event.target.checked;
-      refreshActivePreset();
-      scheduleSolve();
-    });
     const runUntilStable = el("runUntilStable");
     runUntilStable.checked = state.runUntilStable;
     runUntilStable.addEventListener("change", (event) => {
@@ -821,12 +834,159 @@
     });
     el("resetPreset").addEventListener("click", () => applyPreset(selectedPreset));
     el("downloadCsv").addEventListener("click", downloadCsv);
+    setupInteractivePlots();
     window.addEventListener("resize", drawAll);
     updateDriverButtons();
     updatePhaseModeButtons();
     updateSolverButtons();
     updateAllSliderLabels();
     updateResetButtons();
+  }
+  function setupInteractivePlots() {
+    Object.entries(INTERACTIVE_CANVASES).forEach(([canvasId, plotId]) => {
+      const canvas = el(canvasId);
+      canvas.classList.add("interactive-canvas");
+      canvas.addEventListener("pointerdown", (event) => beginPlotSelection(event, canvasId, plotId));
+      canvas.addEventListener("pointermove", (event) => updatePlotSelection(event, canvasId));
+      canvas.addEventListener("pointerup", (event) => finishPlotSelection(event, canvasId));
+      canvas.addEventListener("pointercancel", (event) => cancelPlotSelection(event, canvasId));
+      canvas.addEventListener("dblclick", () => resetPlotView(plotId));
+      canvas.addEventListener("wheel", (event) => zoomPlotWithWheel(event, canvasId, plotId), { passive: false });
+    });
+    document.querySelectorAll("[data-plot-reset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const plotId = button.dataset.plotReset;
+        if (plotId) resetPlotView(plotId);
+      });
+    });
+    updatePlotResetButtons();
+  }
+  function canvasPoint(canvas, event) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  }
+  function clamp2(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+  function clampPointToPlot(point, plot) {
+    return {
+      x: clamp2(point.x, plot.left, plot.left + plot.width),
+      y: clamp2(point.y, plot.top, plot.top + plot.height)
+    };
+  }
+  function pointInPlot(point, plot) {
+    return point.x >= plot.left && point.x <= plot.left + plot.width && point.y >= plot.top && point.y <= plot.top + plot.height;
+  }
+  function xFromPixel(render, x) {
+    const f = (x - render.plot.left) / render.plot.width;
+    return render.xlim[0] + f * (render.xlim[1] - render.xlim[0]);
+  }
+  function yFromPixel(render, y) {
+    const f = 1 - (y - render.plot.top) / render.plot.height;
+    return render.ylim[0] + f * (render.ylim[1] - render.ylim[0]);
+  }
+  function sortedRange(a, b) {
+    return a <= b ? [a, b] : [b, a];
+  }
+  function validRange(rangeValue, minimumSpan = 1e-9) {
+    const [min, max] = rangeValue;
+    if (!Number.isFinite(min) || !Number.isFinite(max) || max - min < minimumSpan) return void 0;
+    return rangeValue;
+  }
+  function beginPlotSelection(event, canvasId, plotId) {
+    if (event.button !== 0) return;
+    const canvas = event.currentTarget;
+    const render = plotRenderStates.get(canvasId);
+    if (!render) return;
+    const point = canvasPoint(canvas, event);
+    if (!pointInPlot(point, render.plot)) return;
+    const clamped = clampPointToPlot(point, render.plot);
+    activeSelection = {
+      plotId,
+      canvasId,
+      pointerId: event.pointerId,
+      startX: clamped.x,
+      startY: clamped.y,
+      currentX: clamped.x,
+      currentY: clamped.y
+    };
+    canvas.setPointerCapture(event.pointerId);
+    drawAll();
+  }
+  function updatePlotSelection(event, canvasId) {
+    if (!activeSelection || activeSelection.canvasId !== canvasId || activeSelection.pointerId !== event.pointerId) return;
+    const canvas = event.currentTarget;
+    const render = plotRenderStates.get(canvasId);
+    if (!render) return;
+    const point = clampPointToPlot(canvasPoint(canvas, event), render.plot);
+    activeSelection.currentX = point.x;
+    activeSelection.currentY = point.y;
+    drawAll();
+  }
+  function finishPlotSelection(event, canvasId) {
+    if (!activeSelection || activeSelection.canvasId !== canvasId || activeSelection.pointerId !== event.pointerId) return;
+    const canvas = event.currentTarget;
+    const render = plotRenderStates.get(canvasId);
+    const selection = activeSelection;
+    activeSelection = null;
+    if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+    if (!render) {
+      drawAll();
+      return;
+    }
+    const dx = Math.abs(selection.currentX - selection.startX);
+    const dy = Math.abs(selection.currentY - selection.startY);
+    const nextView = { ...plotViews[selection.plotId] };
+    if (dx > 8) nextView.xlim = validRange(sortedRange(xFromPixel(render, selection.startX), xFromPixel(render, selection.currentX)));
+    if (dy > 8) nextView.ylim = validRange(sortedRange(yFromPixel(render, selection.startY), yFromPixel(render, selection.currentY)));
+    if (dx > 8 || dy > 8) {
+      plotViews[selection.plotId] = nextView;
+      updatePlotResetButtons();
+    }
+    drawAll();
+  }
+  function cancelPlotSelection(event, canvasId) {
+    if (!activeSelection || activeSelection.canvasId !== canvasId || activeSelection.pointerId !== event.pointerId) return;
+    activeSelection = null;
+    drawAll();
+  }
+  function zoomRangeAround(rangeValue, center, factor) {
+    const [min, max] = rangeValue;
+    return [
+      center - (center - min) * factor,
+      center + (max - center) * factor
+    ];
+  }
+  function zoomPlotWithWheel(event, canvasId, plotId) {
+    const canvas = event.currentTarget;
+    const render = plotRenderStates.get(canvasId);
+    if (!render) return;
+    const point = canvasPoint(canvas, event);
+    if (!pointInPlot(point, render.plot)) return;
+    event.preventDefault();
+    const factor = event.deltaY > 0 ? 1.16 : 1 / 1.16;
+    const nextView = {
+      xlim: validRange(zoomRangeAround(render.xlim, xFromPixel(render, point.x), factor)) || render.xlim,
+      ylim: validRange(zoomRangeAround(render.ylim, yFromPixel(render, point.y), factor)) || render.ylim
+    };
+    plotViews[plotId] = nextView;
+    updatePlotResetButtons();
+    drawAll();
+  }
+  function resetPlotView(plotId) {
+    plotViews[plotId] = {};
+    if (activeSelection?.plotId === plotId) activeSelection = null;
+    updatePlotResetButtons();
+    drawAll();
+  }
+  function plotViewIsActive(plotId) {
+    return Boolean(plotViews[plotId].xlim || plotViews[plotId].ylim);
+  }
+  function updatePlotResetButtons() {
+    document.querySelectorAll("[data-plot-reset]").forEach((button) => {
+      const plotId = button.dataset.plotReset;
+      button.disabled = !plotId || !plotViewIsActive(plotId);
+    });
   }
   function buildPresetButtons() {
     const container = el("presetButtons");
@@ -843,12 +1003,14 @@
   function buildSolverButtons() {
     const container = el("solverButtons");
     container.innerHTML = "";
-    const labels = { rk45: "RK45", dop853: "DOP853", midpoint: "Midpoint" };
+    const labels = { rk45: "RK45", dop853: "DOP853", midpoint: "Mid" };
+    const titles = { rk45: "RK45 adaptive solver", dop853: "DOP853 reference solver", midpoint: "Historical midpoint solver" };
     SOLVER_NAMES.forEach((name) => {
       const button = document.createElement("button");
       button.type = "button";
       button.dataset.solver = name;
       button.textContent = labels[name];
+      button.title = titles[name];
       button.addEventListener("click", () => {
         state.solver = name;
         updateSolverButtons();
@@ -866,15 +1028,14 @@
       wrapper.className = "slider-control";
       wrapper.style.setProperty("--accent", color);
       wrapper.innerHTML = `
-      <div class="slider-head">
-        <div class="slider-label"><span class="slider-symbol">${symbol}</span><span class="slider-name">${name}</span></div>
-        <div class="slider-actions">
-          <span class="slider-value" data-value-for="${key}"></span>
-          <button class="parameter-reset" type="button" data-reset-key="${key}" title="Restore ${name} to the ${selectedPreset} preset value" aria-label="Restore ${name} to the preset value">\u21BA</button>
+      <div class="slider-name" title="${name}">${name}</div>
+      <div class="slider-symbol">${symbol}</div>
+      <div class="slider-track">
+        <input type="range" min="${min}" max="${max}" step="${step2}" value="${String(sliderInputValue(key))}" aria-label="${name}">
+        <span class="slider-value" data-value-for="${key}"></span>
+        ${key === "tEnd" ? tauScaleMarkup() : ""}
         </div>
-      </div>
-      <input type="range" min="${min}" max="${max}" step="${step2}" value="${String(sliderInputValue(key))}">
-      ${key === "tEnd" ? tauScaleMarkup() : ""}
+      <button class="parameter-reset" type="button" data-reset-key="${key}" title="Restore ${name} to the ${selectedPreset} preset value" aria-label="Restore ${name} to the preset value">\u21BA</button>
     `;
       const input = wrapper.querySelector("input");
       if (!input) throw new Error("missing slider input");
@@ -897,32 +1058,53 @@
   }
   function valueFromSlider(key, value) {
     if (key !== "tEnd") return value;
-    return Math.min(1e3, Math.max(10, 10 ** value));
+    return Math.min(1e3, Math.max(1, 10 ** value));
   }
   function controlValueLabel(key, value) {
     if (key !== "tEnd") return fmt(value, 5);
     return fmt(value, value >= 100 ? 0 : 1);
   }
   function buildParameterTable() {
-    const table = el("parameterTable");
-    const allControls = [...CONTROL_GROUPS.physical, ...CONTROL_GROUPS.initial, ...CONTROL_GROUPS.integration];
-    const controlRows = allControls.map(([key, symbol, _name, _min, _max, _step, _defaultValue, color]) => `
+    const tunableTable = el("tunableParameterTable");
+    const derivedTable = el("derivedParameterTable");
+    const numericalTable = el("numericalParameterTable");
+    const controlRows = (controls) => controls.map(([key, symbol, _name, _min, _max, _step, _defaultValue, color]) => `
       <tr>
         <td class="symbol-cell" style="--color:${color}">${symbol}</td>
         <td>${PARAMETER_DESCRIPTIONS[key] || ""}</td>
       </tr>
     `).join("");
-    const derivedRows = DERIVED_DESCRIPTIONS.map(({ symbol, description, color }) => `
+    tunableTable.innerHTML = controlRows(CONTROL_GROUPS.physical) + `
+      <tr><td class="symbol-cell" style="--color:${COLORS.H}">driver</td><td>Convective driving choice: the standard Stellingwerf pressure form is \\(\\sqrt{${TEX.H}}\\); \\(\\sqrt{|${TEX.V}|}\\) is retained as a diagnostic variant.</td></tr>
+      <tr><td class="symbol-cell" style="--color:${COLORS.m}">geometry</td><td>Switch between fixed paper-model \\(${TEX.m}\\) and radius-dependent local geometry \\(${TEX.m}_{\\mathrm{eff}}(${TEX.R})\\).</td></tr>
+    `;
+    derivedTable.innerHTML = DERIVED_DESCRIPTIONS.map(({ symbol, description, color }) => `
       <tr>
         <td class="symbol-cell" style="--color:${color}">${symbol}</td>
         <td>${description}</td>
       </tr>
     `).join("");
-    table.innerHTML = controlRows + derivedRows + `
-      <tr><td class="symbol-cell" data-symbol="tau" style="--color:${COLORS.tau}">\\(${TEX.tau}\\)</td><td>Dimensionless clock scaled by the model's free-fall/dynamical time; derivatives such as \\(dR/d\\tau\\) are per dynamical time unit.</td></tr>
+    numericalTable.innerHTML = controlRows(CONTROL_GROUPS.integration) + `
       <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">solver</td><td>Numerical method: RK45 default, DOP853 reference, or historical midpoint.</td></tr>
+      <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">phase window</td><td>Reference cycles use the first valid Stellingwerf-style max-to-max luminosity window; final cycles use the latest valid window.</td></tr>
     `;
     queueMathTypeset();
+  }
+  function updateVariableInitials() {
+    const initial = sample(0, [state.r0, state.v0, state.h0, state.uc0], state);
+    const values = {
+      initialTau: `\\(${TEX.tau}_{0}=0\\)`,
+      initialR: `\\(${TEX.R}_{0}=${fmt(initial.R, 4)}\\)`,
+      initialV: `\\(${TEX.V}_{0}=${fmt(initial.V, 4)}\\)`,
+      initialH: `\\(${TEX.H}_{0}=${fmt(initial.H, 4)}\\)`,
+      initialUc: `\\(${TEX.Uc}_{0}=${fmt(initial.Uc, 4)}\\)`,
+      initialLr: `\\(${TEX.Lr}_{0}=${fmt(initial.Lr, 4)}\\)`,
+      initialLc: `\\(${TEX.Lc}_{0}=${fmt(initial.Lc, 4)}\\)`,
+      initialL: `\\(${TEX.L}_{0}=${fmt(initial.L, 4)}\\)`
+    };
+    Object.entries(values).forEach(([id, value]) => {
+      el(id).innerHTML = value;
+    });
   }
   function updateSliderLabel(key) {
     const label = document.querySelector(`[data-value-for="${String(key)}"]`);
@@ -978,7 +1160,6 @@
     updatePhaseModeButtons();
     updateSolverButtons();
     el("variableM").checked = state.variableM;
-    el("compareMidpoint").checked = state.compareMidpoint;
     el("runUntilStable").checked = state.runUntilStable;
     updateAllSliderLabels();
     updateResetButtons();
@@ -991,19 +1172,66 @@
   function solveAndDraw() {
     latestResult = solveModel(state);
     latestRows = latestResult.rows;
-    if (state.compareMidpoint && state.solver !== "midpoint") {
-      comparisonResult = solveModel(state, "midpoint");
-      comparisonRows = comparisonResult.rows;
-    } else {
-      comparisonResult = null;
-      comparisonRows = [];
-    }
     drawAll();
   }
-  function downsample(rows, maxPoints = 2200) {
+  function strideDownsample(rows, maxPoints) {
     if (rows.length <= maxPoints) return rows;
     const stride = Math.ceil(rows.length / maxPoints);
-    return rows.filter((_row, index) => index % stride === 0);
+    const sampled = rows.filter((_row, index) => index % stride === 0);
+    const last = rows.at(-1);
+    if (last && sampled.at(-1) !== last) sampled.push(last);
+    return sampled;
+  }
+  function downsample(rows, maxPoints = 2200, keys = []) {
+    if (rows.length <= maxPoints) return rows;
+    const uniqueKeys = [...new Set(keys)];
+    if (!uniqueKeys.length) return strideDownsample(rows, maxPoints);
+    const maxPointsPerBucket = 2 + uniqueKeys.length * 2;
+    const bucketCount = Math.max(1, Math.floor(maxPoints / maxPointsPerBucket));
+    const bucketSize = Math.ceil(rows.length / bucketCount);
+    const selectedIndices = /* @__PURE__ */ new Set();
+    for (let start = 0; start < rows.length; start += bucketSize) {
+      const end = Math.min(rows.length - 1, start + bucketSize - 1);
+      selectedIndices.add(start);
+      selectedIndices.add(end);
+      uniqueKeys.forEach((key) => {
+        let min = Infinity;
+        let max = -Infinity;
+        let minIndex = start;
+        let maxIndex = start;
+        for (let index = start; index <= end; index += 1) {
+          const value = rows[index][key];
+          if (!Number.isFinite(value)) continue;
+          if (value < min) {
+            min = value;
+            minIndex = index;
+          }
+          if (value > max) {
+            max = value;
+            maxIndex = index;
+          }
+        }
+        selectedIndices.add(minIndex);
+        selectedIndices.add(maxIndex);
+      });
+    }
+    return [...selectedIndices].sort((a, b) => a - b).map((index) => rows[index]);
+  }
+  function rowsInTauRange(rows, xlim) {
+    if (!xlim || !validRange(xlim)) return rows;
+    const [minTau, maxTau] = xlim;
+    const firstVisible = rows.findIndex((row) => row.tau >= minTau);
+    if (firstVisible === -1) return [];
+    let endExclusive = firstVisible;
+    while (endExclusive < rows.length && rows[endExclusive].tau <= maxTau) endExclusive += 1;
+    return rows.slice(Math.max(0, firstVisible - 1), Math.min(rows.length, endExclusive + 1));
+  }
+  function activeSeriesKeys(plotId, keys) {
+    return keys.filter((key) => seriesIsVisible(plotId, key));
+  }
+  function rowsForInteractivePlot(plotId, rows, keys, maxPoints = 6e4) {
+    const windowedRows = rowsInTauRange(rows, plotViews[plotId].xlim);
+    return downsample(windowedRows, maxPoints, activeSeriesKeys(plotId, keys));
   }
   function range(values, padFraction = 0.08) {
     let min = Infinity;
@@ -1021,6 +1249,80 @@
     }
     const pad = (max - min) * padFraction;
     return [min - pad, max + pad];
+  }
+  function colorWithAlpha(color, alpha) {
+    const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
+    if (!match) return color;
+    const [, r, g, b] = match;
+    return `rgba(${parseInt(r, 16)}, ${parseInt(g, 16)}, ${parseInt(b, 16)}, ${alpha})`;
+  }
+  function drawDenseEnvelope(ctx, item, plot, xlim, ylim) {
+    const xSpan = xlim[1] - xlim[0];
+    const ySpan = ylim[1] - ylim[0];
+    if (xSpan <= 0 || ySpan <= 0) return false;
+    const columnCount = Math.max(1, Math.ceil(plot.width));
+    const bins = Array.from({ length: columnCount }, () => ({
+      min: Infinity,
+      max: -Infinity,
+      sum: 0,
+      count: 0
+    }));
+    let visibleCount = 0;
+    item.rows.forEach((row) => {
+      const x = item.x(row);
+      const y = item.y(row);
+      if (!Number.isFinite(x) || !Number.isFinite(y) || x < xlim[0] || x > xlim[1]) return;
+      const column = clamp2(Math.floor((x - xlim[0]) / xSpan * columnCount), 0, columnCount - 1);
+      const bin = bins[column];
+      bin.min = Math.min(bin.min, y);
+      bin.max = Math.max(bin.max, y);
+      bin.sum += y;
+      bin.count += 1;
+      visibleCount += 1;
+    });
+    if (visibleCount <= plot.width * DENSE_ENVELOPE_POINTS_PER_PIXEL) return false;
+    const sx = (column) => plot.left + (column + 0.5) / columnCount * plot.width;
+    const sy = (value) => plot.top + plot.height - (value - ylim[0]) / ySpan * plot.height;
+    const drawSegment = (start2, end) => {
+      ctx.beginPath();
+      for (let column = start2; column <= end; column += 1) {
+        const bin = bins[column];
+        const x = sx(column);
+        const y = sy(bin.max);
+        if (column === start2) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      for (let column = end; column >= start2; column -= 1) {
+        const bin = bins[column];
+        ctx.lineTo(sx(column), sy(bin.min));
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      for (let column = start2; column <= end; column += 1) {
+        const bin = bins[column];
+        const x = sx(column);
+        const y = sy(bin.sum / bin.count);
+        if (column === start2) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    };
+    ctx.fillStyle = colorWithAlpha(item.color, 0.22);
+    ctx.strokeStyle = colorWithAlpha(item.color, 0.88);
+    ctx.lineWidth = item.width ? Math.max(1, item.width * 0.65) : 1.3;
+    ctx.setLineDash([]);
+    let start = null;
+    bins.forEach((bin, column) => {
+      if (bin.count > 0 && start === null) {
+        start = column;
+      } else if (bin.count === 0 && start !== null) {
+        drawSegment(start, column - 1);
+        start = null;
+      }
+    });
+    if (start !== null) drawSegment(start, bins.length - 1);
+    return true;
   }
   function drawAxes(ctx, plot, xlim, ylim, xlabel, ylabel, xlabelColor = THEME.axisText, ylabelColor = THEME.axisText) {
     ctx.strokeStyle = THEME.axisGrid;
@@ -1077,11 +1379,18 @@
     series.forEach((item) => {
       item.rows.forEach((row) => {
         xValues.push(item.x(row));
-        yValues.push(item.y(row));
       });
     });
-    const xlim = options.xlim || range(xValues, 0.02);
-    const ylim = options.ylim || range(yValues, 0.08);
+    const xlim = options.view?.xlim || options.xlim || options.fallbackXlim || range(xValues, 0.02);
+    series.forEach((item) => {
+      item.rows.forEach((row) => {
+        const x = item.x(row);
+        const y = item.y(row);
+        if (Number.isFinite(x) && x >= xlim[0] && x <= xlim[1]) yValues.push(y);
+      });
+    });
+    const ylim = options.view?.ylim || options.ylim || range(yValues, 0.08);
+    plotRenderStates.set(canvasId, { plotId: options.interactivePlotId, plot, xlim, ylim });
     const sx = (x) => plot.left + (x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
     const sy = (y) => plot.top + plot.height - (y - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
     drawAxes(ctx, plot, xlim, ylim, options.xlabel, options.ylabel, options.xlabelColor, options.ylabelColor);
@@ -1092,7 +1401,12 @@
       ctx.textBaseline = "middle";
       ctx.fillText(options.message, plot.left + plot.width / 2, plot.top + plot.height / 2);
     }
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(plot.left, plot.top, plot.width, plot.height);
+    ctx.clip();
     series.forEach((item) => {
+      if (options.denseEnvelope && drawDenseEnvelope(ctx, item, plot, xlim, ylim)) return;
       ctx.beginPath();
       let started = false;
       item.rows.forEach((row) => {
@@ -1114,11 +1428,56 @@
       ctx.stroke();
       ctx.setLineDash([]);
     });
+    ctx.restore();
+    drawSelectionOverlay(ctx, canvasId, plot);
   }
-  function drawLegend(id, items) {
+  function drawSelectionOverlay(ctx, canvasId, plot) {
+    if (!activeSelection || activeSelection.canvasId !== canvasId) return;
+    const left = Math.min(activeSelection.startX, activeSelection.currentX);
+    const top = Math.min(activeSelection.startY, activeSelection.currentY);
+    const width = Math.abs(activeSelection.currentX - activeSelection.startX);
+    const height = Math.abs(activeSelection.currentY - activeSelection.startY);
+    if (width < 2 && height < 2) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(plot.left, plot.top, plot.width, plot.height);
+    ctx.clip();
+    ctx.fillStyle = THEME.selectionFill;
+    ctx.strokeStyle = THEME.selectionStroke;
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 3]);
+    ctx.fillRect(left, top, width, height);
+    ctx.strokeRect(left, top, width, height);
+    ctx.restore();
+  }
+  function drawLegend(id, items, options = {}) {
     const node = el(id);
-    node.innerHTML = items.map((item) => `<span class="legend-item"><span class="swatch" style="--color:${item.color}"></span>${item.label}</span>`).join("");
+    node.innerHTML = items.map((item) => {
+      if (!options.plotId || !item.key) {
+        return `<span class="legend-item"><span class="swatch" style="--color:${item.color}"></span>${item.label}</span>`;
+      }
+      const visible = seriesIsVisible(options.plotId, item.key);
+      const toggleLabel = item.toggleLabel || item.key;
+      return `
+        <button class="legend-item legend-toggle${visible ? "" : " is-hidden"}" type="button" data-plot-series="${item.key}" aria-pressed="${String(visible)}" title="Toggle ${toggleLabel} visibility" aria-label="Toggle ${toggleLabel} visibility">
+          <span class="swatch" style="--color:${item.color}"></span>${item.label}
+        </button>
+      `;
+    }).join("");
+    if (options.plotId) {
+      node.querySelectorAll("[data-plot-series]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const key = button.dataset.plotSeries;
+          if (!key) return;
+          plotVisibility[options.plotId][key] = !seriesIsVisible(options.plotId, key);
+          drawAll();
+        });
+      });
+    }
     queueMathTypeset();
+  }
+  function seriesIsVisible(plotId, key) {
+    return plotVisibility[plotId][key] !== false;
   }
   function stopReasonLabel(message, runUntilStable) {
     switch (message) {
@@ -1156,8 +1515,6 @@
         return "phase unavailable: luminosity cycles are below threshold";
       case "reference_out_of_range":
         return "phase unavailable: comparison does not cover the reference window";
-      case "not_stable_limit_cycle":
-        return "phase unavailable: no stable final limit cycle";
     }
   }
   function referenceFamilyLabel(value) {
@@ -1166,41 +1523,54 @@
   function phaseModeLabel(value) {
     return value === "final" ? "final cycles" : "reference cycles";
   }
-  function unavailablePhase(reason) {
-    return { rows: [], reference: null, period: null, reason };
-  }
-  function phaseForRows(rows, result) {
-    if (state.phaseMode === "final" && result.message !== "limit_cycle") {
-      return unavailablePhase("not_stable_limit_cycle");
-    }
+  function phaseForRows(rows) {
     return buildTwoCyclePhase(rows, {
       warmupTau: state.phaseWarmupTau,
       minAmplitude: state.phaseMinAmplitude,
       selection: state.phaseMode === "final" ? "last" : "first"
     });
   }
+  function timeDomain(rows) {
+    if (!rows.length) return [0, 1];
+    const first = rows[0].tau;
+    const last = rows[rows.length - 1].tau;
+    return first === last ? range([first, last], 0.02) : [first, last];
+  }
+  function paddedTimeRange(rows) {
+    return range(rows.map((row) => row.tau), 0.02);
+  }
+  function clearStalePlotView(plotId, rows) {
+    const view = plotViews[plotId];
+    const domain = timeDomain(rows);
+    if (view.xlim && (view.xlim[1] < domain[0] || view.xlim[0] > domain[1])) view.xlim = void 0;
+    if (view.xlim && !validRange(view.xlim)) view.xlim = void 0;
+    if (view.ylim && !validRange(view.ylim)) view.ylim = void 0;
+  }
+  function visibleRows(plotId, key, rows) {
+    return seriesIsVisible(plotId, key) ? rows : [];
+  }
   function drawAll() {
     const rows = latestRows;
-    const sampled = downsample(rows);
+    updateVariableInitials();
+    clearStalePlotView("time", rows);
+    clearStalePlotView("lum", rows);
+    updatePlotResetButtons();
     const statusPill = el("statusPill");
     const stopReason = stopReasonLabel(latestResult.message, state.runUntilStable);
     statusPill.textContent = `stop: ${stopReason}`;
     const okStatus = latestResult.message === "equilibrium" || latestResult.message === "limit_cycle" || !state.runUntilStable && latestResult.status === "complete";
     statusPill.className = `status-pill ${okStatus ? "status-ok" : "status-warn"}`;
     const final = rows[rows.length - 1];
-    const phase = phaseForRows(rows, latestResult);
-    const comparisonPhase = comparisonRows.length && phase.reference ? buildTwoCyclePhase(comparisonRows, { reference: phase.reference }) : null;
-    const comparison = comparisonResult && comparisonRows.length ? compareRows(rows, comparisonRows, state) : null;
-    const comparisonText = comparison ? `<span class="metric">midpoint \u0394y<b>${fmt(comparison.maxStateDelta, 3)}</b></span><span class="metric">midpoint \u0394L<b>${fmt(comparison.maxLuminosityDelta, 3)}</b></span>` : "";
+    const phase = phaseForRows(rows);
     el("metrics").innerHTML = [
       ["solver", state.solver.toUpperCase()],
       ["stop reason", stopReason],
       ["reference", referenceFamilyLabel(state.referenceFamily)],
       ["phase mode", phaseModeLabel(state.phaseMode)],
-      ["driver", state.driver === "h" ? "sqrt(H)" : "sqrt(|V|)"],
-      ["gamma_c", fmt(state.gammac, 3)],
-      ["zeta", fmt(state.zeta, 3)],
-      ["zeta_c", fmt(state.zetac, 3)],
+      ["driver", state.driver === "h" ? `\\(\\sqrt{${TEX.H}}\\)` : `\\(\\sqrt{|${TEX.V}|}\\)`],
+      [`\\(${TEX.gammac}\\)`, fmt(state.gammac, 3)],
+      [`\\(${TEX.zeta}\\)`, fmt(state.zeta, 3)],
+      [`\\(${TEX.zetac}\\)`, fmt(state.zetac, 3)],
       [`final \\(${TEX.tau}\\)`, final ? fmt(final.tau || 0, 4) : "n/a"],
       [`\\(${TEX.tau}_{max}\\)`, fmt(state.tEnd, 4)],
       ["rows", rows.length],
@@ -1209,51 +1579,67 @@
       ["max err", fmt(latestResult.stats.maxNormalizedError, 3)],
       ["period", phase.period ? fmt(phase.period, 3) : "n/a"],
       ["phase", phase.reason === "ok" ? phaseModeLabel(state.phaseMode) : "unavailable"],
-      ["final R", final ? fmt(final.R, 3) : "n/a"],
-      ["final L", final ? fmt(final.L, 3) : "n/a"]
-    ].map(([label, value]) => `<span class="metric">${label}<b>${value}</b></span>`).join("") + comparisonText;
+      [`final \\(${TEX.R}\\)`, final ? fmt(final.R, 3) : "n/a"],
+      [`final \\(${TEX.L}\\)`, final ? fmt(final.L, 3) : "n/a"]
+    ].map(([label, value]) => `<span class="metric">${label}<b>${value}</b></span>`).join("");
     el("modelSubtitle").textContent = "";
-    const phaseSample = phase.rows.length ? downsample(phase.rows, 1800) : [];
-    const phaseComparison = comparisonPhase?.rows.length ? downsample(comparisonPhase.rows, 1800) : [];
+    const phaseSample = phase.rows.length ? downsample(phase.rows, 1800, ["L", "V"]) : [];
     const phaseMessage = phaseUnavailableLabel(phase);
     drawSeries("lightCanvas", [
-      { label: "L", color: COLORS.L, rows: phaseSample, x: (row) => row.tau, y: (row) => row.L },
-      { label: "midpoint L", color: THEME.comparison, rows: phaseComparison, x: (row) => row.tau, y: (row) => row.L, dash: [5, 4], width: 1.5 }
+      { label: "L", color: COLORS.L, rows: phaseSample, x: (row) => row.tau, y: (row) => row.L }
     ], { xlabel: "phase", ylabel: "luminosity", xlim: [0, 2], ylim: phaseSample.length ? void 0 : [0, 1], message: phaseMessage });
     drawLegend("lightLegend", [
-      { label: `\\(${TEX.L}\\) selected solver`, color: COLORS.L },
-      ...phaseComparison.length ? [{ label: `\\(${TEX.L}\\) midpoint comparison`, color: THEME.comparison }] : []
+      { label: `\\(${TEX.L}\\)`, color: COLORS.L }
     ]);
     drawSeries("velocityCanvas", [
-      { label: "V", color: COLORS.V, rows: phaseSample, x: (row) => row.tau, y: (row) => row.V },
-      { label: "midpoint V", color: THEME.comparison, rows: phaseComparison, x: (row) => row.tau, y: (row) => row.V, dash: [5, 4], width: 1.5 }
+      { label: "V", color: COLORS.V, rows: phaseSample, x: (row) => row.tau, y: (row) => row.V }
     ], { xlabel: "phase", ylabel: "radial velocity", xlim: [0, 2], ylim: phaseSample.length ? void 0 : [0, 1], message: phaseMessage });
     drawLegend("velocityLegend", [
-      { label: `\\(${TEX.V}\\) selected solver`, color: COLORS.V },
-      ...phaseComparison.length ? [{ label: `\\(${TEX.V}\\) midpoint comparison`, color: THEME.comparison }] : []
+      { label: `\\(${TEX.V}\\)`, color: COLORS.V }
     ]);
+    const timeXlim = paddedTimeRange(rows);
+    const sampledTimeRows = rowsForInteractivePlot("time", rows, ["R", "V", "H", "Uc"]);
+    const sampledLumRows = rowsForInteractivePlot("lum", rows, ["L", "Lr", "Lc"]);
     drawSeries("timeCanvas", [
-      { label: "R", color: COLORS.R, rows: sampled, x: (row) => row.tau, y: (row) => row.R },
-      { label: "V", color: COLORS.V, rows: sampled, x: (row) => row.tau, y: (row) => row.V },
-      { label: "H", color: COLORS.H, rows: sampled, x: (row) => row.tau, y: (row) => row.H },
-      { label: "Uc", color: COLORS.Uc, rows: sampled, x: (row) => row.tau, y: (row) => row.Uc }
-    ], { xlabel: "time \u03C4", ylabel: "state", xlabelColor: COLORS.tau });
+      { label: "R", color: COLORS.R, rows: visibleRows("time", "R", sampledTimeRows), x: (row) => row.tau, y: (row) => row.R },
+      { label: "V", color: COLORS.V, rows: visibleRows("time", "V", sampledTimeRows), x: (row) => row.tau, y: (row) => row.V },
+      { label: "H", color: COLORS.H, rows: visibleRows("time", "H", sampledTimeRows), x: (row) => row.tau, y: (row) => row.H },
+      { label: "Uc", color: COLORS.Uc, rows: visibleRows("time", "Uc", sampledTimeRows), x: (row) => row.tau, y: (row) => row.Uc }
+    ], {
+      xlabel: "time \u03C4",
+      ylabel: "state",
+      xlabelColor: COLORS.tau,
+      fallbackXlim: timeXlim,
+      view: plotViews.time,
+      interactivePlotId: "time",
+      denseEnvelope: true,
+      message: "all state variables hidden"
+    });
     drawLegend("timeLegend", [
-      { label: `\\(${TEX.R}\\) radius`, color: COLORS.R },
-      { label: `\\(${TEX.V}\\) radial velocity`, color: COLORS.V },
-      { label: `\\(${TEX.H}\\) nonadiabatic pressure factor`, color: COLORS.H },
-      { label: `\\(${TEX.Uc}\\) convective velocity`, color: COLORS.Uc }
-    ]);
+      { key: "R", label: `\\(${TEX.R}\\) radius`, color: COLORS.R, toggleLabel: "radius" },
+      { key: "V", label: `\\(${TEX.V}\\) radial velocity`, color: COLORS.V, toggleLabel: "radial velocity" },
+      { key: "H", label: `\\(${TEX.H}\\) nonadiabatic pressure factor`, color: COLORS.H, toggleLabel: "nonadiabatic pressure factor" },
+      { key: "Uc", label: `\\(${TEX.Uc}\\) convective velocity`, color: COLORS.Uc, toggleLabel: "convective velocity" }
+    ], { plotId: "time" });
     drawSeries("lumCanvas", [
-      { label: "L", color: COLORS.L, rows: sampled, x: (row) => row.tau, y: (row) => row.L },
-      { label: "Lr", color: COLORS.Lr, rows: sampled, x: (row) => row.tau, y: (row) => row.Lr },
-      { label: "Lc", color: COLORS.Lc, rows: sampled, x: (row) => row.tau, y: (row) => row.Lc }
-    ], { xlabel: "time \u03C4", ylabel: "luminosity", xlabelColor: COLORS.tau });
+      { label: "L", color: COLORS.L, rows: visibleRows("lum", "L", sampledLumRows), x: (row) => row.tau, y: (row) => row.L },
+      { label: "Lr", color: COLORS.Lr, rows: visibleRows("lum", "Lr", sampledLumRows), x: (row) => row.tau, y: (row) => row.Lr },
+      { label: "Lc", color: COLORS.Lc, rows: visibleRows("lum", "Lc", sampledLumRows), x: (row) => row.tau, y: (row) => row.Lc }
+    ], {
+      xlabel: "time \u03C4",
+      ylabel: "luminosity",
+      xlabelColor: COLORS.tau,
+      fallbackXlim: timeXlim,
+      view: plotViews.lum,
+      interactivePlotId: "lum",
+      denseEnvelope: true,
+      message: "all luminosity variables hidden"
+    });
     drawLegend("lumLegend", [
-      { label: `\\(${TEX.L}\\) total`, color: COLORS.L },
-      { label: `\\(${TEX.Lr}\\) radiative`, color: COLORS.Lr },
-      { label: `\\(${TEX.Lc}\\) convective`, color: COLORS.Lc }
-    ]);
+      { key: "L", label: `\\(${TEX.L}\\) total`, color: COLORS.L, toggleLabel: "total luminosity" },
+      { key: "Lr", label: `\\(${TEX.Lr}\\) radiative`, color: COLORS.Lr, toggleLabel: "radiative luminosity" },
+      { key: "Lc", label: `\\(${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
+    ], { plotId: "lum" });
     queueMathTypeset();
   }
   function downloadCsv() {

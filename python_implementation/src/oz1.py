@@ -14,7 +14,7 @@ from stability import StabilityDetector, StabilityOptions
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "oz1"
-CSV_COLUMNS = ("tau", "R", "V", "P", "L")
+CSV_COLUMNS = ("tau", "R", "V", "H", "L")
 
 
 @dataclass
@@ -77,7 +77,7 @@ class OZ1Sample:
             "tau": self.t,
             "R": self.radius,
             "V": self.velocity,
-            "P": self.pressure,
+            "H": self.pressure,
             "L": self.luminosity,
         }
 
@@ -101,7 +101,7 @@ class OZ1Model:
     def derivatives(self, _time: float, state: Sequence[float]) -> list[float]:
         radius, velocity, pressure = state
         if radius <= 0.0 or pressure <= 0.0:
-            raise ValueError("model left the positive-radius/positive-pressure domain")
+            raise ValueError("model left the positive-radius/positive-H domain")
         return [
             velocity,
             pressure / radius**self.qvar(radius) - 1.0 / radius**2.0 - self.params.cq * velocity**3.0,

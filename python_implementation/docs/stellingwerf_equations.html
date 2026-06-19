@@ -264,8 +264,8 @@
       <p class="subtitle">
         A MathJax-formatted map of the equations implemented by <code>OZ1.S</code>,
         <code>OZC.S</code>, and <code>0MidPoint.s</code>. The maintained Python
-        and web outputs use \( \tau \), \(R\), and \(P\) for time, radius, and
-        pressure.
+        and web outputs use \( \tau \), \(R\), and \(H\) for time, radius, and
+        the nonadiabatic pressure factor.
       </p>
     </header>
 
@@ -294,7 +294,7 @@
                 <td>\(\tau\)</td>
                 <td>Time</td>
                 <td><code>tau</code></td>
-                <td>Independent integration variable, measured in free-fall time units.</td>
+                <td>Independent integration variable, measured in the model free-fall/dynamical time units.</td>
               </tr>
               <tr>
                 <td>\(R\)</td>
@@ -309,10 +309,10 @@
                 <td>Dimensionless radial velocity, \(V=dR/d\tau\).</td>
               </tr>
               <tr>
-                <td>\(P\)</td>
-                <td>Pressure factor</td>
-                <td><code>P</code></td>
-                <td>Nonadiabatic contribution to the pressure.</td>
+                <td>\(H\)</td>
+                <td>Nonadiabatic pressure factor</td>
+                <td><code>H</code></td>
+                <td>Nonadiabatic pressure factor; this is not the total gas pressure.</td>
               </tr>
               <tr>
                 <td>\(U_c\)</td>
@@ -321,22 +321,22 @@
                 <td>Time-dependent convective velocity variable in <code>OZC.S</code>.</td>
               </tr>
               <tr>
-                <td>\(m_0\)</td>
-                <td>Reference form factor</td>
+                <td>\(m\)</td>
+                <td>Equilibrium form factor</td>
                 <td><code>Mgeo</code></td>
-                <td>Geometric shell form-factor parameter used to define the core radius.</td>
+                <td>Shell-thickness form factor \(m=3/(1-\eta^3)\), with \(\eta=R_c/R_0\).</td>
               </tr>
               <tr>
                 <td>\(\eta\)</td>
                 <td>Core radius fraction</td>
                 <td><code>Eta</code></td>
-                <td>Dimensionless core radius, defined by \(\eta^3=1-3/m_0\).</td>
+                <td>Dimensionless core radius fraction \(\eta=R_c/R_0\), with \(\eta^3=1-3/m\).</td>
               </tr>
               <tr>
-                <td>\(m(R)\)</td>
-                <td>Variable form factor</td>
+                <td>\(m_{\mathrm{eff}}(R)\)</td>
+                <td>Optional local form factor</td>
                 <td><code>Mvar()</code></td>
-                <td>Radius-dependent shell form factor used by both S_Tran models.</td>
+                <td>Source-code extension \(3/[1-(\eta/R)^3]\), used only when radius-dependent geometry is enabled.</td>
               </tr>
               <tr>
                 <td>\(\Gamma_1\)</td>
@@ -354,13 +354,13 @@
                 <td>\(n\)</td>
                 <td>Opacity density exponent</td>
                 <td><code>Nk</code></td>
-                <td>Kramers-law opacity exponent used in the radiative luminosity term.</td>
+                <td>Density exponent in the opacity convention \(\kappa\propto\rho^nT^{-s}\).</td>
               </tr>
               <tr>
                 <td>\(s\)</td>
                 <td>Opacity temperature exponent</td>
                 <td><code>Sk</code></td>
-                <td>Kramers-law temperature exponent used in \(P^{s+4}\).</td>
+                <td>Temperature exponent in the opacity convention \(\kappa\propto\rho^nT^{-s}\).</td>
               </tr>
               <tr>
                 <td>\(B_1\)</td>
@@ -372,13 +372,13 @@
                 <td>\(b(R)\)</td>
                 <td>Radiative radius exponent</td>
                 <td><code>Bvar()</code></td>
-                <td>Exponent of \(R\) in the radiative luminosity \(L_r\).</td>
+                <td>Exponent \(b=4+m_{\mathrm{eff}}(R)[n-B_1]\), giving \(L_r=R^{b(R)}H^{s+4}\).</td>
               </tr>
               <tr>
                 <td>\(q(R)\)</td>
                 <td>Pressure-force exponent</td>
                 <td><code>Qvar()</code></td>
-                <td>Exponent controlling the pressure acceleration term \(P/R^{q(R)}\).</td>
+                <td>Exponent \(q=m_{\mathrm{eff}}(R)\Gamma_1-2\), controlling the acceleration term \(H/R^{q(R)}\).</td>
               </tr>
               <tr>
                 <td>\(U\)</td>
@@ -390,7 +390,7 @@
                 <td>\(\zeta\)</td>
                 <td>Thermal adjustment coefficient</td>
                 <td><code>Zeta</code></td>
-                <td>Scales the rate of pressure/thermal response.</td>
+                <td>Ratio of the model free-fall/dynamical time to the thermal time scale; it sets the \(H\)-adjustment rate per \(\tau\).</td>
               </tr>
               <tr>
                 <td>\(C_q\)</td>
@@ -402,25 +402,25 @@
                 <td>\(c(R)\)</td>
                 <td>Convective luminosity radius exponent</td>
                 <td><code>Cvar()</code></td>
-                <td>Exponent used in \(L_c=R^{-c(R)}U_c^3\).</td>
+                <td>Exponent \(c=m_{\mathrm{eff}}(R)-2\), used in \(L_c=R^{-c(R)}U_c^3\).</td>
               </tr>
               <tr>
                 <td>\(d(R)\)</td>
                 <td>Convective velocity radius exponent</td>
                 <td><code>Dvar()</code></td>
-                <td>Exponent used in the convective velocity driver \(R^{-d(R)}\).</td>
+                <td>Exponent \(d=m_{\mathrm{eff}}(R)(\Gamma_1-1)/2\), used in the convective velocity driver \(R^{-d(R)}D\).</td>
               </tr>
               <tr>
                 <td>\(\zeta_c\)</td>
                 <td>Convective adjustment coefficient</td>
                 <td><code>Zetac</code></td>
-                <td>Scales the relaxation rate of \(U_c\) toward the mixing-length value.</td>
+                <td>Ratio of the model free-fall/dynamical time to the convective adjustment time; it sets the \(U_c\)-relaxation rate.</td>
               </tr>
               <tr>
                 <td>\(\gamma_c\)</td>
                 <td>Convective luminosity fraction</td>
                 <td><code>Gammac</code></td>
-                <td>Fractional weight of the convective luminosity in the energy equation.</td>
+                <td>Equilibrium convective luminosity fraction \(\gamma_c=L_{c0}/L_0\), used as the convective weight in the energy equation.</td>
               </tr>
               <tr>
                 <td>\(\gamma_r\)</td>
@@ -432,7 +432,7 @@
                 <td>\(L_r\)</td>
                 <td>Radiative luminosity</td>
                 <td><code>Lum()</code></td>
-                <td>Radiative luminosity-like term \(L_r=R^{b(R)}P^{s+4}\).</td>
+                <td>Radiative luminosity-like term \(L_r=R^{b(R)}H^{s+4}\).</td>
               </tr>
               <tr>
                 <td>\(L_c\)</td>
@@ -469,7 +469,7 @@
               <h3><code>OZ1.S</code></h3>
               <p>
                 A three-variable radiative one-zone model. It evolves radius \(R\),
-                velocity \(V\), and nonadiabatic pressure factor \(P\).
+                velocity \(V\), and nonadiabatic pressure factor \(H\).
               </p>
               <p class="source">
                 Source equations: <a href="OZ1.S">OZ1.S</a>, derivative definitions near lines 39-41.
@@ -514,7 +514,7 @@
               <tr>
                 <td>\( \tau \)</td>
                 <td><code>tau</code></td>
-                <td>Independent integration variable, interpreted as time.</td>
+                <td>Independent integration variable scaled by the model free-fall/dynamical time.</td>
               </tr>
               <tr>
                 <td>\( R \)</td>
@@ -527,8 +527,8 @@
                 <td>Dimensionless radial velocity, \(V = dR/d\tau\).</td>
               </tr>
               <tr>
-                <td>\( P \)</td>
-                <td><code>P</code></td>
+                <td>\( H \)</td>
+                <td><code>H</code></td>
                 <td>Nonadiabatic pressure factor.</td>
               </tr>
               <tr>
@@ -543,20 +543,25 @@
         <section id="shared">
           <h2>Shared Geometry And Exponents</h2>
           <p>
-            Both S_Tran model files use a variable form factor \(m(R)\). The setup
-            values are \(m_0=10\), \(\Gamma_1=1.1\), \(n=1\), \(s=3\), and \(U=-1\).
+            Stellingwerf's paper model uses a constant equilibrium form factor \(m\).
+            The local S_Tran-derived models can optionally replace it with a
+            radius-dependent effective form factor. The setup values are \(m=10\),
+            \(\Gamma_1=1.1\), \(n=1\), \(s=3\), and \(U=-1\), with opacity
+            convention \(\kappa\propto\rho^nT^{-s}\).
           </p>
           <div class="equation">
             \[
               \begin{alignedat}{2}
-                \eta^3 &= 1 - \frac{3}{m_0},
-                &\qquad \eta &= \left(1 - \frac{3}{m_0}\right)^{1/3},\\[0.45em]
-                m(R) &= \frac{3}{1 - \left(\eta/R\right)^3},
+                \eta^3 &= 1 - \frac{3}{m},
+                &\qquad \eta &= \left(1 - \frac{3}{m}\right)^{1/3},\\[0.45em]
+                m_{\mathrm{eff}}(R) &= m
+                \quad\text{or}\quad
+                \frac{3}{1-\left(\eta/R\right)^3},
                 &\qquad & \\[0.45em]
                 \Gamma_{11} &= \Gamma_1 - 1,
                 &\qquad B_1 &= (s+4)\Gamma_{11},\\[0.45em]
-                b(R) &= 4 + m(R)\left(n - B_1\right),
-                &\qquad q(R) &= m(R)\Gamma_1 - 2.
+                b(R) &= 4 + m_{\mathrm{eff}}(R)\left(n - B_1\right),
+                &\qquad q(R) &= m_{\mathrm{eff}}(R)\Gamma_1 - 2.
               \end{alignedat}
             \]
           </div>
@@ -565,7 +570,7 @@
           </p>
           <div class="equation">
             \[
-              L_r(R,P) = R^{b(R)} P^{s+4}.
+              L_r(R,H) = R^{b(R)} H^{s+4}.
             \]
           </div>
           <p>
@@ -577,7 +582,7 @@
         <section id="oz1">
           <h2>Radiative Model: <code>OZ1.S</code></h2>
           <p>
-            <code>OZ1.S</code> evolves \(R\), \(V\), and \(P\). It uses
+            <code>OZ1.S</code> evolves \(R\), \(V\), and \(H\). It uses
             \(\zeta=1\) and a turbulent dissipation coefficient \(C_q=2\).
           </p>
           <div class="equation">
@@ -586,11 +591,11 @@
                 \frac{dR}{d\tau}
                   &= V,\\[0.45em]
                 \frac{dV}{d\tau}
-                  &= \frac{P}{R^{q(R)}} - \frac{1}{R^2} - C_q V^3,\\[0.45em]
-                \frac{dP}{d\tau}
+                  &= \frac{H}{R^{q(R)}} - \frac{1}{R^2} - C_q V^3,\\[0.45em]
+                \frac{dH}{d\tau}
                   &=
-                  \zeta R^{m(R)(\Gamma_1-1)}
-                  \left(R^U - L_r(R,P)\right).
+                  \zeta R^{m_{\mathrm{eff}}(R)(\Gamma_1-1)}
+                  \left(R^U - L_r(R,H)\right).
               \end{aligned}
             \]
           </div>
@@ -604,14 +609,14 @@
             <tbody>
               <tr><td>Initial radius</td><td>\(R(0)=1.2\)</td></tr>
               <tr><td>Initial velocity</td><td>\(V(0)=0\)</td></tr>
-              <tr><td>Initial pressure factor</td><td>\(P(0)=0.8\)</td></tr>
+              <tr><td>Initial \(H\) factor</td><td>\(H(0)=0.8\)</td></tr>
               <tr><td>Thermal coefficient</td><td>\(\zeta=1\)</td></tr>
               <tr><td>Dissipation</td><td>\(C_q=2\)</td></tr>
             </tbody>
           </table>
           <p>
             The CSV columns written by this model are
-            <code>tau, R, V, P, L</code>, where \(L=L_r\) after the initial row.
+            <code>tau, R, V, H, L</code>, where \(L=L_r\) after the initial row.
           </p>
         </section>
 
@@ -623,8 +628,8 @@
           <div class="equation">
             \[
               \begin{alignedat}{2}
-                c(R) &= m(R) - 2,
-                &\qquad d(R) &= \frac{m(R)(\Gamma_1-1)}{2},\\[0.45em]
+                c(R) &= m_{\mathrm{eff}}(R) - 2,
+                &\qquad d(R) &= \frac{m_{\mathrm{eff}}(R)(\Gamma_1-1)}{2},\\[0.45em]
                 L_c(R,U_c) &= R^{-c(R)}U_c^3.
                 &\qquad &
               \end{alignedat}
@@ -640,13 +645,13 @@
                 \frac{dR}{d\tau}
                   &= V,\\[0.45em]
                 \frac{dV}{d\tau}
-                  &= \frac{P}{R^{q(R)}} - \frac{1}{R^2} - C_q V^3,\\[0.45em]
-                \frac{dP}{d\tau}
+                  &= \frac{H}{R^{q(R)}} - \frac{1}{R^2} - C_q V^3,\\[0.45em]
+                \frac{dH}{d\tau}
                   &=
-                  \zeta R^{m(R)(\Gamma_1-1)}
+                  \zeta R^{m_{\mathrm{eff}}(R)(\Gamma_1-1)}
                   \left(
                     R^U
-                    - \gamma_r L_r(R,P)
+                    - \gamma_r L_r(R,H)
                     - \gamma_c L_c(R,U_c)
                   \right),\\[0.45em]
                 \frac{dU_c}{d\tau}
@@ -662,12 +667,12 @@
             <strong>Important:</strong> the final equation above is what
             <code>OZC.S</code> literally contains: <code>sqrt(Y[2])</code>, or
             \(\sqrt{V}\). The printed Stellingwerf 1986 convective equation uses
-            \(\sqrt{P}\):
+            \(\sqrt{H}\):
             \[
               \begin{aligned}
                 \frac{dU_c}{d\tau}
                   &=
-                  \zeta_c\left(R^{-d(R)}\sqrt{P} - U_c\right).
+                  \zeta_c\left(R^{-d(R)}\sqrt{H} - U_c\right).
               \end{aligned}
             \]
             In ordinary real arithmetic, the literal \(\sqrt{V}\) version becomes
@@ -683,7 +688,7 @@
             <tbody>
               <tr><td>Initial radius</td><td>\(R(0)=1.4\)</td></tr>
               <tr><td>Initial velocity</td><td>\(V(0)=0\)</td></tr>
-              <tr><td>Initial pressure factor</td><td>\(P(0)=0.9\)</td></tr>
+              <tr><td>Initial \(H\) factor</td><td>\(H(0)=0.9\)</td></tr>
               <tr><td>Initial convective velocity</td><td>\(U_c(0)=0.7\)</td></tr>
               <tr><td>Thermal coefficient</td><td>\(\zeta=1\)</td></tr>
               <tr><td>Convective adjustment coefficient</td><td>\(\zeta_c=1\)</td></tr>
@@ -694,7 +699,7 @@
           </table>
           <p>
             The CSV columns written by this model are
-            <code>tau, R, V, P, L, Lr, Lc, Uc</code>, where
+            <code>tau, R, V, H, L, Lr, Lc, Uc</code>, where
             \(L=\gamma_r L_r+\gamma_c L_c\).
           </p>
         </section>

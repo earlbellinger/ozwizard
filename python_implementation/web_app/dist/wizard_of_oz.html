@@ -166,7 +166,7 @@
     .app-shell {
       min-height: 100vh;
       display: grid;
-      grid-template-columns: minmax(310px, 365px) minmax(0, 1fr);
+      grid-template-columns: minmax(455px, 520px) minmax(0, 1fr);
     }
 
     aside {
@@ -270,6 +270,11 @@
       gap: 8px;
     }
 
+    .solver-row {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+    }
+
     .preset-grid button,
     .driver-row button,
     .action-row button {
@@ -282,6 +287,11 @@
       font-size: 13px;
       min-height: 36px;
       box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.04);
+    }
+
+    .solver-row button {
+      padding: 7px 6px;
+      font-size: 12px;
     }
 
     .preset-grid button:hover,
@@ -329,16 +339,23 @@
 
     .slider-list {
       display: grid;
-      gap: 10px;
+      gap: 6px;
     }
 
     .slider-control {
+      --slider-desc-width: 126px;
+      --slider-symbol-width: 88px;
+      display: grid;
+      grid-template-columns: var(--slider-desc-width) var(--slider-symbol-width) minmax(0, 1fr) 24px;
+      align-items: center;
+      column-gap: 8px;
       border: 1px solid var(--line);
       border-left: 5px solid var(--accent, var(--focus));
-      border-radius: 8px;
-      padding: 9px 10px 8px;
+      border-radius: 7px;
+      padding: 5px 8px;
       background: var(--paper-raised);
       box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.03);
+      min-height: 36px;
     }
 
     .slider-control:hover {
@@ -346,16 +363,9 @@
       background: var(--paper-high);
     }
 
-    .slider-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      align-items: center;
-      margin-bottom: 5px;
-      min-width: 0;
-    }
-
-    .slider-label {
+    .slider-name {
+      color: var(--muted);
+      font-size: 12px;
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -366,12 +376,10 @@
       font-weight: 800;
       color: var(--accent, var(--focus));
       font-size: 14px;
-    }
-
-    .slider-name {
-      color: var(--muted);
-      font-size: 12px;
-      margin-left: 4px;
+      text-align: center;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
     }
 
     .slider-value {
@@ -379,14 +387,15 @@
       color: var(--ink);
       font-size: 12px;
       white-space: nowrap;
-      flex: 0 0 auto;
+      text-align: right;
     }
 
-    .slider-actions {
-      display: inline-flex;
+    .slider-track {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 54px;
       align-items: center;
       gap: 7px;
-      flex: 0 0 auto;
+      min-width: 0;
     }
 
     .parameter-reset {
@@ -412,13 +421,15 @@
 
     input[type="range"] {
       width: 100%;
+      min-width: 0;
       accent-color: var(--accent, var(--focus));
     }
 
     .slider-scale {
+      grid-column: 1 / 2;
       display: flex;
       justify-content: space-between;
-      margin-top: 2px;
+      margin-top: -3px;
       color: var(--subtle);
       font-size: 10px;
       font-variant-numeric: tabular-nums;
@@ -476,6 +487,7 @@
       border-radius: 8px;
       padding: 12px;
       min-width: 0;
+      overflow-x: auto;
       box-shadow: 0 14px 34px var(--shadow), inset 0 1px 0 rgba(238, 245, 255, 0.03);
     }
 
@@ -486,6 +498,12 @@
       gap: 12px;
       margin-bottom: 8px;
       min-height: 22px;
+    }
+
+    .plot-heading {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
     }
 
     .plot-title h3,
@@ -501,6 +519,38 @@
       font-size: 12px;
     }
 
+    .plot-tools {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex: 0 0 auto;
+    }
+
+    .plot-reset {
+      width: 28px;
+      height: 28px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--canvas);
+      color: var(--focus);
+      cursor: pointer;
+      line-height: 1;
+      padding: 0;
+    }
+
+    .plot-reset:hover:not(:disabled) {
+      border-color: var(--line-strong);
+      background: var(--paper-high);
+    }
+
+    .plot-reset:disabled {
+      color: var(--subtle);
+      cursor: default;
+      opacity: 0.55;
+    }
+
     canvas {
       width: 100%;
       height: 260px;
@@ -508,6 +558,11 @@
       border: 1px solid var(--line);
       background: var(--canvas);
       border-radius: 6px;
+    }
+
+    canvas.interactive-canvas {
+      cursor: crosshair;
+      touch-action: none;
     }
 
     .legend {
@@ -526,6 +581,31 @@
       white-space: nowrap;
     }
 
+    .legend-toggle {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(17, 27, 51, 0.72);
+      color: var(--ink);
+      cursor: pointer;
+      padding: 4px 7px;
+      box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.03);
+    }
+
+    .legend-toggle:hover {
+      border-color: var(--line-strong);
+      background: var(--paper-high);
+    }
+
+    .legend-toggle.is-hidden {
+      color: var(--subtle);
+      opacity: 0.58;
+    }
+
+    .legend-toggle.is-hidden .swatch {
+      background: transparent;
+      border: 1px solid var(--color);
+    }
+
     .swatch {
       width: 11px;
       height: 11px;
@@ -536,9 +616,46 @@
 
     .notes-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
       gap: 14px;
       margin-top: 14px;
+    }
+
+    .reference-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+      gap: 14px;
+      align-items: start;
+    }
+
+    .reference-panel {
+      min-height: 100%;
+    }
+
+    .parameters-panel {
+      max-height: 620px;
+      overflow-y: auto;
+      scrollbar-color: var(--line-strong) var(--canvas);
+      scrollbar-width: thin;
+    }
+
+    .parameter-section {
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+      margin-top: 12px;
+    }
+
+    .parameter-section:first-of-type {
+      border-top: 0;
+      padding-top: 0;
+      margin-top: 8px;
+    }
+
+    .parameter-section h4 {
+      margin: 0 0 6px;
+      color: var(--ink);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
     }
 
     .content-panel p,
@@ -586,6 +703,12 @@
 
     .variable-table td:not(.symbol-cell) {
       color: var(--muted);
+    }
+
+    .initial-cell {
+      color: var(--ink) !important;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
 
     .symbol-cell {
@@ -644,6 +767,14 @@
       .slider-list {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+
+      .reference-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .parameters-panel {
+        max-height: none;
+      }
     }
 
     @media (max-width: 760px) {
@@ -654,6 +785,7 @@
       .slider-list,
       .plot-grid,
       .notes-grid,
+      .reference-grid,
       .plots-header {
         grid-template-columns: 1fr;
       }
@@ -684,22 +816,14 @@
         grid-template-columns: 1fr;
       }
 
-      .slider-head {
-        display: block;
+      .solver-row {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
 
-      .slider-label {
-        white-space: normal;
-      }
-
-      .slider-actions {
-        display: flex;
-        justify-content: space-between;
-        margin-top: 4px;
-      }
-
-      .slider-value {
-        display: block;
+      .slider-control {
+        --slider-desc-width: 98px;
+        --slider-symbol-width: 76px;
+        column-gap: 7px;
       }
 
       .metrics {
@@ -733,29 +857,12 @@
 
       <div class="section-title">Convective Driver</div>
       <div class="driver-row">
-        <button type="button" data-driver="h" class="active">\(\sqrt{H}\)</button>
-        <button type="button" data-driver="abs-v">\(\sqrt{|V|}\)</button>
-      </div>
-
-      <div class="section-title">Solver</div>
-      <div class="driver-row" id="solverButtons"></div>
-      <label class="toggle-line">
-        <span>Compare selected solver to midpoint</span>
-        <input id="compareMidpoint" type="checkbox">
-      </label>
-      <label class="toggle-line">
-        <span>Run until stable</span>
-        <input id="runUntilStable" type="checkbox" checked>
-      </label>
-
-      <div class="section-title">Phase Window</div>
-      <div class="driver-row">
-        <button type="button" data-phase-mode="reference" class="active">Reference cycles</button>
-        <button type="button" data-phase-mode="final">Final cycles</button>
+        <button type="button" data-driver="h" class="active">\(\sqrt{\ozPressure{H}}\)</button>
+        <button type="button" data-driver="abs-v">\(\sqrt{|\ozVelocity{V}|}\)</button>
       </div>
 
       <label class="toggle-line">
-        <span>Use radius-dependent geometry \(m_{\mathrm{eff}}(R)\)</span>
+        <span>Use radius-dependent geometry \(\ozMass{m}_{\mathrm{eff}}(\ozRadius{R})\)</span>
         <input id="variableM" type="checkbox">
       </label>
 
@@ -766,7 +873,19 @@
       <div class="slider-list" id="initialControls"></div>
 
       <div class="section-title">Integration</div>
+      <div class="driver-row solver-row" id="solverButtons"></div>
+      <label class="toggle-line">
+        <span>Run until stable</span>
+        <input id="runUntilStable" type="checkbox" checked>
+      </label>
       <div class="slider-list" id="integrationControls"></div>
+
+      <div class="section-title">Phase Window</div>
+      <div class="driver-row">
+        <button type="button" data-phase-mode="reference" class="active">Reference cycles</button>
+        <button type="button" data-phase-mode="final">Final cycles</button>
+      </div>
+
       <div class="action-row">
         <button type="button" id="resetPreset">Reset preset</button>
         <button type="button" id="downloadCsv">Download CSV</button>
@@ -803,8 +922,13 @@
 
         <div class="plot-panel">
           <div class="plot-title">
-            <h3>Time Evolution</h3>
-            <span>state variables</span>
+            <div class="plot-heading">
+              <h3>Time Evolution</h3>
+              <span>state variables</span>
+            </div>
+            <div class="plot-tools">
+              <button class="plot-reset" type="button" data-plot-reset="time" title="Reset Time Evolution zoom" aria-label="Reset Time Evolution zoom">↺</button>
+            </div>
           </div>
           <canvas id="timeCanvas"></canvas>
           <div class="legend" id="timeLegend"></div>
@@ -812,8 +936,13 @@
 
         <div class="plot-panel">
           <div class="plot-title">
-            <h3>Luminosity Split</h3>
-            <span>total, radiative, convective</span>
+            <div class="plot-heading">
+              <h3>Luminosity Split</h3>
+              <span>total, radiative, convective</span>
+            </div>
+            <div class="plot-tools">
+              <button class="plot-reset" type="button" data-plot-reset="lum" title="Reset Luminosity Split zoom" aria-label="Reset Luminosity Split zoom">↺</button>
+            </div>
           </div>
           <canvas id="lumCanvas"></canvas>
           <div class="legend" id="lumLegend"></div>
@@ -856,7 +985,8 @@
             <span class="symbol-cell" style="--color:var(--convective)">\(\ozConvective{U_c}\)</span> relaxes toward a
             local value set mainly by radius and
             <span class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{H}\)</span>, while the convective
-            luminosity scales like \(U_c^3\). That delay is why changing \(\zeta\), \(\zeta_c\), and \(\gamma_c\)
+            luminosity scales like \(\ozConvective{U_c}^{3}\). That delay is why changing
+            \(\ozZeta{\zeta}\), \(\ozZetac{\zeta_c}\), and \(\ozGammac{\gamma_c}\)
             can move the model between damping, a stable limit cycle, and dynamic instability. Phase-folded plots
             are most meaningful once the model has reached a repeatable cycle; a still-growing pulse should be read
             as transient evolution, not a final waveform.
@@ -870,85 +1000,104 @@
           </p>
         </div>
 
-        <div class="content-panel">
-          <h3>Variables</h3>
-          <table class="variable-table">
-            <thead>
-              <tr><th>Symbol</th><th>Name</th><th>Meaning</th></tr>
-            </thead>
-            <tbody>
-              <tr><td class="symbol-cell" data-symbol="tau" style="--color:var(--tau)">\(\ozTau{\tau}\)</td><td>Independent time</td><td>Dimensionless clock scaled by the model's free-fall/dynamical time; derivatives such as \(dR/d\tau\) are per dynamical time unit.</td></tr>
-              <tr><td class="symbol-cell" style="--color:var(--radius)">\(\ozRadius{R}\)</td><td>Radius</td><td>Dimensionless radius of the moving shell.</td></tr>
-              <tr><td class="symbol-cell" style="--color:var(--velocity)">\(\ozVelocity{V}\)</td><td>Radial velocity</td><td>Time derivative of the shell radius.</td></tr>
-              <tr><td class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{H}\)</td><td>Nonadiabatic pressure factor</td><td>Normalized factor carrying nonadiabatic pressure/thermal response, not total gas pressure.</td></tr>
-              <tr><td class="symbol-cell" style="--color:var(--convective)">\(\ozConvective{U_c}\)</td><td>Convective velocity</td><td>Time-dependent turbulent/convective velocity scale.</td></tr>
-              <tr><td class="symbol-cell" style="--color:var(--radiative)">\(\ozRadiative{L_r}\)</td><td>Radiative luminosity</td><td>Radiative luminosity-like flux leaving the shell.</td></tr>
-              <tr><td class="symbol-cell" style="--color:var(--conv-lum)">\(\ozConvLum{L_c}\)</td><td>Convective luminosity</td><td>Convective luminosity-like flux proportional to \(U_c^3\).</td></tr>
-              <tr><td class="symbol-cell" style="--color:var(--luminosity)">\(\ozLuminosity{L}\)</td><td>Total luminosity</td><td>Weighted sum \(L=\gamma_rL_r+\gamma_cL_c\).</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="content-panel">
-          <h3>Equations Solved</h3>
-          <div class="equation-block">
-            \[
-            \begin{aligned}
-            \frac{d\ozRadius{R}}{d\ozTau{\tau}} &=
-              \ozVelocity{V},\\[0.35em]
-            \frac{d\ozVelocity{V}}{d\ozTau{\tau}} &=
-              \frac{\ozPressure{H}}{\ozRadius{R}^{q(\ozRadius{R})}}
-              - \frac{1}{\ozRadius{R}^{2}}
-              - \ozDamping{C_q}\ozVelocity{V}^{3},\\[0.35em]
-            \frac{d\ozPressure{H}}{d\ozTau{\tau}} &=
-              \ozZeta{\zeta}\,
-              \ozRadius{R}^{m_{\mathrm{eff}}(\ozRadius{R})(\ozGamma{\Gamma_1}-1)}
-              \left[
-                \ozRadius{R}^{\ozSource{U}}
-                - \ozNeutral{\gamma_r}\ozRadiative{L_r}
-                - \ozGammac{\gamma_c}\ozConvLum{L_c}
-              \right],\\[0.35em]
-            \frac{d\ozConvective{U_c}}{d\ozTau{\tau}} &=
-              \ozZetac{\zeta_c}
-              \left[
-                \ozRadius{R}^{-d(\ozRadius{R})}D
-                - \ozConvective{U_c}
-              \right].
-            \end{aligned}
-            \]
+        <div class="reference-grid">
+          <div class="content-panel reference-panel">
+            <h3>Equations Solved</h3>
+            <div class="equation-block">
+              \[
+              \begin{aligned}
+              \frac{d\ozRadius{R}}{d\ozTau{\tau}} &=
+                \ozVelocity{V},\\[0.35em]
+              \frac{d\ozVelocity{V}}{d\ozTau{\tau}} &=
+                \frac{\ozPressure{H}}{\ozRadius{R}^{\ozPressure{q}(\ozRadius{R})}}
+                - \frac{1}{\ozRadius{R}^{2}}
+                - \ozDamping{C_q}\ozVelocity{V}^{3},\\[0.35em]
+              \frac{d\ozPressure{H}}{d\ozTau{\tau}} &=
+                \ozZeta{\zeta}\,
+                \ozRadius{R}^{\ozMass{m}_{\mathrm{eff}}(\ozRadius{R})(\ozGamma{\Gamma_1}-1)}
+                \left[
+                  \ozRadius{R}^{\ozSource{U}}
+                  - \ozNeutral{\gamma_r}\ozRadiative{L_r}
+                  - \ozGammac{\gamma_c}\ozConvLum{L_c}
+                \right],\\[0.35em]
+              \frac{d\ozConvective{U_c}}{d\ozTau{\tau}} &=
+                \ozZetac{\zeta_c}
+                \left[
+                  \ozRadius{R}^{-\ozConvective{d}(\ozRadius{R})}\ozPressure{D}
+                  - \ozConvective{U_c}
+                \right].
+              \end{aligned}
+              \]
+            </div>
+            <div class="equation-block">
+              \[
+              \begin{aligned}
+              \ozRadiative{L_r} &=
+                \ozRadius{R}^{\ozRadiative{b}(\ozRadius{R})}
+                \ozPressure{H}^{\ozPink{s}+4},\\[0.35em]
+              \ozConvLum{L_c} &=
+                \ozRadius{R}^{-\ozConvLum{c}(\ozRadius{R})}
+                \ozConvective{U_c}^{3},\\[0.35em]
+              \ozLuminosity{L} &=
+                \ozNeutral{\gamma_r}\ozRadiative{L_r}
+                + \ozGammac{\gamma_c}\ozConvLum{L_c},\\[0.35em]
+              \ozPressure{D} &= \sqrt{\ozPressure{H}}
+                \quad\text{or}\quad
+                \sqrt{|\ozVelocity{V}|}.
+              \end{aligned}
+              \]
+            </div>
           </div>
-          <div class="equation-block">
-            \[
-            \begin{aligned}
-            \ozRadiative{L_r} &=
-              \ozRadius{R}^{b(\ozRadius{R})}
-              \ozPressure{H}^{\ozPink{s}+4},\\[0.35em]
-            \ozConvLum{L_c} &=
-              \ozRadius{R}^{-c(\ozRadius{R})}
-              \ozConvective{U_c}^{3},\\[0.35em]
-            \ozLuminosity{L} &=
-              \ozNeutral{\gamma_r}\ozRadiative{L_r}
-              + \ozGammac{\gamma_c}\ozConvLum{L_c},\\[0.35em]
-            D &= \sqrt{\ozPressure{H}}
-              \quad\text{or}\quad
-              \sqrt{|\ozVelocity{V}|}.
-            \end{aligned}
-            \]
-          </div>
-          <p class="small-note">
-            With fixed geometry, \(m_{\mathrm{eff}}(R)=m=3/(1-\eta^3)\). With the toggle enabled,
-            \(m_{\mathrm{eff}}(R)=3/[1-(\eta/R)^3]\), where \(\eta=(1-3/m)^{1/3}\).
-          </p>
-        </div>
 
-        <div class="content-panel">
-          <h3>Parameter Guide</h3>
-          <table class="variable-table">
-            <thead>
-              <tr><th>Control</th><th>Meaning</th></tr>
-            </thead>
-            <tbody id="parameterTable"></tbody>
-          </table>
+          <div class="content-panel reference-panel">
+            <h3>Variables</h3>
+            <table class="variable-table">
+              <thead>
+                <tr><th>Symbol</th><th>Name</th><th>Initial</th><th>Meaning</th></tr>
+              </thead>
+              <tbody>
+                <tr><td class="symbol-cell" data-symbol="tau" style="--color:var(--tau)">\(\ozTau{\tau}\)</td><td>Independent time</td><td class="initial-cell" id="initialTau"></td><td>Dimensionless clock scaled by the model's free-fall/dynamical time; derivatives such as \(d\ozRadius{R}/d\ozTau{\tau}\) are per dynamical time unit.</td></tr>
+                <tr><td class="symbol-cell" style="--color:var(--radius)">\(\ozRadius{R}\)</td><td>Radius</td><td class="initial-cell" id="initialR"></td><td>Dimensionless radius of the moving shell.</td></tr>
+                <tr><td class="symbol-cell" style="--color:var(--velocity)">\(\ozVelocity{V}\)</td><td>Radial velocity</td><td class="initial-cell" id="initialV"></td><td>Time derivative of the shell radius.</td></tr>
+                <tr><td class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{H}\)</td><td>Nonadiabatic pressure factor</td><td class="initial-cell" id="initialH"></td><td>Normalized factor carrying nonadiabatic pressure/thermal response, not total gas pressure.</td></tr>
+                <tr><td class="symbol-cell" style="--color:var(--convective)">\(\ozConvective{U_c}\)</td><td>Convective velocity</td><td class="initial-cell" id="initialUc"></td><td>Time-dependent turbulent/convective velocity scale.</td></tr>
+                <tr><td class="symbol-cell" style="--color:var(--radiative)">\(\ozRadiative{L_r}\)</td><td>Radiative luminosity</td><td class="initial-cell" id="initialLr"></td><td>Radiative luminosity-like flux leaving the shell.</td></tr>
+                <tr><td class="symbol-cell" style="--color:var(--conv-lum)">\(\ozConvLum{L_c}\)</td><td>Convective luminosity</td><td class="initial-cell" id="initialLc"></td><td>Convective luminosity-like flux proportional to \(\ozConvective{U_c}^{3}\).</td></tr>
+                <tr><td class="symbol-cell" style="--color:var(--luminosity)">\(\ozLuminosity{L}\)</td><td>Total luminosity</td><td class="initial-cell" id="initialL"></td><td>Weighted sum \(\ozLuminosity{L}=\ozNeutral{\gamma_r}\ozRadiative{L_r}+\ozGammac{\gamma_c}\ozConvLum{L_c}\).</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="content-panel reference-panel parameters-panel">
+            <h3>Parameters</h3>
+            <div class="parameter-section">
+              <h4>Tunable</h4>
+              <table class="variable-table">
+                <thead>
+                  <tr><th>Control</th><th>Meaning</th></tr>
+                </thead>
+                <tbody id="tunableParameterTable"></tbody>
+              </table>
+            </div>
+            <div class="parameter-section">
+              <h4>Derived</h4>
+              <table class="variable-table">
+                <thead>
+                  <tr><th>Quantity</th><th>Meaning</th></tr>
+                </thead>
+                <tbody id="derivedParameterTable"></tbody>
+              </table>
+            </div>
+            <div class="parameter-section">
+              <h4>Numerical</h4>
+              <table class="variable-table">
+                <thead>
+                  <tr><th>Control</th><th>Meaning</th></tr>
+                </thead>
+                <tbody id="numericalParameterTable"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </section>
     </main>

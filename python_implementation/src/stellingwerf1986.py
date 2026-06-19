@@ -3,7 +3,7 @@
 The paper figures use the constant-m equations printed as eqs. (33)-(35),
 with a fixed base luminosity. The S_Tran files in this directory are useful
 implementation references, but OZ1.S/OZC.S also include later/local switches
-such as variable m(R), an R^-1 inner luminosity, and turbulent pressure.
+such as variable m_eff(R), an R^-1 inner luminosity, and turbulent pressure.
 """
 
 from __future__ import annotations
@@ -38,12 +38,12 @@ class PaperModelParams:
     s: float = 3.0
     r0: float = 1.4
     v0: float = 0.0
-    p0: float = 1.0
+    h0: float = 1.0
     uc0: float = 1.0
     source_exp: float = 0.0
     cq: float = 0.0
     variable_m: bool = False
-    convective_driver: str = "p"
+    convective_driver: str = "h"
 
     @property
     def gammar(self) -> float:
@@ -98,7 +98,7 @@ class PaperModel:
     def derivatives(self, _time: float, state: Sequence[float]) -> list[float]:
         radius, velocity, pressure, convective_velocity = state
         if radius <= 0.0 or pressure <= 0.0:
-            raise ValueError("model left the positive-radius/positive-pressure domain")
+            raise ValueError("model left the positive-radius/positive-H domain")
 
         params = self.params
         m = params.m_at(radius)
@@ -109,7 +109,7 @@ class PaperModel:
         lr = radius**b * pressure ** (params.s + 4.0)
         lc = radius ** (-c) * convective_velocity**3.0
         inner_luminosity = radius**params.source_exp
-        if params.convective_driver == "p":
+        if params.convective_driver == "h":
             convective_driver = sqrt(pressure)
         elif params.convective_driver == "abs-v":
             convective_driver = sqrt(abs(velocity))
@@ -133,7 +133,7 @@ class PaperModel:
             "tau": time,
             "R": radius,
             "V": velocity,
-            "P": pressure,
+            "H": pressure,
             "Uc": convective_velocity,
             "Lr": lr,
             "Lc": lc,
@@ -170,7 +170,7 @@ class PaperModel:
                 stable_cycles=stable_cycles,
             )
         )
-        detector.observe(self.sample(0.0, [self.params.r0, self.params.v0, self.params.p0, self.params.uc0]))
+        detector.observe(self.sample(0.0, [self.params.r0, self.params.v0, self.params.h0, self.params.uc0]))
 
         def stop(time: float, state: Sequence[float]) -> str | None:
             row = self.sample(time, state)
@@ -180,7 +180,7 @@ class PaperModel:
 
         result = integrate(
             self.derivatives,
-            [self.params.r0, self.params.v0, self.params.p0, self.params.uc0],
+            [self.params.r0, self.params.v0, self.params.h0, self.params.uc0],
             t_end,
             options,
             stop_condition=stop,
@@ -209,7 +209,7 @@ def stability_margin(zeta: float, zetac: float, gammac: float, params: PaperMode
 def write_csv(path: Path, rows: Sequence[Row]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=("tau", "R", "V", "P", "Uc", "Lr", "Lc", "L"))
+        writer = csv.DictWriter(handle, fieldnames=("tau", "R", "V", "H", "Uc", "Lr", "Lc", "L"))
         writer.writeheader()
         writer.writerows(rows)
 
@@ -471,17 +471,17 @@ def time_panel_figure(path: Path, rows: Sequence[Row], start: float, end: float,
     sub = window_rows(rows, start, end)
     fig = Figure(620, 560)
     top = Panel(70, 42, 500, 225, (start, end), (-0.8, 1.6))
-    bottom = Panel(70, 267, 500, 225, (start, end), (min(min(r["P"], r["Uc"]) for r in sub) - 0.02, max(max(r["P"], r["Uc"]) for r in sub) + 0.02))
+    bottom = Panel(70, 267, 500, 225, (start, end), (min(min(r["H"], r["Uc"]) for r in sub) - 0.02, max(max(r["H"], r["Uc"]) for r in sub) + 0.02))
     x_ticks = [round(start + i, 1) for i in range(1, int(end - start) + 1)]
     draw_axes(fig, top, x_ticks, _ticks(-0.5, 1.5, 5), show_x_labels=False)
     draw_axes(fig, bottom, x_ticks, _ticks(round(bottom.ylim[0], 2), round(bottom.ylim[1], 2), 5))
     fig.path(top.map_points(rows, "tau", "R", (start, end)), width=1.7)
     fig.path(top.map_points(rows, "tau", "V", (start, end)), dash="9 5", width=1.7)
-    fig.path(bottom.map_points(rows, "tau", "P", (start, end)), width=1.7)
+    fig.path(bottom.map_points(rows, "tau", "H", (start, end)), width=1.7)
     fig.path(bottom.map_points(rows, "tau", "Uc", (start, end)), dash="9 5", width=1.7)
     fig.text(190, 104, "R", size=15, weight="bold")
     fig.text(150, 190, "V", size=15, weight="bold")
-    fig.text(190, 332, "P", size=15, weight="bold")
+    fig.text(190, 332, "H", size=15, weight="bold")
     fig.text(305, 365, "U_c", size=15, weight="bold")
     fig.text(500, 78, label, size=15, weight="bold")
     fig.text(320, 535, "tau", size=16, weight="bold")
@@ -500,13 +500,13 @@ def figure6(path: Path, case_rows: dict[str, tuple[Sequence[Row], tuple[float, f
         rows, window = case_rows[label.title()]
         sub = window_rows(rows, *window)
         draw_axes(fig, panel, _ticks(panel.xlim[0], panel.xlim[1], 5), _ticks(panel.ylim[0], panel.ylim[1], 4), show_x_labels=(key == "c"))
-        fig.path(panel.map_points(sub, "R", "P"), width=1.6)
+        fig.path(panel.map_points(sub, "R", "H"), width=1.6)
         fig.path(panel.map_points(sub, "R", "Uc"), dash="9 5", width=1.6)
-        draw_curve_arrow(fig, panel, sub, "R", "P", 0.45)
+        draw_curve_arrow(fig, panel, sub, "R", "H", 0.45)
         draw_curve_arrow(fig, panel, sub, "R", "Uc", 0.68)
         fig.text(panel.left + panel.width - 25, panel.top + 32, key, size=13, weight="bold")
         fig.text(panel.left + panel.width - 55, panel.top + 55, label, size=15, weight="bold")
-        fig.text(panel.left + 95, panel.top + 48, "P", size=14, weight="bold")
+        fig.text(panel.left + 95, panel.top + 48, "H", size=14, weight="bold")
         fig.text(panel.left + 145, panel.top + panel.height - 42, "U_c", size=14, weight="bold")
     fig.text(320, 706, "R", size=16, weight="bold")
     fig.text(320, 735, "Fig. 6 - Phase plots for the Blue, Strip, and Red cases", size=12)
@@ -518,12 +518,12 @@ def quad_figure(path: Path, rows: Sequence[Row], time_window: tuple[float, float
     fig = Figure(860, 470)
     left_top = Panel(62, 32, 360, 180, time_window, (min(r["R"] for r in sub) - 0.02, max(r["R"] for r in sub) + 0.02))
     left_bottom = Panel(62, 212, 360, 180, time_window, (min(r["V"] for r in sub) - 0.03, max(r["V"] for r in sub) + 0.03))
-    right_top = Panel(432, 32, 360, 180, xlim_phase, (min(r["P"] for r in sub) - 0.04, max(r["P"] for r in sub) + 0.04))
+    right_top = Panel(432, 32, 360, 180, xlim_phase, (min(r["H"] for r in sub) - 0.04, max(r["H"] for r in sub) + 0.04))
     right_bottom = Panel(432, 212, 360, 180, xlim_phase, (min(r["Uc"] for r in sub) - 0.03, max(r["Uc"] for r in sub) + 0.03))
     for panel, y_key, letter, label in (
         (left_top, "R", "a", "R"),
         (left_bottom, "V", "b", "V"),
-        (right_top, "P", "c", "P"),
+        (right_top, "H", "c", "H"),
         (right_bottom, "Uc", "d", "U_c"),
     ):
         draw_axes(fig, panel, _ticks(panel.xlim[0], panel.xlim[1], 5), _ticks(panel.ylim[0], panel.ylim[1], 4), show_x_labels=panel in (left_bottom, right_bottom))
