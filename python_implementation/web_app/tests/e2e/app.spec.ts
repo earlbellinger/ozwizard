@@ -46,8 +46,8 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#initialR")).toBeVisible();
   await expect(page.locator("#initialLr")).toBeVisible();
   await expect(page.locator("#initialL")).toBeVisible();
-  await expect(page.locator(".equation-label")).toContainText("Closure Relations");
-  await expect(page.locator("#closureRelations")).toHaveAttribute("data-geometry-mode", "radius-dependent");
+  await expect(page.locator(".equation-label")).toHaveCount(0);
+  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "radius-dependent");
   await expect(page.locator("#odeEquations")).toHaveAttribute("data-driver-mode", "h");
   await expect(page.getByRole("heading", { name: "Derived" })).toHaveCount(0);
   await expect(page.locator("#timeLegend")).toContainText("radius");
@@ -63,9 +63,9 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   });
   expect(hasPaint).toBe(true);
   await page.locator("#variableM").uncheck();
-  await expect(page.locator("#closureRelations")).toHaveAttribute("data-geometry-mode", "fixed");
+  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "fixed");
   await page.locator("#variableM").check();
-  await expect(page.locator("#closureRelations")).toHaveAttribute("data-geometry-mode", "radius-dependent");
+  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "radius-dependent");
   await page.locator("[data-driver='abs-v']").click();
   await expect(page.locator("#odeEquations")).toHaveAttribute("data-driver-mode", "abs-v");
   await page.locator("[data-driver='h']").click();

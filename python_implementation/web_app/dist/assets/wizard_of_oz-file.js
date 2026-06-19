@@ -304,11 +304,6 @@
   var TEX_EXTRA = {
     gammaR: "\\ozNeutral{\\gamma_r}",
     eta: "\\ozMass{\\eta}",
-    b1: "\\ozGamma{B_1}",
-    b: "\\ozRadiative{b}",
-    q: "\\ozPressure{q}",
-    c: "\\ozConvLum{c}",
-    d: "\\ozConvective{d}",
     kappa: "\\ozNeutral{\\kappa}",
     rho: "\\ozNeutral{\\rho}",
     temp: "\\ozNeutral{T}"
@@ -1101,8 +1096,8 @@
     queueMathTypeset();
   }
   function updateEquationBlocks() {
-    const geometry = state.variableM ? `\\ozMass{m}_{\\mathrm{eff}}(\\ozRadius{R}) &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}
-       \\qquad \\ozNeutral{\\eta}=\\left(1-\\frac{3}{\\ozMass{m}}\\right)^{1/3}` : `\\ozMass{m}_{\\mathrm{eff}}(\\ozRadius{R}) &= \\ozMass{m}`;
+    const geometry = state.variableM ? `\\ozMass{m}_{\\mathrm{eff}} &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}
+       \\qquad \\ozNeutral{\\eta}=\\left(1-\\frac{3}{\\ozMass{m}}\\right)^{1/3}` : `\\ozMass{m}_{\\mathrm{eff}} &= \\ozMass{m}`;
     const driver = state.driver === "abs-v" ? "\\sqrt{|\\ozVelocity{V}|}" : "\\sqrt{\\ozPressure{H}}";
     const odeNode = el("odeEquations");
     odeNode.dataset.driverMode = state.driver;
@@ -1112,12 +1107,12 @@
     \\frac{d\\ozRadius{R}}{d\\ozTau{\\tau}} &=
       \\ozVelocity{V}\\\\[0.35em]
     \\frac{d\\ozVelocity{V}}{d\\ozTau{\\tau}} &=
-      \\frac{\\ozPressure{H}}{\\ozRadius{R}^{\\ozPressure{q}(\\ozRadius{R})}}
+      \\frac{\\ozPressure{H}}{\\ozRadius{R}^{\\ozMass{m}_{\\mathrm{eff}}\\ozGamma{\\Gamma_1}-2}}
       - \\frac{1}{\\ozRadius{R}^{2}}
       - \\ozDamping{C_q}\\ozVelocity{V}^{3}\\\\[0.35em]
     \\frac{d\\ozPressure{H}}{d\\ozTau{\\tau}} &=
       \\ozZeta{\\zeta}\\,
-      \\ozRadius{R}^{\\ozMass{m}_{\\mathrm{eff}}(\\ozRadius{R})(\\ozGamma{\\Gamma_1}-1)}
+      \\ozRadius{R}^{\\ozMass{m}_{\\mathrm{eff}}(\\ozGamma{\\Gamma_1}-1)}
       \\left[
         \\ozRadius{R}^{\\ozSource{U}}
         - \\ozNeutral{\\gamma_r}\\ozRadiative{L_r}
@@ -1126,27 +1121,28 @@
     \\frac{d\\ozConvective{U_c}}{d\\ozTau{\\tau}} &=
       \\ozZetac{\\zeta_c}
       \\left[
-        \\ozRadius{R}^{-\\ozConvective{d}(\\ozRadius{R})}\\,${driver}
+        \\ozRadius{R}^{-\\ozMass{m}_{\\mathrm{eff}}(\\ozGamma{\\Gamma_1}-1)/2}\\,${driver}
         - \\ozConvective{U_c}
       \\right]
     \\end{aligned}
     \\]
   `;
-    const closureNode = el("closureRelations");
-    closureNode.dataset.geometryMode = state.variableM ? "radius-dependent" : "fixed";
-    closureNode.innerHTML = `
+    const luminosityNode = el("luminosityEquations");
+    luminosityNode.dataset.geometryMode = state.variableM ? "radius-dependent" : "fixed";
+    luminosityNode.innerHTML = `
     \\[
     \\begin{aligned}
     ${geometry}\\\\[0.35em]
-    \\ozGamma{B_1} &= (\\ozPink{s}+4)(\\ozGamma{\\Gamma_1}-1)\\\\[0.35em]
-    \\ozRadiative{b}(\\ozRadius{R}) &=
-      4+\\ozMass{m}_{\\mathrm{eff}}(\\ozRadius{R})\\left[\\ozBlue{n}-\\ozGamma{B_1}\\right]\\\\[0.35em]
-    \\ozPressure{q}(\\ozRadius{R}) &=
-      \\ozMass{m}_{\\mathrm{eff}}(\\ozRadius{R})\\ozGamma{\\Gamma_1}-2\\\\[0.35em]
-    \\ozConvLum{c}(\\ozRadius{R}) &=
-      \\ozMass{m}_{\\mathrm{eff}}(\\ozRadius{R})-2\\\\[0.35em]
-    \\ozConvective{d}(\\ozRadius{R}) &=
-      \\frac{\\ozMass{m}_{\\mathrm{eff}}(\\ozRadius{R})(\\ozGamma{\\Gamma_1}-1)}{2}
+    \\ozRadiative{L_r} &=
+      \\ozRadius{R}^{4+\\ozMass{m}_{\\mathrm{eff}}
+      \\left[\\ozBlue{n}-(\\ozPink{s}+4)(\\ozGamma{\\Gamma_1}-1)\\right]}
+      \\ozPressure{H}^{\\ozPink{s}+4}\\\\[0.35em]
+    \\ozConvLum{L_c} &=
+      \\ozRadius{R}^{-(\\ozMass{m}_{\\mathrm{eff}}-2)}
+      \\ozConvective{U_c}^{3}\\\\[0.35em]
+    \\ozLuminosity{L} &=
+      \\ozNeutral{\\gamma_r}\\ozRadiative{L_r}
+      + \\ozGammac{\\gamma_c}\\ozConvLum{L_c}
     \\end{aligned}
     \\]
   `;

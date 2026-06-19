@@ -779,15 +779,6 @@
       margin: 0.5em 0 !important;
     }
 
-    .equation-label {
-      margin: 12px 0 6px;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 750;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-
     .small-note {
       font-size: 12px;
       color: var(--muted);
@@ -1012,23 +1003,7 @@
           <div class="content-panel reference-panel equations-panel">
             <h3>Equations Solved</h3>
             <div class="equation-block" id="odeEquations"></div>
-            <div class="equation-block">
-              \[
-              \begin{aligned}
-              \ozRadiative{L_r} &=
-                \ozRadius{R}^{\ozRadiative{b}(\ozRadius{R})}
-                \ozPressure{H}^{\ozPink{s}+4}\\[0.35em]
-              \ozConvLum{L_c} &=
-                \ozRadius{R}^{-\ozConvLum{c}(\ozRadius{R})}
-                \ozConvective{U_c}^{3}\\[0.35em]
-              \ozLuminosity{L} &=
-                \ozNeutral{\gamma_r}\ozRadiative{L_r}
-                + \ozGammac{\gamma_c}\ozConvLum{L_c}\\[0.35em]
-              \end{aligned}
-              \]
-            </div>
-            <div class="equation-label">Closure Relations</div>
-            <div class="equation-block" id="closureRelations"></div>
+            <div class="equation-block" id="luminosityEquations"></div>
           </div>
 
           <div class="content-panel reference-panel">

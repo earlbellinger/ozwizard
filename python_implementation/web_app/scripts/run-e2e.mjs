@@ -85,8 +85,8 @@ async function runPlaywrightChecks() {
     assertOk(await page.getByRole("heading", { name: "Equations Solved" }).isVisible(), "equations panel was not visible");
     assertOk(await page.getByRole("heading", { name: "Variables" }).isVisible(), "variables panel was not visible");
     assertOk(await page.getByRole("heading", { name: "Parameters" }).isVisible(), "parameters panel was not visible");
-    assertOk((await page.locator(".equation-label").textContent())?.includes("Closure Relations"), "closure relations label was not visible");
-    assertOk((await page.locator("#closureRelations").getAttribute("data-geometry-mode")) === "radius-dependent", "closure geometry should start radius-dependent");
+    assertOk((await page.locator(".equation-label").count()) === 0, "closure relations label should be removed");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "radius-dependent", "luminosity equations should start radius-dependent");
     assertOk((await page.locator("#odeEquations").getAttribute("data-driver-mode")) === "h", "ODE driver should start with sqrt(H)");
     assertOk(await page.locator("#initialR").isVisible(), "initial R cell was not visible");
     assertOk(await page.locator("#initialLr").isVisible(), "computed initial Lr cell was not visible");
@@ -118,9 +118,9 @@ async function runPlaywrightChecks() {
     await radiusToggle.click();
     assertOk((await radiusToggle.getAttribute("aria-pressed")) === "true", "radius toggle did not restore the radius series");
     await page.locator("#variableM").uncheck();
-    assertOk((await page.locator("#closureRelations").getAttribute("data-geometry-mode")) === "fixed", "closure geometry did not switch back to fixed");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "fixed", "luminosity equations did not switch back to fixed geometry");
     await page.locator("#variableM").check();
-    assertOk((await page.locator("#closureRelations").getAttribute("data-geometry-mode")) === "radius-dependent", "closure geometry did not switch to radius-dependent");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "radius-dependent", "luminosity equations did not switch to radius-dependent geometry");
     await page.locator("[data-driver='abs-v']").click();
     assertOk((await page.locator("#odeEquations").getAttribute("data-driver-mode")) === "abs-v", "ODE driver did not switch to sqrt(abs(V))");
     await page.locator("[data-driver='h']").click();

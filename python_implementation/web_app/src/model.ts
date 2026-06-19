@@ -103,11 +103,6 @@ export const TEX = {
 const TEX_EXTRA = {
   gammaR: "\\ozNeutral{\\gamma_r}",
   eta: "\\ozMass{\\eta}",
-  b1: "\\ozGamma{B_1}",
-  b: "\\ozRadiative{b}",
-  q: "\\ozPressure{q}",
-  c: "\\ozConvLum{c}",
-  d: "\\ozConvective{d}",
   kappa: "\\ozNeutral{\\kappa}",
   rho: "\\ozNeutral{\\rho}",
   temp: "\\ozNeutral{T}"
