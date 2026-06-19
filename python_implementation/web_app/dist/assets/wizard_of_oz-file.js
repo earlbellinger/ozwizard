@@ -1124,25 +1124,26 @@
     const tunableTable = el("tunableParameterTable");
     const derivedTable = el("derivedParameterTable");
     const numericalTable = el("numericalParameterTable");
+    const meaning = (text) => text.trim().replace(/\.$/, "");
     const controlRows = (controls) => controls.map(([key, symbol, _name, _min, _max, _step, _defaultValue, color]) => `
       <tr>
         <td class="symbol-cell" style="--color:${color}">${symbol}</td>
-        <td>${PARAMETER_DESCRIPTIONS[key] || ""}</td>
+        <td>${meaning(PARAMETER_DESCRIPTIONS[key] || "")}</td>
       </tr>
     `).join("");
     tunableTable.innerHTML = controlRows(CONTROL_GROUPS.physical) + `
-      <tr><td class="symbol-cell" style="--color:${COLORS.H}">driver</td><td>Convective driving choice: the standard Stellingwerf pressure form is \\(\\sqrt{${TEX.H}}\\); \\(\\sqrt{|${TEX.V}|}\\) is retained as a diagnostic variant.</td></tr>
-      <tr><td class="symbol-cell" style="--color:${COLORS.m}">geometry</td><td>Switch between fixed paper-model \\(${TEX.m}\\) and radius-dependent local geometry \\(${TEX.m}_{\\mathrm{eff}}(${TEX.R})\\).</td></tr>
+      <tr><td class="symbol-cell" style="--color:${COLORS.H}">driver</td><td>${meaning(`Convective driving choice: the standard Stellingwerf pressure form is \\(\\sqrt{${TEX.H}}\\); \\(\\sqrt{|${TEX.V}|}\\) is retained as a diagnostic variant.`)}</td></tr>
+      <tr><td class="symbol-cell" style="--color:${COLORS.m}">geometry</td><td>${meaning(`Switch between fixed paper-model \\(${TEX.m}\\) and radius-dependent local geometry \\(${TEX.m}_{\\mathrm{eff}}(${TEX.R})\\).`)}</td></tr>
     `;
     derivedTable.innerHTML = DERIVED_DESCRIPTIONS.map(({ symbol, description, color }) => `
       <tr>
         <td class="symbol-cell" style="--color:${color}">${symbol}</td>
-        <td>${description}</td>
+        <td>${meaning(description)}</td>
       </tr>
     `).join("");
     numericalTable.innerHTML = controlRows(CONTROL_GROUPS.integration) + `
-      <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">solver</td><td>Numerical method: RK45 default, DOP853 reference, or historical midpoint.</td></tr>
-      <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">phase window</td><td>Reference cycles use the first valid minimum-light luminosity window; final cycles use the latest valid window.</td></tr>
+      <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">solver</td><td>${meaning("Numerical method: RK45 default, DOP853 reference, or historical midpoint.")}</td></tr>
+      <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">phase window</td><td>${meaning("Reference cycles use the first valid minimum-light luminosity window; final cycles use the latest valid window.")}</td></tr>
     `;
     queueMathTypeset();
   }
