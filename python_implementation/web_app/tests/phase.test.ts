@@ -34,12 +34,12 @@ function syntheticRows(): Row[] {
 }
 
 describe("phase folding", () => {
-  it("anchors two-cycle phase at three consecutive luminosity maxima", () => {
+  it("anchors two-cycle phase at three consecutive luminosity minima", () => {
     const phase = buildTwoCyclePhase(syntheticRows(), { warmupTau: 0, minAmplitude: 0.1, minSeparation: 0.5 });
     expect(phase.reason).toBe("ok");
     const reference = phase.reference!;
     expect(reference.period).toBeCloseTo(1, 12);
-    reference.peakRows.forEach((row, index) => {
+    reference.minimumRows.forEach((row, index) => {
       expect((row.tau - reference.startTau) / reference.period).toBeCloseTo(index, 12);
     });
     expect(phase.rows[0].tau).toBeCloseTo(0, 12);
@@ -79,8 +79,8 @@ describe("phase folding", () => {
     const rows = syntheticRows();
     const referencePhase = buildTwoCyclePhase(rows, { warmupTau: 0, minAmplitude: 0.1, minSeparation: 0.5 });
     const finalPhase = buildTwoCyclePhase(rows, { warmupTau: 0, minAmplitude: 0.1, minSeparation: 0.5, selection: "last" });
-    expect(referencePhase.reference?.startTau).toBeCloseTo(1, 12);
-    expect(finalPhase.reference?.startTau).toBeCloseTo(2, 12);
+    expect(referencePhase.reference?.startTau).toBeCloseTo(0.5, 12);
+    expect(finalPhase.reference?.startTau).toBeCloseTo(1.5, 12);
     expect(finalPhase.period).toBeCloseTo(referencePhase.period ?? 0, 12);
   });
 });

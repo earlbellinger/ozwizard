@@ -482,7 +482,7 @@ function buildParameterTable(): void {
     .join("");
   numericalTable.innerHTML = controlRows(CONTROL_GROUPS.integration) + `
       <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">solver</td><td>Numerical method: RK45 default, DOP853 reference, or historical midpoint.</td></tr>
-      <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">phase window</td><td>Reference cycles use the first valid Stellingwerf-style max-to-max luminosity window; final cycles use the latest valid window.</td></tr>
+      <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">phase window</td><td>Reference cycles use the first valid minimum-light luminosity window; final cycles use the latest valid window.</td></tr>
     `;
   queueMathTypeset();
 }
@@ -1003,8 +1003,8 @@ function phaseUnavailableLabel(phase: PhaseResult): string | undefined {
       return undefined;
     case "not_enough_rows":
       return "phase unavailable: not enough samples";
-    case "not_enough_maxima":
-      return "phase unavailable: fewer than three luminosity maxima";
+    case "not_enough_minima":
+      return "phase unavailable: fewer than three luminosity minima";
     case "amplitude_below_threshold":
       return "phase unavailable: luminosity cycles are below threshold";
     case "reference_out_of_range":
@@ -1035,8 +1035,8 @@ function timeDomain(rows: readonly Row[]): NumericRange {
   return first === last ? range([first, last], 0.02) : [first, last];
 }
 
-function paddedTimeRange(rows: readonly Row[]): NumericRange {
-  return range(rows.map((row) => row.tau), 0.02);
+function integrationTimeRange(): NumericRange {
+  return [0, Math.max(state.tEnd, Number.EPSILON)];
 }
 
 function clearStalePlotView(plotId: InteractivePlotId, rows: readonly Row[]): void {
@@ -1093,19 +1093,19 @@ function drawAll(): void {
   const phaseMessage = phaseUnavailableLabel(phase);
   drawSeries("lightCanvas", [
     { label: "L", color: COLORS.L, rows: phaseSample, x: (row) => row.tau, y: (row) => row.L }
-  ], { xlabel: "phase", ylabel: "luminosity", xlim: [0, 2], ylim: phaseSample.length ? undefined : [0, 1], message: phaseMessage });
+  ], { xlabel: "phase (minimum light = 0)", ylabel: "luminosity", xlim: [0, 2], ylim: phaseSample.length ? undefined : [0, 1], message: phaseMessage });
   drawLegend("lightLegend", [
     { label: `\\(${TEX.L}\\)`, color: COLORS.L }
   ]);
 
   drawSeries("velocityCanvas", [
     { label: "V", color: COLORS.V, rows: phaseSample, x: (row) => row.tau, y: (row) => row.V }
-  ], { xlabel: "phase", ylabel: "radial velocity", xlim: [0, 2], ylim: phaseSample.length ? undefined : [0, 1], message: phaseMessage });
+  ], { xlabel: "phase (minimum light = 0)", ylabel: "radial velocity", xlim: [0, 2], ylim: phaseSample.length ? undefined : [0, 1], message: phaseMessage });
   drawLegend("velocityLegend", [
     { label: `\\(${TEX.V}\\)`, color: COLORS.V }
   ]);
 
-  const timeXlim = paddedTimeRange(rows);
+  const timeXlim = integrationTimeRange();
   const sampledTimeRows = rowsForInteractivePlot("time", rows, ["R", "V", "H", "Uc"]);
   const sampledLumRows = rowsForInteractivePlot("lum", rows, ["L", "Lr", "Lc"]);
   drawSeries("timeCanvas", [

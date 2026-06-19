@@ -333,7 +333,7 @@
       ["uc0", `\\(${TEX.Uc}_{0}\\)`, "initial convective velocity", 0, 1.8, 0.01, 1, COLORS.Uc]
     ],
     integration: [
-      ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "maximum integration time", 0, 3, 0.01, 120, COLORS.tEnd],
+      ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "maximum integration time", 0, 3, 0.01, 100, COLORS.tEnd],
       ["step", `\\(\\Delta ${TEX.tau}_0\\)`, "initial step", 5e-4, 0.02, 5e-4, 1e-3, COLORS.step],
       ["maxStep", `\\(\\Delta ${TEX.tau}_{\\max}\\)`, "maximum adaptive step", 5e-3, 0.3, 5e-3, 0.15, COLORS.maxStep],
       ["logRtol", "\\(\\ozNeutral{\\log_{10} r_{tol}}\\)", "modern relative tolerance", -11, -5, 0.25, -8, COLORS.rtol],
@@ -460,7 +460,7 @@
     "Thick convective shell": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 1e-3, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
     "RR Lyrae fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.2 },
     "RR Lyrae low-amplitude fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.1 },
-    "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 80 },
+    "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 100 },
     "RR Lyrae first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.05 },
     "RR Lyrae first overtone, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 15, sourceExp: 2, cq: 7, r0: 1.05, tEnd: 80 },
     "RR Lyrae high-amplitude first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.1 },
@@ -629,21 +629,21 @@
   function phaseWarmupTau(rows, requested) {
     return requested !== void 0 && Number.isFinite(requested) ? requested : defaultWarmupTau(rows);
   }
-  function findLuminosityMaxima(rows, after, minSeparation = 0.75) {
-    const maxima = [];
+  function findLuminosityMinima(rows, after, minSeparation = 0.75) {
+    const minima = [];
     for (let i = 1; i < rows.length - 1; i += 1) {
       const row = rows[i];
       if (row.tau < after) continue;
-      if (rows[i - 1].L < row.L && row.L >= rows[i + 1].L) {
-        const last = maxima.at(-1);
+      if (rows[i - 1].L > row.L && row.L <= rows[i + 1].L) {
+        const last = minima.at(-1);
         if (last && row.tau - last.tau < minSeparation) {
-          if (row.L > last.L) maxima[maxima.length - 1] = row;
+          if (row.L < last.L) minima[minima.length - 1] = row;
         } else {
-          maxima.push(row);
+          minima.push(row);
         }
       }
     }
-    return maxima;
+    return minima;
   }
   function cycleAmplitude(rows, startTau, endTau) {
     let min = Infinity;
@@ -663,16 +663,16 @@
     }
     const warmupTau = phaseWarmupTau(rows, options.warmupTau);
     const minAmplitude = options.minAmplitude ?? 1e-4;
-    const maxima = findLuminosityMaxima(rows, warmupTau, options.minSeparation);
-    if (maxima.length < 3) {
-      return { rows: [], reference: null, period: null, reason: "not_enough_maxima" };
+    const minima = findLuminosityMinima(rows, warmupTau, options.minSeparation);
+    if (minima.length < 3) {
+      return { rows: [], reference: null, period: null, reason: "not_enough_minima" };
     }
-    const start = options.selection === "last" ? maxima.length - 3 : 0;
-    const end = options.selection === "last" ? -1 : maxima.length - 3;
+    const start = options.selection === "last" ? minima.length - 3 : 0;
+    const end = options.selection === "last" ? -1 : minima.length - 3;
     const direction = options.selection === "last" ? -1 : 1;
     for (let i = start; options.selection === "last" ? i > end : i <= end; i += direction) {
-      const peakRows = [maxima[i], maxima[i + 1], maxima[i + 2]];
-      const [first, second, third] = peakRows;
+      const minimumRows = [minima[i], minima[i + 1], minima[i + 2]];
+      const [first, second, third] = minimumRows;
       const firstCycleAmplitude = cycleAmplitude(rows, first.tau, second.tau);
       const secondCycleAmplitude = cycleAmplitude(rows, second.tau, third.tau);
       if (firstCycleAmplitude < minAmplitude || secondCycleAmplitude < minAmplitude) continue;
@@ -685,7 +685,7 @@
         period,
         warmupTau,
         minAmplitude,
-        peakRows
+        minimumRows
       };
       return foldRowsToReference(rows, reference);
     }
@@ -1088,7 +1088,7 @@
     `).join("");
     numericalTable.innerHTML = controlRows(CONTROL_GROUPS.integration) + `
       <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">solver</td><td>Numerical method: RK45 default, DOP853 reference, or historical midpoint.</td></tr>
-      <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">phase window</td><td>Reference cycles use the first valid Stellingwerf-style max-to-max luminosity window; final cycles use the latest valid window.</td></tr>
+      <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">phase window</td><td>Reference cycles use the first valid minimum-light luminosity window; final cycles use the latest valid window.</td></tr>
     `;
     queueMathTypeset();
   }
@@ -1512,8 +1512,8 @@
         return void 0;
       case "not_enough_rows":
         return "phase unavailable: not enough samples";
-      case "not_enough_maxima":
-        return "phase unavailable: fewer than three luminosity maxima";
+      case "not_enough_minima":
+        return "phase unavailable: fewer than three luminosity minima";
       case "amplitude_below_threshold":
         return "phase unavailable: luminosity cycles are below threshold";
       case "reference_out_of_range":
@@ -1539,8 +1539,8 @@
     const last = rows[rows.length - 1].tau;
     return first === last ? range([first, last], 0.02) : [first, last];
   }
-  function paddedTimeRange(rows) {
-    return range(rows.map((row) => row.tau), 0.02);
+  function integrationTimeRange() {
+    return [0, Math.max(state.tEnd, Number.EPSILON)];
   }
   function clearStalePlotView(plotId, rows) {
     const view = plotViews[plotId];
@@ -1590,17 +1590,17 @@
     const phaseMessage = phaseUnavailableLabel(phase);
     drawSeries("lightCanvas", [
       { label: "L", color: COLORS.L, rows: phaseSample, x: (row) => row.tau, y: (row) => row.L }
-    ], { xlabel: "phase", ylabel: "luminosity", xlim: [0, 2], ylim: phaseSample.length ? void 0 : [0, 1], message: phaseMessage });
+    ], { xlabel: "phase (minimum light = 0)", ylabel: "luminosity", xlim: [0, 2], ylim: phaseSample.length ? void 0 : [0, 1], message: phaseMessage });
     drawLegend("lightLegend", [
       { label: `\\(${TEX.L}\\)`, color: COLORS.L }
     ]);
     drawSeries("velocityCanvas", [
       { label: "V", color: COLORS.V, rows: phaseSample, x: (row) => row.tau, y: (row) => row.V }
-    ], { xlabel: "phase", ylabel: "radial velocity", xlim: [0, 2], ylim: phaseSample.length ? void 0 : [0, 1], message: phaseMessage });
+    ], { xlabel: "phase (minimum light = 0)", ylabel: "radial velocity", xlim: [0, 2], ylim: phaseSample.length ? void 0 : [0, 1], message: phaseMessage });
     drawLegend("velocityLegend", [
       { label: `\\(${TEX.V}\\)`, color: COLORS.V }
     ]);
-    const timeXlim = paddedTimeRange(rows);
+    const timeXlim = integrationTimeRange();
     const sampledTimeRows = rowsForInteractivePlot("time", rows, ["R", "V", "H", "Uc"]);
     const sampledLumRows = rowsForInteractivePlot("lum", rows, ["L", "Lr", "Lc"]);
     drawSeries("timeCanvas", [

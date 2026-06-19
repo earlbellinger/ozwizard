@@ -7,7 +7,7 @@ export interface PhaseReference {
   period: number;
   warmupTau: number;
   minAmplitude: number;
-  peakRows: [Row, Row, Row];
+  minimumRows: [Row, Row, Row];
 }
 
 export interface PhaseOptions {
@@ -22,7 +22,7 @@ export interface PhaseResult {
   rows: Row[];
   reference: PhaseReference | null;
   period: number | null;
-  reason: "ok" | "not_enough_rows" | "not_enough_maxima" | "amplitude_below_threshold" | "reference_out_of_range";
+  reason: "ok" | "not_enough_rows" | "not_enough_minima" | "amplitude_below_threshold" | "reference_out_of_range";
 }
 
 function defaultWarmupTau(rows: readonly Row[]): number {
@@ -51,6 +51,23 @@ export function findLuminosityMaxima(rows: readonly Row[], after: number, minSep
   return maxima;
 }
 
+export function findLuminosityMinima(rows: readonly Row[], after: number, minSeparation = 0.75): Row[] {
+  const minima: Row[] = [];
+  for (let i = 1; i < rows.length - 1; i += 1) {
+    const row = rows[i];
+    if (row.tau < after) continue;
+    if (rows[i - 1].L > row.L && row.L <= rows[i + 1].L) {
+      const last = minima.at(-1);
+      if (last && row.tau - last.tau < minSeparation) {
+        if (row.L < last.L) minima[minima.length - 1] = row;
+      } else {
+        minima.push(row);
+      }
+    }
+  }
+  return minima;
+}
+
 function cycleAmplitude(rows: readonly Row[], startTau: number, endTau: number): number {
   let min = Infinity;
   let max = -Infinity;
@@ -71,17 +88,17 @@ function buildReference(rows: readonly Row[], options: PhaseOptions): PhaseResul
 
   const warmupTau = phaseWarmupTau(rows, options.warmupTau);
   const minAmplitude = options.minAmplitude ?? 1e-4;
-  const maxima = findLuminosityMaxima(rows, warmupTau, options.minSeparation);
-  if (maxima.length < 3) {
-    return { rows: [], reference: null, period: null, reason: "not_enough_maxima" };
+  const minima = findLuminosityMinima(rows, warmupTau, options.minSeparation);
+  if (minima.length < 3) {
+    return { rows: [], reference: null, period: null, reason: "not_enough_minima" };
   }
 
-  const start = options.selection === "last" ? maxima.length - 3 : 0;
-  const end = options.selection === "last" ? -1 : maxima.length - 3;
+  const start = options.selection === "last" ? minima.length - 3 : 0;
+  const end = options.selection === "last" ? -1 : minima.length - 3;
   const direction = options.selection === "last" ? -1 : 1;
   for (let i = start; options.selection === "last" ? i > end : i <= end; i += direction) {
-    const peakRows = [maxima[i], maxima[i + 1], maxima[i + 2]] as [Row, Row, Row];
-    const [first, second, third] = peakRows;
+    const minimumRows = [minima[i], minima[i + 1], minima[i + 2]] as [Row, Row, Row];
+    const [first, second, third] = minimumRows;
     const firstCycleAmplitude = cycleAmplitude(rows, first.tau, second.tau);
     const secondCycleAmplitude = cycleAmplitude(rows, second.tau, third.tau);
     if (firstCycleAmplitude < minAmplitude || secondCycleAmplitude < minAmplitude) continue;
@@ -95,7 +112,7 @@ function buildReference(rows: readonly Row[], options: PhaseOptions): PhaseResul
       period,
       warmupTau,
       minAmplitude,
-      peakRows
+      minimumRows
     };
     return foldRowsToReference(rows, reference);
   }

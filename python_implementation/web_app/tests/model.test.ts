@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PRESETS, compareRows, derivatives, solveModel, solverOptionsFromParameters, type Row } from "../src/model";
+import { CONTROL_GROUPS, DEFAULT_PRESET_NAME, PRESETS, compareRows, derivatives, solveModel, solverOptionsFromParameters, type Row } from "../src/model";
 import { buildTwoCyclePhase, findLuminosityMaxima } from "../src/phase";
 import { integrate } from "../src/solvers";
 
@@ -23,6 +23,12 @@ function cycleAmplitudes(rows: readonly Row[], peaks: readonly Row[], key: "R" |
 }
 
 describe("one-zone model", () => {
+  it("uses tau max 100 for the default preset and integration slider", () => {
+    const tEndControl = CONTROL_GROUPS.integration.find(([key]) => key === "tEnd");
+    expect(PRESETS[DEFAULT_PRESET_NAME].tEnd).toBe(100);
+    expect(tEndControl?.[6]).toBe(100);
+  });
+
   it("matches the Python derivative fixture for the instability-strip initial state", () => {
     const p = PRESETS[STRIP_PRESET];
     const actual = derivatives(0, [p.r0, p.v0, p.h0, p.uc0], p);
