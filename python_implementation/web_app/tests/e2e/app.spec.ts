@@ -48,6 +48,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#initialL")).toBeVisible();
   await expect(page.locator(".equation-label")).toHaveCount(0);
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "radius-dependent");
+  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-eta-value", "0.89");
   await expect(page.locator("#odeEquations")).toHaveAttribute("data-driver-mode", "h");
   await expect(page.getByRole("heading", { name: "Derived" })).toHaveCount(0);
   await expect(page.locator("#timeLegend")).toContainText("radius");
@@ -66,6 +67,20 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "fixed");
   await page.locator("#variableM").check();
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "radius-dependent");
+  await page.locator("input[aria-label='shell form factor']").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "15";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-eta-value", "0.93");
+  await page.locator("input[aria-label='shell form factor']").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "3";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-eta-value", "0.00");
+  await page.locator("[data-reset-key='m']").click();
+  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-eta-value", "0.89");
   await page.locator("[data-driver='abs-v']").click();
   await expect(page.locator("#odeEquations")).toHaveAttribute("data-driver-mode", "abs-v");
   await page.locator("[data-driver='h']").click();

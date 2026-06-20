@@ -774,6 +774,14 @@
       color: var(--ink);
     }
 
+    .equation-block[data-math-state="pending"] {
+      color: transparent;
+    }
+
+    .equation-block[data-math-state="pending"] > * {
+      visibility: hidden;
+    }
+
     .equation-block mjx-container[jax="SVG"][display="true"] {
       text-align: left !important;
       margin: 0.5em 0 !important;
@@ -1020,7 +1028,7 @@
                 <tr><td class="symbol-cell" style="--color:var(--convective)">\(\ozConvective{U_c}\)</td><td>Convective velocity</td><td class="initial-cell" id="initialUc"></td><td>Time-dependent turbulent/convective velocity scale</td></tr>
                 <tr><td class="symbol-cell" style="--color:var(--radiative)">\(\ozRadiative{L_r}\)</td><td>Radiative luminosity</td><td class="initial-cell" id="initialLr"></td><td>Radiative luminosity-like flux leaving the shell</td></tr>
                 <tr><td class="symbol-cell" style="--color:var(--conv-lum)">\(\ozConvLum{L_c}\)</td><td>Convective luminosity</td><td class="initial-cell" id="initialLc"></td><td>Convective luminosity-like flux proportional to \(\ozConvective{U_c}^{3}\)</td></tr>
-                <tr><td class="symbol-cell" style="--color:var(--luminosity)">\(\ozLuminosity{L}\)</td><td>Total luminosity</td><td class="initial-cell" id="initialL"></td><td>Weighted sum \(\ozLuminosity{L}=\ozNeutral{\gamma_r}\ozRadiative{L_r}+\ozGammac{\gamma_c}\ozConvLum{L_c}\)</td></tr>
+                <tr><td class="symbol-cell" style="--color:var(--luminosity)">\(\ozLuminosity{L}\)</td><td>Total luminosity</td><td class="initial-cell" id="initialL"></td><td>Weighted sum \(\ozLuminosity{L}=(1-\ozGammac{\gamma_c})\ozRadiative{L_r}+\ozGammac{\gamma_c}\ozConvLum{L_c}\)</td></tr>
               </tbody>
             </table>
           </div>

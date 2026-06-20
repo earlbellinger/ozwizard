@@ -87,6 +87,7 @@ async function runPlaywrightChecks() {
     assertOk(await page.getByRole("heading", { name: "Parameters" }).isVisible(), "parameters panel was not visible");
     assertOk((await page.locator(".equation-label").count()) === 0, "closure relations label should be removed");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "radius-dependent", "luminosity equations should start radius-dependent");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.89", "eta should match the default m value");
     assertOk((await page.locator("#odeEquations").getAttribute("data-driver-mode")) === "h", "ODE driver should start with sqrt(H)");
     assertOk(await page.locator("#initialR").isVisible(), "initial R cell was not visible");
     assertOk(await page.locator("#initialLr").isVisible(), "computed initial Lr cell was not visible");
@@ -121,6 +122,20 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "fixed", "luminosity equations did not switch back to fixed geometry");
     await page.locator("#variableM").check();
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "radius-dependent", "luminosity equations did not switch to radius-dependent geometry");
+    await page.locator("input[aria-label='shell form factor']").evaluate((input) => {
+      const slider = input;
+      slider.value = "15";
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.93", "eta did not update when m changed");
+    await page.locator("input[aria-label='shell form factor']").evaluate((input) => {
+      const slider = input;
+      slider.value = "3";
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.00", "eta should keep two decimal places at the Baker limit");
+    await page.locator("[data-reset-key='m']").click();
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.89", "eta did not reset with m");
     await page.locator("[data-driver='abs-v']").click();
     assertOk((await page.locator("#odeEquations").getAttribute("data-driver-mode")) === "abs-v", "ODE driver did not switch to sqrt(abs(V))");
     await page.locator("[data-driver='h']").click();

@@ -35,6 +35,9 @@ let debounceTimer = 0;
 let mathTypesetTimer = 0;
 let mathTypesetRunning = false;
 let mathTypesetPending = false;
+let mathTypesetWholeRoot = false;
+let mathRenderVersion = 0;
+const mathTypesetTargets = new Set<HTMLElement>();
 
 const controlElements = new Map<ControlParameterKey, HTMLInputElement>();
 const TAU_TICKS = [1, 3, 10, 30, 100, 300, 1000];
@@ -99,7 +102,42 @@ function fmt(value: number, digits = 4): string {
   return Number(value).toFixed(digits).replace(/\.?0+$/, "");
 }
 
-function queueMathTypeset(): void {
+function fmtFixed(value: number, digits: number): string {
+  if (!Number.isFinite(value)) return "n/a";
+  return Number(value).toFixed(digits);
+}
+
+function markMathPending(elements: HTMLElement[]): void {
+  const version = String(++mathRenderVersion);
+  elements.forEach((element) => {
+    element.dataset.mathState = "pending";
+    element.dataset.mathVersion = version;
+  });
+}
+
+function collectPendingMath(elements: Iterable<Element>): Map<HTMLElement, string> {
+  const pending = new Map<HTMLElement, string>();
+  for (const element of elements) {
+    if (!(element instanceof HTMLElement) || element.dataset.mathState !== "pending") continue;
+    pending.set(element, element.dataset.mathVersion || "");
+  }
+  return pending;
+}
+
+function markMathReady(pending: Map<HTMLElement, string>): void {
+  pending.forEach((version, element) => {
+    if (element.dataset.mathVersion !== version) return;
+    element.dataset.mathState = "ready";
+    delete element.dataset.mathVersion;
+  });
+}
+
+function queueMathTypeset(elements?: HTMLElement[]): void {
+  if (elements?.length) {
+    elements.forEach((element) => mathTypesetTargets.add(element));
+  } else {
+    mathTypesetWholeRoot = true;
+  }
   window.clearTimeout(mathTypesetTimer);
   mathTypesetTimer = window.setTimeout(() => {
     void runMathTypeset();
@@ -113,14 +151,28 @@ async function runMathTypeset(): Promise<void> {
   }
   const root = document.querySelector<HTMLElement>(".app-shell");
   const mathJax = window.MathJax;
-  if (!root || !mathJax?.typesetPromise) return;
+  if (!root) return;
+  const elements = mathTypesetWholeRoot || mathTypesetTargets.size === 0
+    ? [root]
+    : Array.from(mathTypesetTargets);
+  const pendingElements = mathTypesetWholeRoot
+    ? collectPendingMath(root.querySelectorAll("[data-math-state='pending']"))
+    : collectPendingMath(elements);
+  mathTypesetTargets.clear();
+  mathTypesetWholeRoot = false;
+  if (!mathJax?.typesetPromise) {
+    markMathReady(pendingElements);
+    return;
+  }
   mathTypesetRunning = true;
   try {
     await mathJax.startup?.promise;
-    mathJax.typesetClear?.([root]);
-    await mathJax.typesetPromise([root]);
+    mathJax.typesetClear?.(elements);
+    await mathJax.typesetPromise(elements);
+    markMathReady(pendingElements);
   } catch (error) {
     console.warn("MathJax typeset failed", error);
+    markMathReady(pendingElements);
   } finally {
     mathTypesetRunning = false;
     if (mathTypesetPending) {
@@ -430,6 +482,7 @@ function buildSliderGroup(containerId: string, controls: ControlDef[]): void {
     input.addEventListener("input", (event) => {
       state[key] = valueFromSlider(key, Number((event.target as HTMLInputElement).value));
       updateSliderLabel(key);
+      if (key === "m") updateEquationBlocks();
       refreshActivePreset();
       scheduleSolve();
     });
@@ -482,12 +535,16 @@ function buildParameterTable(): void {
 }
 
 function updateEquationBlocks(): void {
+  const eta = Math.cbrt(Math.max(0, 1 - 3 / state.m));
+  const etaDisplay = fmtFixed(eta, 2);
   const geometry = state.variableM
     ? `\\ozMass{m}_{\\mathrm{eff}} &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}
-       \\qquad \\ozNeutral{\\eta}=\\left(1-\\frac{3}{\\ozMass{m}}\\right)^{1/3}`
+       \\qquad \\ozNeutral{\\eta}=\\left(1-\\frac{3}{\\ozMass{m}}\\right)^{1/3}=\\ozNeutral{${etaDisplay}}`
     : `\\ozMass{m}_{\\mathrm{eff}} &= \\ozMass{m}`;
   const driver = state.driver === "abs-v" ? "\\sqrt{|\\ozVelocity{V}|}" : "\\sqrt{\\ozPressure{H}}";
   const odeNode = el<HTMLDivElement>("odeEquations");
+  const luminosityNode = el<HTMLDivElement>("luminosityEquations");
+  markMathPending([odeNode, luminosityNode]);
   odeNode.dataset.driverMode = state.driver;
   odeNode.innerHTML = `
     \\[
@@ -503,8 +560,7 @@ function updateEquationBlocks(): void {
       \\ozRadius{R}^{\\ozMass{m}_{\\mathrm{eff}}(\\ozGamma{\\Gamma_1}-1)}
       \\left[
         \\ozRadius{R}^{\\ozSource{U}}
-        - \\ozNeutral{\\gamma_r}\\ozRadiative{L_r}
-        - \\ozGammac{\\gamma_c}\\ozConvLum{L_c}
+        - \\ozLuminosity{L}
       \\right]\\\\[0.35em]
     \\frac{d\\ozConvective{U_c}}{d\\ozTau{\\tau}} &=
       \\ozZetac{\\zeta_c}
@@ -515,8 +571,8 @@ function updateEquationBlocks(): void {
     \\end{aligned}
     \\]
   `;
-  const luminosityNode = el<HTMLDivElement>("luminosityEquations");
   luminosityNode.dataset.geometryMode = state.variableM ? "radius-dependent" : "fixed";
+  luminosityNode.dataset.etaValue = etaDisplay;
   luminosityNode.innerHTML = `
     \\[
     \\begin{aligned}
@@ -529,12 +585,12 @@ function updateEquationBlocks(): void {
       \\ozRadius{R}^{-(\\ozMass{m}_{\\mathrm{eff}}-2)}
       \\ozConvective{U_c}^{3}\\\\[0.35em]
     \\ozLuminosity{L} &=
-      \\ozNeutral{\\gamma_r}\\ozRadiative{L_r}
+      (1-\\ozGammac{\\gamma_c})\\ozRadiative{L_r}
       + \\ozGammac{\\gamma_c}\\ozConvLum{L_c}
     \\end{aligned}
     \\]
   `;
-  queueMathTypeset();
+  queueMathTypeset([odeNode, luminosityNode]);
 }
 
 function updateVariableInitials(): void {
@@ -571,6 +627,7 @@ function updateAllSliderLabels(): void {
 function restoreParameterDefault(key: ControlParameterKey): void {
   state[key] = PRESETS[selectedPreset][key];
   updateSliderLabel(key);
+  if (key === "m") updateEquationBlocks();
   refreshActivePreset();
   scheduleSolve();
 }
@@ -1219,7 +1276,7 @@ function downloadCsv(): void {
 function startApp(): void {
   buildControls();
   solveAndDraw();
-  window.addEventListener("load", queueMathTypeset);
+  window.addEventListener("load", () => queueMathTypeset());
 }
 
 if (document.readyState === "loading") {
