@@ -258,26 +258,26 @@
 
   // src/model.ts
   var COLORS = {
-    tau: "#9EA7FF",
-    R: "#7FA7FF",
-    V: "#FF6F91",
-    H: "#65D68A",
-    Uc: "#F0BD3D",
-    L: "#C084FC",
-    Lr: "#FFD166",
-    Lc: "#55D6D2",
-    zeta: "#A78BFA",
+    tau: "#8B949E",
+    R: "#58A6FF",
+    V: "#E69F00",
+    H: "#CC79A7",
+    Uc: "#A371F7",
+    L: "#FF7B72",
+    Lr: "#79C0FF",
+    Lc: "#39C5CF",
+    zeta: "#B392F0",
     zetac: "#FF7EB6",
-    gammac: "#39D4B8",
+    gammac: "#7EE787",
     m: "#9AA8BD",
-    gamma1: "#B994FF",
-    n: "#72B7FF",
-    s: "#F778BA",
-    sourceExp: "#D99A50",
-    cq: "#8994A6",
-    tEnd: "#9EA7FF",
-    step: "#9EA7FF",
-    maxStep: "#9EA7FF",
+    gamma1: "#C297FF",
+    n: "#79C0FF",
+    s: "#FF9BCE",
+    sourceExp: "#D18616",
+    cq: "#8B949E",
+    tEnd: "#8B949E",
+    step: "#8B949E",
+    maxStep: "#8B949E",
     rtol: "#C0CAE8",
     atol: "#C0CAE8",
     errTol: "#C0CAE8"
@@ -340,7 +340,7 @@
   var PARAMETER_DESCRIPTIONS = {
     zeta: `Ratio of the model free-fall/dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\).`,
     zetac: `Ratio of the model free-fall/dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\).`,
-    gammac: `Equilibrium convective luminosity fraction \\(${TEX.gammac}=${TEX.Lc}_{0}/${TEX.L}_{0}\\); the radiative weight is \\(${TEX_EXTRA.gammaR}=1-${TEX.gammac}\\).`,
+    gammac: `Equilibrium convective luminosity fraction \\(${TEX.gammac}=${TEX.Lc}_{0}/${TEX.L}_{0}\\).`,
     m: `User-tunable reference shell form factor that sets \\(${TEX_EXTRA.eta}\\), the shell's inner boundary radius as a fraction of the reference outer radius. Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\).`,
     gamma1: `First adiabatic exponent used in the \\(${TEX.H}\\) response.`,
     n: `Density exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
@@ -2093,8 +2093,8 @@
       </tr>
     `).join("");
     tunableTable.innerHTML = controlRows(CONTROL_GROUPS.physical) + `
-      <tr><td class="symbol-cell" style="--color:${COLORS.H}">driver</td><td>${meaning(`Convective driving choice: the standard Stellingwerf pressure form is \\(\\sqrt{${TEX.H}}\\); \\(\\sqrt{|${TEX.V}|}\\) is retained as a diagnostic variant.`)}</td></tr>
       <tr><td class="symbol-cell" style="--color:${COLORS.m}">geometry</td><td>${meaning(`Switch between fixed geometry \\(\\ozChi{\\chi}=${TEX.m}\\) and radius-dependent local geometry \\(\\ozChi{\\chi}(${TEX.R})\\).`)}</td></tr>
+      <tr><td class="symbol-cell" style="--color:${COLORS.H}">driver</td><td>${meaning(`Convective driving choice: the standard Stellingwerf pressure form is \\(\\sqrt{${TEX.H}}\\); \\(\\sqrt{|${TEX.V}|}\\) is retained as a diagnostic variant.`)}</td></tr>
     `;
     numericalTable.innerHTML = controlRows(CONTROL_GROUPS.integration) + `
       <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">solver</td><td>${meaning("Numerical method: RK45 default, DOP853 reference, or historical midpoint.")}</td></tr>

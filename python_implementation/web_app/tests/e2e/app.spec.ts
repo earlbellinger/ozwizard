@@ -404,7 +404,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(tauRow).toContainText("Time");
   await expect(tauRow).toContainText("free-fall/dynamical time");
   await expect(tauRow).not.toContainText("derivatives such as");
-  await expect(tauCell).toHaveCSS("color", "rgb(158, 167, 255)");
+  await expect(tauCell).toHaveCSS("color", "rgb(139, 148, 158)");
   await expect(page.locator("#initialR")).toBeVisible();
   await expect(page.locator("#initialLr")).toBeVisible();
   await expect(page.locator("#initialL")).toBeVisible();

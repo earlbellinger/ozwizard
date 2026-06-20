@@ -239,7 +239,7 @@ async function runPlaywrightChecks() {
     assertOk(tauRowText?.includes("free-fall/dynamical time"), "tau row should describe the dynamical time scaling");
     assertOk(!tauRowText?.includes("derivatives such as"), "tau row should not include the old derivative explanation");
     const tauColor = await page.locator("[data-symbol='tau']").first().evaluate((node) => getComputedStyle(node).color);
-    assertOk(tauColor === "rgb(158, 167, 255)", `unexpected tau color: ${tauColor}`);
+    assertOk(tauColor === "rgb(139, 148, 158)", `unexpected tau color: ${tauColor}`);
     assertOk(await page.getByRole("heading", { name: "Equations Solved" }).isVisible(), "equations panel was not visible");
     assertOk(await page.getByRole("heading", { name: "Variables" }).isVisible(), "variables panel was not visible");
     assertOk(await page.getByRole("heading", { name: "Parameters" }).isVisible(), "parameters panel was not visible");
