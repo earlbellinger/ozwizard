@@ -753,6 +753,7 @@
     lum: { L: true, Lr: true, Lc: true }
   };
   var plotRenderStates = /* @__PURE__ */ new Map();
+  var legendSignatures = /* @__PURE__ */ new Map();
   var activeSelection = null;
   var DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
   function fmt(value, digits = 4) {
@@ -1595,6 +1596,15 @@
   }
   function drawLegend(id, items, options = {}) {
     const node = el(id);
+    const signature = JSON.stringify({
+      plotId: options.plotId || "",
+      items: items.map(({ label, color, key, toggleLabel }) => ({ label, color, key: key || "", toggleLabel: toggleLabel || "" }))
+    });
+    if (legendSignatures.get(id) === signature) {
+      updateLegendToggleState(node, options.plotId);
+      return;
+    }
+    legendSignatures.set(id, signature);
     node.innerHTML = items.map((item) => {
       if (!options.plotId || !item.key) {
         return `<span class="legend-item"><span class="swatch" style="--color:${item.color}"></span>${item.label}</span>`;
@@ -1613,11 +1623,22 @@
           const key = button.dataset.plotSeries;
           if (!key) return;
           plotVisibility[options.plotId][key] = !seriesIsVisible(options.plotId, key);
+          updateLegendToggleState(node, options.plotId);
           drawAll();
         });
       });
     }
-    queueMathTypeset();
+    queueMathTypeset([node]);
+  }
+  function updateLegendToggleState(node, plotId) {
+    if (!plotId) return;
+    node.querySelectorAll("[data-plot-series]").forEach((button) => {
+      const key = button.dataset.plotSeries;
+      if (!key) return;
+      const visible = seriesIsVisible(plotId, key);
+      button.classList.toggle("is-hidden", !visible);
+      button.setAttribute("aria-pressed", String(visible));
+    });
   }
   function seriesIsVisible(plotId, key) {
     return plotVisibility[plotId][key] !== false;
@@ -1660,12 +1681,6 @@
         return "phase unavailable: comparison does not cover the reference window";
     }
   }
-  function referenceFamilyLabel(value) {
-    return value.replaceAll("-", " ");
-  }
-  function phaseModeLabel(value) {
-    return value === "final" ? "final cycles" : "reference cycles";
-  }
   function phaseForRows(rows) {
     return buildTwoCyclePhase(rows, {
       warmupTau: state.phaseWarmupTau,
@@ -1705,26 +1720,20 @@
     statusPill.className = `status-pill ${okStatus ? "status-ok" : "status-warn"}`;
     const final = rows[rows.length - 1];
     const phase = phaseForRows(rows);
-    el("metrics").innerHTML = [
-      ["solver", state.solver.toUpperCase()],
-      ["stop reason", stopReason],
-      ["reference", referenceFamilyLabel(state.referenceFamily)],
-      ["phase mode", phaseModeLabel(state.phaseMode)],
-      ["driver", state.driver === "h" ? `\\(\\sqrt{${TEX.H}}\\)` : `\\(\\sqrt{|${TEX.V}|}\\)`],
-      [`\\(${TEX.gammac}\\)`, fmt(state.gammac, 3)],
-      [`\\(${TEX.zeta}\\)`, fmt(state.zeta, 3)],
-      [`\\(${TEX.zetac}\\)`, fmt(state.zetac, 3)],
+    const metricsNode = el("metrics");
+    const metricsHtml = [
       [`final \\(${TEX.tau}\\)`, final ? fmt(final.tau || 0, 4) : "n/a"],
-      [`\\(${TEX.tau}_{max}\\)`, fmt(state.tEnd, 4)],
-      ["rows", rows.length],
+      ["models", rows.length],
       ["accepted", latestResult.stats.acceptedSteps],
       ["rejected", latestResult.stats.rejectedSteps],
       ["max err", fmt(latestResult.stats.maxNormalizedError, 3)],
       ["period", phase.period ? fmt(phase.period, 3) : "n/a"],
-      ["phase", phase.reason === "ok" ? phaseModeLabel(state.phaseMode) : "unavailable"],
+      ["phase", phase.reason === "ok" ? "available" : "unavailable"],
       [`final \\(${TEX.R}\\)`, final ? fmt(final.R, 3) : "n/a"],
       [`final \\(${TEX.L}\\)`, final ? fmt(final.L, 3) : "n/a"]
     ].map(([label, value]) => `<span class="metric">${label}<b>${value}</b></span>`).join("");
+    stageMathHtml(metricsNode, metricsHtml);
+    queueMathTypeset([metricsNode]);
     el("modelSubtitle").textContent = "";
     const phaseSample = phase.rows.length ? downsample(phase.rows, 1800, ["L", "V"]) : [];
     const phaseMessage = phaseUnavailableLabel(phase);
@@ -1783,7 +1792,6 @@
       { key: "Lr", label: `\\(${TEX.Lr}\\) radiative`, color: COLORS.Lr, toggleLabel: "radiative luminosity" },
       { key: "Lc", label: `\\(${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
     ], { plotId: "lum" });
-    queueMathTypeset();
   }
   function downloadCsv() {
     if (!latestRows.length) return;

@@ -76,7 +76,13 @@ async function runPlaywrightChecks() {
     assertOk(new Set(solverRows).size === 1, "solver buttons should fit on one row");
     assertOk((await page.getByLabel("Compare selected solver to midpoint").count()) === 0, "midpoint comparison checkbox should be removed");
     assertOk((await page.locator("#statusPill").textContent())?.includes("stop:"), "status pill did not update");
-    assertOk((await page.locator("#metrics").textContent())?.includes("stop reason"), "metrics did not render");
+    await page.waitForFunction(() => document.querySelector("#metrics")?.textContent?.includes("models"), null, { timeout: 15000 });
+    const initialMetrics = await page.locator("#metrics").textContent();
+    assertOk(initialMetrics?.includes("models"), "metrics did not render");
+    assertOk(!initialMetrics?.includes("stop reason"), "metrics should not duplicate the status pill");
+    assertOk(!initialMetrics?.includes("reference"), "metrics should not duplicate reference metadata");
+    assertOk(!initialMetrics?.includes("driver"), "metrics should not duplicate driver controls");
+    assertOk(!initialMetrics?.includes("solver"), "metrics should not duplicate solver controls");
     await page.waitForFunction(() => !document.body.innerText.includes("\\("), null, { timeout: 15000 });
 
     assertOk(await page.locator("[data-symbol='tau']").first().isVisible(), "tau symbol was not visible");
@@ -122,12 +128,15 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "fixed", "luminosity equations did not switch back to fixed geometry");
     await page.locator("#variableM").check();
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "radius-dependent", "luminosity equations did not switch to radius-dependent geometry");
+    const timeLegendHtmlBeforeMSlider = await page.locator("#timeLegend").innerHTML();
     await page.locator("input[aria-label='shell form factor']").evaluate((input) => {
       const slider = input;
       slider.value = "15";
       slider.dispatchEvent(new Event("input", { bubbles: true }));
     });
     assertOk(await page.locator("#luminosityEquations mjx-container").count() > 0, "rendered equations should remain visible while m changes");
+    assertOk(await page.locator("#metrics mjx-container").count() > 0, "rendered output metrics should remain visible while m changes");
+    assertOk((await page.locator("#timeLegend").innerHTML()) === timeLegendHtmlBeforeMSlider, "plot legend should not be rebuilt while m changes");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.93", "eta did not update when m changed");
     await page.locator("input[aria-label='shell form factor']").evaluate((input) => {
       const slider = input;

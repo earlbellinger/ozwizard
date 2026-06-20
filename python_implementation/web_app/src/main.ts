@@ -8,7 +8,6 @@ import {
   type ControlParameterKey,
   type ControlDef,
   type ModelParameters,
-  type PhaseMode,
   type Row,
   sample,
   solveModel
@@ -99,6 +98,7 @@ const plotVisibility: Record<InteractivePlotId, Record<string, boolean>> = {
 };
 
 const plotRenderStates = new Map<string, PlotRenderState>();
+const legendSignatures = new Map<string, string>();
 let activeSelection: PlotSelection | null = null;
 const DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
 
@@ -1092,6 +1092,15 @@ interface LegendItem {
 
 function drawLegend(id: string, items: LegendItem[], options: { plotId?: InteractivePlotId } = {}): void {
   const node = el<HTMLDivElement>(id);
+  const signature = JSON.stringify({
+    plotId: options.plotId || "",
+    items: items.map(({ label, color, key, toggleLabel }) => ({ label, color, key: key || "", toggleLabel: toggleLabel || "" }))
+  });
+  if (legendSignatures.get(id) === signature) {
+    updateLegendToggleState(node, options.plotId);
+    return;
+  }
+  legendSignatures.set(id, signature);
   node.innerHTML = items
     .map((item) => {
       if (!options.plotId || !item.key) {
@@ -1112,11 +1121,23 @@ function drawLegend(id: string, items: LegendItem[], options: { plotId?: Interac
         const key = button.dataset.plotSeries as ToggleSeriesKey | undefined;
         if (!key) return;
         plotVisibility[options.plotId!][key] = !seriesIsVisible(options.plotId!, key);
+        updateLegendToggleState(node, options.plotId);
         drawAll();
       });
     });
   }
-  queueMathTypeset();
+  queueMathTypeset([node]);
+}
+
+function updateLegendToggleState(node: HTMLElement, plotId?: InteractivePlotId): void {
+  if (!plotId) return;
+  node.querySelectorAll<HTMLButtonElement>("[data-plot-series]").forEach((button) => {
+    const key = button.dataset.plotSeries as ToggleSeriesKey | undefined;
+    if (!key) return;
+    const visible = seriesIsVisible(plotId, key);
+    button.classList.toggle("is-hidden", !visible);
+    button.setAttribute("aria-pressed", String(visible));
+  });
 }
 
 function seriesIsVisible(plotId: InteractivePlotId, key: ToggleSeriesKey): boolean {
@@ -1161,14 +1182,6 @@ function phaseUnavailableLabel(phase: PhaseResult): string | undefined {
     case "reference_out_of_range":
       return "phase unavailable: comparison does not cover the reference window";
   }
-}
-
-function referenceFamilyLabel(value: ModelParameters["referenceFamily"]): string {
-  return value.replaceAll("-", " ");
-}
-
-function phaseModeLabel(value: PhaseMode): string {
-  return value === "final" ? "final cycles" : "reference cycles";
 }
 
 function phaseForRows(rows: Row[]): PhaseResult {
@@ -1217,26 +1230,20 @@ function drawAll(): void {
   statusPill.className = `status-pill ${okStatus ? "status-ok" : "status-warn"}`;
   const final = rows[rows.length - 1];
   const phase = phaseForRows(rows);
-  el<HTMLDivElement>("metrics").innerHTML = [
-    ["solver", state.solver.toUpperCase()],
-    ["stop reason", stopReason],
-    ["reference", referenceFamilyLabel(state.referenceFamily)],
-    ["phase mode", phaseModeLabel(state.phaseMode)],
-    ["driver", state.driver === "h" ? `\\(\\sqrt{${TEX.H}}\\)` : `\\(\\sqrt{|${TEX.V}|}\\)`],
-    [`\\(${TEX.gammac}\\)`, fmt(state.gammac, 3)],
-    [`\\(${TEX.zeta}\\)`, fmt(state.zeta, 3)],
-    [`\\(${TEX.zetac}\\)`, fmt(state.zetac, 3)],
+  const metricsNode = el<HTMLDivElement>("metrics");
+  const metricsHtml = [
     [`final \\(${TEX.tau}\\)`, final ? fmt(final.tau || 0, 4) : "n/a"],
-    [`\\(${TEX.tau}_{max}\\)`, fmt(state.tEnd, 4)],
-    ["rows", rows.length],
+    ["models", rows.length],
     ["accepted", latestResult.stats.acceptedSteps],
     ["rejected", latestResult.stats.rejectedSteps],
     ["max err", fmt(latestResult.stats.maxNormalizedError, 3)],
     ["period", phase.period ? fmt(phase.period, 3) : "n/a"],
-    ["phase", phase.reason === "ok" ? phaseModeLabel(state.phaseMode) : "unavailable"],
+    ["phase", phase.reason === "ok" ? "available" : "unavailable"],
     [`final \\(${TEX.R}\\)`, final ? fmt(final.R, 3) : "n/a"],
     [`final \\(${TEX.L}\\)`, final ? fmt(final.L, 3) : "n/a"]
   ].map(([label, value]) => `<span class="metric">${label}<b>${value}</b></span>`).join("");
+  stageMathHtml(metricsNode, metricsHtml);
+  queueMathTypeset([metricsNode]);
 
   el<HTMLParagraphElement>("modelSubtitle").textContent = "";
 
@@ -1300,7 +1307,6 @@ function drawAll(): void {
     { key: "Lr", label: `\\(${TEX.Lr}\\) radiative`, color: COLORS.Lr, toggleLabel: "radiative luminosity" },
     { key: "Lc", label: `\\(${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
   ], { plotId: "lum" });
-  queueMathTypeset();
 }
 
 function downloadCsv(): void {

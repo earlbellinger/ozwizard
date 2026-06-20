@@ -33,7 +33,11 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(physicalControlsBox!.y).toBeLessThan(geometryBox!.y);
   expect(geometryBox!.y).toBeLessThan(driverBox!.y);
   await expect(page.locator("#statusPill")).toContainText("stop:");
-  await expect(page.locator("#metrics")).toContainText("stop reason");
+  await expect(page.locator("#metrics")).toContainText("models");
+  await expect(page.locator("#metrics")).not.toContainText("stop reason");
+  await expect(page.locator("#metrics")).not.toContainText("reference");
+  await expect(page.locator("#metrics")).not.toContainText("driver");
+  await expect(page.locator("#metrics")).not.toContainText("solver");
   await expect.poll(async () => (await page.locator("body").innerText()).includes("\\(")).toBe(false);
 
   const canvases = page.locator("canvas");
@@ -67,12 +71,15 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "fixed");
   await page.locator("#variableM").check();
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "radius-dependent");
+  const timeLegendHtmlBeforeMSlider = await page.locator("#timeLegend").innerHTML();
   await page.locator("input[aria-label='shell form factor']").evaluate((input) => {
     const slider = input as HTMLInputElement;
     slider.value = "15";
     slider.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await expect(page.locator("#luminosityEquations mjx-container")).not.toHaveCount(0);
+  await expect(page.locator("#metrics mjx-container")).not.toHaveCount(0);
+  expect(await page.locator("#timeLegend").innerHTML()).toBe(timeLegendHtmlBeforeMSlider);
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-eta-value", "0.93");
   await page.locator("input[aria-label='shell form factor']").evaluate((input) => {
     const slider = input as HTMLInputElement;
@@ -98,7 +105,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#metrics")).toContainText("1.00e+3", { timeout: 15000 });
   await page.getByRole("button", { name: "Final cycles" }).click();
   await expect(page.getByRole("button", { name: "Final cycles" })).toHaveClass(/active/);
-  await expect(page.locator("#metrics")).toContainText("final cycles");
+  await expect(page.locator("#metrics")).not.toContainText("final cycles");
   await expect(page.locator("#metrics")).not.toContainText("unavailable");
 
   const downloadPromise = page.waitForEvent("download");
