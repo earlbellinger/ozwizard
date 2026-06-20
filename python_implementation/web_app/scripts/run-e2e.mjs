@@ -178,6 +178,7 @@ async function runPlaywrightChecks() {
     assertOk(await page.getByRole("heading", { name: "Parameters" }).isVisible(), "parameters panel was not visible");
     assertOk((await page.locator(".equation-label").count()) === 0, "closure relations label should be removed");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "radius-dependent", "luminosity equations should start radius-dependent");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-layout")) === "inline", "geometry equation should start inline on desktop");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.89", "eta should match the default m value");
     assertOk((await page.locator("#odeEquations").getAttribute("data-driver-mode")) === "h", "ODE driver should start with sqrt(H)");
     assertOk(await page.locator("#initialR").isVisible(), "initial R cell was not visible");
@@ -328,6 +329,7 @@ async function runPlaywrightChecks() {
     console.log("download passed");
 
     await page.setViewportSize({ width: 760, height: 900 });
+    await page.waitForFunction(() => document.querySelector("#luminosityEquations")?.getAttribute("data-geometry-layout") === "stacked");
     assertOk(!(await page.locator("#sidebarControls").evaluate((node) => node.open)), "sidebar controls should collapse below the half-width threshold");
     await page.locator("#sidebarControls > summary").click();
     assertOk(await page.locator("#physicalControls").isVisible(), "collapsed sidebar controls did not reopen");

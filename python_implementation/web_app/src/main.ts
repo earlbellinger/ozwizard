@@ -187,6 +187,7 @@ const INTERACTIVE_CANVASES: Record<string, InteractivePlotId> = {
   lumCanvas: "lum"
 };
 
+const EQUATION_STACK_QUERY = "(max-width: 760px)";
 const SIDEBAR_COLLAPSE_QUERY = "(max-width: 780px)";
 
 const plotViews: Record<InteractivePlotId, PlotView> = {
@@ -202,6 +203,7 @@ const plotVisibility: Record<InteractivePlotId, Record<string, boolean>> = {
 const plotRenderStates = new Map<string, PlotRenderState>();
 const legendSignatures = new Map<string, string>();
 let activeSelection: PlotSelection | null = null;
+let geometryEquationStacked = false;
 const DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
 const PLOT_LAYOUT = {
   left: 84,
@@ -702,13 +704,13 @@ function drawAdsrVisualization(): void {
   ctx.fill();
 }
 
-async function toggleSonification(): Promise<void> {
+function toggleSonification(): void {
   if (pianoModeActive) return;
   if (sonificationActive) {
     stopSonification();
     return;
   }
-  await startSonification();
+  startSonification();
 }
 
 function ensureAudioContext(): AudioContext | null {
@@ -719,10 +721,29 @@ function ensureAudioContext(): AudioContext | null {
   return sonificationContext;
 }
 
-async function startSonification(): Promise<void> {
+function resumeAudioContext(context: AudioContext): void {
+  if (context.state === "closed") return;
+  void context.resume().catch(() => undefined);
+}
+
+function unlockAudioContext(context: AudioContext): void {
+  if (context.state === "closed") return;
+  try {
+    const source = context.createBufferSource();
+    source.buffer = context.createBuffer(1, 1, Math.max(1, context.sampleRate || 44100));
+    source.connect(context.destination);
+    source.addEventListener("ended", () => source.disconnect(), { once: true });
+    source.start();
+    source.stop(context.currentTime + 0.001);
+  } catch {
+    // Some WebKit builds are fussy about unlock sources; the calling voice still starts synchronously.
+  }
+}
+
+function startSonification(): void {
   const context = ensureAudioContext();
   if (!context) return;
-  await context.resume();
+  unlockAudioContext(context);
   if (sonificationStopTimer) {
     window.clearTimeout(sonificationStopTimer);
     sonificationStopTimer = 0;
@@ -737,6 +758,7 @@ async function startSonification(): Promise<void> {
   sonificationVoice = createSonificationVoice(context, masterGain, 1);
   sonificationActive = true;
   updateSonificationToggleUi();
+  resumeAudioContext(context);
 }
 
 function stopSonification(): void {
@@ -845,12 +867,12 @@ function ensurePianoMasterGain(context: AudioContext): GainNode {
   return pianoMasterGain;
 }
 
-async function startPianoNote(sourceId: string, midi: number): Promise<void> {
+function startPianoNote(sourceId: string, midi: number): void {
   if (!pianoModeActive || activePianoVoices.has(sourceId)) return;
   const note = clamp(Math.round(midi), PIANO_MIN_NOTE, PIANO_MAX_NOTE);
   const context = ensureAudioContext();
   if (!context) return;
-  await context.resume();
+  unlockAudioContext(context);
   const output = ensurePianoMasterGain(context);
   const oscillator = context.createOscillator();
   const gain = context.createGain();
@@ -881,6 +903,7 @@ async function startPianoNote(sourceId: string, midi: number): Promise<void> {
   activePianoMidiCounts.set(note, (activePianoMidiCounts.get(note) || 0) + 1);
   updatePianoKeyState(note);
   oscillator.start(now);
+  resumeAudioContext(context);
 }
 
 function releasePianoNote(sourceId: string): void {
@@ -1102,6 +1125,7 @@ function buildControls(): void {
   setupInteractivePlots();
   window.addEventListener("resize", drawAll);
   window.addEventListener("resize", drawAdsrVisualization);
+  window.addEventListener("resize", syncEquationLayoutForViewport);
   updateDriverButtons();
   updatePhaseModeButtons();
   updatePhaseAnchorButtons();
@@ -1459,12 +1483,26 @@ function buildParameterTable(): void {
   queueMathTypeset();
 }
 
+function shouldStackGeometryEquation(): boolean {
+  return window.matchMedia(EQUATION_STACK_QUERY).matches;
+}
+
+function syncEquationLayoutForViewport(): void {
+  const nextStacked = shouldStackGeometryEquation();
+  if (nextStacked !== geometryEquationStacked) updateEquationBlocks();
+}
+
 function updateEquationBlocks(): void {
   const eta = Math.cbrt(Math.max(0, 1 - 3 / state.m));
   const etaDisplay = fmtFixed(eta, 2);
+  const stackGeometry = shouldStackGeometryEquation();
+  const etaDefinition = `\\ozNeutral{\\eta}=\\left(1-\\frac{3}{\\ozMass{m}}\\right)^{1/3}=\\ozNeutral{${etaDisplay}}`;
   const geometry = state.variableM
-    ? `\\ozMass{m}_{\\mathrm{eff}} &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}
-       \\qquad \\ozNeutral{\\eta}=\\left(1-\\frac{3}{\\ozMass{m}}\\right)^{1/3}=\\ozNeutral{${etaDisplay}}`
+    ? stackGeometry
+      ? `\\ozMass{m}_{\\mathrm{eff}} &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}\\\\[0.2em]
+       \\ozNeutral{\\eta} &= \\left(1-\\frac{3}{\\ozMass{m}}\\right)^{1/3}=\\ozNeutral{${etaDisplay}}`
+      : `\\ozMass{m}_{\\mathrm{eff}} &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}
+       \\qquad ${etaDefinition}`
     : `\\ozMass{m}_{\\mathrm{eff}} &= \\ozMass{m}`;
   const driver = state.driver === "abs-v" ? "\\sqrt{|\\ozVelocity{V}|}" : "\\sqrt{\\ozPressure{H}}";
   const odeNode = el<HTMLDivElement>("odeEquations");
@@ -1496,6 +1534,8 @@ function updateEquationBlocks(): void {
     \\]
   `;
   luminosityNode.dataset.geometryMode = state.variableM ? "radius-dependent" : "fixed";
+  geometryEquationStacked = stackGeometry;
+  luminosityNode.dataset.geometryLayout = stackGeometry ? "stacked" : "inline";
   luminosityNode.dataset.etaValue = etaDisplay;
   const luminosityHtml = `
     \\[

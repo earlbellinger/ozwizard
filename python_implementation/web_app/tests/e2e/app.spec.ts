@@ -18,6 +18,157 @@ async function referencePanelMetrics(page: Page) {
   });
 }
 
+async function installPendingResumeAudioContext(page: Page): Promise<void> {
+  await page.addInitScript({
+    content: `
+      (() => {
+        const events = [];
+        window.__audioEvents = events;
+
+        class FakeAudioParam {
+          constructor() {
+            this.value = 0;
+          }
+
+          setValueAtTime(value) {
+            this.value = value;
+          }
+
+          linearRampToValueAtTime(value) {
+            this.value = value;
+          }
+
+          setTargetAtTime(value) {
+            this.value = value;
+          }
+
+          cancelScheduledValues() {}
+        }
+
+        class FakeAudioNode {
+          connect() {
+            return this;
+          }
+
+          disconnect() {}
+
+          addEventListener(type, callback) {
+            if (type === "ended") this.ended = callback;
+          }
+
+          end() {
+            if (!this.ended) return;
+            const callback = this.ended;
+            this.ended = null;
+            callback();
+          }
+        }
+
+        class FakeGainNode extends FakeAudioNode {
+          constructor() {
+            super();
+            this.gain = new FakeAudioParam();
+          }
+        }
+
+        class FakeOscillatorNode extends FakeAudioNode {
+          constructor() {
+            super();
+            this.frequency = new FakeAudioParam();
+          }
+
+          setPeriodicWave() {
+            events.push("oscillator:wave");
+          }
+
+          start() {
+            events.push("oscillator:start");
+          }
+
+          stop() {
+            events.push("oscillator:stop");
+            this.end();
+          }
+        }
+
+        class FakeBufferSourceNode extends FakeAudioNode {
+          start() {
+            events.push("buffer:start");
+          }
+
+          stop() {
+            events.push("buffer:stop");
+            this.end();
+          }
+        }
+
+        class FakeAudioContext {
+          constructor() {
+            this.currentTime = 0;
+            this.sampleRate = 44100;
+            this.state = "suspended";
+            this.destination = new FakeAudioNode();
+          }
+
+          resume() {
+            events.push("context:resume");
+            return new Promise(() => {});
+          }
+
+          createBuffer() {
+            return {};
+          }
+
+          createBufferSource() {
+            return new FakeBufferSourceNode();
+          }
+
+          createGain() {
+            return new FakeGainNode();
+          }
+
+          createOscillator() {
+            return new FakeOscillatorNode();
+          }
+
+          createPeriodicWave() {
+            return {};
+          }
+        }
+
+        Object.defineProperty(window, "AudioContext", { configurable: true, value: FakeAudioContext });
+        Object.defineProperty(window, "webkitAudioContext", { configurable: true, value: FakeAudioContext });
+      })();
+    `
+  });
+}
+
+async function audioEvents(page: Page): Promise<string[]> {
+  return page.evaluate(() => (window as typeof window & { __audioEvents: string[] }).__audioEvents || []);
+}
+
+test("audio voices start from the tap even when mobile WebKit keeps resume pending", async ({ page }) => {
+  await installPendingResumeAudioContext(page);
+  await page.goto("/wizard_of_oz.html");
+  const sonificationToggle = page.locator("#sonificationToggle");
+  await sonificationToggle.click();
+  await expect(sonificationToggle).toHaveAttribute("aria-pressed", "true");
+
+  const continuousEvents = await audioEvents(page);
+  expect(continuousEvents).toContain("buffer:start");
+  expect(continuousEvents).toContain("oscillator:start");
+  expect(continuousEvents.indexOf("oscillator:start")).toBeLessThan(continuousEvents.indexOf("context:resume"));
+
+  await sonificationToggle.click();
+  await page.locator("#pianoToggle").click();
+  await expect(page.locator("#pianoPanel")).toBeVisible();
+  const startsBeforePiano = (await audioEvents(page)).filter((eventName) => eventName === "oscillator:start").length;
+  await page.locator(".piano-key[data-midi='48']").click();
+  const pianoEvents = await audioEvents(page);
+  const startsAfterPiano = pianoEvents.filter((eventName) => eventName === "oscillator:start").length;
+  expect(startsAfterPiano).toBeGreaterThan(startsBeforePiano);
+});
+
 test("app renders solver controls, canvases, and output metrics", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -190,6 +341,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("[data-value-for='tEnd']")).toHaveText("100");
   await expect(page.locator(".equation-label")).toHaveCount(0);
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "radius-dependent");
+  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-layout", "inline");
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-eta-value", "0.89");
   await expect(page.locator("#odeEquations")).toHaveAttribute("data-driver-mode", "h");
   await expect(page.getByRole("heading", { name: "Derived" })).toHaveCount(0);
@@ -269,6 +421,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(wideParameters?.scrollHeight).toBeGreaterThan(wideParameters?.clientHeight || 0);
 
   await page.setViewportSize({ width: 760, height: 900 });
+  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-layout", "stacked");
   await expect(page.locator("#sidebarControls")).not.toHaveAttribute("open", "");
   await expect(page.locator("#sidebarControls > summary")).toBeVisible();
   await page.locator("#sidebarControls > summary").click();

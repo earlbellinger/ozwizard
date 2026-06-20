@@ -827,6 +827,7 @@
     timeCanvas: "time",
     lumCanvas: "lum"
   };
+  var EQUATION_STACK_QUERY = "(max-width: 760px)";
   var SIDEBAR_COLLAPSE_QUERY = "(max-width: 780px)";
   var plotViews = {
     time: {},
@@ -839,6 +840,7 @@
   var plotRenderStates = /* @__PURE__ */ new Map();
   var legendSignatures = /* @__PURE__ */ new Map();
   var activeSelection = null;
+  var geometryEquationStacked = false;
   var DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
   var PLOT_LAYOUT = {
     left: 84,
@@ -1286,13 +1288,13 @@
     ctx.closePath();
     ctx.fill();
   }
-  async function toggleSonification() {
+  function toggleSonification() {
     if (pianoModeActive) return;
     if (sonificationActive) {
       stopSonification();
       return;
     }
-    await startSonification();
+    startSonification();
   }
   function ensureAudioContext() {
     if (sonificationContext) return sonificationContext;
@@ -1301,10 +1303,26 @@
     sonificationContext = new AudioContextCtor();
     return sonificationContext;
   }
-  async function startSonification() {
+  function resumeAudioContext(context) {
+    if (context.state === "closed") return;
+    void context.resume().catch(() => void 0);
+  }
+  function unlockAudioContext(context) {
+    if (context.state === "closed") return;
+    try {
+      const source = context.createBufferSource();
+      source.buffer = context.createBuffer(1, 1, Math.max(1, context.sampleRate || 44100));
+      source.connect(context.destination);
+      source.addEventListener("ended", () => source.disconnect(), { once: true });
+      source.start();
+      source.stop(context.currentTime + 1e-3);
+    } catch {
+    }
+  }
+  function startSonification() {
     const context = ensureAudioContext();
     if (!context) return;
-    await context.resume();
+    unlockAudioContext(context);
     if (sonificationStopTimer) {
       window.clearTimeout(sonificationStopTimer);
       sonificationStopTimer = 0;
@@ -1319,6 +1337,7 @@
     sonificationVoice = createSonificationVoice(context, masterGain, 1);
     sonificationActive = true;
     updateSonificationToggleUi();
+    resumeAudioContext(context);
   }
   function stopSonification() {
     if (!sonificationActive && !sonificationMasterGain && !sonificationVoices.size) return;
@@ -1418,12 +1437,12 @@
     pianoMasterGain.connect(context.destination);
     return pianoMasterGain;
   }
-  async function startPianoNote(sourceId, midi) {
+  function startPianoNote(sourceId, midi) {
     if (!pianoModeActive || activePianoVoices.has(sourceId)) return;
     const note = clamp2(Math.round(midi), PIANO_MIN_NOTE, PIANO_MAX_NOTE);
     const context = ensureAudioContext();
     if (!context) return;
-    await context.resume();
+    unlockAudioContext(context);
     const output = ensurePianoMasterGain(context);
     const oscillator = context.createOscillator();
     const gain = context.createGain();
@@ -1454,6 +1473,7 @@
     activePianoMidiCounts.set(note, (activePianoMidiCounts.get(note) || 0) + 1);
     updatePianoKeyState(note);
     oscillator.start(now);
+    resumeAudioContext(context);
   }
   function releasePianoNote(sourceId) {
     const voice = activePianoVoices.get(sourceId);
@@ -1655,6 +1675,7 @@
     setupInteractivePlots();
     window.addEventListener("resize", drawAll);
     window.addEventListener("resize", drawAdsrVisualization);
+    window.addEventListener("resize", syncEquationLayoutForViewport);
     updateDriverButtons();
     updatePhaseModeButtons();
     updatePhaseAnchorButtons();
@@ -1976,11 +1997,21 @@
     `;
     queueMathTypeset();
   }
+  function shouldStackGeometryEquation() {
+    return window.matchMedia(EQUATION_STACK_QUERY).matches;
+  }
+  function syncEquationLayoutForViewport() {
+    const nextStacked = shouldStackGeometryEquation();
+    if (nextStacked !== geometryEquationStacked) updateEquationBlocks();
+  }
   function updateEquationBlocks() {
     const eta = Math.cbrt(Math.max(0, 1 - 3 / state.m));
     const etaDisplay = fmtFixed(eta, 2);
-    const geometry = state.variableM ? `\\ozMass{m}_{\\mathrm{eff}} &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}
-       \\qquad \\ozNeutral{\\eta}=\\left(1-\\frac{3}{\\ozMass{m}}\\right)^{1/3}=\\ozNeutral{${etaDisplay}}` : `\\ozMass{m}_{\\mathrm{eff}} &= \\ozMass{m}`;
+    const stackGeometry = shouldStackGeometryEquation();
+    const etaDefinition = `\\ozNeutral{\\eta}=\\left(1-\\frac{3}{\\ozMass{m}}\\right)^{1/3}=\\ozNeutral{${etaDisplay}}`;
+    const geometry = state.variableM ? stackGeometry ? `\\ozMass{m}_{\\mathrm{eff}} &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}\\\\[0.2em]
+       \\ozNeutral{\\eta} &= \\left(1-\\frac{3}{\\ozMass{m}}\\right)^{1/3}=\\ozNeutral{${etaDisplay}}` : `\\ozMass{m}_{\\mathrm{eff}} &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}
+       \\qquad ${etaDefinition}` : `\\ozMass{m}_{\\mathrm{eff}} &= \\ozMass{m}`;
     const driver = state.driver === "abs-v" ? "\\sqrt{|\\ozVelocity{V}|}" : "\\sqrt{\\ozPressure{H}}";
     const odeNode = el("odeEquations");
     const luminosityNode = el("luminosityEquations");
@@ -2011,6 +2042,8 @@
     \\]
   `;
     luminosityNode.dataset.geometryMode = state.variableM ? "radius-dependent" : "fixed";
+    geometryEquationStacked = stackGeometry;
+    luminosityNode.dataset.geometryLayout = stackGeometry ? "stacked" : "inline";
     luminosityNode.dataset.etaValue = etaDisplay;
     const luminosityHtml = `
     \\[
