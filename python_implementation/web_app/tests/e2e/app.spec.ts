@@ -72,6 +72,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     slider.value = "15";
     slider.dispatchEvent(new Event("input", { bubbles: true }));
   });
+  await expect(page.locator("#luminosityEquations mjx-container")).not.toHaveCount(0);
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-eta-value", "0.93");
   await page.locator("input[aria-label='shell form factor']").evaluate((input) => {
     const slider = input as HTMLInputElement;

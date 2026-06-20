@@ -774,17 +774,17 @@
       color: var(--ink);
     }
 
-    .equation-block[data-math-state="pending"] {
-      color: transparent;
-    }
-
-    .equation-block[data-math-state="pending"] > * {
-      visibility: hidden;
-    }
-
     .equation-block mjx-container[jax="SVG"][display="true"] {
       text-align: left !important;
       margin: 0.5em 0 !important;
+    }
+
+    .math-typeset-staging {
+      position: fixed;
+      left: -10000px;
+      top: 0;
+      visibility: hidden;
+      pointer-events: none;
     }
 
     .small-note {

@@ -729,6 +729,7 @@
   var mathTypesetWholeRoot = false;
   var mathRenderVersion = 0;
   var mathTypesetTargets = /* @__PURE__ */ new Set();
+  var stagedMathUpdates = /* @__PURE__ */ new Map();
   var controlElements = /* @__PURE__ */ new Map();
   var TAU_TICKS = [1, 3, 10, 30, 100, 300, 1e3];
   var THEME = {
@@ -763,26 +764,24 @@
     if (!Number.isFinite(value)) return "n/a";
     return Number(value).toFixed(digits);
   }
-  function markMathPending(elements) {
-    const version = String(++mathRenderVersion);
-    elements.forEach((element) => {
-      element.dataset.mathState = "pending";
-      element.dataset.mathVersion = version;
-    });
+  function stageMathHtml(element, html) {
+    const version = ++mathRenderVersion;
+    stagedMathUpdates.set(element, { html, version });
+    element.dataset.mathState = "rendering";
+    element.dataset.mathVersion = String(version);
   }
-  function collectPendingMath(elements) {
-    const pending = /* @__PURE__ */ new Map();
-    for (const element of elements) {
-      if (!(element instanceof HTMLElement) || element.dataset.mathState !== "pending") continue;
-      pending.set(element, element.dataset.mathVersion || "");
-    }
-    return pending;
+  function markStagedMathReady(element, update) {
+    const current = stagedMathUpdates.get(element);
+    if (!current || current.version !== update.version) return false;
+    stagedMathUpdates.delete(element);
+    element.dataset.mathState = "ready";
+    delete element.dataset.mathVersion;
+    return true;
   }
-  function markMathReady(pending) {
-    pending.forEach((version, element) => {
-      if (element.dataset.mathVersion !== version) return;
-      element.dataset.mathState = "ready";
-      delete element.dataset.mathVersion;
+  function applyRawStagedMathFallback(entries) {
+    entries.forEach(([element, update]) => {
+      if (!markStagedMathReady(element, update)) return;
+      element.innerHTML = update.html;
     });
   }
   function queueMathTypeset(elements) {
@@ -805,28 +804,62 @@
     const mathJax = window.MathJax;
     if (!root) return;
     const elements = mathTypesetWholeRoot || mathTypesetTargets.size === 0 ? [root] : Array.from(mathTypesetTargets);
-    const pendingElements = mathTypesetWholeRoot ? collectPendingMath(root.querySelectorAll("[data-math-state='pending']")) : collectPendingMath(elements);
+    const stagedEntries = mathTypesetWholeRoot ? Array.from(stagedMathUpdates.entries()) : elements.flatMap((element) => {
+      const update = stagedMathUpdates.get(element);
+      return update ? [[element, update]] : [];
+    });
+    const directElements = elements.filter((element) => !stagedMathUpdates.has(element));
     mathTypesetTargets.clear();
     mathTypesetWholeRoot = false;
-    if (!mathJax?.typesetPromise) {
-      markMathReady(pendingElements);
+    const typesetPromise = mathJax?.typesetPromise?.bind(mathJax);
+    const typesetClear = mathJax?.typesetClear?.bind(mathJax);
+    if (!mathJax || !typesetPromise) {
+      applyRawStagedMathFallback(stagedEntries);
       return;
     }
     mathTypesetRunning = true;
     try {
       await mathJax.startup?.promise;
-      mathJax.typesetClear?.(elements);
-      await mathJax.typesetPromise(elements);
-      markMathReady(pendingElements);
+      if (directElements.length) {
+        typesetClear?.(directElements);
+        await typesetPromise(directElements);
+      }
+      if (stagedEntries.length) {
+        await renderStagedMath(stagedEntries, { typesetClear, typesetPromise });
+      }
     } catch (error) {
       console.warn("MathJax typeset failed", error);
-      markMathReady(pendingElements);
     } finally {
       mathTypesetRunning = false;
       if (mathTypesetPending) {
         mathTypesetPending = false;
         queueMathTypeset();
       }
+    }
+  }
+  async function renderStagedMath(entries, mathJax) {
+    const host = document.createElement("div");
+    host.className = "math-typeset-staging";
+    const staged = entries.map(([target, update]) => {
+      const node = document.createElement("div");
+      node.className = target.className;
+      node.style.width = `${Math.max(1, target.clientWidth)}px`;
+      node.innerHTML = update.html;
+      host.appendChild(node);
+      return { target, update, node };
+    });
+    document.body.appendChild(host);
+    try {
+      const stagedNodes = staged.map(({ node }) => node);
+      mathJax.typesetClear?.(stagedNodes);
+      await mathJax.typesetPromise(stagedNodes);
+      staged.forEach(({ target, update, node }) => {
+        if (!markStagedMathReady(target, update)) return;
+        mathJax.typesetClear?.([target]);
+        target.innerHTML = node.innerHTML;
+      });
+    } finally {
+      host.remove();
     }
   }
   function valuesMatch(a, b) {
@@ -1148,9 +1181,8 @@
     const driver = state.driver === "abs-v" ? "\\sqrt{|\\ozVelocity{V}|}" : "\\sqrt{\\ozPressure{H}}";
     const odeNode = el("odeEquations");
     const luminosityNode = el("luminosityEquations");
-    markMathPending([odeNode, luminosityNode]);
     odeNode.dataset.driverMode = state.driver;
-    odeNode.innerHTML = `
+    const odeHtml = `
     \\[
     \\begin{aligned}
     \\frac{d\\ozRadius{R}}{d\\ozTau{\\tau}} &=
@@ -1177,7 +1209,7 @@
   `;
     luminosityNode.dataset.geometryMode = state.variableM ? "radius-dependent" : "fixed";
     luminosityNode.dataset.etaValue = etaDisplay;
-    luminosityNode.innerHTML = `
+    const luminosityHtml = `
     \\[
     \\begin{aligned}
     ${geometry}\\\\[0.35em]
@@ -1194,6 +1226,8 @@
     \\end{aligned}
     \\]
   `;
+    stageMathHtml(odeNode, odeHtml);
+    stageMathHtml(luminosityNode, luminosityHtml);
     queueMathTypeset([odeNode, luminosityNode]);
   }
   function updateVariableInitials() {

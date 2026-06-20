@@ -38,6 +38,7 @@ let mathTypesetPending = false;
 let mathTypesetWholeRoot = false;
 let mathRenderVersion = 0;
 const mathTypesetTargets = new Set<HTMLElement>();
+const stagedMathUpdates = new Map<HTMLElement, StagedMathUpdate>();
 
 const controlElements = new Map<ControlParameterKey, HTMLInputElement>();
 const TAU_TICKS = [1, 3, 10, 30, 100, 300, 1000];
@@ -77,6 +78,11 @@ interface PlotSelection {
   currentY: number;
 }
 
+interface StagedMathUpdate {
+  html: string;
+  version: number;
+}
+
 const INTERACTIVE_CANVASES: Record<string, InteractivePlotId> = {
   timeCanvas: "time",
   lumCanvas: "lum"
@@ -107,28 +113,26 @@ function fmtFixed(value: number, digits: number): string {
   return Number(value).toFixed(digits);
 }
 
-function markMathPending(elements: HTMLElement[]): void {
-  const version = String(++mathRenderVersion);
-  elements.forEach((element) => {
-    element.dataset.mathState = "pending";
-    element.dataset.mathVersion = version;
-  });
+function stageMathHtml(element: HTMLElement, html: string): void {
+  const version = ++mathRenderVersion;
+  stagedMathUpdates.set(element, { html, version });
+  element.dataset.mathState = "rendering";
+  element.dataset.mathVersion = String(version);
 }
 
-function collectPendingMath(elements: Iterable<Element>): Map<HTMLElement, string> {
-  const pending = new Map<HTMLElement, string>();
-  for (const element of elements) {
-    if (!(element instanceof HTMLElement) || element.dataset.mathState !== "pending") continue;
-    pending.set(element, element.dataset.mathVersion || "");
-  }
-  return pending;
+function markStagedMathReady(element: HTMLElement, update: StagedMathUpdate): boolean {
+  const current = stagedMathUpdates.get(element);
+  if (!current || current.version !== update.version) return false;
+  stagedMathUpdates.delete(element);
+  element.dataset.mathState = "ready";
+  delete element.dataset.mathVersion;
+  return true;
 }
 
-function markMathReady(pending: Map<HTMLElement, string>): void {
-  pending.forEach((version, element) => {
-    if (element.dataset.mathVersion !== version) return;
-    element.dataset.mathState = "ready";
-    delete element.dataset.mathVersion;
+function applyRawStagedMathFallback(entries: Array<[HTMLElement, StagedMathUpdate]>): void {
+  entries.forEach(([element, update]) => {
+    if (!markStagedMathReady(element, update)) return;
+    element.innerHTML = update.html;
   });
 }
 
@@ -155,30 +159,68 @@ async function runMathTypeset(): Promise<void> {
   const elements = mathTypesetWholeRoot || mathTypesetTargets.size === 0
     ? [root]
     : Array.from(mathTypesetTargets);
-  const pendingElements = mathTypesetWholeRoot
-    ? collectPendingMath(root.querySelectorAll("[data-math-state='pending']"))
-    : collectPendingMath(elements);
+  const stagedEntries = mathTypesetWholeRoot
+    ? Array.from(stagedMathUpdates.entries())
+    : elements.flatMap((element): Array<[HTMLElement, StagedMathUpdate]> => {
+        const update = stagedMathUpdates.get(element);
+        return update ? [[element, update]] : [];
+      });
+  const directElements = elements.filter((element) => !stagedMathUpdates.has(element));
   mathTypesetTargets.clear();
   mathTypesetWholeRoot = false;
-  if (!mathJax?.typesetPromise) {
-    markMathReady(pendingElements);
+  const typesetPromise = mathJax?.typesetPromise?.bind(mathJax);
+  const typesetClear = mathJax?.typesetClear?.bind(mathJax);
+  if (!mathJax || !typesetPromise) {
+    applyRawStagedMathFallback(stagedEntries);
     return;
   }
   mathTypesetRunning = true;
   try {
     await mathJax.startup?.promise;
-    mathJax.typesetClear?.(elements);
-    await mathJax.typesetPromise(elements);
-    markMathReady(pendingElements);
+    if (directElements.length) {
+      typesetClear?.(directElements);
+      await typesetPromise(directElements);
+    }
+    if (stagedEntries.length) {
+      await renderStagedMath(stagedEntries, { typesetClear, typesetPromise });
+    }
   } catch (error) {
     console.warn("MathJax typeset failed", error);
-    markMathReady(pendingElements);
   } finally {
     mathTypesetRunning = false;
     if (mathTypesetPending) {
       mathTypesetPending = false;
       queueMathTypeset();
     }
+  }
+}
+
+async function renderStagedMath(
+  entries: Array<[HTMLElement, StagedMathUpdate]>,
+  mathJax: { typesetClear?: (elements?: Element[]) => void; typesetPromise: (elements?: Element[]) => Promise<void> }
+): Promise<void> {
+  const host = document.createElement("div");
+  host.className = "math-typeset-staging";
+  const staged = entries.map(([target, update]) => {
+    const node = document.createElement("div");
+    node.className = target.className;
+    node.style.width = `${Math.max(1, target.clientWidth)}px`;
+    node.innerHTML = update.html;
+    host.appendChild(node);
+    return { target, update, node };
+  });
+  document.body.appendChild(host);
+  try {
+    const stagedNodes = staged.map(({ node }) => node);
+    mathJax.typesetClear?.(stagedNodes);
+    await mathJax.typesetPromise(stagedNodes);
+    staged.forEach(({ target, update, node }) => {
+      if (!markStagedMathReady(target, update)) return;
+      mathJax.typesetClear?.([target]);
+      target.innerHTML = node.innerHTML;
+    });
+  } finally {
+    host.remove();
   }
 }
 
@@ -544,9 +586,8 @@ function updateEquationBlocks(): void {
   const driver = state.driver === "abs-v" ? "\\sqrt{|\\ozVelocity{V}|}" : "\\sqrt{\\ozPressure{H}}";
   const odeNode = el<HTMLDivElement>("odeEquations");
   const luminosityNode = el<HTMLDivElement>("luminosityEquations");
-  markMathPending([odeNode, luminosityNode]);
   odeNode.dataset.driverMode = state.driver;
-  odeNode.innerHTML = `
+  const odeHtml = `
     \\[
     \\begin{aligned}
     \\frac{d\\ozRadius{R}}{d\\ozTau{\\tau}} &=
@@ -573,7 +614,7 @@ function updateEquationBlocks(): void {
   `;
   luminosityNode.dataset.geometryMode = state.variableM ? "radius-dependent" : "fixed";
   luminosityNode.dataset.etaValue = etaDisplay;
-  luminosityNode.innerHTML = `
+  const luminosityHtml = `
     \\[
     \\begin{aligned}
     ${geometry}\\\\[0.35em]
@@ -590,6 +631,8 @@ function updateEquationBlocks(): void {
     \\end{aligned}
     \\]
   `;
+  stageMathHtml(odeNode, odeHtml);
+  stageMathHtml(luminosityNode, luminosityHtml);
   queueMathTypeset([odeNode, luminosityNode]);
 }
 

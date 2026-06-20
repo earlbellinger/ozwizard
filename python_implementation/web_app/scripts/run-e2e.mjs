@@ -127,6 +127,7 @@ async function runPlaywrightChecks() {
       slider.value = "15";
       slider.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    assertOk(await page.locator("#luminosityEquations mjx-container").count() > 0, "rendered equations should remain visible while m changes");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.93", "eta did not update when m changed");
     await page.locator("input[aria-label='shell form factor']").evaluate((input) => {
       const slider = input;
