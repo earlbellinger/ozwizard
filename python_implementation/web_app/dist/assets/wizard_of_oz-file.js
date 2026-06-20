@@ -770,11 +770,19 @@
   var SONIFICATION_WAVEFORM_SAMPLES = 512;
   var SONIFICATION_WAVEFORM_SMOOTH_PASSES = 5;
   var SONIFICATION_MAX_HARMONICS = 32;
+  var PIANO_DEFAULT_ENVELOPE = { attack: 0.015, decay: 0.22, release: 0.36 };
+  var PIANO_DEFAULT_SUSTAIN_LEVEL = 0.38;
+  var SONIFICATION_SOURCE_LABELS = {
+    luminosity: "luminosity",
+    velocity: "radial velocity",
+    pressure: "pressure"
+  };
   var controlElements = /* @__PURE__ */ new Map();
   var sonificationReferenceNote = MIDDLE_C_NOTE;
   var sonificationReferenceHz = noteToFrequency(MIDDLE_C_NOTE);
   var sonificationSamples = [];
   var sonificationWaveformSignature = "";
+  var sonificationSource = "luminosity";
   var sonificationContext = null;
   var sonificationVoice = null;
   var sonificationMasterGain = null;
@@ -784,8 +792,8 @@
   var pianoModeActive = false;
   var pianoStartOctave = PIANO_DEFAULT_START_OCTAVE;
   var pianoMasterGain = null;
-  var pianoEnvelope = { attack: 0.015, decay: 0.22, release: 0.36 };
-  var pianoSustainLevel = 0.38;
+  var pianoEnvelope = { ...PIANO_DEFAULT_ENVELOPE };
+  var pianoSustainLevel = PIANO_DEFAULT_SUSTAIN_LEVEL;
   var activePianoVoices = /* @__PURE__ */ new Map();
   var activePianoMidiCounts = /* @__PURE__ */ new Map();
   var TAU_TICKS = [1, 3, 10, 30, 100, 300, 1e3];
@@ -1010,6 +1018,14 @@
     const pitch = el("sonificationPitch");
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
     pitch.addEventListener("input", handleSonificationSliderInput);
+    document.querySelectorAll("[data-sonify-source]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const source = button.dataset.sonifySource;
+        if (!isSonificationSource(source) || source === sonificationSource) return;
+        sonificationSource = source;
+        drawAll();
+      });
+    });
     if (!AudioContextCtor) {
       piano.disabled = true;
       piano.title = "Audio is not supported in this browser";
@@ -1024,12 +1040,30 @@
       });
     }
     setupPianoControls();
+    updateSonificationSourceControls();
     updateHeaderAudioControls();
     updateSonificationToggleUi();
     updatePianoToggleUi();
     window.addEventListener("keydown", handlePianoKeyDown);
     window.addEventListener("keyup", handlePianoKeyUp);
     window.addEventListener("blur", releaseAllPianoNotes);
+  }
+  function isSonificationSource(value) {
+    return value === "luminosity" || value === "velocity" || value === "pressure";
+  }
+  function updateSonificationSourceControls() {
+    document.querySelectorAll("[data-sonify-source]").forEach((button) => {
+      const source = button.dataset.sonifySource;
+      const active = source === sonificationSource;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+      if (isSonificationSource(source)) button.title = `Sonify ${SONIFICATION_SOURCE_LABELS[source]}`;
+    });
+    const pressureVisible = sonificationSource === "pressure";
+    const pressurePanel = document.getElementById("pressurePhasePanel");
+    if (pressurePanel instanceof HTMLElement) pressurePanel.hidden = !pressureVisible;
+    const plotGrid = document.querySelector(".plot-grid");
+    if (plotGrid) plotGrid.dataset.pressureVisible = String(pressureVisible);
   }
   function handleSonificationSliderInput(event) {
     const input = event.target;
@@ -1119,6 +1153,9 @@
     if (!panel) return;
     panel.hidden = !visible;
   }
+  function capitalize(value) {
+    return value ? `${value[0].toUpperCase()}${value.slice(1)}` : value;
+  }
   function setupPianoControls() {
     const bindEnvelopeSlider = (id, key) => {
       const input = document.getElementById(id);
@@ -1127,6 +1164,7 @@
       input.addEventListener("input", () => {
         pianoEnvelope = { ...pianoEnvelope, [key]: Number(input.value) };
         updatePianoControlLabels();
+        updatePianoResetButtons();
         drawAdsrVisualization();
       });
     };
@@ -1139,24 +1177,60 @@
       sustain.addEventListener("input", () => {
         pianoSustainLevel = Number(sustain.value);
         updatePianoControlLabels();
+        updatePianoResetButtons();
         drawAdsrVisualization();
       });
     }
+    document.querySelectorAll("[data-piano-reset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const key = button.dataset.pianoReset;
+        if (key) resetPianoControl(key);
+      });
+    });
     buildPianoKeyboard();
     updatePianoControlLabels();
+    updatePianoResetButtons();
     drawAdsrVisualization();
+  }
+  function resetPianoControl(key) {
+    if (key === "sustain") {
+      pianoSustainLevel = PIANO_DEFAULT_SUSTAIN_LEVEL;
+      const input = document.getElementById("pianoSustain");
+      if (input instanceof HTMLInputElement) input.value = String(pianoSustainLevel);
+    } else {
+      pianoEnvelope = { ...pianoEnvelope, [key]: PIANO_DEFAULT_ENVELOPE[key] };
+      const input = document.getElementById(`piano${capitalize(key)}`);
+      if (input instanceof HTMLInputElement) input.value = String(pianoEnvelope[key]);
+    }
+    updatePianoControlLabels();
+    updatePianoResetButtons();
+    drawAdsrVisualization();
+  }
+  function updatePianoResetButtons() {
+    document.querySelectorAll("[data-piano-reset]").forEach((button) => {
+      const key = button.dataset.pianoReset;
+      if (!key) return;
+      const current = key === "sustain" ? pianoSustainLevel : pianoEnvelope[key];
+      const defaultValue = key === "sustain" ? PIANO_DEFAULT_SUSTAIN_LEVEL : PIANO_DEFAULT_ENVELOPE[key];
+      const label = capitalize(key);
+      button.disabled = valuesMatch(current, defaultValue);
+      button.title = `Reset ${label.toLowerCase()} to ${formatPianoControlValue(key, defaultValue)}`;
+    });
   }
   function updatePianoControlLabels() {
     const labels = {
-      pianoAttackValue: formatDuration(pianoEnvelope.attack),
-      pianoDecayValue: formatDuration(pianoEnvelope.decay),
-      pianoReleaseValue: formatDuration(pianoEnvelope.release),
-      pianoSustainValue: `${Math.round(pianoSustainLevel * 100)}%`
+      pianoAttackValue: formatPianoControlValue("attack", pianoEnvelope.attack),
+      pianoDecayValue: formatPianoControlValue("decay", pianoEnvelope.decay),
+      pianoReleaseValue: formatPianoControlValue("release", pianoEnvelope.release),
+      pianoSustainValue: formatPianoControlValue("sustain", pianoSustainLevel)
     };
     Object.entries(labels).forEach(([id, value]) => {
       const node = document.getElementById(id);
       if (node) node.textContent = value;
     });
+  }
+  function formatPianoControlValue(key, value) {
+    return key === "sustain" ? `${Math.round(value * 100)}%` : formatDuration(value);
   }
   function formatDuration(seconds) {
     return seconds < 0.1 ? `${Math.round(seconds * 1e3)} ms` : `${seconds.toFixed(2).replace(/\.?0+$/, "")} s`;
@@ -1546,6 +1620,18 @@
     }
     return context.createPeriodicWave(real, imag, { disableNormalization: false });
   }
+  function updateActivePianoWaveforms() {
+    const context = sonificationContext;
+    if (!context || !activePianoVoices.size) return;
+    const wave = createSonificationPeriodicWave(context);
+    if (!wave) return;
+    activePianoVoices.forEach((voice) => {
+      try {
+        voice.oscillator.setPeriodicWave(wave);
+      } catch {
+      }
+    });
+  }
   function circularSmooth(values, passes) {
     let smoothed = [...values];
     for (let pass = 0; pass < passes; pass += 1) {
@@ -1585,11 +1671,12 @@
     sonificationSamples = nextSamples;
     sonificationWaveformSignature = nextSignature;
     updateSonificationWaveform();
+    updateActivePianoWaveforms();
   }
   function sonificationSampleSignature(samples) {
-    if (!samples.length) return "empty";
+    if (!samples.length) return `${sonificationSource}|empty`;
     const step2 = Math.max(1, Math.floor(samples.length / 48));
-    const values = [String(samples.length)];
+    const values = [sonificationSource, String(samples.length)];
     for (let index = 0; index < samples.length; index += step2) {
       const sample2 = samples[index];
       values.push(`${sample2.phase.toFixed(4)}:${sample2.value.toFixed(4)}`);
@@ -1598,21 +1685,39 @@
     values.push(`${last.phase.toFixed(4)}:${last.value.toFixed(4)}`);
     return values.join("|");
   }
+  function acousticPressure(row) {
+    const m = mAt(row.R, state);
+    return row.H * row.R ** (-m * state.gamma1);
+  }
+  function acousticPressureSignal(row) {
+    const pressure = acousticPressure(row);
+    return pressure > 0 ? pressure : NaN;
+  }
+  function sonificationSignal(row) {
+    switch (sonificationSource) {
+      case "luminosity":
+        return row.L;
+      case "velocity":
+        return row.V;
+      case "pressure":
+        return acousticPressureSignal(row);
+    }
+  }
   function buildSonificationSamples(rows, domain) {
-    const finiteRows = rows.filter((row) => Number.isFinite(row.tau) && Number.isFinite(row.L));
+    const finiteRows = rows.map((row) => ({ row, value: sonificationSignal(row) })).filter((sample2) => Number.isFinite(sample2.row.tau) && Number.isFinite(sample2.value));
     if (!finiteRows.length) return [];
-    const start = domain?.[0] ?? finiteRows[0].tau;
-    const end = domain?.[1] ?? finiteRows[finiteRows.length - 1].tau;
+    const start = domain?.[0] ?? finiteRows[0].row.tau;
+    const end = domain?.[1] ?? finiteRows[finiteRows.length - 1].row.tau;
     if (end <= start) return [{ phase: 0, value: 0 }];
-    const inDomain = finiteRows.filter((row) => row.tau >= start && row.tau <= end);
+    const inDomain = finiteRows.filter((sample2) => sample2.row.tau >= start && sample2.row.tau <= end);
     if (!inDomain.length) return [];
-    const luminosities = inDomain.map((row) => row.L);
-    const minLuminosity = Math.min(...luminosities);
-    const maxLuminosity = Math.max(...luminosities);
-    const span = maxLuminosity - minLuminosity;
-    const samples = strideDownsample(inDomain, SONIFICATION_MAX_SAMPLES).map((row) => ({
-      phase: clamp2((row.tau - start) / (end - start), 0, 1),
-      value: span > 1e-12 ? clamp2(2 * ((row.L - minLuminosity) / span) - 1, -1, 1) : 0
+    const sourceValues = inDomain.map((sample2) => sample2.value);
+    const minValue = Math.min(...sourceValues);
+    const maxValue = Math.max(...sourceValues);
+    const span = maxValue - minValue;
+    const samples = strideDownsample(inDomain, SONIFICATION_MAX_SAMPLES).map((sample2) => ({
+      phase: clamp2((sample2.row.tau - start) / (end - start), 0, 1),
+      value: span > 1e-12 ? clamp2(2 * ((sample2.value - minValue) / span) - 1, -1, 1) : 0
     })).sort((a, b) => a.phase - b.phase);
     if (!samples.length) return [];
     const first = samples[0];
@@ -2564,6 +2669,7 @@
     const okStatus = latestResult.message === "equilibrium" || latestResult.message === "limit_cycle" || !state.runUntilStable && latestResult.status === "complete";
     const final = rows[rows.length - 1];
     const phase = phaseForRows(rows);
+    updateSonificationSourceControls();
     updateSonificationCurve(phase);
     const metricsNode = el("metrics");
     const metricItems = [
@@ -2574,14 +2680,12 @@
       { label: "rejected", value: latestResult.stats.rejectedSteps },
       { label: "max err", value: fmt(latestResult.stats.maxNormalizedError, 3) },
       { label: "period", value: phase.period ? fmt(phase.period, 3) : "n/a" },
-      { label: "phase", value: phase.reason === "ok" ? "available" : "unavailable" },
-      { label: `final \\(${TEX.R}\\)`, value: final ? fmt(final.R, 3) : "n/a" },
-      { label: `final \\(${TEX.L}\\)`, value: final ? fmt(final.L, 3) : "n/a" }
+      { label: "phase", value: phase.reason === "ok" ? "available" : "unavailable" }
     ];
     const metricsHtml = metricItems.map(({ label, value, className }) => `<span class="metric${className ? ` ${className}` : ""}">${label}<b>${value}</b></span>`).join("");
     stageMathHtml(metricsNode, metricsHtml);
     queueMathTypeset([metricsNode]);
-    const phaseSample = phase.rows.length ? downsample(phase.rows, 1800, ["L", "V"]) : [];
+    const phaseSample = phase.rows.length ? downsample(phase.rows, 1800, ["L", "V", "H"]) : [];
     const phaseMessage = phaseUnavailableLabel(phase);
     const phasePeriodLabel = `phase (period = ${phase.period ? fmt(phase.period, 3) : "n/a"} \u03C4)`;
     drawSeries("lightCanvas", [
@@ -2604,6 +2708,18 @@
       ylim: phaseSample.length ? void 0 : [0, 1],
       message: phaseMessage
     });
+    if (sonificationSource === "pressure") {
+      drawSeries("pressureCanvas", [
+        { label: "P", color: COLORS.H, rows: phaseSample, x: (row) => row.tau, y: acousticPressureSignal }
+      ], {
+        xlabel: phasePeriodLabel,
+        ylabel: "pressure",
+        ylabelColor: COLORS.H,
+        xlim: [0, 2],
+        ylim: phaseSample.length ? void 0 : [0, 1],
+        message: phaseMessage
+      });
+    }
     const timeXlim = integrationTimeRange();
     const sampledTimeRows = rowsForInteractivePlot("time", rows, ["R", "V", "H", "Uc"]);
     const sampledLumRows = rowsForInteractivePlot("lum", rows, ["L", "Lr", "Lc"]);

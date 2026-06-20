@@ -248,10 +248,48 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator(".piano-key")).toHaveCount(24);
   await expect(page.locator(".white-key")).toHaveCount(14);
   await expect(page.locator(".black-key")).toHaveCount(10);
+  await expect(page.locator(".sonify-source-control")).toContainText("sonify:");
+  const luminositySource = page.locator("[data-sonify-source='luminosity']");
+  const velocitySource = page.locator("[data-sonify-source='velocity']");
+  const pressureSource = page.locator("[data-sonify-source='pressure']");
+  await expect(luminositySource).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#pressurePhasePanel")).toBeHidden();
+  await velocitySource.click();
+  await expect(velocitySource).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#pressurePhasePanel")).toBeHidden();
+  await pressureSource.click();
+  await expect(pressureSource).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#pressurePhasePanel")).toBeVisible();
+  const hasPressurePaint = await page.locator("#pressureCanvas").evaluate((canvas) => {
+    const node = canvas as HTMLCanvasElement;
+    const ctx = node.getContext("2d");
+    if (!ctx) return false;
+    return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
+  });
+  expect(hasPressurePaint).toBe(true);
+  await luminositySource.click();
+  await expect(luminositySource).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#pressurePhasePanel")).toBeHidden();
   await expect(page.locator("#pianoAttackValue")).toHaveText("15 ms");
   await expect(page.locator("#pianoDecayValue")).toHaveText("0.22 s");
   await expect(page.locator("#pianoReleaseValue")).toHaveText("0.36 s");
   await expect(page.locator("#pianoSustainValue")).toHaveText("38%");
+  await expect(page.locator("[data-piano-reset]")).toHaveCount(4);
+  const attackReset = page.getByRole("button", { name: "Reset attack" });
+  await expect(attackReset).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Reset decay" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Reset release" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Reset sustain" })).toBeDisabled();
+  await page.locator("#pianoAttack").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "0.08";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#pianoAttackValue")).toHaveText("80 ms");
+  await expect(attackReset).toBeEnabled();
+  await attackReset.click();
+  await expect(page.locator("#pianoAttackValue")).toHaveText("15 ms");
+  await expect(attackReset).toBeDisabled();
   const hasAdsrPaint = await page.locator("#adsrCanvas").evaluate((canvas) => {
     const node = canvas as HTMLCanvasElement;
     const ctx = node.getContext("2d");
@@ -348,16 +386,18 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await page.getByRole("button", { name: "min light" }).click();
   await expect(page.getByRole("button", { name: "min light" })).toHaveClass(/active/);
   await expect(page.getByRole("heading", { name: "RV Curve" })).toBeVisible();
+  await expect(page.locator("#pressurePhasePanel")).toBeHidden();
   await expect(page.getByRole("heading", { name: "History" })).toBeVisible();
   await expect(page.locator("body")).not.toContainText("state variables");
   await expect(page.locator("body")).not.toContainText("total, radiative, convective");
   await expect.poll(async () => (await page.locator("body").innerText()).includes("\\(")).toBe(false);
 
-  const canvases = page.locator(".plot-panel canvas");
-  await expect(canvases).toHaveCount(4);
+  const visibleCanvases = page.locator(".plot-panel canvas:visible");
+  await expect(visibleCanvases).toHaveCount(4);
   await expect(page.locator("#adsrCanvas")).toHaveCount(1);
   await expect(page.locator("#lightLegend")).toHaveCount(0);
   await expect(page.locator("#velocityLegend")).toHaveCount(0);
+  await expect(page.locator("#phaseLegend")).toHaveCount(0);
   const tauCell = page.locator("[data-symbol='tau']").first();
   const tauRow = tauCell.locator("xpath=ancestor::tr");
   await expect(tauCell).toBeVisible();
@@ -411,6 +451,13 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
   });
   expect(hasPaint).toBe(true);
+  const hasVelocityPaint = await page.locator("#velocityCanvas").evaluate((canvas) => {
+    const node = canvas as HTMLCanvasElement;
+    const ctx = node.getContext("2d");
+    if (!ctx) return false;
+    return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
+  });
+  expect(hasVelocityPaint).toBe(true);
   await page.locator("#variableM").uncheck();
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "fixed");
   await page.locator("#variableM").check();

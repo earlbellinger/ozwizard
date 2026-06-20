@@ -360,6 +360,46 @@
       display: none;
     }
 
+    .sonify-source-control {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .sonify-source-control span {
+      color: var(--muted);
+      font-weight: 720;
+      letter-spacing: 0;
+    }
+
+    .sonify-source-control button {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--paper-raised);
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 12px;
+      min-height: 24px;
+      padding: 3px 8px;
+      box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.04);
+    }
+
+    .sonify-source-control button:hover {
+      border-color: var(--line-strong);
+      background: var(--paper-high);
+    }
+
+    .sonify-source-control button.active {
+      border-color: rgba(240, 189, 61, 0.74);
+      background: linear-gradient(180deg, rgba(240, 189, 61, 0.24), rgba(96, 128, 208, 0.16)), var(--paper-high);
+      color: var(--logo-gold-bright);
+      box-shadow: inset 0 1px 0 rgba(255, 209, 102, 0.2), 0 0 0 1px rgba(240, 189, 61, 0.08);
+    }
+
     .piano-panel-layout {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
@@ -468,14 +508,18 @@
 
     .piano-slider {
       display: grid;
-      grid-template-columns: 58px minmax(0, 1fr) 52px;
+      grid-template-columns: 58px minmax(0, 1fr) 52px 22px;
       align-items: center;
       gap: 7px;
       color: var(--muted);
       font-size: 12px;
     }
 
-    .piano-slider span:last-child {
+    .piano-slider label {
+      cursor: pointer;
+    }
+
+    .piano-slider-value {
       color: var(--ink);
       font-variant-numeric: tabular-nums;
       text-align: right;
@@ -815,8 +859,12 @@
 
     .plot-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
       gap: 14px;
+    }
+
+    .plot-grid[data-pressure-visible="true"] {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
     }
 
     .plot-panel,
@@ -1405,37 +1453,47 @@
       </div>
 
       <section class="piano-panel" id="pianoPanel" hidden>
+        <div class="sonify-source-control" aria-label="Sonification signal">
+          <span>sonify:</span>
+          <button class="active" type="button" data-sonify-source="luminosity" aria-pressed="true">luminosity</button>
+          <button type="button" data-sonify-source="velocity" aria-pressed="false">radial velocity</button>
+          <button type="button" data-sonify-source="pressure" aria-pressed="false">pressure</button>
+        </div>
         <div class="piano-panel-layout">
           <div class="piano-keyboard" id="pianoKeys" aria-label="Lightcurve piano keyboard"></div>
           <div class="piano-synth-controls">
             <div class="piano-slider-grid">
-              <label class="piano-slider">
-                <span>Attack</span>
+              <div class="piano-slider">
+                <label for="pianoAttack">Attack</label>
                 <input id="pianoAttack" type="range" min="0.001" max="0.2" step="0.001" value="0.015">
-                <span id="pianoAttackValue">15 ms</span>
-              </label>
-              <label class="piano-slider">
-                <span>Decay</span>
+                <span class="piano-slider-value" id="pianoAttackValue">15 ms</span>
+                <button class="parameter-reset" type="button" data-piano-reset="attack" title="Reset attack" aria-label="Reset attack">↺</button>
+              </div>
+              <div class="piano-slider">
+                <label for="pianoDecay">Decay</label>
                 <input id="pianoDecay" type="range" min="0.03" max="1.2" step="0.01" value="0.22">
-                <span id="pianoDecayValue">0.22 s</span>
-              </label>
-              <label class="piano-slider">
-                <span>Release</span>
+                <span class="piano-slider-value" id="pianoDecayValue">0.22 s</span>
+                <button class="parameter-reset" type="button" data-piano-reset="decay" title="Reset decay" aria-label="Reset decay">↺</button>
+              </div>
+              <div class="piano-slider">
+                <label for="pianoRelease">Release</label>
                 <input id="pianoRelease" type="range" min="0.03" max="1.8" step="0.01" value="0.36">
-                <span id="pianoReleaseValue">0.36 s</span>
-              </label>
-              <label class="piano-slider">
-                <span>Sustain</span>
+                <span class="piano-slider-value" id="pianoReleaseValue">0.36 s</span>
+                <button class="parameter-reset" type="button" data-piano-reset="release" title="Reset release" aria-label="Reset release">↺</button>
+              </div>
+              <div class="piano-slider">
+                <label for="pianoSustain">Sustain</label>
                 <input id="pianoSustain" type="range" min="0" max="1" step="0.01" value="0.38">
-                <span id="pianoSustainValue">38%</span>
-              </label>
+                <span class="piano-slider-value" id="pianoSustainValue">38%</span>
+                <button class="parameter-reset" type="button" data-piano-reset="sustain" title="Reset sustain" aria-label="Reset sustain">↺</button>
+              </div>
             </div>
             <canvas class="adsr-canvas" id="adsrCanvas" aria-label="ADSR amplitude envelope"></canvas>
           </div>
         </div>
       </section>
 
-      <section class="plot-grid">
+      <section class="plot-grid" data-pressure-visible="false">
         <div class="plot-panel">
           <div class="plot-title">
             <h3>Lightcurve</h3>
@@ -1453,6 +1511,13 @@
             <h3>RV Curve</h3>
           </div>
           <canvas id="velocityCanvas"></canvas>
+        </div>
+
+        <div class="plot-panel" id="pressurePhasePanel" hidden>
+          <div class="plot-title">
+            <h3>Pressure</h3>
+          </div>
+          <canvas id="pressureCanvas"></canvas>
         </div>
 
         <div class="plot-panel">

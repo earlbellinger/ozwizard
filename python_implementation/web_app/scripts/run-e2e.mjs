@@ -128,6 +128,40 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#sonificationHz").textContent()) === "C3-B4", "piano mode should show visible octaves");
     assertOk((await page.locator(".piano-key").count()) === 24, "piano should render two octaves of keys");
     assertOk((await page.locator("#pianoSustainValue").textContent()) === "38%", "piano sustain default should render");
+    assertOk((await page.locator(".sonify-source-control").textContent())?.includes("sonify:"), "sonification source control should render");
+    const luminositySource = page.locator("[data-sonify-source='luminosity']");
+    const velocitySource = page.locator("[data-sonify-source='velocity']");
+    const pressureSource = page.locator("[data-sonify-source='pressure']");
+    assertOk((await luminositySource.getAttribute("aria-pressed")) === "true", "luminosity should be the default sonification source");
+    assertOk(!(await page.locator("#pressurePhasePanel").isVisible()), "pressure panel should start hidden for luminosity sonification");
+    await velocitySource.click();
+    assertOk((await velocitySource.getAttribute("aria-pressed")) === "true", "radial velocity source did not activate");
+    assertOk(!(await page.locator("#pressurePhasePanel").isVisible()), "pressure panel should stay hidden for radial velocity sonification");
+    await pressureSource.click();
+    assertOk((await pressureSource.getAttribute("aria-pressed")) === "true", "pressure source did not reactivate");
+    assertOk(await page.locator("#pressurePhasePanel").isVisible(), "pressure panel should show when pressure is selected");
+    const hasPressurePaint = await page.locator("#pressureCanvas").evaluate((canvas) => {
+      const node = canvas;
+      const ctx = node.getContext("2d");
+      if (!ctx) return false;
+      return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
+    });
+    assertOk(hasPressurePaint, "pressure canvas was blank");
+    await luminositySource.click();
+    assertOk((await luminositySource.getAttribute("aria-pressed")) === "true", "luminosity source did not reactivate");
+    assertOk(!(await page.locator("#pressurePhasePanel").isVisible()), "pressure panel should hide when returning to luminosity sonification");
+    assertOk((await page.locator("[data-piano-reset]").count()) === 4, "piano ADSR reset buttons should render");
+    const sustainReset = page.getByRole("button", { name: "Reset sustain" });
+    assertOk(await sustainReset.isDisabled(), "piano sustain reset should start disabled");
+    await page.locator("#pianoSustain").evaluate((input) => {
+      input.value = "0.72";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    assertOk((await page.locator("#pianoSustainValue").textContent()) === "72%", "piano sustain slider should update");
+    assertOk(!(await sustainReset.isDisabled()), "piano sustain reset should enable after a change");
+    await sustainReset.click();
+    assertOk((await page.locator("#pianoSustainValue").textContent()) === "38%", "piano sustain reset should restore the default");
+    assertOk(await sustainReset.isDisabled(), "piano sustain reset should disable at the default");
     await page.locator("#sonificationPitch").evaluate((input) => {
       input.value = "4";
       input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -276,7 +310,7 @@ async function runPlaywrightChecks() {
     const parameterOverflow = await page.locator(".parameters-panel").evaluate((node) => getComputedStyle(node).overflowY);
     assertOk(parameterOverflow === "auto", `parameters panel should scroll vertically, saw ${parameterOverflow}`);
 
-    assertOk(await page.locator(".plot-panel canvas").count() === 4, "expected four plot canvases");
+    assertOk(await page.locator(".plot-panel canvas:visible").count() === 4, "expected four visible plot canvases");
     assertOk(await page.locator("#adsrCanvas").count() === 1, "expected one ADSR canvas");
     assertOk(await page.getByRole("heading", { name: "Lightcurve" }).isVisible(), "Lightcurve heading was not visible");
     assertOk((await page.locator(".phase-anchor-control").textContent())?.includes("phase to"), "phase anchor control was not visible");
@@ -286,12 +320,14 @@ async function runPlaywrightChecks() {
     await page.getByRole("button", { name: "min light" }).click();
     assertOk((await page.getByRole("button", { name: "min light" }).getAttribute("aria-pressed")) === "true", "min-light phase anchor did not reactivate");
     assertOk(await page.getByRole("heading", { name: "RV Curve" }).isVisible(), "RV Curve heading was not visible");
+    assertOk(!(await page.locator("#pressurePhasePanel").isVisible()), "pressure panel should be hidden outside pressure sonification");
     assertOk(await page.getByRole("heading", { name: "History" }).isVisible(), "History heading was not visible");
     const bodyText = await page.locator("body").innerText();
     assertOk(!bodyText.includes("state variables"), "old History subtitle should be removed");
     assertOk(!bodyText.includes("total, radiative, convective"), "old Luminosity Evolution subtitle should be removed");
     assertOk(await page.locator("#lightLegend").count() === 0, "phase luminosity legend should be removed");
     assertOk(await page.locator("#velocityLegend").count() === 0, "phase velocity legend should be removed");
+    assertOk(await page.locator("#phaseLegend").count() === 0, "combined phase legend should be removed");
     const hasPaint = await page.locator("#lightCanvas").evaluate((canvas) => {
       const node = canvas;
       const ctx = node.getContext("2d");
@@ -299,6 +335,13 @@ async function runPlaywrightChecks() {
       return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
     });
     assertOk(hasPaint, "light curve canvas was blank");
+    const hasVelocityPaint = await page.locator("#velocityCanvas").evaluate((canvas) => {
+      const node = canvas;
+      const ctx = node.getContext("2d");
+      if (!ctx) return false;
+      return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
+    });
+    assertOk(hasVelocityPaint, "radial velocity canvas was blank");
 
     const timeLegend = await page.locator("#timeLegend").textContent();
     assertOk(
@@ -339,6 +382,7 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#odeEquations").getAttribute("data-driver-mode")) === "h", "ODE driver did not switch back to sqrt(H)");
 
     const timeCanvas = page.locator("#timeCanvas");
+    await timeCanvas.scrollIntoViewIfNeeded();
     const timeBox = await timeCanvas.boundingBox();
     assertOk(Boolean(timeBox), "time canvas bounds were unavailable");
     const timeReset = page.locator("[data-plot-reset='time']");
@@ -359,6 +403,7 @@ async function runPlaywrightChecks() {
     assertOk(await timeReset.isDisabled(), "time reset did not clear the panned range");
 
     const lumCanvas = page.locator("#lumCanvas");
+    await lumCanvas.scrollIntoViewIfNeeded();
     const lumBox = await lumCanvas.boundingBox();
     assertOk(Boolean(lumBox), "luminosity evolution canvas bounds were unavailable");
     const lumReset = page.locator("[data-plot-reset='lum']");

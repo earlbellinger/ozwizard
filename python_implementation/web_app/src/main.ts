@@ -9,6 +9,7 @@ import {
   type ControlDef,
   type ModelParameters,
   type Row,
+  mAt,
   sample,
   solveModel
 } from "./model";
@@ -58,11 +59,19 @@ const SONIFICATION_MAX_SAMPLES = 2400;
 const SONIFICATION_WAVEFORM_SAMPLES = 512;
 const SONIFICATION_WAVEFORM_SMOOTH_PASSES = 5;
 const SONIFICATION_MAX_HARMONICS = 32;
+const PIANO_DEFAULT_ENVELOPE: PianoEnvelope = { attack: 0.015, decay: 0.22, release: 0.36 };
+const PIANO_DEFAULT_SUSTAIN_LEVEL = 0.38;
+const SONIFICATION_SOURCE_LABELS: Record<SonificationSource, string> = {
+  luminosity: "luminosity",
+  velocity: "radial velocity",
+  pressure: "pressure"
+};
 const controlElements = new Map<ControlParameterKey, HTMLInputElement>();
 let sonificationReferenceNote = MIDDLE_C_NOTE;
 let sonificationReferenceHz = noteToFrequency(MIDDLE_C_NOTE);
 let sonificationSamples: SonificationSample[] = [];
 let sonificationWaveformSignature = "";
+let sonificationSource: SonificationSource = "luminosity";
 let sonificationContext: AudioContext | null = null;
 let sonificationVoice: SonificationVoice | null = null;
 let sonificationMasterGain: GainNode | null = null;
@@ -72,8 +81,8 @@ let sonificationActive = false;
 let pianoModeActive = false;
 let pianoStartOctave = PIANO_DEFAULT_START_OCTAVE;
 let pianoMasterGain: GainNode | null = null;
-let pianoEnvelope: PianoEnvelope = { attack: 0.015, decay: 0.22, release: 0.36 };
-let pianoSustainLevel = 0.38;
+let pianoEnvelope: PianoEnvelope = { ...PIANO_DEFAULT_ENVELOPE };
+let pianoSustainLevel = PIANO_DEFAULT_SUSTAIN_LEVEL;
 const activePianoVoices = new Map<string, PianoVoice>();
 const activePianoMidiCounts = new Map<number, number>();
 const TAU_TICKS = [1, 3, 10, 30, 100, 300, 1000];
@@ -89,7 +98,8 @@ const THEME = {
 type PlotBox = { left: number; top: number; width: number; height: number };
 type NumericRange = [number, number];
 type InteractivePlotId = "time" | "lum";
-type ToggleSeriesKey = "R" | "V" | "H" | "Uc" | "L" | "Lr" | "Lc";
+type PlotSeriesKey = "R" | "V" | "H" | "Uc" | "L" | "Lr" | "Lc";
+type SonificationSource = "luminosity" | "velocity" | "pressure";
 
 interface PlotView {
   xlim?: NumericRange;
@@ -137,6 +147,8 @@ interface PianoEnvelope {
   decay: number;
   release: number;
 }
+
+type PianoResetKey = keyof PianoEnvelope | "sustain";
 
 interface PianoVoice {
   oscillator: OscillatorNode;
@@ -401,6 +413,14 @@ function setupSonificationControls(): void {
   const pitch = el<HTMLInputElement>("sonificationPitch");
   const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
   pitch.addEventListener("input", handleSonificationSliderInput);
+  document.querySelectorAll<HTMLButtonElement>("[data-sonify-source]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const source = button.dataset.sonifySource;
+      if (!isSonificationSource(source) || source === sonificationSource) return;
+      sonificationSource = source;
+      drawAll();
+    });
+  });
   if (!AudioContextCtor) {
     piano.disabled = true;
     piano.title = "Audio is not supported in this browser";
@@ -415,12 +435,32 @@ function setupSonificationControls(): void {
     });
   }
   setupPianoControls();
+  updateSonificationSourceControls();
   updateHeaderAudioControls();
   updateSonificationToggleUi();
   updatePianoToggleUi();
   window.addEventListener("keydown", handlePianoKeyDown);
   window.addEventListener("keyup", handlePianoKeyUp);
   window.addEventListener("blur", releaseAllPianoNotes);
+}
+
+function isSonificationSource(value: string | undefined): value is SonificationSource {
+  return value === "luminosity" || value === "velocity" || value === "pressure";
+}
+
+function updateSonificationSourceControls(): void {
+  document.querySelectorAll<HTMLButtonElement>("[data-sonify-source]").forEach((button) => {
+    const source = button.dataset.sonifySource;
+    const active = source === sonificationSource;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+    if (isSonificationSource(source)) button.title = `Sonify ${SONIFICATION_SOURCE_LABELS[source]}`;
+  });
+  const pressureVisible = sonificationSource === "pressure";
+  const pressurePanel = document.getElementById("pressurePhasePanel");
+  if (pressurePanel instanceof HTMLElement) pressurePanel.hidden = !pressureVisible;
+  const plotGrid = document.querySelector<HTMLElement>(".plot-grid");
+  if (plotGrid) plotGrid.dataset.pressureVisible = String(pressureVisible);
 }
 
 function handleSonificationSliderInput(event: Event): void {
@@ -517,6 +557,10 @@ function setPianoPanelVisible(visible: boolean): void {
   panel.hidden = !visible;
 }
 
+function capitalize(value: string): string {
+  return value ? `${value[0].toUpperCase()}${value.slice(1)}` : value;
+}
+
 function setupPianoControls(): void {
   const bindEnvelopeSlider = (id: string, key: keyof PianoEnvelope) => {
     const input = document.getElementById(id);
@@ -525,6 +569,7 @@ function setupPianoControls(): void {
     input.addEventListener("input", () => {
       pianoEnvelope = { ...pianoEnvelope, [key]: Number(input.value) };
       updatePianoControlLabels();
+      updatePianoResetButtons();
       drawAdsrVisualization();
     });
   };
@@ -537,25 +582,64 @@ function setupPianoControls(): void {
     sustain.addEventListener("input", () => {
       pianoSustainLevel = Number(sustain.value);
       updatePianoControlLabels();
+      updatePianoResetButtons();
       drawAdsrVisualization();
     });
   }
+  document.querySelectorAll<HTMLButtonElement>("[data-piano-reset]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const key = button.dataset.pianoReset as PianoResetKey | undefined;
+      if (key) resetPianoControl(key);
+    });
+  });
   buildPianoKeyboard();
   updatePianoControlLabels();
+  updatePianoResetButtons();
   drawAdsrVisualization();
+}
+
+function resetPianoControl(key: PianoResetKey): void {
+  if (key === "sustain") {
+    pianoSustainLevel = PIANO_DEFAULT_SUSTAIN_LEVEL;
+    const input = document.getElementById("pianoSustain");
+    if (input instanceof HTMLInputElement) input.value = String(pianoSustainLevel);
+  } else {
+    pianoEnvelope = { ...pianoEnvelope, [key]: PIANO_DEFAULT_ENVELOPE[key] };
+    const input = document.getElementById(`piano${capitalize(key)}`);
+    if (input instanceof HTMLInputElement) input.value = String(pianoEnvelope[key]);
+  }
+  updatePianoControlLabels();
+  updatePianoResetButtons();
+  drawAdsrVisualization();
+}
+
+function updatePianoResetButtons(): void {
+  document.querySelectorAll<HTMLButtonElement>("[data-piano-reset]").forEach((button) => {
+    const key = button.dataset.pianoReset as PianoResetKey | undefined;
+    if (!key) return;
+    const current = key === "sustain" ? pianoSustainLevel : pianoEnvelope[key];
+    const defaultValue = key === "sustain" ? PIANO_DEFAULT_SUSTAIN_LEVEL : PIANO_DEFAULT_ENVELOPE[key];
+    const label = capitalize(key);
+    button.disabled = valuesMatch(current, defaultValue);
+    button.title = `Reset ${label.toLowerCase()} to ${formatPianoControlValue(key, defaultValue)}`;
+  });
 }
 
 function updatePianoControlLabels(): void {
   const labels: Record<string, string> = {
-    pianoAttackValue: formatDuration(pianoEnvelope.attack),
-    pianoDecayValue: formatDuration(pianoEnvelope.decay),
-    pianoReleaseValue: formatDuration(pianoEnvelope.release),
-    pianoSustainValue: `${Math.round(pianoSustainLevel * 100)}%`
+    pianoAttackValue: formatPianoControlValue("attack", pianoEnvelope.attack),
+    pianoDecayValue: formatPianoControlValue("decay", pianoEnvelope.decay),
+    pianoReleaseValue: formatPianoControlValue("release", pianoEnvelope.release),
+    pianoSustainValue: formatPianoControlValue("sustain", pianoSustainLevel)
   };
   Object.entries(labels).forEach(([id, value]) => {
     const node = document.getElementById(id);
     if (node) node.textContent = value;
   });
+}
+
+function formatPianoControlValue(key: PianoResetKey, value: number): string {
+  return key === "sustain" ? `${Math.round(value * 100)}%` : formatDuration(value);
 }
 
 function formatDuration(seconds: number): string {
@@ -980,6 +1064,20 @@ function createSonificationPeriodicWave(context: AudioContext): PeriodicWave | n
   return context.createPeriodicWave(real, imag, { disableNormalization: false });
 }
 
+function updateActivePianoWaveforms(): void {
+  const context = sonificationContext;
+  if (!context || !activePianoVoices.size) return;
+  const wave = createSonificationPeriodicWave(context);
+  if (!wave) return;
+  activePianoVoices.forEach((voice) => {
+    try {
+      voice.oscillator.setPeriodicWave(wave);
+    } catch {
+      // A note may be ending while a parameter redraw updates the waveform.
+    }
+  });
+}
+
 function circularSmooth(values: number[], passes: number): number[] {
   let smoothed = [...values];
   for (let pass = 0; pass < passes; pass += 1) {
@@ -1023,12 +1121,13 @@ function updateSonificationCurve(phase: PhaseResult): void {
   sonificationSamples = nextSamples;
   sonificationWaveformSignature = nextSignature;
   updateSonificationWaveform();
+  updateActivePianoWaveforms();
 }
 
 function sonificationSampleSignature(samples: SonificationSample[]): string {
-  if (!samples.length) return "empty";
+  if (!samples.length) return `${sonificationSource}|empty`;
   const step = Math.max(1, Math.floor(samples.length / 48));
-  const values: string[] = [String(samples.length)];
+  const values: string[] = [sonificationSource, String(samples.length)];
   for (let index = 0; index < samples.length; index += step) {
     const sample = samples[index];
     values.push(`${sample.phase.toFixed(4)}:${sample.value.toFixed(4)}`);
@@ -1038,22 +1137,45 @@ function sonificationSampleSignature(samples: SonificationSample[]): string {
   return values.join("|");
 }
 
+function acousticPressure(row: Row): number {
+  const m = mAt(row.R, state);
+  return row.H * row.R ** (-m * state.gamma1);
+}
+
+function acousticPressureSignal(row: Row): number {
+  const pressure = acousticPressure(row);
+  return pressure > 0 ? pressure : NaN;
+}
+
+function sonificationSignal(row: Row): number {
+  switch (sonificationSource) {
+    case "luminosity":
+      return row.L;
+    case "velocity":
+      return row.V;
+    case "pressure":
+      return acousticPressureSignal(row);
+  }
+}
+
 function buildSonificationSamples(rows: Row[], domain?: NumericRange): SonificationSample[] {
-  const finiteRows = rows.filter((row) => Number.isFinite(row.tau) && Number.isFinite(row.L));
+  const finiteRows = rows
+    .map((row) => ({ row, value: sonificationSignal(row) }))
+    .filter((sample) => Number.isFinite(sample.row.tau) && Number.isFinite(sample.value));
   if (!finiteRows.length) return [];
-  const start = domain?.[0] ?? finiteRows[0].tau;
-  const end = domain?.[1] ?? finiteRows[finiteRows.length - 1].tau;
+  const start = domain?.[0] ?? finiteRows[0].row.tau;
+  const end = domain?.[1] ?? finiteRows[finiteRows.length - 1].row.tau;
   if (end <= start) return [{ phase: 0, value: 0 }];
-  const inDomain = finiteRows.filter((row) => row.tau >= start && row.tau <= end);
+  const inDomain = finiteRows.filter((sample) => sample.row.tau >= start && sample.row.tau <= end);
   if (!inDomain.length) return [];
-  const luminosities = inDomain.map((row) => row.L);
-  const minLuminosity = Math.min(...luminosities);
-  const maxLuminosity = Math.max(...luminosities);
-  const span = maxLuminosity - minLuminosity;
+  const sourceValues = inDomain.map((sample) => sample.value);
+  const minValue = Math.min(...sourceValues);
+  const maxValue = Math.max(...sourceValues);
+  const span = maxValue - minValue;
   const samples = strideDownsample(inDomain, SONIFICATION_MAX_SAMPLES)
-    .map((row) => ({
-      phase: clamp((row.tau - start) / (end - start), 0, 1),
-      value: span > 1e-12 ? clamp(2 * ((row.L - minLuminosity) / span) - 1, -1, 1) : 0
+    .map((sample) => ({
+      phase: clamp((sample.row.tau - start) / (end - start), 0, 1),
+      value: span > 1e-12 ? clamp(2 * ((sample.value - minValue) / span) - 1, -1, 1) : 0
     }))
     .sort((a, b) => a.phase - b.phase);
   if (!samples.length) return [];
@@ -1657,7 +1779,7 @@ function solveAndDraw(): void {
   drawAll();
 }
 
-function strideDownsample(rows: Row[], maxPoints: number): Row[] {
+function strideDownsample<T>(rows: T[], maxPoints: number): T[] {
   if (rows.length <= maxPoints) return rows;
   const stride = Math.ceil(rows.length / maxPoints);
   const sampled = rows.filter((_row, index) => index % stride === 0);
@@ -1666,7 +1788,7 @@ function strideDownsample(rows: Row[], maxPoints: number): Row[] {
   return sampled;
 }
 
-function downsample(rows: Row[], maxPoints = 2200, keys: readonly ToggleSeriesKey[] = []): Row[] {
+function downsample(rows: Row[], maxPoints = 2200, keys: readonly PlotSeriesKey[] = []): Row[] {
   if (rows.length <= maxPoints) return rows;
   const uniqueKeys = [...new Set(keys)];
   if (!uniqueKeys.length) return strideDownsample(rows, maxPoints);
@@ -1718,11 +1840,11 @@ function rowsInTauRange(rows: Row[], xlim: NumericRange | undefined): Row[] {
   return rows.slice(Math.max(0, firstVisible - 1), Math.min(rows.length, endExclusive + 1));
 }
 
-function activeSeriesKeys(plotId: InteractivePlotId, keys: readonly ToggleSeriesKey[]): ToggleSeriesKey[] {
+function activeSeriesKeys(plotId: InteractivePlotId, keys: readonly PlotSeriesKey[]): PlotSeriesKey[] {
   return keys.filter((key) => seriesIsVisible(plotId, key));
 }
 
-function rowsForInteractivePlot(plotId: InteractivePlotId, rows: Row[], keys: readonly ToggleSeriesKey[], maxPoints = 60000): Row[] {
+function rowsForInteractivePlot(plotId: InteractivePlotId, rows: Row[], keys: readonly PlotSeriesKey[], maxPoints = 60000): Row[] {
   const windowedRows = rowsInTauRange(rows, plotViews[plotId].xlim);
   return downsample(windowedRows, maxPoints, activeSeriesKeys(plotId, keys));
 }
@@ -2014,7 +2136,7 @@ function drawSelectionOverlay(ctx: CanvasRenderingContext2D, canvasId: string, p
 interface LegendItem {
   label: string;
   color: string;
-  key?: ToggleSeriesKey;
+  key?: PlotSeriesKey;
   toggleLabel?: string;
 }
 
@@ -2046,7 +2168,7 @@ function drawLegend(id: string, items: LegendItem[], options: { plotId?: Interac
   if (options.plotId) {
     node.querySelectorAll<HTMLButtonElement>("[data-plot-series]").forEach((button) => {
       button.addEventListener("click", () => {
-        const key = button.dataset.plotSeries as ToggleSeriesKey | undefined;
+        const key = button.dataset.plotSeries as PlotSeriesKey | undefined;
         if (!key) return;
         plotVisibility[options.plotId!][key] = !seriesIsVisible(options.plotId!, key);
         updateLegendToggleState(node, options.plotId);
@@ -2060,7 +2182,7 @@ function drawLegend(id: string, items: LegendItem[], options: { plotId?: Interac
 function updateLegendToggleState(node: HTMLElement, plotId?: InteractivePlotId): void {
   if (!plotId) return;
   node.querySelectorAll<HTMLButtonElement>("[data-plot-series]").forEach((button) => {
-    const key = button.dataset.plotSeries as ToggleSeriesKey | undefined;
+    const key = button.dataset.plotSeries as PlotSeriesKey | undefined;
     if (!key) return;
     const visible = seriesIsVisible(plotId, key);
     button.classList.toggle("is-hidden", !visible);
@@ -2068,7 +2190,7 @@ function updateLegendToggleState(node: HTMLElement, plotId?: InteractivePlotId):
   });
 }
 
-function seriesIsVisible(plotId: InteractivePlotId, key: ToggleSeriesKey): boolean {
+function seriesIsVisible(plotId: InteractivePlotId, key: PlotSeriesKey): boolean {
   return plotVisibility[plotId][key] !== false;
 }
 
@@ -2142,7 +2264,7 @@ function clearStalePlotView(plotId: InteractivePlotId, rows: readonly Row[]): vo
   if (view.ylim && !validRange(view.ylim)) view.ylim = undefined;
 }
 
-function visibleRows(plotId: InteractivePlotId, key: ToggleSeriesKey, rows: Row[]): Row[] {
+function visibleRows(plotId: InteractivePlotId, key: PlotSeriesKey, rows: Row[]): Row[] {
   return seriesIsVisible(plotId, key) ? rows : [];
 }
 
@@ -2158,6 +2280,7 @@ function drawAll(): void {
     || (!state.runUntilStable && latestResult.status === "complete");
   const final = rows[rows.length - 1];
   const phase = phaseForRows(rows);
+  updateSonificationSourceControls();
   updateSonificationCurve(phase);
   const metricsNode = el<HTMLDivElement>("metrics");
   const metricItems = [
@@ -2168,9 +2291,7 @@ function drawAll(): void {
     { label: "rejected", value: latestResult.stats.rejectedSteps },
     { label: "max err", value: fmt(latestResult.stats.maxNormalizedError, 3) },
     { label: "period", value: phase.period ? fmt(phase.period, 3) : "n/a" },
-    { label: "phase", value: phase.reason === "ok" ? "available" : "unavailable" },
-    { label: `final \\(${TEX.R}\\)`, value: final ? fmt(final.R, 3) : "n/a" },
-    { label: `final \\(${TEX.L}\\)`, value: final ? fmt(final.L, 3) : "n/a" }
+    { label: "phase", value: phase.reason === "ok" ? "available" : "unavailable" }
   ];
   const metricsHtml = metricItems
     .map(({ label, value, className }) => `<span class="metric${className ? ` ${className}` : ""}">${label}<b>${value}</b></span>`)
@@ -2178,7 +2299,7 @@ function drawAll(): void {
   stageMathHtml(metricsNode, metricsHtml);
   queueMathTypeset([metricsNode]);
 
-  const phaseSample = phase.rows.length ? downsample(phase.rows, 1800, ["L", "V"]) : [];
+  const phaseSample = phase.rows.length ? downsample(phase.rows, 1800, ["L", "V", "H"]) : [];
   const phaseMessage = phaseUnavailableLabel(phase);
   const phasePeriodLabel = `phase (period = ${phase.period ? fmt(phase.period, 3) : "n/a"} τ)`;
   drawSeries("lightCanvas", [
@@ -2202,6 +2323,19 @@ function drawAll(): void {
     ylim: phaseSample.length ? undefined : [0, 1],
     message: phaseMessage
   });
+
+  if (sonificationSource === "pressure") {
+    drawSeries("pressureCanvas", [
+      { label: "P", color: COLORS.H, rows: phaseSample, x: (row) => row.tau, y: acousticPressureSignal }
+    ], {
+      xlabel: phasePeriodLabel,
+      ylabel: "pressure",
+      ylabelColor: COLORS.H,
+      xlim: [0, 2],
+      ylim: phaseSample.length ? undefined : [0, 1],
+      message: phaseMessage
+    });
+  }
 
   const timeXlim = integrationTimeRange();
   const sampledTimeRows = rowsForInteractivePlot("time", rows, ["R", "V", "H", "Uc"]);
