@@ -273,5 +273,14 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#sidebarControls > summary")).toBeVisible();
   await page.locator("#sidebarControls > summary").click();
   await expect(page.locator("#physicalControls")).toBeVisible();
+  const mobileMeaningFontSizes = await page.locator(".parameters-panel .variable-table tbody td:nth-child(2)").evaluateAll((cells) => {
+    const sizes = new Set<string>();
+    cells.forEach((cell) => {
+      sizes.add(getComputedStyle(cell).fontSize);
+      cell.querySelectorAll("mjx-container").forEach((math) => sizes.add(getComputedStyle(math).fontSize));
+    });
+    return [...sizes];
+  });
+  expect(mobileMeaningFontSizes).toEqual(["13px"]);
   expect(pageErrors).toEqual([]);
 });

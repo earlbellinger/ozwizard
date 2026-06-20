@@ -1075,6 +1075,13 @@
 
     .variable-table td:not(.symbol-cell) {
       color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .variable-table td:not(.symbol-cell) mjx-container[jax="SVG"] {
+      font-size: 1em !important;
+      line-height: 0;
     }
 
     .initial-cell {
