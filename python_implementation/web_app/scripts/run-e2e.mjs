@@ -234,6 +234,10 @@ async function runPlaywrightChecks() {
     await page.waitForFunction(() => !document.body.innerText.includes("\\("), null, { timeout: 15000 });
 
     assertOk(await page.locator("[data-symbol='tau']").first().isVisible(), "tau symbol was not visible");
+    const tauRowText = await page.locator("[data-symbol='tau']").first().locator("xpath=ancestor::tr").textContent();
+    assertOk(tauRowText?.includes("Time"), "tau row should label the variable as Time");
+    assertOk(tauRowText?.includes("free-fall/dynamical time"), "tau row should describe the dynamical time scaling");
+    assertOk(!tauRowText?.includes("derivatives such as"), "tau row should not include the old derivative explanation");
     const tauColor = await page.locator("[data-symbol='tau']").first().evaluate((node) => getComputedStyle(node).color);
     assertOk(tauColor === "rgb(158, 167, 255)", `unexpected tau color: ${tauColor}`);
     assertOk(await page.getByRole("heading", { name: "Equations Solved" }).isVisible(), "equations panel was not visible");
