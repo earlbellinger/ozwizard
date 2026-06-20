@@ -85,7 +85,8 @@ let pianoEnvelope: PianoEnvelope = { ...PIANO_DEFAULT_ENVELOPE };
 let pianoSustainLevel = PIANO_DEFAULT_SUSTAIN_LEVEL;
 const activePianoVoices = new Map<string, PianoVoice>();
 const activePianoMidiCounts = new Map<number, number>();
-const TAU_TICKS = [1, 3, 10, 30, 100, 300, 1000];
+const TAU_SCALE_MAX = 1000;
+const TAU_TICKS = [1, 3, 10, 30, 100, 300];
 const THEME = {
   axisGrid: "#26334E",
   axisText: "#A8B4C7",
@@ -1560,10 +1561,11 @@ function buildSliderGroup(containerId: string, controls: ControlDef[]): void {
 }
 
 function tauScaleMarkup(): string {
-  const maxLog = Math.log10(Math.max(...TAU_TICKS));
+  const maxLog = Math.log10(TAU_SCALE_MAX);
   return `<div class="slider-scale">${TAU_TICKS.map((tick) => {
     const position = (Math.log10(tick) / maxLog) * 100;
-    return `<span style="--tick-position:${position.toFixed(4)}%">${tick}</span>`;
+    const edge = tick === 1 ? ` data-scale-edge="start"` : tick === TAU_SCALE_MAX ? ` data-scale-edge="end"` : "";
+    return `<span${edge} style="--tick-position:${position.toFixed(4)}%">${tick}</span>`;
   }).join("")}</div>`;
 }
 

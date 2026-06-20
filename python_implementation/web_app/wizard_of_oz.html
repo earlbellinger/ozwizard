@@ -755,7 +755,7 @@
     }
 
     .slider-control {
-      --slider-label-width: 178px;
+      --slider-label-width: 206px;
       --slider-reading-width: 58px;
       display: grid;
       grid-template-columns: minmax(160px, var(--slider-label-width)) minmax(0, 1fr) 22px;
@@ -878,11 +878,11 @@
       transform: translateX(-50%);
     }
 
-    .slider-scale span:first-child {
+    .slider-scale span[data-scale-edge="start"] {
       transform: translateX(0);
     }
 
-    .slider-scale span:last-child {
+    .slider-scale span[data-scale-edge="end"] {
       transform: translateX(-100%);
     }
 
@@ -1645,7 +1645,7 @@
                 <tr><th>Symbol</th><th>Name</th><th>Initial</th><th>Meaning</th></tr>
               </thead>
               <tbody>
-                <tr><td class="symbol-cell" data-symbol="tau" style="--color:var(--tau)">\(\ozTau{\tau}\)</td><td>Time</td><td class="initial-cell" id="initialTau"></td><td>Dimensionless clock scaled by the model's free-fall/dynamical time</td></tr>
+                <tr><td class="symbol-cell" data-symbol="tau" style="--color:var(--tau)">\(\ozTau{\tau}\)</td><td>Time</td><td class="initial-cell" id="initialTau"></td><td>Dimensionless clock scaled by the model's dynamical time</td></tr>
                 <tr><td class="symbol-cell" style="--color:var(--radius)">\(\ozRadius{R}\)</td><td>Radius</td><td class="initial-cell" id="initialR"></td><td>Dimensionless radius of the moving shell</td></tr>
                 <tr><td class="symbol-cell" style="--color:var(--velocity)">\(\ozVelocity{V}\)</td><td>Radial velocity</td><td class="initial-cell" id="initialV"></td><td>Time derivative of the shell radius</td></tr>
                 <tr><td class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{H}\)</td><td>Thermal-pressure state</td><td class="initial-cell" id="initialH"></td><td>Dimensionless thermal-pressure state; raises pressure support and radiative luminosity</td></tr>
@@ -1687,7 +1687,7 @@
             <span class="symbol-cell" style="--color:var(--radius)">\(\ozRadius{R}\)</span> and radial velocity
             <span class="symbol-cell" style="--color:var(--velocity)">\(\ozVelocity{V}\)</span> describe the mechanical motion.
             The independent clock <span class="symbol-cell" style="--color:var(--tau)">\(\ozTau{\tau}\)</span>
-            is scaled by the model's free-fall/dynamical time.
+            is scaled by the model's dynamical time.
             The nonadiabatic pressure factor <span class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{H}\)</span>
             carries the thermal/pressure response, while the convective velocity
             <span class="symbol-cell" style="--color:var(--convective)">\(\ozConvective{U_c}\)</span> relaxes toward a

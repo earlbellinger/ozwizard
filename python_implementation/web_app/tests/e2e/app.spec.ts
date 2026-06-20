@@ -379,6 +379,9 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await page.locator("#runUntilStable").uncheck();
   await expect(page.locator("#integrationControls .slider-scale span").nth(4)).toHaveAttribute("style", /66\.6667%/);
   await expect(page.locator("#integrationControls .slider-scale span").nth(5)).toHaveAttribute("style", /82\.5707%/);
+  await expect(page.locator("#integrationControls .slider-scale span")).toHaveText(["1", "3", "10", "30", "100", "300"]);
+  await expect(page.locator("#integrationControls .slider-scale span").first()).toHaveAttribute("data-scale-edge", "start");
+  await expect(page.locator("#integrationControls .slider-scale span").last()).not.toHaveAttribute("data-scale-edge", "end");
   const maxTauLabel = await page.locator("input[aria-label='max time']").evaluate((input) => {
     const slider = input as HTMLInputElement;
     slider.value = "3";
@@ -389,6 +392,17 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     return label;
   });
   expect(maxTauLabel).toBe("1000");
+  await expect(page.getByRole("slider", { name: "κ-ρ exponent" })).toBeVisible();
+  await expect(page.getByRole("slider", { name: "κ-T exponent" })).toBeVisible();
+  await expect(page.getByRole("slider", { name: "inner L exponent" })).toBeVisible();
+  await expect(page.getByText("opacity-density exponent", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("opacity-temperature exponent", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("inner luminosity exponent", { exact: true })).toHaveCount(0);
+  const convectiveFluxLabelFit = await page.getByRole("slider", { name: "convective flux fraction" })
+    .locator("xpath=ancestor::*[contains(@class, 'slider-control')]")
+    .locator(".slider-name")
+    .evaluate((node) => node.scrollWidth <= node.clientWidth + 1);
+  expect(convectiveFluxLabelFit).toBe(true);
   const physicalControlsBox = await page.locator("#physicalControls").boundingBox();
   const geometryBox = await page.locator("#variableM").boundingBox();
   const driverBox = await page.locator("[data-driver='h']").boundingBox();
@@ -431,7 +445,8 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   const tauRow = tauCell.locator("xpath=ancestor::tr");
   await expect(tauCell).toBeVisible();
   await expect(tauRow).toContainText("Time");
-  await expect(tauRow).toContainText("free-fall/dynamical time");
+  await expect(tauRow).toContainText("dynamical time");
+  await expect(tauRow).not.toContainText("free-fall");
   await expect(tauRow).not.toContainText("derivatives such as");
   await expect(tauCell).toHaveCSS("color", "rgb(139, 148, 158)");
   await expect(page.locator("#initialR")).toBeVisible();
@@ -486,9 +501,12 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(sourceText).toContain("\\\\ozChiZero{\\\\chi_0}");
   expect(sourceText).toContain("\\\\ozChi{\\\\chi}");
   expect(sourceText).toContain("\\\\ozEta{\\\\eta}");
+  expect(sourceText).not.toContain("User-tunable reference shell form factor");
+  expect(sourceText).not.toContain("free-fall/dynamical");
   expect(htmlText).toContain("ozChiZero");
   expect(htmlText).toContain("ozEta");
   expect(htmlText).toContain("\\ozChi{\\chi}");
+  expect(htmlText).not.toContain("free-fall/dynamical");
   expect(sourceText).not.toContain("\\\\ozChi{\\\\chi_0}");
   expect(sourceText).not.toContain("\\\\mathrm{eff}");
   expect(htmlText).not.toContain("\\mathrm{eff}");

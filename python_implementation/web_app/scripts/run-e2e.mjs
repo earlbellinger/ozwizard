@@ -249,6 +249,14 @@ async function runPlaywrightChecks() {
     );
     assertOk(tauTickPositions[4] === "66.6667%", `tau=100 tick should be at 66.6667%, saw ${tauTickPositions[4]}`);
     assertOk(tauTickPositions[5] === "82.5707%", `tau=300 tick should use log placement, saw ${tauTickPositions[5]}`);
+    const tauTickLabels = await page.locator("#integrationControls .slider-scale span").evaluateAll((spans) =>
+      spans.map((span) => span.textContent?.trim()).join("|")
+    );
+    assertOk(tauTickLabels === "1|3|10|30|100|300", `tau scale should omit the overlapping 1000 label, saw ${tauTickLabels}`);
+    const tauTickEdges = await page.locator("#integrationControls .slider-scale span").evaluateAll((spans) =>
+      spans.map((span) => span.getAttribute("data-scale-edge") || "").join("|")
+    );
+    assertOk(tauTickEdges === "start|||||", `tau scale should only edge-anchor the first visible label, saw ${tauTickEdges}`);
     assertOk((await page.locator("#statusPill").count()) === 0, "status pill should be folded into model output");
     await page.waitForFunction(
       () => document.querySelector("#metrics")?.textContent?.includes("fixed-time complete"),
@@ -267,7 +275,8 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("[data-symbol='tau']").first().isVisible(), "tau symbol was not visible");
     const tauRowText = await page.locator("[data-symbol='tau']").first().locator("xpath=ancestor::tr").textContent();
     assertOk(tauRowText?.includes("Time"), "tau row should label the variable as Time");
-    assertOk(tauRowText?.includes("free-fall/dynamical time"), "tau row should describe the dynamical time scaling");
+    assertOk(tauRowText?.includes("dynamical time"), "tau row should describe the dynamical time scaling");
+    assertOk(!tauRowText?.includes("free-fall"), "tau row should not use the old free-fall/dynamical phrasing");
     assertOk(!tauRowText?.includes("derivatives such as"), "tau row should not include the old derivative explanation");
     const tauColor = await page.locator("[data-symbol='tau']").first().evaluate((node) => getComputedStyle(node).color);
     assertOk(tauColor === "rgb(139, 148, 158)", `unexpected tau color: ${tauColor}`);
@@ -284,6 +293,8 @@ async function runPlaywrightChecks() {
       sourceText.includes("\\\\ozChiZero{\\\\chi_0}") && sourceText.includes("\\\\ozChi{\\\\chi}") && sourceText.includes("\\\\ozEta{\\\\eta}") && htmlText.includes("\\ozChi{\\chi}"),
       "web app source should use separate chi, chi0, and eta notation"
     );
+    assertOk(!sourceText.includes("User-tunable reference shell form factor"), "chi0 meaning should not start with User-tunable");
+    assertOk(!sourceText.includes("free-fall/dynamical") && !htmlText.includes("free-fall/dynamical"), "web app should use dynamical time wording consistently");
     assertOk(sourceText.includes("\\\\ozChi{\\\\chi_0}") === false, "chi0 should not use the active chi color macro");
     assertOk(!sourceText.includes("\\\\mathrm{eff}") && !htmlText.includes("\\mathrm{eff}"), "web app source should not use chi_eff notation");
     assertOk(!sourceText.includes("\\\\ozMass") && !htmlText.includes("\\ozMass"), "web app source should not use the old mass macro");
@@ -347,6 +358,17 @@ async function runPlaywrightChecks() {
     });
     await page.locator("[data-reset-key='r0']").click();
     assertOk((await page.locator("[data-value-for='tEnd']").textContent()) === "100", "default tau_max value should render as 100");
+    assertOk(await page.getByRole("slider", { name: "κ-ρ exponent" }).isVisible(), "kappa-rho exponent slider label should use symbols");
+    assertOk(await page.getByRole("slider", { name: "κ-T exponent" }).isVisible(), "kappa-temperature exponent slider label should use symbols");
+    assertOk(await page.getByRole("slider", { name: "inner L exponent" }).isVisible(), "inner luminosity exponent slider label should be compact");
+    assertOk(await page.getByText("opacity-density exponent", { exact: true }).count() === 0, "old opacity-density slider label should be removed");
+    assertOk(await page.getByText("opacity-temperature exponent", { exact: true }).count() === 0, "old opacity-temperature slider label should be removed");
+    assertOk(await page.getByText("inner luminosity exponent", { exact: true }).count() === 0, "old inner luminosity slider label should be removed");
+    const convectiveFluxLabelFit = await page.getByRole("slider", { name: "convective flux fraction" })
+      .locator("xpath=ancestor::*[contains(@class, 'slider-control')]")
+      .locator(".slider-name")
+      .evaluate((node) => node.scrollWidth <= node.clientWidth + 1);
+    assertOk(convectiveFluxLabelFit, "convective flux fraction label should fit without ellipsis on desktop");
     const maxTauLabel = await page.locator("input[aria-label='max time']").evaluate((input) => {
       const slider = input;
       slider.value = "3";
