@@ -335,6 +335,29 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#initialR")).toBeVisible();
   await expect(page.locator("#initialLr")).toBeVisible();
   await expect(page.locator("#initialL")).toBeVisible();
+  const referenceType = await page.evaluate(() => {
+    const physicalText = document.querySelector<HTMLElement>(".notes-grid > .content-panel:not(.reference-panel) p");
+    const variableMeaning = document.querySelector<HTMLElement>("[data-symbol='tau']")?.closest("tr")?.lastElementChild;
+    const parameterMeaning = document.querySelector<HTMLElement>("#tunableParameterTable td:last-child");
+    if (!(physicalText instanceof HTMLElement) || !(variableMeaning instanceof HTMLElement) || !(parameterMeaning instanceof HTMLElement)) {
+      throw new Error("missing reference typography target");
+    }
+    const physicalStyle = getComputedStyle(physicalText);
+    const variableStyle = getComputedStyle(variableMeaning);
+    const parameterStyle = getComputedStyle(parameterMeaning);
+    return {
+      physicalFontSize: physicalStyle.fontSize,
+      physicalLineHeight: physicalStyle.lineHeight,
+      variableFontSize: variableStyle.fontSize,
+      variableLineHeight: variableStyle.lineHeight,
+      parameterFontSize: parameterStyle.fontSize,
+      parameterLineHeight: parameterStyle.lineHeight
+    };
+  });
+  expect(referenceType.variableFontSize).toBe(referenceType.physicalFontSize);
+  expect(referenceType.variableLineHeight).toBe(referenceType.physicalLineHeight);
+  expect(referenceType.parameterFontSize).toBe(referenceType.physicalFontSize);
+  expect(referenceType.parameterLineHeight).toBe(referenceType.physicalLineHeight);
   const initialRadiusControl = page.locator("input[aria-label='initial radius']").locator("xpath=ancestor::*[contains(@class, 'slider-control')]");
   await expect(initialRadiusControl).toContainText("initial radius");
   await expect(initialRadiusControl).toContainText("1.1");
@@ -414,7 +437,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
 
   await page.setViewportSize({ width: 1800, height: 1200 });
   const wideReferenceLayout = await referencePanelMetrics(page);
-  expect(wideReferenceLayout.panels.map((panel) => panel.height)).toEqual([498, 498, 498]);
+  expect(wideReferenceLayout.panels.map((panel) => panel.height)).toEqual([559, 559, 559]);
   const wideVariables = wideReferenceLayout.panels.find((panel) => panel.heading === "Variables");
   const wideParameters = wideReferenceLayout.panels.find((panel) => panel.heading === "Parameters");
   expect(wideVariables?.scrollHeight).toBeGreaterThanOrEqual(wideVariables?.clientHeight || 0);
@@ -426,7 +449,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#sidebarControls > summary")).toBeVisible();
   await page.locator("#sidebarControls > summary").click();
   await expect(page.locator("#physicalControls")).toBeVisible();
-  const mobileMeaningFontSizes = await page.locator(".parameters-panel .variable-table tbody td:nth-child(2)").evaluateAll((cells) => {
+  const mobileMeaningFontSizes = await page.locator(".variable-table tbody td:last-child").evaluateAll((cells) => {
     const sizes = new Set<string>();
     cells.forEach((cell) => {
       sizes.add(getComputedStyle(cell).fontSize);
@@ -434,6 +457,6 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     });
     return [...sizes];
   });
-  expect(mobileMeaningFontSizes).toEqual(["13px"]);
+  expect(mobileMeaningFontSizes).toEqual([referenceType.physicalFontSize]);
   expect(pageErrors).toEqual([]);
 });

@@ -184,6 +184,35 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("#initialR").isVisible(), "initial R cell was not visible");
     assertOk(await page.locator("#initialLr").isVisible(), "computed initial Lr cell was not visible");
     assertOk(await page.locator("#initialL").isVisible(), "computed initial L cell was not visible");
+    const referenceType = await page.evaluate(() => {
+      const physicalText = document.querySelector(".notes-grid > .content-panel:not(.reference-panel) p");
+      const variableMeaning = document.querySelector("[data-symbol='tau']")?.closest("tr")?.lastElementChild;
+      const parameterMeaning = document.querySelector("#tunableParameterTable td:last-child");
+      if (!(physicalText instanceof HTMLElement) || !(variableMeaning instanceof HTMLElement) || !(parameterMeaning instanceof HTMLElement)) {
+        throw new Error("missing reference typography target");
+      }
+      const physicalStyle = getComputedStyle(physicalText);
+      const variableStyle = getComputedStyle(variableMeaning);
+      const parameterStyle = getComputedStyle(parameterMeaning);
+      return {
+        physicalFontSize: physicalStyle.fontSize,
+        physicalLineHeight: physicalStyle.lineHeight,
+        variableFontSize: variableStyle.fontSize,
+        variableLineHeight: variableStyle.lineHeight,
+        parameterFontSize: parameterStyle.fontSize,
+        parameterLineHeight: parameterStyle.lineHeight
+      };
+    });
+    assertOk(
+      referenceType.variableFontSize === referenceType.physicalFontSize
+        && referenceType.parameterFontSize === referenceType.physicalFontSize,
+      `meaning font size should match physical model text, saw ${JSON.stringify(referenceType)}`
+    );
+    assertOk(
+      referenceType.variableLineHeight === referenceType.physicalLineHeight
+        && referenceType.parameterLineHeight === referenceType.physicalLineHeight,
+      `meaning line-height should match physical model text, saw ${JSON.stringify(referenceType)}`
+    );
     await page.locator("#initialR mjx-container").waitFor({ state: "visible", timeout: 15000 });
     const initialRadiusControl = page.locator("input[aria-label='initial radius']").locator("xpath=ancestor::*[contains(@class, 'slider-control')]");
     const initialRadiusText = await initialRadiusControl.textContent();
