@@ -1,5 +1,4 @@
 import { expect, test, type Page } from "@playwright/test";
-import { readFile } from "node:fs/promises";
 
 async function referencePanelMetrics(page: Page) {
   return page.evaluate(() => {
@@ -320,10 +319,37 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#sidebarControls")).toHaveAttribute("open", "");
   await expect(page.getByRole("button", { name: "RK45" })).toHaveClass(/active/);
   await expect(page.locator("#solverButtons button")).toHaveCount(3);
+  const sectionActionLayouts = await page.locator(".section-title-with-actions").evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const label = node.querySelector("span")?.getBoundingClientRect();
+      const actions = node.querySelector(".section-action-row")?.getBoundingClientRect();
+      const buttonHeights = [...node.querySelectorAll<HTMLButtonElement>(".section-action-row button")]
+        .map((button) => Math.round(button.getBoundingClientRect().height));
+      if (!label || !actions) return null;
+      return {
+        label: node.querySelector("span")?.textContent?.trim() || "",
+        labelCenterY: Math.round(label.top + label.height / 2),
+        actionsCenterY: Math.round(actions.top + actions.height / 2),
+        buttonHeights
+      };
+    }),
+  );
+  expect(sectionActionLayouts.map((layout) => layout?.label)).toEqual(["Integration", "Convective Driver", "Phase Window"]);
+  for (const layout of sectionActionLayouts) {
+    expect(layout).not.toBeNull();
+    expect(layout!.actionsCenterY).toBe(layout!.labelCenterY);
+    expect(Math.max(...layout!.buttonHeights)).toBeLessThanOrEqual(30);
+  }
+  await expect(page.locator("#physicalControlSection")).toHaveAttribute("open", "");
+  await expect(page.locator("#integrationControlSection")).toHaveAttribute("open", "");
+  await expect(page.locator("#initialControlSection")).not.toHaveAttribute("open", "");
+  await expect(page.locator("#initialControls")).toBeHidden();
   await expect(page.locator("#presetButtons")).not.toBeVisible();
   await expect(page.locator("#presetSummaryLabel")).toContainText("RR Lyrae low-amplitude fundamental, damped");
   await page.locator("#presetPanel summary").click();
   await expect(page.locator("#presetButtons")).toBeVisible();
+  await expect(page.locator("#presetPanel #resetPreset")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download CSV" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "RR Lyrae low-amplitude fundamental, damped" })).toHaveClass(/active/);
   await expect(page.getByRole("button", { name: "Baker radiative pulsator" })).toBeVisible();
   await expect(page.getByRole("button", { name: "RR Lyrae first overtone", exact: true })).toBeVisible();
@@ -333,6 +359,9 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.getByRole("button", { name: "Local radiative OZ1" })).toBeVisible();
   await expect(page.getByRole("button", { name: /corrected/i })).toHaveCount(0);
   await expect(page.getByLabel("Compare selected solver to midpoint")).toHaveCount(0);
+  await page.locator("#initialControlSection > summary").click();
+  await expect(page.locator("#initialControlSection")).toHaveAttribute("open", "");
+  await expect(page.locator("#initialControls")).toBeVisible();
   await expect(page.locator("#runUntilStable")).not.toBeChecked();
   const integrationControl = (name: string) => page.locator(`#integrationControls .slider-control:visible input[aria-label="${name}"]`);
   await expect(integrationControl("relative tol")).toHaveCount(1);
@@ -543,18 +572,10 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await page.getByRole("button", { name: "DOP853" }).click();
   await expect(page.getByRole("button", { name: "DOP853" })).toHaveClass(/active/);
   await expect(page.locator("#metrics")).toContainText("1000", { timeout: 15000 });
-  await page.getByRole("button", { name: "Final cycles" }).click();
-  await expect(page.getByRole("button", { name: "Final cycles" })).toHaveClass(/active/);
+  await page.getByRole("button", { name: "Final" }).click();
+  await expect(page.getByRole("button", { name: "Final" })).toHaveClass(/active/);
   await expect(page.locator("#metrics")).not.toContainText("final cycles");
   await expect(page.locator("#metrics")).not.toContainText("unavailable");
-
-  const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download CSV" }).click();
-  const download = await downloadPromise;
-  const path = await download.path();
-  expect(path).toBeTruthy();
-  const csv = await readFile(path!, "utf8");
-  expect(csv.split(/\r?\n/, 1)[0]).toBe("tau,R,V,H,Uc,Lr,Lc,L");
 
   await page.setViewportSize({ width: 1100, height: 1200 });
   const mediumReferenceLayout = await referencePanelMetrics(page);

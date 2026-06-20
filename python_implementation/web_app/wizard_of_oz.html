@@ -561,9 +561,8 @@
     }
 
     .section-title {
-      margin: 15px 0 7px;
-      padding-top: 12px;
-      border-top: 1px solid var(--line);
+      margin: 10px 0 5px;
+      padding-top: 4px;
       font-size: 12px;
       text-transform: uppercase;
       letter-spacing: 0.08em;
@@ -571,10 +570,55 @@
       font-weight: 760;
     }
 
+    .section-title-with-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-title-with-actions > span {
+      flex: 0 0 auto;
+    }
+
+    .section-title-with-actions > .section-action-row {
+      margin-left: auto;
+    }
+
+    .control-section > summary.section-title {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      list-style: none;
+    }
+
+    .control-section > summary.section-title::-webkit-details-marker {
+      display: none;
+    }
+
+    .control-section > summary.section-title::before {
+      content: "+";
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 13px;
+      margin-right: 6px;
+      color: var(--subtle);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0;
+      line-height: 1;
+    }
+
+    .control-section[open] > summary.section-title::before {
+      content: "-";
+    }
+
+    .control-section > summary.section-title:hover {
+      color: var(--ink);
+    }
+
     .preset-panel {
-      border-top: 1px solid var(--line);
-      margin-top: 15px;
-      padding-top: 12px;
+      margin-top: 10px;
+      padding-top: 4px;
     }
 
     .preset-summary {
@@ -605,7 +649,12 @@
     }
 
     .preset-grid {
-      margin-top: 8px;
+      margin-top: 6px;
+    }
+
+    .preset-actions {
+      display: grid;
+      margin-top: 6px;
     }
 
     .sidebar-controls-summary {
@@ -620,7 +669,7 @@
     .driver-row {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
+      gap: 6px;
     }
 
     .solver-row {
@@ -628,9 +677,23 @@
       gap: 6px;
     }
 
+    .section-action-row {
+      flex: 0 1 158px;
+      width: min(158px, 58%);
+      gap: 4px;
+    }
+
+    .section-action-row.driver-row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .section-action-row.solver-row {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
     .preset-grid button,
     .driver-row button,
-    .action-row button {
+    .preset-actions button {
       border: 1px solid var(--line);
       border-radius: 7px;
       background: var(--paper-raised);
@@ -642,14 +705,17 @@
       box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.04);
     }
 
-    .solver-row button {
-      padding: 7px 6px;
-      font-size: 12px;
+    .section-action-row button {
+      padding: 5px 6px;
+      font-size: 11.5px;
+      min-height: 28px;
+      letter-spacing: 0;
+      text-transform: none;
     }
 
     .preset-grid button:hover,
     .driver-row button:hover,
-    .action-row button:hover {
+    .preset-actions button:hover {
       border-color: var(--line-strong);
       background: var(--paper-high);
     }
@@ -662,13 +728,6 @@
       box-shadow: inset 0 1px 0 rgba(255, 209, 102, 0.2), 0 0 0 1px rgba(240, 189, 61, 0.08);
     }
 
-    .action-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-top: 10px;
-    }
-
     .toggle-line {
       display: flex;
       align-items: center;
@@ -679,7 +738,7 @@
       border-radius: 7px;
       padding: 8px 10px;
       background: var(--paper-raised);
-      margin-top: 8px;
+      margin-top: 5px;
       font-size: 13px;
       color: var(--muted);
     }
@@ -692,7 +751,7 @@
 
     .slider-list {
       display: grid;
-      gap: 5px;
+      gap: 4px;
     }
 
     .slider-control {
@@ -1350,6 +1409,11 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
       }
 
+      .section-action-row {
+        flex-basis: 144px;
+        width: min(144px, 56%);
+      }
+
       .slider-control {
         --slider-label-width: 166px;
         --slider-reading-width: 56px;
@@ -1414,42 +1478,53 @@
               <span class="preset-summary-label" id="presetSummaryLabel"></span>
             </summary>
             <div class="preset-grid" id="presetButtons"></div>
+            <div class="preset-actions">
+              <button type="button" id="resetPreset">Reset preset</button>
+            </div>
           </details>
 
-          <div class="section-title">Physical Parameters</div>
-          <div class="slider-list" id="physicalControls"></div>
-          <label class="toggle-line">
-            <span>Use radius-dependent geometry \(\ozChi{\chi}(\ozRadius{R})\)</span>
-            <input id="variableM" type="checkbox">
-          </label>
+          <details class="control-section" id="physicalControlSection" open>
+            <summary class="section-title">Physical Parameters</summary>
+            <div class="slider-list" id="physicalControls"></div>
+            <label class="toggle-line">
+              <span>Use radius-dependent geometry \(\ozChi{\chi}(\ozRadius{R})\)</span>
+              <input id="variableM" type="checkbox">
+            </label>
+          </details>
 
-          <div class="section-title">Initial Conditions</div>
-          <div class="slider-list" id="initialControls"></div>
+          <details class="control-section" id="initialControlSection">
+            <summary class="section-title">Initial Conditions</summary>
+            <div class="slider-list" id="initialControls"></div>
+          </details>
 
-          <div class="section-title">Integration</div>
-          <div class="driver-row solver-row" id="solverButtons"></div>
-          <label class="toggle-line">
-            <span>Run until stable</span>
-            <input id="runUntilStable" type="checkbox">
-          </label>
-          <div class="slider-list" id="integrationControls"></div>
+          <details class="control-section" id="integrationControlSection" open>
+            <summary class="section-title section-title-with-actions">
+              <span>Integration</span>
+              <div class="driver-row solver-row section-action-row" id="solverButtons"></div>
+            </summary>
+            <label class="toggle-line">
+              <span>Run until stable</span>
+              <input id="runUntilStable" type="checkbox">
+            </label>
+            <div class="slider-list" id="integrationControls"></div>
+          </details>
 
-          <div class="section-title">Convective Driver</div>
-          <div class="driver-row">
-            <button type="button" data-driver="h" class="active">\(\sqrt{\ozPressure{H}}\)</button>
-            <button type="button" data-driver="abs-v">\(\sqrt{|\ozVelocity{V}|}\)</button>
+          <div class="section-title section-title-with-actions">
+            <span>Convective Driver</span>
+            <div class="driver-row section-action-row" id="driverButtons">
+              <button type="button" data-driver="h" class="active">\(\sqrt{\ozPressure{H}}\)</button>
+              <button type="button" data-driver="abs-v">\(\sqrt{|\ozVelocity{V}|}\)</button>
+            </div>
           </div>
 
-          <div class="section-title">Phase Window</div>
-          <div class="driver-row">
-            <button type="button" data-phase-mode="reference" class="active">Reference cycles</button>
-            <button type="button" data-phase-mode="final">Final cycles</button>
+          <div class="section-title section-title-with-actions">
+            <span>Phase Window</span>
+            <div class="driver-row section-action-row" id="phaseModeButtons">
+              <button type="button" data-phase-mode="reference" class="active">Reference</button>
+              <button type="button" data-phase-mode="final">Final</button>
+            </div>
           </div>
 
-          <div class="action-row">
-            <button type="button" id="resetPreset">Reset preset</button>
-            <button type="button" id="downloadCsv">Download CSV</button>
-          </div>
         </div>
       </details>
     </aside>

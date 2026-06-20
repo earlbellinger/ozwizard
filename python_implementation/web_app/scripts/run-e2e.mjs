@@ -1,5 +1,4 @@
 import { spawn, spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 
@@ -191,6 +190,38 @@ async function runPlaywrightChecks() {
     assertOk((await page.getByRole("button", { name: "RK45" }).getAttribute("class"))?.includes("active"), "RK45 preset was not active");
     assertOk(await page.locator("#sidebarControls").evaluate((node) => node.open), "sidebar controls should be open on desktop");
     assertOk(await page.locator("#solverButtons button").count() === 3, "expected three compact solver buttons");
+    const sectionActionLayouts = await page.locator(".section-title-with-actions").evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const label = node.querySelector("span")?.getBoundingClientRect();
+        const actions = node.querySelector(".section-action-row")?.getBoundingClientRect();
+        const buttonHeights = [...node.querySelectorAll(".section-action-row button")]
+          .map((button) => Math.round(button.getBoundingClientRect().height));
+        if (!label || !actions) return null;
+        return {
+          label: node.querySelector("span")?.textContent?.trim() || "",
+          labelCenterY: Math.round(label.top + label.height / 2),
+          actionsCenterY: Math.round(actions.top + actions.height / 2),
+          buttonHeights
+        };
+      })
+    );
+    assertOk(sectionActionLayouts.map((layout) => layout?.label).join("|") === "Integration|Convective Driver|Phase Window", "expected compact action rows in three section headers");
+    sectionActionLayouts.forEach((layout) => {
+      assertOk(layout?.actionsCenterY === layout?.labelCenterY, `${layout?.label || "section"} buttons should sit on the header line`);
+      assertOk(Math.max(...layout.buttonHeights) <= 30, `${layout?.label || "section"} buttons should be compact`);
+    });
+    assertOk(await page.locator("#physicalControlSection").evaluate((node) => node.open), "physical controls should start open");
+    assertOk(await page.locator("#integrationControlSection").evaluate((node) => node.open), "integration controls should start open");
+    assertOk(!(await page.locator("#initialControlSection").evaluate((node) => node.open)), "initial conditions should start collapsed");
+    assertOk(!(await page.locator("#initialControls").isVisible()), "initial condition sliders should start hidden");
+    assertOk(!(await page.locator("#presetButtons").isVisible()), "preset buttons should start hidden");
+    await page.locator("#presetPanel summary").click();
+    assertOk(await page.locator("#presetButtons").isVisible(), "preset buttons should show inside the presets menu");
+    assertOk(await page.locator("#presetPanel #resetPreset").isVisible(), "reset preset should live inside the presets menu");
+    assertOk(await page.getByRole("button", { name: "Download CSV" }).count() === 0, "download CSV button should be removed");
+    await page.locator("#initialControlSection > summary").click();
+    assertOk(await page.locator("#initialControlSection").evaluate((node) => node.open), "initial conditions should open from its summary");
+    assertOk(await page.locator("#initialControls").isVisible(), "initial condition sliders should show after opening");
     const solverRows = await page.locator("#solverButtons button").evaluateAll((buttons) =>
       buttons.map((button) => Math.round(button.getBoundingClientRect().top))
     );
@@ -462,17 +493,7 @@ async function runPlaywrightChecks() {
     await page.getByRole("button", { name: "DOP853" }).click();
     assertOk((await page.getByRole("button", { name: "DOP853" }).getAttribute("class"))?.includes("active"), "DOP853 was not active after click");
     console.log("interactions passed");
-
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      page.getByRole("button", { name: "Download CSV" }).click()
-    ]);
-    const path = await download.path();
-    assertOk(Boolean(path), "download path was missing");
-    const csv = await readFile(path, "utf8");
-    assertOk(csv.split(/\r?\n/, 1)[0] === "tau,R,V,H,Uc,Lr,Lc,L", "downloaded CSV header was incorrect");
     assertOk(pageErrors.length === 0, `page errors: ${pageErrors.join("; ")}`);
-    console.log("download passed");
 
     await page.setViewportSize({ width: 760, height: 900 });
     await page.waitForFunction(() => document.querySelector("#luminosityEquations")?.getAttribute("data-geometry-layout") === "stacked");

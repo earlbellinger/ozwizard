@@ -1243,7 +1243,6 @@ function buildControls(): void {
   });
 
   el<HTMLButtonElement>("resetPreset").addEventListener("click", () => applyPreset(selectedPreset));
-  el<HTMLButtonElement>("downloadCsv").addEventListener("click", downloadCsv);
   setupInteractivePlots();
   window.addEventListener("resize", drawAll);
   window.addEventListener("resize", drawAdsrVisualization);
@@ -1475,7 +1474,9 @@ function buildSolverButtons(): void {
     button.dataset.solver = name;
     button.textContent = labels[name];
     button.title = titles[name];
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       state.solver = name;
       updateSolverButtons();
       rebuildIntegrationControls();
@@ -2411,19 +2412,6 @@ function drawAll(): void {
         { key: "Lc", label: `\\(${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
       ];
   drawLegend("lumLegend", lumLegendItems, convectionOff ? {} : { plotId: "lum" });
-}
-
-function downloadCsv(): void {
-  if (!latestRows.length) return;
-  const headers: Array<keyof Row> = ["tau", "R", "V", "H", "Uc", "Lr", "Lc", "L"];
-  const body = latestRows.map((row) => headers.map((key) => row[key]).join(",")).join("\n");
-  const blob = new Blob([`${headers.join(",")}\n${body}`], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `ozwizard-${state.solver}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 function startApp(): void {

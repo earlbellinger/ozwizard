@@ -1777,7 +1777,6 @@
       });
     });
     el("resetPreset").addEventListener("click", () => applyPreset(selectedPreset));
-    el("downloadCsv").addEventListener("click", downloadCsv);
     setupInteractivePlots();
     window.addEventListener("resize", drawAll);
     window.addEventListener("resize", drawAdsrVisualization);
@@ -1986,7 +1985,9 @@
       button.dataset.solver = name;
       button.textContent = labels[name];
       button.title = titles[name];
-      button.addEventListener("click", () => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
         state.solver = name;
         updateSolverButtons();
         rebuildIntegrationControls();
@@ -2789,19 +2790,6 @@
       { key: "Lc", label: `\\(${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
     ];
     drawLegend("lumLegend", lumLegendItems, convectionOff ? {} : { plotId: "lum" });
-  }
-  function downloadCsv() {
-    if (!latestRows.length) return;
-    const headers = ["tau", "R", "V", "H", "Uc", "Lr", "Lc", "L"];
-    const body = latestRows.map((row) => headers.map((key) => row[key]).join(",")).join("\n");
-    const blob = new Blob([`${headers.join(",")}
-${body}`], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `ozwizard-${state.solver}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
   }
   function startApp() {
     buildControls();
