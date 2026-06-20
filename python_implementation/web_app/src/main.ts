@@ -1608,9 +1608,9 @@ function updateEquationBlocks(): void {
   const eta = Math.cbrt(Math.max(0, 1 - 3 / state.m));
   const etaDisplay = fmtFixed(eta, 2);
   const geometry = state.variableM
-    ? `\\ozChi{\\chi} &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}\\\\[0.2em]
-       \\ozNeutral{\\eta} &= \\left(1-\\frac{3}{\\ozChi{\\chi_0}}\\right)^{1/3}=\\ozNeutral{${etaDisplay}}`
-    : `\\ozChi{\\chi} &= \\ozChi{\\chi_0}`;
+    ? `\\ozChi{\\chi} &= \\frac{3}{1-(\\ozEta{\\eta}/\\ozRadius{R})^3}\\\\[0.2em]
+       \\ozEta{\\eta} &= \\left(1-\\frac{3}{\\ozChiZero{\\chi_0}}\\right)^{1/3}=\\ozEta{${etaDisplay}}`
+    : `\\ozChi{\\chi} &= \\ozChiZero{\\chi_0}`;
   const driver = state.driver === "abs-v" ? "\\sqrt{|\\ozVelocity{V}|}" : "\\sqrt{\\ozPressure{H}}";
   const odeNode = el<HTMLDivElement>("odeEquations");
   const luminosityNode = el<HTMLDivElement>("luminosityEquations");

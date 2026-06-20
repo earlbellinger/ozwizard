@@ -92,7 +92,7 @@ export const TEX = {
   zeta: "\\ozZeta{\\zeta}",
   zetac: "\\ozZetac{\\zeta_c}",
   gammac: "\\ozGammac{\\gamma_c}",
-  m: "\\ozChi{\\chi_0}",
+  m: "\\ozChiZero{\\chi_0}",
   gamma1: "\\ozGamma{\\Gamma_1}",
   n: "\\ozBlue{n}",
   s: "\\ozPink{s}",
@@ -102,7 +102,7 @@ export const TEX = {
 
 const TEX_EXTRA = {
   gammaR: "\\ozNeutral{\\gamma_r}",
-  eta: "\\ozChi{\\eta}",
+  eta: "\\ozEta{\\eta}",
   kappa: "\\ozNeutral{\\kappa}",
   rho: "\\ozNeutral{\\rho}",
   temp: "\\ozNeutral{T}"

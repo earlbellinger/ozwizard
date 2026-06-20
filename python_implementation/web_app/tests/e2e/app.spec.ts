@@ -454,9 +454,13 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
       fetch("/wizard_of_oz.html").then((response) => response.text()),
     ]),
   );
-  expect(sourceText).toContain("\\\\ozChi{\\\\chi_0}");
+  expect(sourceText).toContain("\\\\ozChiZero{\\\\chi_0}");
   expect(sourceText).toContain("\\\\ozChi{\\\\chi}");
+  expect(sourceText).toContain("\\\\ozEta{\\\\eta}");
+  expect(htmlText).toContain("ozChiZero");
+  expect(htmlText).toContain("ozEta");
   expect(htmlText).toContain("\\ozChi{\\chi}");
+  expect(sourceText).not.toContain("\\\\ozChi{\\\\chi_0}");
   expect(sourceText).not.toContain("\\\\mathrm{eff}");
   expect(htmlText).not.toContain("\\mathrm{eff}");
   expect(sourceText).not.toContain("\\\\ozMass");

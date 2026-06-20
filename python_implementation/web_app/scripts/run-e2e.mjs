@@ -249,7 +249,11 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.89", "eta should match the default chi0 value");
     const sourceText = await page.evaluate(async () => (await fetch("/src/main.ts")).text());
     const htmlText = await page.evaluate(async () => (await fetch("/wizard_of_oz.html")).text());
-    assertOk(sourceText.includes("\\\\ozChi{\\\\chi_0}") && sourceText.includes("\\\\ozChi{\\\\chi}") && htmlText.includes("\\ozChi{\\chi}"), "web app source should use chi and chi0 notation");
+    assertOk(
+      sourceText.includes("\\\\ozChiZero{\\\\chi_0}") && sourceText.includes("\\\\ozChi{\\\\chi}") && sourceText.includes("\\\\ozEta{\\\\eta}") && htmlText.includes("\\ozChi{\\chi}"),
+      "web app source should use separate chi, chi0, and eta notation"
+    );
+    assertOk(sourceText.includes("\\\\ozChi{\\\\chi_0}") === false, "chi0 should not use the active chi color macro");
     assertOk(!sourceText.includes("\\\\mathrm{eff}") && !htmlText.includes("\\mathrm{eff}"), "web app source should not use chi_eff notation");
     assertOk(!sourceText.includes("\\\\ozMass") && !htmlText.includes("\\ozMass"), "web app source should not use the old mass macro");
     assertOk((await page.locator("#odeEquations").getAttribute("data-driver-mode")) === "h", "ODE driver should start with sqrt(H)");
