@@ -99,7 +99,7 @@ async function runPlaywrightChecks() {
     assertOk((await page.getByLabel("shown piano octaves").inputValue()) === "3", "piano octave slider should start at C3-B4");
     assertOk((await page.locator("#sonificationHz").textContent()) === "C3-B4", "piano mode should show visible octaves");
     assertOk((await page.locator(".piano-key").count()) === 24, "piano should render two octaves of keys");
-    assertOk((await page.locator("#pianoVolumeValue").textContent()) === "45%", "piano volume default should render");
+    assertOk((await page.locator("#pianoSustainValue").textContent()) === "38%", "piano sustain default should render");
     await page.locator("#sonificationPitch").evaluate((input) => {
       input.value = "4";
       input.dispatchEvent(new Event("input", { bubbles: true }));

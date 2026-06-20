@@ -760,7 +760,7 @@
   var PIANO_MIN_START_OCTAVE = 1;
   var PIANO_MAX_START_OCTAVE = 6;
   var PIANO_DEFAULT_START_OCTAVE = 3;
-  var PIANO_SUSTAIN_LEVEL = 0.38;
+  var PIANO_OUTPUT_GAIN = 0.45;
   var SONIFICATION_ATTACK_SECONDS = 1;
   var SONIFICATION_RELEASE_SECONDS = 0.14;
   var SONIFICATION_OUTPUT_GAIN = 0.12;
@@ -785,7 +785,7 @@
   var pianoStartOctave = PIANO_DEFAULT_START_OCTAVE;
   var pianoMasterGain = null;
   var pianoEnvelope = { attack: 0.015, decay: 0.22, release: 0.36 };
-  var pianoVolume = 0.45;
+  var pianoSustainLevel = 0.38;
   var activePianoVoices = /* @__PURE__ */ new Map();
   var activePianoMidiCounts = /* @__PURE__ */ new Map();
   var TAU_TICKS = [1, 3, 10, 30, 100, 300, 1e3];
@@ -1133,13 +1133,13 @@
     bindEnvelopeSlider("pianoAttack", "attack");
     bindEnvelopeSlider("pianoDecay", "decay");
     bindEnvelopeSlider("pianoRelease", "release");
-    const volume = document.getElementById("pianoVolume");
-    if (volume instanceof HTMLInputElement) {
-      volume.value = String(pianoVolume);
-      volume.addEventListener("input", () => {
-        pianoVolume = Number(volume.value);
+    const sustain = document.getElementById("pianoSustain");
+    if (sustain instanceof HTMLInputElement) {
+      sustain.value = String(pianoSustainLevel);
+      sustain.addEventListener("input", () => {
+        pianoSustainLevel = Number(sustain.value);
         updatePianoControlLabels();
-        updatePianoVolume();
+        drawAdsrVisualization();
       });
     }
     buildPianoKeyboard();
@@ -1151,7 +1151,7 @@
       pianoAttackValue: formatDuration(pianoEnvelope.attack),
       pianoDecayValue: formatDuration(pianoEnvelope.decay),
       pianoReleaseValue: formatDuration(pianoEnvelope.release),
-      pianoVolumeValue: `${Math.round(pianoVolume * 100)}%`
+      pianoSustainValue: `${Math.round(pianoSustainLevel * 100)}%`
     };
     Object.entries(labels).forEach(([id, value]) => {
       const node = document.getElementById(id);
@@ -1275,8 +1275,8 @@
     ctx.beginPath();
     ctx.moveTo(x(0), y(0));
     ctx.lineTo(x(attackEnd), y(1));
-    ctx.lineTo(x(decayEnd), y(PIANO_SUSTAIN_LEVEL));
-    ctx.lineTo(x(releaseStart), y(PIANO_SUSTAIN_LEVEL));
+    ctx.lineTo(x(decayEnd), y(pianoSustainLevel));
+    ctx.lineTo(x(releaseStart), y(pianoSustainLevel));
     ctx.lineTo(x(releaseEnd), y(0));
     ctx.strokeStyle = "#FFD166";
     ctx.lineWidth = 2.2;
@@ -1414,14 +1414,9 @@
   function ensurePianoMasterGain(context) {
     if (pianoMasterGain) return pianoMasterGain;
     pianoMasterGain = context.createGain();
-    pianoMasterGain.gain.setValueAtTime(pianoVolume, context.currentTime);
+    pianoMasterGain.gain.setValueAtTime(PIANO_OUTPUT_GAIN, context.currentTime);
     pianoMasterGain.connect(context.destination);
     return pianoMasterGain;
-  }
-  function updatePianoVolume() {
-    const context = sonificationContext;
-    if (!context || !pianoMasterGain) return;
-    pianoMasterGain.gain.setTargetAtTime(pianoVolume, context.currentTime, 0.02);
   }
   async function startPianoNote(sourceId, midi) {
     if (!pianoModeActive || activePianoVoices.has(sourceId)) return;
@@ -1435,12 +1430,13 @@
     const now = context.currentTime;
     const attack = Math.max(1e-3, pianoEnvelope.attack);
     const decay = Math.max(1e-3, pianoEnvelope.decay);
+    const sustain = clamp2(pianoSustainLevel, 0, 1);
     oscillator.frequency.setValueAtTime(noteToFrequency(note), now);
     const wave = createSonificationPeriodicWave(context);
     if (wave) oscillator.setPeriodicWave(wave);
     gain.gain.setValueAtTime(0, now);
     gain.gain.linearRampToValueAtTime(1, now + attack);
-    gain.gain.linearRampToValueAtTime(PIANO_SUSTAIN_LEVEL, now + attack + decay);
+    gain.gain.linearRampToValueAtTime(sustain, now + attack + decay);
     oscillator.connect(gain);
     gain.connect(output);
     const voice = {
@@ -1450,7 +1446,7 @@
       startedAt: now,
       attack,
       decay,
-      sustain: PIANO_SUSTAIN_LEVEL,
+      sustain,
       released: false
     };
     oscillator.addEventListener("ended", () => disconnectPianoVoice(sourceId, voice), { once: true });

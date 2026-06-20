@@ -70,7 +70,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#pianoAttackValue")).toHaveText("15 ms");
   await expect(page.locator("#pianoDecayValue")).toHaveText("0.22 s");
   await expect(page.locator("#pianoReleaseValue")).toHaveText("0.36 s");
-  await expect(page.locator("#pianoVolumeValue")).toHaveText("45%");
+  await expect(page.locator("#pianoSustainValue")).toHaveText("38%");
   const hasAdsrPaint = await page.locator("#adsrCanvas").evaluate((canvas) => {
     const node = canvas as HTMLCanvasElement;
     const ctx = node.getContext("2d");

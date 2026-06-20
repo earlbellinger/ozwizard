@@ -48,7 +48,7 @@ const PIANO_VISIBLE_OCTAVES = 2;
 const PIANO_MIN_START_OCTAVE = 1;
 const PIANO_MAX_START_OCTAVE = 6;
 const PIANO_DEFAULT_START_OCTAVE = 3;
-const PIANO_SUSTAIN_LEVEL = 0.38;
+const PIANO_OUTPUT_GAIN = 0.45;
 const SONIFICATION_ATTACK_SECONDS = 1;
 const SONIFICATION_RELEASE_SECONDS = 0.14;
 const SONIFICATION_OUTPUT_GAIN = 0.12;
@@ -73,7 +73,7 @@ let pianoModeActive = false;
 let pianoStartOctave = PIANO_DEFAULT_START_OCTAVE;
 let pianoMasterGain: GainNode | null = null;
 let pianoEnvelope: PianoEnvelope = { attack: 0.015, decay: 0.22, release: 0.36 };
-let pianoVolume = 0.45;
+let pianoSustainLevel = 0.38;
 const activePianoVoices = new Map<string, PianoVoice>();
 const activePianoMidiCounts = new Map<number, number>();
 const TAU_TICKS = [1, 3, 10, 30, 100, 300, 1000];
@@ -531,13 +531,13 @@ function setupPianoControls(): void {
   bindEnvelopeSlider("pianoAttack", "attack");
   bindEnvelopeSlider("pianoDecay", "decay");
   bindEnvelopeSlider("pianoRelease", "release");
-  const volume = document.getElementById("pianoVolume");
-  if (volume instanceof HTMLInputElement) {
-    volume.value = String(pianoVolume);
-    volume.addEventListener("input", () => {
-      pianoVolume = Number(volume.value);
+  const sustain = document.getElementById("pianoSustain");
+  if (sustain instanceof HTMLInputElement) {
+    sustain.value = String(pianoSustainLevel);
+    sustain.addEventListener("input", () => {
+      pianoSustainLevel = Number(sustain.value);
       updatePianoControlLabels();
-      updatePianoVolume();
+      drawAdsrVisualization();
     });
   }
   buildPianoKeyboard();
@@ -550,7 +550,7 @@ function updatePianoControlLabels(): void {
     pianoAttackValue: formatDuration(pianoEnvelope.attack),
     pianoDecayValue: formatDuration(pianoEnvelope.decay),
     pianoReleaseValue: formatDuration(pianoEnvelope.release),
-    pianoVolumeValue: `${Math.round(pianoVolume * 100)}%`
+    pianoSustainValue: `${Math.round(pianoSustainLevel * 100)}%`
   };
   Object.entries(labels).forEach(([id, value]) => {
     const node = document.getElementById(id);
@@ -689,8 +689,8 @@ function drawAdsrVisualization(): void {
   ctx.beginPath();
   ctx.moveTo(x(0), y(0));
   ctx.lineTo(x(attackEnd), y(1));
-  ctx.lineTo(x(decayEnd), y(PIANO_SUSTAIN_LEVEL));
-  ctx.lineTo(x(releaseStart), y(PIANO_SUSTAIN_LEVEL));
+  ctx.lineTo(x(decayEnd), y(pianoSustainLevel));
+  ctx.lineTo(x(releaseStart), y(pianoSustainLevel));
   ctx.lineTo(x(releaseEnd), y(0));
   ctx.strokeStyle = "#FFD166";
   ctx.lineWidth = 2.2;
@@ -840,15 +840,9 @@ function disconnectSonificationVoice(voice: SonificationVoice): void {
 function ensurePianoMasterGain(context: AudioContext): GainNode {
   if (pianoMasterGain) return pianoMasterGain;
   pianoMasterGain = context.createGain();
-  pianoMasterGain.gain.setValueAtTime(pianoVolume, context.currentTime);
+  pianoMasterGain.gain.setValueAtTime(PIANO_OUTPUT_GAIN, context.currentTime);
   pianoMasterGain.connect(context.destination);
   return pianoMasterGain;
-}
-
-function updatePianoVolume(): void {
-  const context = sonificationContext;
-  if (!context || !pianoMasterGain) return;
-  pianoMasterGain.gain.setTargetAtTime(pianoVolume, context.currentTime, 0.02);
 }
 
 async function startPianoNote(sourceId: string, midi: number): Promise<void> {
@@ -863,12 +857,13 @@ async function startPianoNote(sourceId: string, midi: number): Promise<void> {
   const now = context.currentTime;
   const attack = Math.max(0.001, pianoEnvelope.attack);
   const decay = Math.max(0.001, pianoEnvelope.decay);
+  const sustain = clamp(pianoSustainLevel, 0, 1);
   oscillator.frequency.setValueAtTime(noteToFrequency(note), now);
   const wave = createSonificationPeriodicWave(context);
   if (wave) oscillator.setPeriodicWave(wave);
   gain.gain.setValueAtTime(0, now);
   gain.gain.linearRampToValueAtTime(1, now + attack);
-  gain.gain.linearRampToValueAtTime(PIANO_SUSTAIN_LEVEL, now + attack + decay);
+  gain.gain.linearRampToValueAtTime(sustain, now + attack + decay);
   oscillator.connect(gain);
   gain.connect(output);
   const voice: PianoVoice = {
@@ -878,7 +873,7 @@ async function startPianoNote(sourceId: string, midi: number): Promise<void> {
     startedAt: now,
     attack,
     decay,
-    sustain: PIANO_SUSTAIN_LEVEL,
+    sustain,
     released: false
   };
   oscillator.addEventListener("ended", () => disconnectPianoVoice(sourceId, voice), { once: true });
