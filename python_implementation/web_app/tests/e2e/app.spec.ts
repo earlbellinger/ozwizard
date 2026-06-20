@@ -448,10 +448,44 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "radius-dependent");
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-layout", "stacked");
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-eta-value", "0.89");
+  const [sourceText, htmlText] = await page.evaluate(async () =>
+    Promise.all([
+      fetch("/src/main.ts").then((response) => response.text()),
+      fetch("/wizard_of_oz.html").then((response) => response.text()),
+    ]),
+  );
+  expect(sourceText).toContain("\\\\ozChi{\\\\chi_0}");
+  expect(sourceText).toContain("\\\\ozChi{\\\\chi}");
+  expect(htmlText).toContain("\\ozChi{\\chi}");
+  expect(sourceText).not.toContain("\\\\mathrm{eff}");
+  expect(htmlText).not.toContain("\\mathrm{eff}");
+  expect(sourceText).not.toContain("\\\\ozMass");
+  expect(htmlText).not.toContain("\\ozMass");
   await expect(page.locator("#odeEquations")).toHaveAttribute("data-driver-mode", "h");
   await expect(page.getByRole("heading", { name: "Derived" })).toHaveCount(0);
   await expect(page.locator("#timeLegend")).toContainText("radius");
-  await expect(page.locator("#timeLegend")).toContainText("nonadiabatic pressure factor");
+  await expect(page.locator("#timeLegend")).toContainText("pressure factor");
+  await expect(page.locator("#timeLegend")).not.toContainText("nonadiabatic pressure factor");
+  await expect(page.locator("#timeLegend")).not.toContainText("convective velocity");
+  await expect(page.locator("#lumLegend")).toContainText("total");
+  await expect(page.locator("#lumLegend")).not.toContainText("radiative");
+  await expect(page.locator("#lumLegend")).not.toContainText("convective");
+  await expect(page.locator("#lumLegend [data-plot-series]")).toHaveCount(0);
+  await page.locator("input[aria-label='convective response']").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "1";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#timeLegend [data-plot-series='Uc']")).toHaveCount(1);
+  await expect(page.locator("#timeLegend")).toContainText("convective velocity");
+  await expect(page.locator("#lumLegend")).toContainText("radiative");
+  await expect(page.locator("#lumLegend")).toContainText("convective");
+  await page.locator("input[aria-label='convective response']").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "0";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#timeLegend [data-plot-series='Uc']")).toHaveCount(0);
   const legendHtml = await page.locator("#timeLegend").innerHTML();
   expect(legendHtml).toContain("R");
   expect(legendHtml).toContain("H");
@@ -525,7 +559,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await page.setViewportSize({ width: 1500, height: 1200 });
   const pairedReferenceLayout = await referencePanelMetrics(page);
   expect(pairedReferenceLayout.gridColumns.split(" ")).toHaveLength(2);
-  expect(pairedReferenceLayout.panels[0].width).toBeGreaterThanOrEqual(354);
+  expect(pairedReferenceLayout.panels[0].width).toBeGreaterThanOrEqual(324);
   expect(pairedReferenceLayout.panels[1].width).toBeGreaterThanOrEqual(434);
   expect(pairedReferenceLayout.panels[1].width).toBeGreaterThan(pairedReferenceLayout.panels[0].width);
   expect(pairedReferenceLayout.panels[0].top).toBe(pairedReferenceLayout.panels[1].top);

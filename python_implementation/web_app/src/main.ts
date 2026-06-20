@@ -1595,7 +1595,7 @@ function buildParameterTable(): void {
 
   tunableTable.innerHTML = controlRows(CONTROL_GROUPS.physical) + `
       <tr><td class="symbol-cell" style="--color:${COLORS.H}">driver</td><td>${meaning(`Convective driving choice: the standard Stellingwerf pressure form is \\(\\sqrt{${TEX.H}}\\); \\(\\sqrt{|${TEX.V}|}\\) is retained as a diagnostic variant.`)}</td></tr>
-      <tr><td class="symbol-cell" style="--color:${COLORS.m}">geometry</td><td>${meaning(`Switch between fixed paper-model \\(${TEX.m}\\) and radius-dependent local geometry \\(${TEX.m}_{\\mathrm{eff}}(${TEX.R})\\).`)}</td></tr>
+      <tr><td class="symbol-cell" style="--color:${COLORS.m}">geometry</td><td>${meaning(`Switch between fixed geometry \\(\\ozChi{\\chi}=${TEX.m}\\) and radius-dependent local geometry \\(\\ozChi{\\chi}(${TEX.R})\\).`)}</td></tr>
     `;
   numericalTable.innerHTML = controlRows(CONTROL_GROUPS.integration) + `
       <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">solver</td><td>${meaning("Numerical method: RK45 default, DOP853 reference, or historical midpoint.")}</td></tr>
@@ -1608,9 +1608,9 @@ function updateEquationBlocks(): void {
   const eta = Math.cbrt(Math.max(0, 1 - 3 / state.m));
   const etaDisplay = fmtFixed(eta, 2);
   const geometry = state.variableM
-    ? `\\ozMass{m}_{\\mathrm{eff}} &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}\\\\[0.2em]
-       \\ozNeutral{\\eta} &= \\left(1-\\frac{3}{\\ozMass{m}}\\right)^{1/3}=\\ozNeutral{${etaDisplay}}`
-    : `\\ozMass{m}_{\\mathrm{eff}} &= \\ozMass{m}`;
+    ? `\\ozChi{\\chi} &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}\\\\[0.2em]
+       \\ozNeutral{\\eta} &= \\left(1-\\frac{3}{\\ozChi{\\chi_0}}\\right)^{1/3}=\\ozNeutral{${etaDisplay}}`
+    : `\\ozChi{\\chi} &= \\ozChi{\\chi_0}`;
   const driver = state.driver === "abs-v" ? "\\sqrt{|\\ozVelocity{V}|}" : "\\sqrt{\\ozPressure{H}}";
   const odeNode = el<HTMLDivElement>("odeEquations");
   const luminosityNode = el<HTMLDivElement>("luminosityEquations");
@@ -1621,12 +1621,12 @@ function updateEquationBlocks(): void {
     \\frac{d\\ozRadius{R}}{d\\ozTau{\\tau}} &=
       \\ozVelocity{V}\\\\[0.35em]
     \\frac{d\\ozVelocity{V}}{d\\ozTau{\\tau}} &=
-      \\frac{\\ozPressure{H}}{\\ozRadius{R}^{\\ozMass{m}_{\\mathrm{eff}}\\ozGamma{\\Gamma_1}-2}}
+      \\frac{\\ozPressure{H}}{\\ozRadius{R}^{\\ozChi{\\chi}\\ozGamma{\\Gamma_1}-2}}
       - \\frac{1}{\\ozRadius{R}^{2}}
       - \\ozDamping{C_q}\\ozVelocity{V}^{3}\\\\[0.35em]
     \\frac{d\\ozPressure{H}}{d\\ozTau{\\tau}} &=
       \\ozZeta{\\zeta}\\,
-      \\ozRadius{R}^{\\ozMass{m}_{\\mathrm{eff}}(\\ozGamma{\\Gamma_1}-1)}
+      \\ozRadius{R}^{\\ozChi{\\chi}(\\ozGamma{\\Gamma_1}-1)}
       \\left[
         \\ozRadius{R}^{\\ozSource{U}}
         - \\ozLuminosity{L}
@@ -1634,7 +1634,7 @@ function updateEquationBlocks(): void {
     \\frac{d\\ozConvective{U_c}}{d\\ozTau{\\tau}} &=
       \\ozZetac{\\zeta_c}
       \\left[
-        \\ozRadius{R}^{-\\ozMass{m}_{\\mathrm{eff}}(\\ozGamma{\\Gamma_1}-1)/2}\\,${driver}
+        \\ozRadius{R}^{-\\ozChi{\\chi}(\\ozGamma{\\Gamma_1}-1)/2}\\,${driver}
         - \\ozConvective{U_c}
       \\right]
     \\end{aligned}
@@ -1648,11 +1648,11 @@ function updateEquationBlocks(): void {
     \\begin{aligned}
     ${geometry}\\\\[0.35em]
     \\ozRadiative{L_r} &=
-      \\ozRadius{R}^{4+\\ozMass{m}_{\\mathrm{eff}}
+      \\ozRadius{R}^{4+\\ozChi{\\chi}
       \\left[\\ozBlue{n}-(\\ozPink{s}+4)(\\ozGamma{\\Gamma_1}-1)\\right]}
       \\ozPressure{H}^{\\ozPink{s}+4}\\\\[0.35em]
     \\ozConvLum{L_c} &=
-      \\ozRadius{R}^{-(\\ozMass{m}_{\\mathrm{eff}}-2)}
+      \\ozRadius{R}^{-(\\ozChi{\\chi}-2)}
       \\ozConvective{U_c}^{3}\\\\[0.35em]
     \\ozLuminosity{L} &=
       (1-\\ozGammac{\\gamma_c})\\ozRadiative{L_r}
@@ -1842,6 +1842,17 @@ function rowsInTauRange(rows: Row[], xlim: NumericRange | undefined): Row[] {
 
 function activeSeriesKeys(plotId: InteractivePlotId, keys: readonly PlotSeriesKey[]): PlotSeriesKey[] {
   return keys.filter((key) => seriesIsVisible(plotId, key));
+}
+
+function convectiveResponseDisabled(): boolean {
+  return state.zetac <= 0;
+}
+
+function plotSeriesIsAvailable(plotId: InteractivePlotId, key: PlotSeriesKey): boolean {
+  if (!convectiveResponseDisabled()) return true;
+  if (plotId === "time" && key === "Uc") return false;
+  if (plotId === "lum" && key !== "L") return false;
+  return true;
 }
 
 function rowsForInteractivePlot(plotId: InteractivePlotId, rows: Row[], keys: readonly PlotSeriesKey[], maxPoints = 60000): Row[] {
@@ -2191,6 +2202,8 @@ function updateLegendToggleState(node: HTMLElement, plotId?: InteractivePlotId):
 }
 
 function seriesIsVisible(plotId: InteractivePlotId, key: PlotSeriesKey): boolean {
+  if (!plotSeriesIsAvailable(plotId, key)) return false;
+  if (convectiveResponseDisabled() && plotId === "lum" && key === "L") return true;
   return plotVisibility[plotId][key] !== false;
 }
 
@@ -2338,14 +2351,20 @@ function drawAll(): void {
   }
 
   const timeXlim = integrationTimeRange();
-  const sampledTimeRows = rowsForInteractivePlot("time", rows, ["R", "V", "H", "Uc"]);
-  const sampledLumRows = rowsForInteractivePlot("lum", rows, ["L", "Lr", "Lc"]);
-  drawSeries("timeCanvas", [
+  const convectionOff = convectiveResponseDisabled();
+  const timeKeys: PlotSeriesKey[] = convectionOff ? ["R", "V", "H"] : ["R", "V", "H", "Uc"];
+  const lumKeys: PlotSeriesKey[] = convectionOff ? ["L"] : ["L", "Lr", "Lc"];
+  const sampledTimeRows = rowsForInteractivePlot("time", rows, timeKeys);
+  const sampledLumRows = rowsForInteractivePlot("lum", rows, lumKeys);
+  const timeSeries: Series[] = [
     { label: "R", color: COLORS.R, rows: visibleRows("time", "R", sampledTimeRows), x: (row) => row.tau, y: (row) => row.R },
     { label: "V", color: COLORS.V, rows: visibleRows("time", "V", sampledTimeRows), x: (row) => row.tau, y: (row) => row.V },
-    { label: "H", color: COLORS.H, rows: visibleRows("time", "H", sampledTimeRows), x: (row) => row.tau, y: (row) => row.H },
-    { label: "Uc", color: COLORS.Uc, rows: visibleRows("time", "Uc", sampledTimeRows), x: (row) => row.tau, y: (row) => row.Uc }
-  ], {
+    { label: "H", color: COLORS.H, rows: visibleRows("time", "H", sampledTimeRows), x: (row) => row.tau, y: (row) => row.H }
+  ];
+  if (!convectionOff) {
+    timeSeries.push({ label: "Uc", color: COLORS.Uc, rows: visibleRows("time", "Uc", sampledTimeRows), x: (row) => row.tau, y: (row) => row.Uc });
+  }
+  drawSeries("timeCanvas", timeSeries, {
     xlabel: "time τ",
     ylabel: "state",
     xlabelColor: COLORS.tau,
@@ -2355,18 +2374,26 @@ function drawAll(): void {
     denseEnvelope: true,
     message: "all series hidden"
   });
-  drawLegend("timeLegend", [
+  const timeLegendItems: LegendItem[] = [
     { key: "R", label: `\\(${TEX.R}\\) radius`, color: COLORS.R, toggleLabel: "radius" },
     { key: "V", label: `\\(${TEX.V}\\) radial velocity`, color: COLORS.V, toggleLabel: "radial velocity" },
-    { key: "H", label: `\\(${TEX.H}\\) nonadiabatic pressure factor`, color: COLORS.H, toggleLabel: "nonadiabatic pressure factor" },
-    { key: "Uc", label: `\\(${TEX.Uc}\\) convective velocity`, color: COLORS.Uc, toggleLabel: "convective velocity" }
-  ], { plotId: "time" });
+    { key: "H", label: `\\(${TEX.H}\\) pressure factor`, color: COLORS.H, toggleLabel: "pressure factor" }
+  ];
+  if (!convectionOff) {
+    timeLegendItems.push({ key: "Uc", label: `\\(${TEX.Uc}\\) convective velocity`, color: COLORS.Uc, toggleLabel: "convective velocity" });
+  }
+  drawLegend("timeLegend", timeLegendItems, { plotId: "time" });
 
-  drawSeries("lumCanvas", [
-    { label: "L", color: COLORS.L, rows: visibleRows("lum", "L", sampledLumRows), x: (row) => row.tau, y: (row) => row.L },
-    { label: "Lr", color: COLORS.Lr, rows: visibleRows("lum", "Lr", sampledLumRows), x: (row) => row.tau, y: (row) => row.Lr },
-    { label: "Lc", color: COLORS.Lc, rows: visibleRows("lum", "Lc", sampledLumRows), x: (row) => row.tau, y: (row) => row.Lc }
-  ], {
+  const lumSeries: Series[] = [
+    { label: "L", color: COLORS.L, rows: visibleRows("lum", "L", sampledLumRows), x: (row) => row.tau, y: (row) => row.L }
+  ];
+  if (!convectionOff) {
+    lumSeries.push(
+      { label: "Lr", color: COLORS.Lr, rows: visibleRows("lum", "Lr", sampledLumRows), x: (row) => row.tau, y: (row) => row.Lr },
+      { label: "Lc", color: COLORS.Lc, rows: visibleRows("lum", "Lc", sampledLumRows), x: (row) => row.tau, y: (row) => row.Lc }
+    );
+  }
+  drawSeries("lumCanvas", lumSeries, {
     xlabel: "time τ",
     ylabel: "luminosity",
     xlabelColor: COLORS.tau,
@@ -2376,11 +2403,14 @@ function drawAll(): void {
     denseEnvelope: true,
     message: "all luminosity variables hidden"
   });
-  drawLegend("lumLegend", [
-    { key: "L", label: `\\(${TEX.L}\\) total`, color: COLORS.L, toggleLabel: "total luminosity" },
-    { key: "Lr", label: `\\(${TEX.Lr}\\) radiative`, color: COLORS.Lr, toggleLabel: "radiative luminosity" },
-    { key: "Lc", label: `\\(${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
-  ], { plotId: "lum" });
+  const lumLegendItems: LegendItem[] = convectionOff
+    ? [{ label: `\\(${TEX.L}\\) total`, color: COLORS.L }]
+    : [
+        { key: "L", label: `\\(${TEX.L}\\) total`, color: COLORS.L, toggleLabel: "total luminosity" },
+        { key: "Lr", label: `\\(${TEX.Lr}\\) radiative`, color: COLORS.Lr, toggleLabel: "radiative luminosity" },
+        { key: "Lc", label: `\\(${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
+      ];
+  drawLegend("lumLegend", lumLegendItems, convectionOff ? {} : { plotId: "lum" });
 }
 
 function downloadCsv(): void {

@@ -92,7 +92,7 @@ export const TEX = {
   zeta: "\\ozZeta{\\zeta}",
   zetac: "\\ozZetac{\\zeta_c}",
   gammac: "\\ozGammac{\\gamma_c}",
-  m: "\\ozMass{m}",
+  m: "\\ozChi{\\chi_0}",
   gamma1: "\\ozGamma{\\Gamma_1}",
   n: "\\ozBlue{n}",
   s: "\\ozPink{s}",
@@ -102,7 +102,7 @@ export const TEX = {
 
 const TEX_EXTRA = {
   gammaR: "\\ozNeutral{\\gamma_r}",
-  eta: "\\ozMass{\\eta}",
+  eta: "\\ozChi{\\eta}",
   kappa: "\\ozNeutral{\\kappa}",
   rho: "\\ozNeutral{\\rho}",
   temp: "\\ozNeutral{T}"
@@ -150,7 +150,7 @@ export const PARAMETER_DESCRIPTIONS: Partial<Record<keyof ModelParameters, strin
   zeta: `Ratio of the model free-fall/dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\).`,
   zetac: `Ratio of the model free-fall/dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\).`,
   gammac: `Equilibrium convective luminosity fraction \\(${TEX.gammac}=${TEX.Lc}_{0}/${TEX.L}_{0}\\); the radiative weight is \\(${TEX_EXTRA.gammaR}=1-${TEX.gammac}\\).`,
-  m: `Equilibrium shell-thickness form factor \\(${TEX.m}=3/(1-${TEX_EXTRA.eta}^{3})\\), where \\(${TEX_EXTRA.eta}=${TEX.R}_{c}/${TEX.R}_{0}\\). Larger \\(${TEX.m}\\) means a thinner shell.`,
+  m: `User-tunable shell-thickness form factor \\(${TEX.m}=3/(1-${TEX_EXTRA.eta}^{3})\\), where \\(${TEX_EXTRA.eta}=${TEX.R}_{c}/${TEX.R}_{0}\\). Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\).`,
   gamma1: `First adiabatic exponent used in the \\(${TEX.H}\\) response.`,
   n: `Density exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
   s: `Temperature exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,

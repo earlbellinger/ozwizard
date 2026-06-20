@@ -246,7 +246,12 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator(".equation-label").count()) === 0, "closure relations label should be removed");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "radius-dependent", "luminosity equations should start radius-dependent");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-layout")) === "stacked", "geometry equation should keep eta on its own line");
-    assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.89", "eta should match the default m value");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.89", "eta should match the default chi0 value");
+    const sourceText = await page.evaluate(async () => (await fetch("/src/main.ts")).text());
+    const htmlText = await page.evaluate(async () => (await fetch("/wizard_of_oz.html")).text());
+    assertOk(sourceText.includes("\\\\ozChi{\\\\chi_0}") && sourceText.includes("\\\\ozChi{\\\\chi}") && htmlText.includes("\\ozChi{\\chi}"), "web app source should use chi and chi0 notation");
+    assertOk(!sourceText.includes("\\\\mathrm{eff}") && !htmlText.includes("\\mathrm{eff}"), "web app source should not use chi_eff notation");
+    assertOk(!sourceText.includes("\\\\ozMass") && !htmlText.includes("\\ozMass"), "web app source should not use the old mass macro");
     assertOk((await page.locator("#odeEquations").getAttribute("data-driver-mode")) === "h", "ODE driver should start with sqrt(H)");
     assertOk(await page.locator("#initialR").isVisible(), "initial R cell was not visible");
     assertOk(await page.locator("#initialLr").isVisible(), "computed initial Lr cell was not visible");
@@ -358,9 +363,30 @@ async function runPlaywrightChecks() {
 
     const timeLegend = await page.locator("#timeLegend").textContent();
     assertOk(
-      timeLegend?.includes("radius") && timeLegend.includes("nonadiabatic pressure factor"),
+      timeLegend?.includes("radius") && timeLegend.includes("pressure factor"),
       "time legend did not render expected entries"
     );
+    assertOk(!timeLegend?.includes("nonadiabatic pressure factor"), "history legend should use the shorter pressure factor label");
+    assertOk(!timeLegend?.includes("convective velocity"), "convective velocity should be hidden when convective response is zero");
+    const lumLegend = await page.locator("#lumLegend").textContent();
+    assertOk(lumLegend?.includes("total"), "luminosity legend should show total luminosity");
+    assertOk(!lumLegend?.includes("radiative") && !lumLegend?.includes("convective"), "luminosity legend should show only total luminosity when convective response is zero");
+    assertOk(await page.locator("#lumLegend [data-plot-series]").count() === 0, "total-only luminosity legend should not expose series toggles");
+    await page.locator("input[aria-label='convective response']").evaluate((input) => {
+      const slider = input;
+      slider.value = "1";
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.locator("#timeLegend [data-plot-series='Uc']").waitFor({ state: "attached", timeout: 15000 });
+    assertOk((await page.locator("#timeLegend").textContent())?.includes("convective velocity"), "convective velocity should return when convective response is nonzero");
+    assertOk((await page.locator("#lumLegend").textContent())?.includes("radiative"), "radiative luminosity should return when convective response is nonzero");
+    assertOk((await page.locator("#lumLegend").textContent())?.includes("convective"), "convective luminosity should return when convective response is nonzero");
+    await page.locator("input[aria-label='convective response']").evaluate((input) => {
+      const slider = input;
+      slider.value = "0";
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForFunction(() => !document.querySelector("#timeLegend [data-plot-series='Uc']"));
     const radiusToggle = page.locator("#timeLegend [data-plot-series='R']");
     assertOk((await radiusToggle.getAttribute("aria-pressed")) === "true", "radius toggle should start visible");
     await radiusToggle.click();
@@ -377,10 +403,10 @@ async function runPlaywrightChecks() {
       slider.value = "15";
       slider.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    assertOk(await page.locator("#luminosityEquations mjx-container").count() > 0, "rendered equations should remain visible while m changes");
-    assertOk(await page.locator("#metrics mjx-container").count() > 0, "rendered output metrics should remain visible while m changes");
-    assertOk((await page.locator("#timeLegend").innerHTML()) === timeLegendHtmlBeforeMSlider, "plot legend should not be rebuilt while m changes");
-    assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.93", "eta did not update when m changed");
+    assertOk(await page.locator("#luminosityEquations mjx-container").count() > 0, "rendered equations should remain visible while chi changes");
+    assertOk(await page.locator("#metrics mjx-container").count() > 0, "rendered output metrics should remain visible while chi changes");
+    assertOk((await page.locator("#timeLegend").innerHTML()) === timeLegendHtmlBeforeMSlider, "plot legend should not be rebuilt while chi changes");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.93", "eta did not update when chi changed");
     await page.locator("input[aria-label='shell form factor']").evaluate((input) => {
       const slider = input;
       slider.value = "3";
@@ -388,7 +414,7 @@ async function runPlaywrightChecks() {
     });
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.00", "eta should keep two decimal places at the Baker limit");
     await page.locator("[data-reset-key='m']").click();
-    assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.89", "eta did not reset with m");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.89", "eta did not reset with chi");
     await page.locator("[data-driver='abs-v']").click();
     assertOk((await page.locator("#odeEquations").getAttribute("data-driver-mode")) === "abs-v", "ODE driver did not switch to sqrt(abs(V))");
     await page.locator("[data-driver='h']").click();
