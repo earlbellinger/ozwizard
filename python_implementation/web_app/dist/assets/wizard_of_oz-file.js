@@ -2163,14 +2163,14 @@
   function updateVariableInitials() {
     const initial = sample(0, [state.r0, state.v0, state.h0, state.uc0], state);
     const values = {
-      initialTau: `\\(${TEX.tau}_{0}=0\\)`,
-      initialR: `\\(${TEX.R}_{0}=${fmt(initial.R, 4)}\\)`,
-      initialV: `\\(${TEX.V}_{0}=${fmt(initial.V, 4)}\\)`,
-      initialH: `\\(${TEX.H}_{0}=${fmt(initial.H, 4)}\\)`,
-      initialUc: `\\(${TEX.Uc}_{0}=${fmt(initial.Uc, 4)}\\)`,
-      initialLr: `\\(${TEX.Lr}_{0}=${fmt(initial.Lr, 4)}\\)`,
-      initialLc: `\\(${TEX.Lc}_{0}=${fmt(initial.Lc, 4)}\\)`,
-      initialL: `\\(${TEX.L}_{0}=${fmt(initial.L, 4)}\\)`
+      initialTau: `\\(${TEX.tau}_{0}=0.00\\)`,
+      initialR: `\\(${TEX.R}_{0}=${fmtFixed(initial.R, 2)}\\)`,
+      initialV: `\\(${TEX.V}_{0}=${fmtFixed(initial.V, 2)}\\)`,
+      initialH: `\\(${TEX.H}_{0}=${fmtFixed(initial.H, 2)}\\)`,
+      initialUc: `\\(${TEX.Uc}_{0}=${fmtFixed(initial.Uc, 2)}\\)`,
+      initialLr: `\\(${TEX.Lr}_{0}=${fmtFixed(initial.Lr, 2)}\\)`,
+      initialLc: `\\(${TEX.Lc}_{0}=${fmtFixed(initial.Lc, 2)}\\)`,
+      initialL: `\\(${TEX.L}_{0}=${fmtFixed(initial.L, 2)}\\)`
     };
     const targets = [];
     Object.entries(values).forEach(([id, value]) => {

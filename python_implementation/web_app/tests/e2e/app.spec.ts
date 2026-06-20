@@ -406,6 +406,15 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#initialR")).toBeVisible();
   await expect(page.locator("#initialLr")).toBeVisible();
   await expect(page.locator("#initialL")).toBeVisible();
+  const initialMathSources = await page.evaluate(() =>
+    ["initialTau", "initialR", "initialV", "initialH", "initialUc", "initialLr", "initialLc", "initialL"]
+      .map((id) => document.getElementById(id)?.dataset.mathSource || "")
+  );
+  expect(initialMathSources).toEqual(expect.arrayContaining([
+    expect.stringContaining("=0.00"),
+    expect.stringContaining("=1.10")
+  ]));
+  initialMathSources.forEach((source) => expect(source).toMatch(/=-?\d+\.\d{2}\\\)$/));
   const referenceType = await page.evaluate(() => {
     const physicalText = document.querySelector<HTMLElement>(".notes-grid > .content-panel:not(.reference-panel) p");
     const variableMeaning = document.querySelector<HTMLElement>("[data-symbol='tau']")?.closest("tr")?.lastElementChild;

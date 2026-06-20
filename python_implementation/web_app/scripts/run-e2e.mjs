@@ -277,6 +277,15 @@ async function runPlaywrightChecks() {
       `meaning line-height should be consistent across reference tables, saw ${JSON.stringify(referenceType)}`
     );
     await page.locator("#initialR mjx-container").waitFor({ state: "visible", timeout: 15000 });
+    const initialMathSources = await page.evaluate(() =>
+      ["initialTau", "initialR", "initialV", "initialH", "initialUc", "initialLr", "initialLc", "initialL"]
+        .map((id) => document.getElementById(id)?.dataset.mathSource || "")
+    );
+    assertOk(
+      initialMathSources.every((source) => /=-?\d+\.\d{2}\\\)$/.test(source)),
+      `initial values should round to 0.01, saw ${initialMathSources.join(", ")}`
+    );
+    assertOk(initialMathSources.some((source) => source.includes("=1.10")), "initial radius should render as 1.10");
     const initialRadiusControl = page.locator("input[aria-label='initial radius']").locator("xpath=ancestor::*[contains(@class, 'slider-control')]");
     const initialRadiusText = await initialRadiusControl.textContent();
     assertOk(initialRadiusText?.includes("initial radius") && initialRadiusText.includes("1.1"), "initial radius value should be shown beside the parameter name");
