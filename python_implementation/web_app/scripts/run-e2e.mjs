@@ -59,6 +59,34 @@ async function runPlaywrightChecks() {
     await page.goto("/wizard_of_oz.html");
     await page.getByRole("heading", { name: "OZwizard" }).waitFor({ state: "visible", timeout: 15000 });
     console.log("page loaded");
+    const metadata = await page.evaluate(() => {
+      const meta = (selector) => document.querySelector(selector)?.getAttribute("content") || "";
+      const link = (selector) => document.querySelector(selector)?.getAttribute("href") || "";
+      return {
+        title: document.title,
+        description: meta("meta[name='description']"),
+        canonical: link("link[rel='canonical']"),
+        icon32: link("link[rel='icon'][sizes='32x32']"),
+        appleTouchIcon: link("link[rel='apple-touch-icon']"),
+        manifest: link("link[rel='manifest']"),
+        ogImage: meta("meta[property='og:image']"),
+        twitterCard: meta("meta[name='twitter:card']")
+      };
+    });
+    assertOk(metadata.title === "OZwizard | Interactive Stellar Pulsation Explorer", "document title should describe the shared app");
+    assertOk(
+      metadata.description === "Interactive one-zone convection and pulsation explorer for Stellingwerf-style stellar-envelope models.",
+      "meta description should describe OZwizard"
+    );
+    assertOk(metadata.canonical === "https://earlbellinger.github.io/apps/ozwizard/", "canonical URL should target the deployed app");
+    assertOk(metadata.icon32 === "./assets/favicon-32x32.png", "32px favicon link should be present");
+    assertOk(metadata.appleTouchIcon === "./assets/apple-touch-icon.png", "Apple touch icon link should be present");
+    assertOk(metadata.manifest === "./site.webmanifest", "web manifest link should be present");
+    assertOk(
+      metadata.ogImage === "https://earlbellinger.github.io/apps/ozwizard/assets/ozwizard-social-card.png",
+      "Open Graph image should use the deployed social card"
+    );
+    assertOk(metadata.twitterCard === "summary_large_image", "Twitter card should use a large preview image");
 
     const pianoToggle = page.locator("#pianoToggle");
     const sonificationToggle = page.locator("#sonificationToggle");
@@ -178,7 +206,7 @@ async function runPlaywrightChecks() {
     assertOk(await page.getByRole("heading", { name: "Parameters" }).isVisible(), "parameters panel was not visible");
     assertOk((await page.locator(".equation-label").count()) === 0, "closure relations label should be removed");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "radius-dependent", "luminosity equations should start radius-dependent");
-    assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-layout")) === "inline", "geometry equation should start inline on desktop");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-layout")) === "stacked", "geometry equation should keep eta on its own line");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.89", "eta should match the default m value");
     assertOk((await page.locator("#odeEquations").getAttribute("data-driver-mode")) === "h", "ODE driver should start with sqrt(H)");
     assertOk(await page.locator("#initialR").isVisible(), "initial R cell was not visible");
@@ -204,14 +232,14 @@ async function runPlaywrightChecks() {
       };
     });
     assertOk(
-      referenceType.variableFontSize === referenceType.physicalFontSize
-        && referenceType.parameterFontSize === referenceType.physicalFontSize,
-      `meaning font size should match physical model text, saw ${JSON.stringify(referenceType)}`
+      referenceType.variableFontSize === "13px"
+        && referenceType.parameterFontSize === referenceType.variableFontSize
+        && parseFloat(referenceType.variableFontSize) < parseFloat(referenceType.physicalFontSize),
+      `meaning font size should be consistent and smaller than physical model text, saw ${JSON.stringify(referenceType)}`
     );
     assertOk(
-      referenceType.variableLineHeight === referenceType.physicalLineHeight
-        && referenceType.parameterLineHeight === referenceType.physicalLineHeight,
-      `meaning line-height should match physical model text, saw ${JSON.stringify(referenceType)}`
+      referenceType.parameterLineHeight === referenceType.variableLineHeight,
+      `meaning line-height should be consistent across reference tables, saw ${JSON.stringify(referenceType)}`
     );
     await page.locator("#initialR mjx-container").waitFor({ state: "visible", timeout: 15000 });
     const initialRadiusControl = page.locator("input[aria-label='initial radius']").locator("xpath=ancestor::*[contains(@class, 'slider-control')]");

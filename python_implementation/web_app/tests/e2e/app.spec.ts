@@ -5,12 +5,18 @@ async function referencePanelMetrics(page: Page) {
   return page.evaluate(() => {
     const grid = document.querySelector<HTMLElement>(".reference-grid");
     if (!grid) throw new Error("missing reference grid");
+    const gridRect = grid.getBoundingClientRect();
     const panels = [...document.querySelectorAll<HTMLElement>(".reference-grid > .reference-panel")];
     return {
       gridColumns: getComputedStyle(grid).gridTemplateColumns,
+      gridWidth: Math.round(gridRect.width),
       panels: panels.map((node) => ({
         heading: node.querySelector("h3")?.textContent || "",
         height: Math.round(node.getBoundingClientRect().height),
+        width: Math.round(node.getBoundingClientRect().width),
+        top: Math.round(node.getBoundingClientRect().top),
+        hasHorizontalOverflow: [node, ...node.querySelectorAll<HTMLElement>(".equation-block, table")]
+          .some((item) => item.scrollWidth > item.clientWidth + 1),
         clientHeight: node.clientHeight,
         scrollHeight: node.scrollHeight
       }))
@@ -174,6 +180,30 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto("/wizard_of_oz.html");
   await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
+  const metadata = await page.evaluate(() => {
+    const meta = (selector: string) => document.querySelector(selector)?.getAttribute("content") || "";
+    const link = (selector: string) => document.querySelector(selector)?.getAttribute("href") || "";
+    return {
+      title: document.title,
+      description: meta("meta[name='description']"),
+      canonical: link("link[rel='canonical']"),
+      icon32: link("link[rel='icon'][sizes='32x32']"),
+      appleTouchIcon: link("link[rel='apple-touch-icon']"),
+      manifest: link("link[rel='manifest']"),
+      ogImage: meta("meta[property='og:image']"),
+      twitterCard: meta("meta[name='twitter:card']")
+    };
+  });
+  expect(metadata).toEqual({
+    title: "OZwizard | Interactive Stellar Pulsation Explorer",
+    description: "Interactive one-zone convection and pulsation explorer for Stellingwerf-style stellar-envelope models.",
+    canonical: "https://earlbellinger.github.io/apps/ozwizard/",
+    icon32: "./assets/favicon-32x32.png",
+    appleTouchIcon: "./assets/apple-touch-icon.png",
+    manifest: "./site.webmanifest",
+    ogImage: "https://earlbellinger.github.io/apps/ozwizard/assets/ozwizard-social-card.png",
+    twitterCard: "summary_large_image"
+  });
   const pianoToggle = page.locator("#pianoToggle");
   const sonificationToggle = page.locator("#sonificationToggle");
   await expect(pianoToggle).not.toBeDisabled();
@@ -354,17 +384,17 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
       parameterLineHeight: parameterStyle.lineHeight
     };
   });
-  expect(referenceType.variableFontSize).toBe(referenceType.physicalFontSize);
-  expect(referenceType.variableLineHeight).toBe(referenceType.physicalLineHeight);
-  expect(referenceType.parameterFontSize).toBe(referenceType.physicalFontSize);
-  expect(referenceType.parameterLineHeight).toBe(referenceType.physicalLineHeight);
+  expect(referenceType.variableFontSize).toBe("13px");
+  expect(referenceType.parameterFontSize).toBe(referenceType.variableFontSize);
+  expect(referenceType.parameterLineHeight).toBe(referenceType.variableLineHeight);
+  expect(parseFloat(referenceType.variableFontSize)).toBeLessThan(parseFloat(referenceType.physicalFontSize));
   const initialRadiusControl = page.locator("input[aria-label='initial radius']").locator("xpath=ancestor::*[contains(@class, 'slider-control')]");
   await expect(initialRadiusControl).toContainText("initial radius");
   await expect(initialRadiusControl).toContainText("1.1");
   await expect(page.locator("[data-value-for='tEnd']")).toHaveText("100");
   await expect(page.locator(".equation-label")).toHaveCount(0);
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "radius-dependent");
-  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-layout", "inline");
+  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-layout", "stacked");
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-eta-value", "0.89");
   await expect(page.locator("#odeEquations")).toHaveAttribute("data-driver-mode", "h");
   await expect(page.getByRole("heading", { name: "Derived" })).toHaveCount(0);
@@ -429,15 +459,29 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   const csv = await readFile(path!, "utf8");
   expect(csv.split(/\r?\n/, 1)[0]).toBe("tau,R,V,H,Uc,Lr,Lc,L");
 
-  await page.setViewportSize({ width: 1300, height: 1200 });
+  await page.setViewportSize({ width: 1100, height: 1200 });
   const mediumReferenceLayout = await referencePanelMetrics(page);
-  expect(mediumReferenceLayout.gridColumns.split(" ")).toHaveLength(2);
-  const mediumHeights = mediumReferenceLayout.panels.map((panel) => panel.height);
-  expect(new Set(mediumHeights).size).toBeGreaterThan(1);
+  expect(mediumReferenceLayout.gridColumns.split(" ")).toHaveLength(1);
 
-  await page.setViewportSize({ width: 1800, height: 1200 });
+  await page.setViewportSize({ width: 1500, height: 1200 });
+  const pairedReferenceLayout = await referencePanelMetrics(page);
+  expect(pairedReferenceLayout.gridColumns.split(" ")).toHaveLength(2);
+  expect(pairedReferenceLayout.panels[0].width).toBeGreaterThanOrEqual(354);
+  expect(pairedReferenceLayout.panels[1].width).toBeGreaterThanOrEqual(434);
+  expect(pairedReferenceLayout.panels[1].width).toBeGreaterThan(pairedReferenceLayout.panels[0].width);
+  expect(pairedReferenceLayout.panels[0].top).toBe(pairedReferenceLayout.panels[1].top);
+  expect(pairedReferenceLayout.panels[0].height).toBe(pairedReferenceLayout.panels[1].height);
+  expect(pairedReferenceLayout.panels[0].height).toBeLessThan(829);
+  expect(pairedReferenceLayout.panels[2].top).toBeGreaterThan(pairedReferenceLayout.panels[0].top);
+  expect(pairedReferenceLayout.panels[2].width).toBeGreaterThanOrEqual(pairedReferenceLayout.gridWidth - 1);
+  expect(pairedReferenceLayout.panels.map((panel) => panel.hasHorizontalOverflow)).toEqual([false, false, false]);
+
+  await page.setViewportSize({ width: 1920, height: 1200 });
   const wideReferenceLayout = await referencePanelMetrics(page);
-  expect(wideReferenceLayout.panels.map((panel) => panel.height)).toEqual([559, 559, 559]);
+  expect(wideReferenceLayout.gridColumns.split(" ")).toHaveLength(3);
+  expect(wideReferenceLayout.panels.map((panel) => panel.height)).toEqual([535, 535, 535]);
+  expect(wideReferenceLayout.panels[1].width).toBeGreaterThan(wideReferenceLayout.panels[0].width);
+  expect(wideReferenceLayout.panels[2].width).toBeGreaterThan(wideReferenceLayout.panels[0].width);
   const wideVariables = wideReferenceLayout.panels.find((panel) => panel.heading === "Variables");
   const wideParameters = wideReferenceLayout.panels.find((panel) => panel.heading === "Parameters");
   expect(wideVariables?.scrollHeight).toBeGreaterThanOrEqual(wideVariables?.clientHeight || 0);
@@ -457,6 +501,6 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     });
     return [...sizes];
   });
-  expect(mobileMeaningFontSizes).toEqual([referenceType.physicalFontSize]);
+  expect(mobileMeaningFontSizes).toEqual(["13px"]);
   expect(pageErrors).toEqual([]);
 });

@@ -3,7 +3,31 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OZwizard</title>
+  <title>OZwizard | Interactive Stellar Pulsation Explorer</title>
+  <meta name="description" content="Interactive one-zone convection and pulsation explorer for Stellingwerf-style stellar-envelope models.">
+  <meta name="application-name" content="OZwizard">
+  <meta name="apple-mobile-web-app-title" content="OZwizard">
+  <meta name="theme-color" content="#050814">
+  <link rel="canonical" href="https://earlbellinger.github.io/apps/ozwizard/">
+  <link rel="icon" href="./assets/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./assets/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png">
+  <link rel="manifest" href="./site.webmanifest">
+  <meta property="og:site_name" content="Earl Bellinger">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="OZwizard | Interactive Stellar Pulsation Explorer">
+  <meta property="og:description" content="Interactive one-zone convection and pulsation explorer for Stellingwerf-style stellar-envelope models.">
+  <meta property="og:url" content="https://earlbellinger.github.io/apps/ozwizard/">
+  <meta property="og:image" content="https://earlbellinger.github.io/apps/ozwizard/assets/ozwizard-social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="OZwizard interactive stellar pulsation explorer with lightcurve and radial velocity plots.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="OZwizard | Interactive Stellar Pulsation Explorer">
+  <meta name="twitter:description" content="Interactive one-zone convection and pulsation explorer for Stellingwerf-style stellar-envelope models.">
+  <meta name="twitter:image" content="https://earlbellinger.github.io/apps/ozwizard/assets/ozwizard-social-card.png">
+  <meta name="twitter:image:alt" content="OZwizard interactive stellar pulsation explorer with lightcurve and radial velocity plots.">
   <script>
     window.MathJax = {
       loader: { load: ["[tex]/color"] },
@@ -973,22 +997,49 @@
       display: grid;
       gap: 14px;
       margin-top: 14px;
+      container-type: inline-size;
     }
 
     .reference-grid {
+      --equations-panel-min-width: 354px;
+      --variables-panel-min-width: 434px;
+      --parameters-panel-min-width: 414px;
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+      grid-template-columns: 1fr;
       gap: 14px;
       align-items: start;
       container-type: inline-size;
     }
 
-    @media (min-width: 1680px) {
+    @container (min-width: 802px) {
       .reference-grid {
         grid-template-columns:
-          minmax(460px, 0.88fr)
-          minmax(390px, 1.05fr)
-          minmax(360px, 0.97fr);
+          minmax(var(--equations-panel-min-width), 0.6fr)
+          minmax(var(--variables-panel-min-width), 1.4fr);
+      }
+    }
+
+    @container (min-width: 1230px) {
+      .reference-grid {
+        grid-template-columns:
+          minmax(var(--equations-panel-min-width), 0.55fr)
+          minmax(var(--variables-panel-min-width), 1.25fr)
+          minmax(var(--parameters-panel-min-width), 1.2fr);
+      }
+
+      .reference-grid > .parameters-panel {
+        grid-column: auto;
+      }
+
+      .reference-grid > .reference-panel {
+        height: 535px;
+        overflow-y: auto;
+      }
+    }
+
+    @container (min-width: 802px) and (max-width: 1229px) {
+      .reference-grid {
+        align-items: stretch;
       }
     }
 
@@ -998,16 +1049,10 @@
     }
 
     .parameters-panel {
+      grid-column: 1 / -1;
       max-height: none;
       scrollbar-color: var(--line-strong) var(--canvas);
       scrollbar-width: thin;
-    }
-
-    @container (min-width: 1108px) {
-      .reference-panel {
-        height: 559px;
-        overflow-y: auto;
-      }
     }
 
     .parameter-section {
@@ -1080,8 +1125,8 @@
     }
 
     .variable-table td:last-child {
-      font-size: 14px;
-      line-height: 1.58;
+      font-size: 13px;
+      line-height: 1.45;
     }
 
     .variable-table td:not(.symbol-cell) mjx-container[jax="SVG"] {
@@ -1444,7 +1489,7 @@
             <div class="equation-block" id="luminosityEquations"></div>
           </div>
 
-          <div class="content-panel reference-panel">
+          <div class="content-panel reference-panel variables-panel">
             <h3>Variables</h3>
             <table class="variable-table">
               <thead>

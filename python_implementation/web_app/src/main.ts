@@ -187,7 +187,6 @@ const INTERACTIVE_CANVASES: Record<string, InteractivePlotId> = {
   lumCanvas: "lum"
 };
 
-const EQUATION_STACK_QUERY = "(max-width: 760px)";
 const SIDEBAR_COLLAPSE_QUERY = "(max-width: 780px)";
 
 const plotViews: Record<InteractivePlotId, PlotView> = {
@@ -203,7 +202,6 @@ const plotVisibility: Record<InteractivePlotId, Record<string, boolean>> = {
 const plotRenderStates = new Map<string, PlotRenderState>();
 const legendSignatures = new Map<string, string>();
 let activeSelection: PlotSelection | null = null;
-let geometryEquationStacked = false;
 const DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
 const PLOT_LAYOUT = {
   left: 84,
@@ -1125,7 +1123,6 @@ function buildControls(): void {
   setupInteractivePlots();
   window.addEventListener("resize", drawAll);
   window.addEventListener("resize", drawAdsrVisualization);
-  window.addEventListener("resize", syncEquationLayoutForViewport);
   updateDriverButtons();
   updatePhaseModeButtons();
   updatePhaseAnchorButtons();
@@ -1483,26 +1480,12 @@ function buildParameterTable(): void {
   queueMathTypeset();
 }
 
-function shouldStackGeometryEquation(): boolean {
-  return window.matchMedia(EQUATION_STACK_QUERY).matches;
-}
-
-function syncEquationLayoutForViewport(): void {
-  const nextStacked = shouldStackGeometryEquation();
-  if (nextStacked !== geometryEquationStacked) updateEquationBlocks();
-}
-
 function updateEquationBlocks(): void {
   const eta = Math.cbrt(Math.max(0, 1 - 3 / state.m));
   const etaDisplay = fmtFixed(eta, 2);
-  const stackGeometry = shouldStackGeometryEquation();
-  const etaDefinition = `\\ozNeutral{\\eta}=\\left(1-\\frac{3}{\\ozMass{m}}\\right)^{1/3}=\\ozNeutral{${etaDisplay}}`;
   const geometry = state.variableM
-    ? stackGeometry
-      ? `\\ozMass{m}_{\\mathrm{eff}} &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}\\\\[0.2em]
+    ? `\\ozMass{m}_{\\mathrm{eff}} &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}\\\\[0.2em]
        \\ozNeutral{\\eta} &= \\left(1-\\frac{3}{\\ozMass{m}}\\right)^{1/3}=\\ozNeutral{${etaDisplay}}`
-      : `\\ozMass{m}_{\\mathrm{eff}} &= \\frac{3}{1-(\\ozNeutral{\\eta}/\\ozRadius{R})^3}
-       \\qquad ${etaDefinition}`
     : `\\ozMass{m}_{\\mathrm{eff}} &= \\ozMass{m}`;
   const driver = state.driver === "abs-v" ? "\\sqrt{|\\ozVelocity{V}|}" : "\\sqrt{\\ozPressure{H}}";
   const odeNode = el<HTMLDivElement>("odeEquations");
@@ -1534,8 +1517,7 @@ function updateEquationBlocks(): void {
     \\]
   `;
   luminosityNode.dataset.geometryMode = state.variableM ? "radius-dependent" : "fixed";
-  geometryEquationStacked = stackGeometry;
-  luminosityNode.dataset.geometryLayout = stackGeometry ? "stacked" : "inline";
+  luminosityNode.dataset.geometryLayout = "stacked";
   luminosityNode.dataset.etaValue = etaDisplay;
   const luminosityHtml = `
     \\[
