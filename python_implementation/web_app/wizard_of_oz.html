@@ -166,25 +166,27 @@
     .app-shell {
       min-height: 100vh;
       display: grid;
-      grid-template-columns: minmax(430px, 490px) minmax(0, 1fr);
+      grid-template-columns: minmax(340px, 388px) minmax(0, 1fr);
     }
 
     aside {
       background: linear-gradient(180deg, var(--paper-raised), var(--paper));
       border-right: 1px solid var(--line);
-      padding: 14px;
+      padding: 12px;
       overflow-y: auto;
       max-height: 100vh;
       position: sticky;
       top: 0;
       box-shadow: 12px 0 28px rgba(0, 0, 0, 0.18);
+      scrollbar-color: var(--line-strong) var(--canvas);
+      scrollbar-width: thin;
     }
 
     main {
       background:
         linear-gradient(180deg, rgba(96, 128, 208, 0.08), rgba(5, 8, 20, 0) 220px),
         var(--bg);
-      padding: 18px 22px 30px;
+      padding: 16px 18px 28px;
       min-width: 0;
     }
 
@@ -235,21 +237,18 @@
       line-height: 1.45;
     }
 
-    .subtitle:empty {
-      display: none;
+    .subtitle a {
+      color: var(--logo-gold-bright);
+      text-decoration: underline;
+      text-underline-offset: 3px;
     }
 
-    .status-pill {
-      border: 1px solid var(--line);
-      background: rgba(7, 16, 31, 0.72);
-      color: var(--muted);
-      border-radius: 999px;
-      padding: 5px 10px;
-      font-size: 12px;
-      white-space: nowrap;
-      box-shadow: inset 0 0 0 1px rgba(158, 167, 255, 0.04);
-      display: inline-block;
-      margin: 8px 0 0 74px;
+    .subtitle a:hover {
+      color: var(--logo-ice);
+    }
+
+    .subtitle:empty {
+      display: none;
     }
 
     .section-title {
@@ -290,15 +289,22 @@
       letter-spacing: 0;
       line-height: 1.35;
       margin: 5px 0 0 19px;
-      max-width: 240px;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      max-width: none;
+      overflow: visible;
       text-transform: none;
-      white-space: nowrap;
+      white-space: normal;
     }
 
     .preset-grid {
       margin-top: 8px;
+    }
+
+    .sidebar-controls-summary {
+      display: none;
+    }
+
+    .sidebar-controls-body {
+      display: contents;
     }
 
     .preset-grid,
@@ -381,12 +387,12 @@
     }
 
     .slider-control {
-      --slider-desc-width: 112px;
-      --slider-symbol-width: 76px;
+      --slider-label-width: 178px;
+      --slider-reading-width: 58px;
       display: grid;
-      grid-template-columns: var(--slider-desc-width) var(--slider-symbol-width) minmax(0, 1fr) 22px;
+      grid-template-columns: minmax(160px, var(--slider-label-width)) minmax(0, 1fr) 22px;
       align-items: center;
-      column-gap: 6px;
+      column-gap: 4px;
       border: 1px solid var(--line);
       border-left: 4px solid var(--accent, var(--focus));
       border-radius: 7px;
@@ -396,9 +402,22 @@
       min-height: 32px;
     }
 
+    .slider-control[hidden] {
+      display: none;
+    }
+
     .slider-control:hover {
       border-color: color-mix(in srgb, var(--accent, var(--focus)) 46%, var(--line));
       background: var(--paper-high);
+    }
+
+    .slider-label {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) var(--slider-reading-width);
+      align-items: baseline;
+      column-gap: 4px;
+      min-width: 0;
+      white-space: nowrap;
     }
 
     .slider-name {
@@ -407,17 +426,27 @@
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
-      white-space: nowrap;
+    }
+
+    .slider-reading {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 2px;
+      justify-content: flex-end;
+      min-width: 0;
+      text-align: right;
     }
 
     .slider-symbol {
       font-weight: 800;
       color: var(--accent, var(--focus));
       font-size: 13px;
-      text-align: center;
-      min-width: 0;
-      overflow: hidden;
-      white-space: nowrap;
+      line-height: 1;
+    }
+
+    .slider-equals {
+      color: var(--subtle);
+      font-size: 11px;
     }
 
     .slider-value {
@@ -430,9 +459,8 @@
 
     .slider-track {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 48px;
+      grid-template-columns: minmax(0, 1fr);
       align-items: center;
-      gap: 6px;
       min-width: 0;
     }
 
@@ -466,12 +494,28 @@
 
     .slider-scale {
       grid-column: 1 / 2;
-      display: flex;
-      justify-content: space-between;
+      display: block;
+      height: 12px;
       margin-top: -3px;
+      position: relative;
       color: var(--subtle);
       font-size: 10px;
       font-variant-numeric: tabular-nums;
+    }
+
+    .slider-scale span {
+      left: var(--tick-position);
+      position: absolute;
+      top: 0;
+      transform: translateX(-50%);
+    }
+
+    .slider-scale span:first-child {
+      transform: translateX(0);
+    }
+
+    .slider-scale span:last-child {
+      transform: translateX(-100%);
     }
 
     .plots-header {
@@ -479,15 +523,7 @@
       grid-template-columns: 1fr;
       align-items: start;
       gap: 8px;
-      margin-bottom: 14px;
-    }
-
-    .plots-header h2 {
-      margin: 0;
-      font-size: 20px;
-      letter-spacing: 0;
-      color: var(--ink);
-      white-space: nowrap;
+      margin-bottom: 12px;
     }
 
     .metrics {
@@ -511,6 +547,12 @@
       color: var(--ink);
       font-variant-numeric: tabular-nums;
       margin-left: 4px;
+    }
+
+    .metric.status-ok b,
+    .metric.status-warn b,
+    .metric.status-bad b {
+      color: currentColor;
     }
 
     .plot-grid {
@@ -806,7 +848,7 @@
       color: var(--bad);
     }
 
-    @media (max-width: 1050px) {
+    @media (max-width: 780px) {
       .app-shell {
         grid-template-columns: 1fr;
       }
@@ -821,7 +863,41 @@
       }
 
       .slider-list {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar-controls {
+        border-top: 1px solid var(--line);
+        margin-top: 12px;
+        padding-top: 10px;
+      }
+
+      .sidebar-controls-summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 780;
+        letter-spacing: 0.08em;
+        min-height: 34px;
+        text-transform: uppercase;
+      }
+
+      .sidebar-controls-summary::after {
+        content: "+";
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1;
+      }
+
+      .sidebar-controls[open] .sidebar-controls-summary::after {
+        content: "-";
+      }
+
+      .sidebar-controls-body {
+        display: block;
       }
 
       .reference-grid {
@@ -859,11 +935,6 @@
         height: 64px;
       }
 
-      .status-pill {
-        display: inline-block;
-        margin-left: 68px;
-      }
-
       .preset-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
@@ -877,9 +948,9 @@
       }
 
       .slider-control {
-        --slider-desc-width: 92px;
-        --slider-symbol-width: 68px;
-        column-gap: 6px;
+        --slider-label-width: 166px;
+        --slider-reading-width: 56px;
+        column-gap: 4px;
       }
 
       .metrics {
@@ -901,90 +972,88 @@
             <img class="brand-logo" src="/assets/ozwizard-logo.png" alt="OZwizard logo" data-ozwizard-logo>
             <div class="brand-copy">
               <h1>OZwizard</h1>
-              <p class="subtitle">Interactive one-zone convection and pulsation explorer.</p>
+              <p class="subtitle">Interactive one-zone convection and pulsation explorer by <a href="https://earlbellinger.com" target="_blank" rel="noopener">Earl Bellinger</a>.</p>
             </div>
           </div>
-          <div id="statusPill" class="status-pill">Ready</div>
         </div>
       </div>
 
-      <details class="preset-panel" id="presetPanel">
-        <summary class="preset-summary">
-          Presets
-          <span class="preset-summary-label" id="presetSummaryLabel"></span>
-        </summary>
-        <div class="preset-grid" id="presetButtons"></div>
+      <details class="sidebar-controls" id="sidebarControls" open>
+        <summary class="sidebar-controls-summary">Controls</summary>
+        <div class="sidebar-controls-body">
+          <details class="preset-panel" id="presetPanel">
+            <summary class="preset-summary">
+              Presets
+              <span class="preset-summary-label" id="presetSummaryLabel"></span>
+            </summary>
+            <div class="preset-grid" id="presetButtons"></div>
+          </details>
+
+          <div class="section-title">Physical Parameters</div>
+          <div class="slider-list" id="physicalControls"></div>
+          <label class="toggle-line">
+            <span>Use radius-dependent geometry \(\ozMass{m}_{\mathrm{eff}}(\ozRadius{R})\)</span>
+            <input id="variableM" type="checkbox">
+          </label>
+
+          <div class="section-title">Initial Conditions</div>
+          <div class="slider-list" id="initialControls"></div>
+
+          <div class="section-title">Integration</div>
+          <div class="driver-row solver-row" id="solverButtons"></div>
+          <label class="toggle-line">
+            <span>Run until stable</span>
+            <input id="runUntilStable" type="checkbox">
+          </label>
+          <div class="slider-list" id="integrationControls"></div>
+
+          <div class="section-title">Convective Driver</div>
+          <div class="driver-row">
+            <button type="button" data-driver="h" class="active">\(\sqrt{\ozPressure{H}}\)</button>
+            <button type="button" data-driver="abs-v">\(\sqrt{|\ozVelocity{V}|}\)</button>
+          </div>
+
+          <div class="section-title">Phase Window</div>
+          <div class="driver-row">
+            <button type="button" data-phase-mode="reference" class="active">Reference cycles</button>
+            <button type="button" data-phase-mode="final">Final cycles</button>
+          </div>
+
+          <div class="action-row">
+            <button type="button" id="resetPreset">Reset preset</button>
+            <button type="button" id="downloadCsv">Download CSV</button>
+          </div>
+        </div>
       </details>
-
-      <div class="section-title">Physical Parameters</div>
-      <div class="slider-list" id="physicalControls"></div>
-      <label class="toggle-line">
-        <span>Use radius-dependent geometry \(\ozMass{m}_{\mathrm{eff}}(\ozRadius{R})\)</span>
-        <input id="variableM" type="checkbox">
-      </label>
-      <div class="section-title">Convective Driver</div>
-      <div class="driver-row">
-        <button type="button" data-driver="h" class="active">\(\sqrt{\ozPressure{H}}\)</button>
-        <button type="button" data-driver="abs-v">\(\sqrt{|\ozVelocity{V}|}\)</button>
-      </div>
-
-      <div class="section-title">Initial Conditions</div>
-      <div class="slider-list" id="initialControls"></div>
-
-      <div class="section-title">Integration</div>
-      <div class="driver-row solver-row" id="solverButtons"></div>
-      <label class="toggle-line">
-        <span>Run until stable</span>
-        <input id="runUntilStable" type="checkbox">
-      </label>
-      <div class="slider-list" id="integrationControls"></div>
-
-      <div class="section-title">Phase Window</div>
-      <div class="driver-row">
-        <button type="button" data-phase-mode="reference" class="active">Reference cycles</button>
-        <button type="button" data-phase-mode="final">Final cycles</button>
-      </div>
-
-      <div class="action-row">
-        <button type="button" id="resetPreset">Reset preset</button>
-        <button type="button" id="downloadCsv">Download CSV</button>
-      </div>
     </aside>
 
     <main>
       <div class="plots-header">
-        <div>
-          <h2>Model Output</h2>
-          <p class="subtitle" id="modelSubtitle">Solving the four-equation convective one-zone model.</p>
-        </div>
         <div class="metrics" id="metrics"></div>
       </div>
 
       <section class="plot-grid">
         <div class="plot-panel">
           <div class="plot-title">
-            <h3>Luminosity vs Phase</h3>
+            <h3>Lightcurve</h3>
           </div>
           <canvas id="lightCanvas"></canvas>
-          <div class="legend" id="lightLegend"></div>
         </div>
 
         <div class="plot-panel">
           <div class="plot-title">
-            <h3>Radial Velocity vs Phase</h3>
+            <h3>RV Curve</h3>
           </div>
           <canvas id="velocityCanvas"></canvas>
-          <div class="legend" id="velocityLegend"></div>
         </div>
 
         <div class="plot-panel">
           <div class="plot-title">
             <div class="plot-heading">
-              <h3>Time Evolution</h3>
-              <span>state variables</span>
+              <h3>History</h3>
             </div>
             <div class="plot-tools">
-              <button class="plot-reset" type="button" data-plot-reset="time" title="Reset Time Evolution zoom" aria-label="Reset Time Evolution zoom">↺</button>
+              <button class="plot-reset" type="button" data-plot-reset="time" title="Reset History zoom" aria-label="Reset History zoom">↺</button>
             </div>
           </div>
           <canvas id="timeCanvas"></canvas>
@@ -995,7 +1064,6 @@
           <div class="plot-title">
             <div class="plot-heading">
               <h3>Luminosity Evolution</h3>
-              <span>total, radiative, convective</span>
             </div>
             <div class="plot-tools">
               <button class="plot-reset" type="button" data-plot-reset="lum" title="Reset Luminosity Evolution zoom" aria-label="Reset Luminosity Evolution zoom">↺</button>
@@ -1037,7 +1105,7 @@
           <div class="content-panel reference-panel parameters-panel">
             <h3>Parameters</h3>
             <div class="parameter-section">
-              <h4>Tunable</h4>
+              <h4>Physical</h4>
               <table class="variable-table">
                 <thead>
                   <tr><th>Control</th><th>Meaning</th></tr>

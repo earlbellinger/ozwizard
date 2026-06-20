@@ -200,8 +200,9 @@ function ticks([low, high], count = 5) {
 
 function fmt(value, digits = 3) {
   if (!Number.isFinite(value)) return "n/a";
-  if (Math.abs(value) >= 1000 || (Math.abs(value) > 0 && Math.abs(value) < 0.001)) return value.toExponential(2);
-  return Number(value).toFixed(digits).replace(/\.?0+$/, "");
+  const decimal = Number(value).toFixed(digits).replace(/\.?0+$/, "");
+  const scientific = value.toExponential(2).replace(/\.?0+e/, "e");
+  return scientific.length < decimal.length ? scientific : decimal;
 }
 
 function escapeXml(value) {

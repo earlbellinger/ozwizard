@@ -69,17 +69,41 @@ async function runPlaywrightChecks() {
     assertOk(logoSize.naturalWidth === 498 && logoSize.naturalHeight === 575, "cropped logo dimensions did not load");
 
     assertOk((await page.getByRole("button", { name: "RK45" }).getAttribute("class"))?.includes("active"), "RK45 preset was not active");
+    assertOk(await page.locator("#sidebarControls").evaluate((node) => node.open), "sidebar controls should be open on desktop");
     assertOk(await page.locator("#solverButtons button").count() === 3, "expected three compact solver buttons");
     const solverRows = await page.locator("#solverButtons button").evaluateAll((buttons) =>
       buttons.map((button) => Math.round(button.getBoundingClientRect().top))
     );
     assertOk(new Set(solverRows).size === 1, "solver buttons should fit on one row");
     assertOk((await page.getByLabel("Compare selected solver to midpoint").count()) === 0, "midpoint comparison checkbox should be removed");
-    assertOk((await page.locator("#statusPill").textContent())?.includes("stop:"), "status pill did not update");
+    const integrationControl = (name) => page.locator(`#integrationControls .slider-control:visible input[aria-label="${name}"]`);
+    assertOk(await integrationControl("modern relative tolerance").count() === 1, "RK45 should show modern relative tolerance");
+    assertOk(await integrationControl("modern absolute tolerance").count() === 1, "RK45 should show modern absolute tolerance");
+    assertOk(await integrationControl("legacy midpoint tolerance").count() === 0, "RK45 should hide legacy midpoint tolerance");
+    assertOk(await integrationControl("stability tolerance").count() === 0, "stability tolerance should be hidden unless auto-stop is enabled");
+    await page.getByRole("button", { name: "Mid" }).click();
+    assertOk(await integrationControl("legacy midpoint tolerance").count() === 1, "midpoint should show legacy midpoint tolerance");
+    assertOk(await integrationControl("modern relative tolerance").count() === 0, "midpoint should hide modern relative tolerance");
+    assertOk(await integrationControl("modern absolute tolerance").count() === 0, "midpoint should hide modern absolute tolerance");
+    await page.locator("#runUntilStable").check();
+    assertOk(await integrationControl("stability tolerance").count() === 1, "stability tolerance should show when auto-stop is enabled");
+    assertOk(await integrationControl("stable cycles required").count() === 1, "stable cycles should show when auto-stop is enabled");
+    await page.getByRole("button", { name: "RK45" }).click();
+    assertOk(await integrationControl("modern relative tolerance").count() === 1, "RK45 should restore modern relative tolerance");
+    assertOk(await integrationControl("legacy midpoint tolerance").count() === 0, "RK45 should hide legacy tolerance after switching back");
+    await page.locator("#runUntilStable").uncheck();
+    assertOk(await integrationControl("stability tolerance").count() === 0, "stability tolerance should hide when auto-stop is disabled");
+    const tauTickPositions = await page.locator("#integrationControls .slider-scale span").evaluateAll((spans) =>
+      spans.map((span) => span.style.getPropertyValue("--tick-position"))
+    );
+    assertOk(tauTickPositions[4] === "66.6667%", `tau=100 tick should be at 66.6667%, saw ${tauTickPositions[4]}`);
+    assertOk(tauTickPositions[5] === "82.5707%", `tau=300 tick should use log placement, saw ${tauTickPositions[5]}`);
+    assertOk((await page.locator("#statusPill").count()) === 0, "status pill should be folded into model output");
     await page.waitForFunction(() => document.querySelector("#metrics")?.textContent?.includes("models"), null, { timeout: 15000 });
     const initialMetrics = await page.locator("#metrics").textContent();
+    assertOk(initialMetrics?.includes("stop") && initialMetrics.includes("fixed-time complete"), "metrics did not include the stop result");
     assertOk(initialMetrics?.includes("models"), "metrics did not render");
-    assertOk(!initialMetrics?.includes("stop reason"), "metrics should not duplicate the status pill");
+    assertOk(!initialMetrics?.includes("stop reason"), "metrics should not show the old stop reason label");
     assertOk(!initialMetrics?.includes("reference"), "metrics should not duplicate reference metadata");
     assertOk(!initialMetrics?.includes("driver"), "metrics should not duplicate driver controls");
     assertOk(!initialMetrics?.includes("solver"), "metrics should not duplicate solver controls");
@@ -98,13 +122,49 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("#initialR").isVisible(), "initial R cell was not visible");
     assertOk(await page.locator("#initialLr").isVisible(), "computed initial Lr cell was not visible");
     assertOk(await page.locator("#initialL").isVisible(), "computed initial L cell was not visible");
-    assertOk(await page.getByRole("heading", { name: "Tunable" }).isVisible(), "tunable parameter section was not visible");
+    await page.locator("#initialR mjx-container").waitFor({ state: "visible", timeout: 15000 });
+    const initialRadiusControl = page.locator("input[aria-label='initial radius']").locator("xpath=ancestor::*[contains(@class, 'slider-control')]");
+    const initialRadiusText = await initialRadiusControl.textContent();
+    assertOk(initialRadiusText?.includes("initial radius") && initialRadiusText.includes("1.1"), "initial radius value should be shown beside the parameter name");
+    await page.locator("input[aria-label='initial radius']").evaluate((input) => {
+      const slider = input;
+      slider.value = "1.2";
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForFunction(() => {
+      const node = document.querySelector("#initialR");
+      return node?.dataset.mathState === "ready"
+        && node.textContent?.includes("1.2")
+        && !node.textContent.includes("\\(")
+        && Boolean(node.querySelector("mjx-container"));
+    });
+    await page.locator("[data-reset-key='r0']").click();
+    assertOk((await page.locator("[data-value-for='tEnd']").textContent()) === "100", "default tau_max value should render as 100");
+    const maxTauLabel = await page.locator("input[aria-label='maximum integration time']").evaluate((input) => {
+      const slider = input;
+      slider.value = "3";
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+      const label = document.querySelector("[data-value-for='tEnd']")?.textContent || "";
+      slider.value = "2";
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+      return label;
+    });
+    assertOk(maxTauLabel === "1000", `max tau_max value should render as 1000, saw ${maxTauLabel}`);
+    assertOk(await page.getByRole("heading", { name: "Physical", exact: true }).isVisible(), "physical parameter section was not visible");
     assertOk((await page.getByRole("heading", { name: "Derived" }).count()) === 0, "derived parameter section should be removed");
     assertOk(await page.getByRole("heading", { name: "Numerical" }).isVisible(), "numerical parameter section was not visible");
     const parameterOverflow = await page.locator(".parameters-panel").evaluate((node) => getComputedStyle(node).overflowY);
     assertOk(parameterOverflow === "auto", `parameters panel should scroll vertically, saw ${parameterOverflow}`);
 
     assertOk(await page.locator("canvas").count() === 4, "expected four plot canvases");
+    assertOk(await page.getByRole("heading", { name: "Lightcurve" }).isVisible(), "Lightcurve heading was not visible");
+    assertOk(await page.getByRole("heading", { name: "RV Curve" }).isVisible(), "RV Curve heading was not visible");
+    assertOk(await page.getByRole("heading", { name: "History" }).isVisible(), "History heading was not visible");
+    const bodyText = await page.locator("body").innerText();
+    assertOk(!bodyText.includes("state variables"), "old History subtitle should be removed");
+    assertOk(!bodyText.includes("total, radiative, convective"), "old Luminosity Evolution subtitle should be removed");
+    assertOk(await page.locator("#lightLegend").count() === 0, "phase luminosity legend should be removed");
+    assertOk(await page.locator("#velocityLegend").count() === 0, "phase velocity legend should be removed");
     const hasPaint = await page.locator("#lightCanvas").evaluate((canvas) => {
       const node = canvas;
       const ctx = node.getContext("2d");
@@ -163,6 +223,26 @@ async function runPlaywrightChecks() {
     assertOk(!(await timeReset.isDisabled()), "drag selection did not enable time zoom reset");
     await timeReset.click();
     assertOk(await timeReset.isDisabled(), "time zoom reset did not clear the selected range");
+    await page.mouse.move(timeBox.x + 210, timeBox.y + 140);
+    await page.mouse.down({ button: "right" });
+    await page.mouse.move(timeBox.x + 140, timeBox.y + 110);
+    await page.mouse.up({ button: "right" });
+    assertOk(!(await timeReset.isDisabled()), "right-drag pan did not enable time reset");
+    await timeReset.click();
+    assertOk(await timeReset.isDisabled(), "time reset did not clear the panned range");
+
+    const lumCanvas = page.locator("#lumCanvas");
+    const lumBox = await lumCanvas.boundingBox();
+    assertOk(Boolean(lumBox), "luminosity evolution canvas bounds were unavailable");
+    const lumReset = page.locator("[data-plot-reset='lum']");
+    assertOk(await lumReset.isDisabled(), "luminosity reset should start disabled");
+    await page.mouse.move(lumBox.x + 210, lumBox.y + 140);
+    await page.mouse.down({ button: "right" });
+    await page.mouse.move(lumBox.x + 140, lumBox.y + 110);
+    await page.mouse.up({ button: "right" });
+    assertOk(!(await lumReset.isDisabled()), "right-drag pan did not enable luminosity reset");
+    await lumReset.click();
+    assertOk(await lumReset.isDisabled(), "luminosity reset did not clear the panned range");
 
     await page.getByRole("button", { name: "DOP853" }).click();
     assertOk((await page.getByRole("button", { name: "DOP853" }).getAttribute("class"))?.includes("active"), "DOP853 was not active after click");
@@ -178,6 +258,11 @@ async function runPlaywrightChecks() {
     assertOk(csv.split(/\r?\n/, 1)[0] === "tau,R,V,H,Uc,Lr,Lc,L", "downloaded CSV header was incorrect");
     assertOk(pageErrors.length === 0, `page errors: ${pageErrors.join("; ")}`);
     console.log("download passed");
+
+    await page.setViewportSize({ width: 760, height: 900 });
+    assertOk(!(await page.locator("#sidebarControls").evaluate((node) => node.open)), "sidebar controls should collapse below the half-width threshold");
+    await page.locator("#sidebarControls > summary").click();
+    assertOk(await page.locator("#physicalControls").isVisible(), "collapsed sidebar controls did not reopen");
   } finally {
     await context.close();
     await browser.close();

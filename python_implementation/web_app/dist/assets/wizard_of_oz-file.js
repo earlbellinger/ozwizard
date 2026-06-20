@@ -744,6 +744,7 @@
     timeCanvas: "time",
     lumCanvas: "lum"
   };
+  var SIDEBAR_COLLAPSE_QUERY = "(max-width: 780px)";
   var plotViews = {
     time: {},
     lum: {}
@@ -756,10 +757,20 @@
   var legendSignatures = /* @__PURE__ */ new Map();
   var activeSelection = null;
   var DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
+  var PLOT_LAYOUT = {
+    left: 84,
+    top: 18,
+    right: 20,
+    bottom: 72,
+    yTickGap: 18,
+    yLabelX: 22
+  };
   function fmt(value, digits = 4) {
     if (!Number.isFinite(value)) return "n/a";
-    if (Math.abs(value) >= 1e3 || Math.abs(value) > 0 && Math.abs(value) < 1e-3) return value.toExponential(2);
-    return Number(value).toFixed(digits).replace(/\.?0+$/, "");
+    const fixed = Number(value).toFixed(digits);
+    const decimal = digits === 0 ? fixed : fixed.replace(/\.?0+$/, "");
+    const scientific = value.toExponential(2).replace(/\.?0+e/, "e");
+    return scientific.length < decimal.length ? scientific : decimal;
   }
   function fmtFixed(value, digits) {
     if (!Number.isFinite(value)) return "n/a";
@@ -882,11 +893,12 @@
     return node;
   }
   function buildControls() {
+    setupResponsiveSidebarControls();
     buildPresetButtons();
     buildSolverButtons();
     buildSliderGroup("physicalControls", CONTROL_GROUPS.physical);
     buildSliderGroup("initialControls", CONTROL_GROUPS.initial);
-    buildSliderGroup("integrationControls", CONTROL_GROUPS.integration);
+    rebuildIntegrationControls();
     buildParameterTable();
     const variableM = el("variableM");
     variableM.checked = state.variableM;
@@ -900,6 +912,7 @@
     runUntilStable.checked = state.runUntilStable;
     runUntilStable.addEventListener("change", (event) => {
       state.runUntilStable = event.target.checked;
+      rebuildIntegrationControls();
       refreshActivePreset();
       scheduleSolve();
     });
@@ -931,6 +944,16 @@
     updateAllSliderLabels();
     updateResetButtons();
   }
+  function setupResponsiveSidebarControls() {
+    const details = document.getElementById("sidebarControls");
+    if (!details) return;
+    const media = window.matchMedia(SIDEBAR_COLLAPSE_QUERY);
+    const sync = () => {
+      details.open = !media.matches;
+    };
+    sync();
+    media.addEventListener("change", sync);
+  }
   function setupInteractivePlots() {
     Object.entries(INTERACTIVE_CANVASES).forEach(([canvasId, plotId]) => {
       const canvas = el(canvasId);
@@ -939,6 +962,7 @@
       canvas.addEventListener("pointermove", (event) => updatePlotSelection(event, canvasId));
       canvas.addEventListener("pointerup", (event) => finishPlotSelection(event, canvasId));
       canvas.addEventListener("pointercancel", (event) => cancelPlotSelection(event, canvasId));
+      canvas.addEventListener("contextmenu", (event) => event.preventDefault());
       canvas.addEventListener("dblclick", () => resetPlotView(plotId));
       canvas.addEventListener("wheel", (event) => zoomPlotWithWheel(event, canvasId, plotId), { passive: false });
     });
@@ -983,21 +1007,25 @@
     return rangeValue;
   }
   function beginPlotSelection(event, canvasId, plotId) {
-    if (event.button !== 0) return;
+    if (event.button !== 0 && event.button !== 2) return;
     const canvas = event.currentTarget;
     const render = plotRenderStates.get(canvasId);
     if (!render) return;
     const point = canvasPoint(canvas, event);
     if (!pointInPlot(point, render.plot)) return;
+    event.preventDefault();
     const clamped = clampPointToPlot(point, render.plot);
     activeSelection = {
       plotId,
       canvasId,
       pointerId: event.pointerId,
+      mode: event.button === 2 ? "pan" : "zoom",
       startX: clamped.x,
       startY: clamped.y,
       currentX: clamped.x,
-      currentY: clamped.y
+      currentY: clamped.y,
+      startXlim: render.xlim,
+      startYlim: render.ylim
     };
     canvas.setPointerCapture(event.pointerId);
     drawAll();
@@ -1007,9 +1035,18 @@
     const canvas = event.currentTarget;
     const render = plotRenderStates.get(canvasId);
     if (!render) return;
-    const point = clampPointToPlot(canvasPoint(canvas, event), render.plot);
+    const point = activeSelection.mode === "pan" ? canvasPoint(canvas, event) : clampPointToPlot(canvasPoint(canvas, event), render.plot);
     activeSelection.currentX = point.x;
     activeSelection.currentY = point.y;
+    if (activeSelection.mode === "pan") {
+      const xDelta = (point.x - activeSelection.startX) / render.plot.width * (activeSelection.startXlim[1] - activeSelection.startXlim[0]);
+      const yDelta = -(point.y - activeSelection.startY) / render.plot.height * (activeSelection.startYlim[1] - activeSelection.startYlim[0]);
+      plotViews[activeSelection.plotId] = {
+        xlim: validRange([activeSelection.startXlim[0] - xDelta, activeSelection.startXlim[1] - xDelta]) || activeSelection.startXlim,
+        ylim: validRange([activeSelection.startYlim[0] - yDelta, activeSelection.startYlim[1] - yDelta]) || activeSelection.startYlim
+      };
+      updatePlotResetButtons();
+    }
     drawAll();
   }
   function finishPlotSelection(event, canvasId) {
@@ -1020,6 +1057,10 @@
     activeSelection = null;
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
     if (!render) {
+      drawAll();
+      return;
+    }
+    if (selection.mode === "pan") {
       drawAll();
       return;
     }
@@ -1103,25 +1144,61 @@
       button.addEventListener("click", () => {
         state.solver = name;
         updateSolverButtons();
+        rebuildIntegrationControls();
         refreshActivePreset();
         scheduleSolve();
       });
       container.appendChild(button);
     });
   }
+  function activeIntegrationControlKeys() {
+    const visible = /* @__PURE__ */ new Set(["tEnd", "step", "maxStep"]);
+    if (state.solver === "midpoint") {
+      visible.add("logErrTol");
+    } else {
+      visible.add("logRtol");
+      visible.add("logAtol");
+    }
+    if (state.runUntilStable) {
+      visible.add("logStabilityTol");
+      visible.add("stableCycles");
+    }
+    return visible;
+  }
+  function rebuildIntegrationControls() {
+    const container = el("integrationControls");
+    if (!container.querySelector("[data-control-key]")) {
+      buildSliderGroup("integrationControls", CONTROL_GROUPS.integration);
+    }
+    updateIntegrationControlVisibility();
+    updateResetButtons();
+  }
+  function updateIntegrationControlVisibility() {
+    const visible = activeIntegrationControlKeys();
+    document.querySelectorAll("#integrationControls [data-control-key]").forEach((wrapper) => {
+      const key = wrapper.dataset.controlKey;
+      wrapper.hidden = !key || !visible.has(key);
+    });
+  }
   function buildSliderGroup(containerId, controls) {
     const container = el(containerId);
+    container.querySelectorAll("[data-reset-key]").forEach((button) => {
+      const key = button.dataset.resetKey;
+      if (key) controlElements.delete(key);
+    });
     container.innerHTML = "";
     controls.forEach(([key, symbol, name, min, max, step2, _defaultValue, color]) => {
       const wrapper = document.createElement("div");
       wrapper.className = "slider-control";
+      wrapper.dataset.controlKey = key;
       wrapper.style.setProperty("--accent", color);
       wrapper.innerHTML = `
-      <div class="slider-name" title="${name}">${name}</div>
-      <div class="slider-symbol">${symbol}</div>
+      <div class="slider-label" title="${name}">
+        <span class="slider-name">${name}</span>
+        <span class="slider-reading"><span class="slider-symbol">${symbol}</span><span class="slider-equals">=</span><span class="slider-value" data-value-for="${key}"></span></span>
+      </div>
       <div class="slider-track">
         <input type="range" min="${min}" max="${max}" step="${step2}" value="${String(sliderInputValue(key))}" aria-label="${name}">
-        <span class="slider-value" data-value-for="${key}"></span>
         ${key === "tEnd" ? tauScaleMarkup() : ""}
         </div>
       <button class="parameter-reset" type="button" data-reset-key="${key}" title="Restore ${name} to the ${selectedPreset} preset value" aria-label="Restore ${name} to the preset value">\u21BA</button>
@@ -1138,10 +1215,16 @@
       wrapper.querySelector("[data-reset-key]")?.addEventListener("click", () => restoreParameterDefault(key));
       container.appendChild(wrapper);
       controlElements.set(key, input);
+      updateSliderLabel(key);
     });
+    queueMathTypeset([container]);
   }
   function tauScaleMarkup() {
-    return `<div class="slider-scale">${TAU_TICKS.map((tick) => `<span>${tick}</span>`).join("")}</div>`;
+    const maxLog = Math.log10(Math.max(...TAU_TICKS));
+    return `<div class="slider-scale">${TAU_TICKS.map((tick) => {
+      const position = Math.log10(tick) / maxLog * 100;
+      return `<span style="--tick-position:${position.toFixed(4)}%">${tick}</span>`;
+    }).join("")}</div>`;
   }
   function sliderInputValue(key) {
     return key === "tEnd" ? Math.log10(state.tEnd) : state[key];
@@ -1243,9 +1326,15 @@
       initialLc: `\\(${TEX.Lc}_{0}=${fmt(initial.Lc, 4)}\\)`,
       initialL: `\\(${TEX.L}_{0}=${fmt(initial.L, 4)}\\)`
     };
+    const targets = [];
     Object.entries(values).forEach(([id, value]) => {
-      el(id).innerHTML = value;
+      const node = el(id);
+      if (node.dataset.mathSource === value || stagedMathUpdates.get(node)?.html === value) return;
+      node.dataset.mathSource = value;
+      stageMathHtml(node, value);
+      targets.push(node);
     });
+    if (targets.length) queueMathTypeset(targets);
   }
   function updateSliderLabel(key) {
     const label = document.querySelector(`[data-value-for="${String(key)}"]`);
@@ -1304,6 +1393,7 @@
     updateSolverButtons();
     el("variableM").checked = state.variableM;
     el("runUntilStable").checked = state.runUntilStable;
+    rebuildIntegrationControls();
     updateEquationBlocks();
     updateAllSliderLabels();
     updateResetButtons();
@@ -1491,7 +1581,7 @@
       ctx.moveTo(plot.left, y);
       ctx.lineTo(plot.left + plot.width, y);
       ctx.stroke();
-      ctx.fillText(fmt(ylim[1] - (ylim[1] - ylim[0]) * i / 4, 2), plot.left - 9, y);
+      ctx.fillText(fmt(ylim[1] - (ylim[1] - ylim[0]) * i / 4, 2), plot.left - PLOT_LAYOUT.yTickGap, y);
     }
     ctx.strokeStyle = THEME.axisBorder;
     ctx.lineWidth = 1.2;
@@ -1501,7 +1591,7 @@
     ctx.fillStyle = xlabelColor;
     ctx.fillText(xlabel, plot.left + plot.width / 2, plot.top + plot.height + 42);
     ctx.save();
-    ctx.translate(16, plot.top + plot.height / 2);
+    ctx.translate(PLOT_LAYOUT.yLabelX, plot.top + plot.height / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.fillStyle = ylabelColor;
     ctx.fillText(ylabel, 0, 0);
@@ -1517,7 +1607,12 @@
     if (!ctx) return;
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, rect.width, rect.height);
-    const plot = { left: 58, top: 18, width: rect.width - 78, height: rect.height - 72 };
+    const plot = {
+      left: PLOT_LAYOUT.left,
+      top: PLOT_LAYOUT.top,
+      width: rect.width - PLOT_LAYOUT.left - PLOT_LAYOUT.right,
+      height: rect.height - PLOT_LAYOUT.top - PLOT_LAYOUT.bottom
+    };
     const xValues = [];
     const yValues = [];
     series.forEach((item) => {
@@ -1577,6 +1672,7 @@
   }
   function drawSelectionOverlay(ctx, canvasId, plot) {
     if (!activeSelection || activeSelection.canvasId !== canvasId) return;
+    if (activeSelection.mode !== "zoom") return;
     const left = Math.min(activeSelection.startX, activeSelection.currentX);
     const top = Math.min(activeSelection.startY, activeSelection.currentY);
     const width = Math.abs(activeSelection.currentX - activeSelection.startX);
@@ -1713,42 +1809,49 @@
     clearStalePlotView("time", rows);
     clearStalePlotView("lum", rows);
     updatePlotResetButtons();
-    const statusPill = el("statusPill");
     const stopReason = stopReasonLabel(latestResult.message, state.runUntilStable);
-    statusPill.textContent = `stop: ${stopReason}`;
     const okStatus = latestResult.message === "equilibrium" || latestResult.message === "limit_cycle" || !state.runUntilStable && latestResult.status === "complete";
-    statusPill.className = `status-pill ${okStatus ? "status-ok" : "status-warn"}`;
     const final = rows[rows.length - 1];
     const phase = phaseForRows(rows);
     const metricsNode = el("metrics");
-    const metricsHtml = [
-      [`final \\(${TEX.tau}\\)`, final ? fmt(final.tau || 0, 4) : "n/a"],
-      ["models", rows.length],
-      ["accepted", latestResult.stats.acceptedSteps],
-      ["rejected", latestResult.stats.rejectedSteps],
-      ["max err", fmt(latestResult.stats.maxNormalizedError, 3)],
-      ["period", phase.period ? fmt(phase.period, 3) : "n/a"],
-      ["phase", phase.reason === "ok" ? "available" : "unavailable"],
-      [`final \\(${TEX.R}\\)`, final ? fmt(final.R, 3) : "n/a"],
-      [`final \\(${TEX.L}\\)`, final ? fmt(final.L, 3) : "n/a"]
-    ].map(([label, value]) => `<span class="metric">${label}<b>${value}</b></span>`).join("");
+    const metricItems = [
+      { label: "stop", value: stopReason, className: okStatus ? "status-ok" : "status-warn" },
+      { label: `final \\(${TEX.tau}\\)`, value: final ? fmt(final.tau || 0, 4) : "n/a" },
+      { label: "models", value: rows.length },
+      { label: "accepted", value: latestResult.stats.acceptedSteps },
+      { label: "rejected", value: latestResult.stats.rejectedSteps },
+      { label: "max err", value: fmt(latestResult.stats.maxNormalizedError, 3) },
+      { label: "period", value: phase.period ? fmt(phase.period, 3) : "n/a" },
+      { label: "phase", value: phase.reason === "ok" ? "available" : "unavailable" },
+      { label: `final \\(${TEX.R}\\)`, value: final ? fmt(final.R, 3) : "n/a" },
+      { label: `final \\(${TEX.L}\\)`, value: final ? fmt(final.L, 3) : "n/a" }
+    ];
+    const metricsHtml = metricItems.map(({ label, value, className }) => `<span class="metric${className ? ` ${className}` : ""}">${label}<b>${value}</b></span>`).join("");
     stageMathHtml(metricsNode, metricsHtml);
     queueMathTypeset([metricsNode]);
-    el("modelSubtitle").textContent = "";
     const phaseSample = phase.rows.length ? downsample(phase.rows, 1800, ["L", "V"]) : [];
     const phaseMessage = phaseUnavailableLabel(phase);
+    const phasePeriodLabel = `phase (period = ${phase.period ? fmt(phase.period, 3) : "n/a"} \u03C4)`;
     drawSeries("lightCanvas", [
       { label: "L", color: COLORS.L, rows: phaseSample, x: (row) => row.tau, y: (row) => row.L }
-    ], { xlabel: "phase (minimum light = 0)", ylabel: "luminosity", xlim: [0, 2], ylim: phaseSample.length ? void 0 : [0, 1], message: phaseMessage });
-    drawLegend("lightLegend", [
-      { label: `\\(${TEX.L}\\)`, color: COLORS.L }
-    ]);
+    ], {
+      xlabel: phasePeriodLabel,
+      ylabel: "luminosity L",
+      ylabelColor: COLORS.L,
+      xlim: [0, 2],
+      ylim: phaseSample.length ? void 0 : [0, 1],
+      message: phaseMessage
+    });
     drawSeries("velocityCanvas", [
       { label: "V", color: COLORS.V, rows: phaseSample, x: (row) => row.tau, y: (row) => row.V }
-    ], { xlabel: "phase (minimum light = 0)", ylabel: "radial velocity", xlim: [0, 2], ylim: phaseSample.length ? void 0 : [0, 1], message: phaseMessage });
-    drawLegend("velocityLegend", [
-      { label: `\\(${TEX.V}\\)`, color: COLORS.V }
-    ]);
+    ], {
+      xlabel: phasePeriodLabel,
+      ylabel: "radial velocity V",
+      ylabelColor: COLORS.V,
+      xlim: [0, 2],
+      ylim: phaseSample.length ? void 0 : [0, 1],
+      message: phaseMessage
+    });
     const timeXlim = integrationTimeRange();
     const sampledTimeRows = rowsForInteractivePlot("time", rows, ["R", "V", "H", "Uc"]);
     const sampledLumRows = rowsForInteractivePlot("lum", rows, ["L", "Lr", "Lc"]);
@@ -1765,7 +1868,7 @@
       view: plotViews.time,
       interactivePlotId: "time",
       denseEnvelope: true,
-      message: "all state variables hidden"
+      message: "all series hidden"
     });
     drawLegend("timeLegend", [
       { key: "R", label: `\\(${TEX.R}\\) radius`, color: COLORS.R, toggleLabel: "radius" },
