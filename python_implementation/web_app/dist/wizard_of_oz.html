@@ -607,6 +607,46 @@
       flex: 0 0 auto;
     }
 
+    .phase-anchor-control {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .phase-anchor-control span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .phase-anchor-control button {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--paper-raised);
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 12px;
+      min-height: 24px;
+      padding: 3px 8px;
+      box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.04);
+    }
+
+    .phase-anchor-control button:hover {
+      border-color: var(--line-strong);
+      background: var(--paper-high);
+    }
+
+    .phase-anchor-control button.active {
+      border-color: rgba(240, 189, 61, 0.74);
+      background: linear-gradient(180deg, rgba(240, 189, 61, 0.24), rgba(96, 128, 208, 0.16)), var(--paper-high);
+      color: var(--logo-gold-bright);
+      box-shadow: inset 0 1px 0 rgba(255, 209, 102, 0.2), 0 0 0 1px rgba(240, 189, 61, 0.08);
+    }
+
     .plot-reset {
       width: 28px;
       height: 28px;
@@ -731,7 +771,7 @@
 
     @container (min-width: 1108px) {
       .reference-panel {
-        height: 620px;
+        height: 496px;
         overflow-y: auto;
       }
     }
@@ -1041,6 +1081,11 @@
         <div class="plot-panel">
           <div class="plot-title">
             <h3>Lightcurve</h3>
+            <div class="phase-anchor-control" aria-label="Phase alignment">
+              <span>phase to</span>
+              <button type="button" data-phase-anchor="min" class="active" aria-pressed="true">min light</button>
+              <button type="button" data-phase-anchor="max" aria-pressed="false">max light</button>
+            </div>
           </div>
           <canvas id="lightCanvas"></canvas>
         </div>

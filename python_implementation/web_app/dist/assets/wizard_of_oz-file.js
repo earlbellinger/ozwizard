@@ -646,8 +646,8 @@
     const period = median(gaps);
     return period ? Math.max(0.75, period * 0.55) : 0.75;
   }
-  function buildReferenceFromMinima(rows, minimumRows, warmupTau, minAmplitude) {
-    const [first, second, third] = minimumRows;
+  function buildReferenceFromAnchors(rows, anchorRows, anchor, warmupTau, minAmplitude) {
+    const [first, second, third] = anchorRows;
     const firstCycleAmplitude = cycleAmplitude(rows, first.tau, second.tau);
     const secondCycleAmplitude = cycleAmplitude(rows, second.tau, third.tau);
     if (firstCycleAmplitude < minAmplitude || secondCycleAmplitude < minAmplitude) return null;
@@ -660,9 +660,28 @@
       period,
       warmupTau,
       minAmplitude,
-      minimumRows
+      anchor,
+      anchorRows,
+      minimumRows: anchor === "min" ? anchorRows : void 0,
+      maximumRows: anchor === "max" ? anchorRows : void 0
     };
     return foldRowsToReference(rows, reference);
+  }
+  function buildReferenceFromMinima(rows, minimumRows, warmupTau, minAmplitude) {
+    return buildReferenceFromAnchors(rows, minimumRows, "min", warmupTau, minAmplitude);
+  }
+  function buildMaxLightReference(rows, maxima, warmupTau, minAmplitude, selection) {
+    if (maxima.length < 3) {
+      return { rows: [], reference: null, period: null, reason: "not_enough_maxima" };
+    }
+    const start = selection === "last" ? maxima.length - 3 : 0;
+    const end = selection === "last" ? -1 : maxima.length - 3;
+    const direction = selection === "last" ? -1 : 1;
+    for (let i = start; selection === "last" ? i > end : i <= end; i += direction) {
+      const result = buildReferenceFromAnchors(rows, [maxima[i], maxima[i + 1], maxima[i + 2]], "max", warmupTau, minAmplitude);
+      if (result) return result;
+    }
+    return { rows: [], reference: null, period: null, reason: "amplitude_below_threshold" };
   }
   function buildReference(rows, options) {
     if (rows.length < 3) {
@@ -671,6 +690,9 @@
     const warmupTau = phaseWarmupTau(rows, options.warmupTau);
     const minAmplitude = options.minAmplitude ?? 1e-4;
     const maxima = findLuminosityMaxima(rows, warmupTau, options.minSeparation);
+    if (options.anchor === "max") {
+      return buildMaxLightReference(rows, maxima, warmupTau, minAmplitude, options.selection);
+    }
     if (maxima.length >= 4) {
       const start2 = options.selection === "last" ? maxima.length - 4 : 0;
       const end2 = options.selection === "last" ? -1 : maxima.length - 4;
@@ -722,6 +744,7 @@
   var activePreset = DEFAULT_PRESET_NAME;
   var latestRows = [];
   var latestResult = solveModel(state);
+  var phaseAnchor = "min";
   var debounceTimer = 0;
   var mathTypesetTimer = 0;
   var mathTypesetRunning = false;
@@ -924,6 +947,13 @@
         drawAll();
       });
     });
+    document.querySelectorAll("[data-phase-anchor]").forEach((button) => {
+      button.addEventListener("click", () => {
+        phaseAnchor = button.dataset.phaseAnchor === "max" ? "max" : "min";
+        updatePhaseAnchorButtons();
+        drawAll();
+      });
+    });
     document.querySelectorAll("[data-driver]").forEach((button) => {
       button.addEventListener("click", () => {
         state.driver = button.dataset.driver === "abs-v" ? "abs-v" : "h";
@@ -939,6 +969,7 @@
     window.addEventListener("resize", drawAll);
     updateDriverButtons();
     updatePhaseModeButtons();
+    updatePhaseAnchorButtons();
     updateSolverButtons();
     updateEquationBlocks();
     updateAllSliderLabels();
@@ -1253,7 +1284,7 @@
     `;
     numericalTable.innerHTML = controlRows(CONTROL_GROUPS.integration) + `
       <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">solver</td><td>${meaning("Numerical method: RK45 default, DOP853 reference, or historical midpoint.")}</td></tr>
-      <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">phase window</td><td>${meaning("Reference cycles use the first valid minimum-light luminosity window; final cycles use the latest valid window.")}</td></tr>
+      <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">phase window</td><td>${meaning("Reference cycles use the first valid luminosity window; final cycles use the latest valid window; the lightcurve control chooses min- or max-light phase zero.")}</td></tr>
     `;
     queueMathTypeset();
   }
@@ -1376,6 +1407,13 @@
   function updatePhaseModeButtons() {
     document.querySelectorAll("[data-phase-mode]").forEach((button) => {
       button.classList.toggle("active", button.dataset.phaseMode === state.phaseMode);
+    });
+  }
+  function updatePhaseAnchorButtons() {
+    document.querySelectorAll("[data-phase-anchor]").forEach((button) => {
+      const active = button.dataset.phaseAnchor === phaseAnchor;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
     });
   }
   function updateSolverButtons() {
@@ -1771,6 +1809,8 @@
         return "phase unavailable: not enough samples";
       case "not_enough_minima":
         return "phase unavailable: fewer than three luminosity minima";
+      case "not_enough_maxima":
+        return "phase unavailable: fewer than three luminosity maxima";
       case "amplitude_below_threshold":
         return "phase unavailable: luminosity cycles are below threshold";
       case "reference_out_of_range":
@@ -1781,7 +1821,8 @@
     return buildTwoCyclePhase(rows, {
       warmupTau: state.phaseWarmupTau,
       minAmplitude: state.phaseMinAmplitude,
-      selection: state.phaseMode === "final" ? "last" : "first"
+      selection: state.phaseMode === "final" ? "last" : "first",
+      anchor: phaseAnchor
     });
   }
   function timeDomain(rows) {

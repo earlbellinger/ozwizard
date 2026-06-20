@@ -158,6 +158,12 @@ async function runPlaywrightChecks() {
 
     assertOk(await page.locator("canvas").count() === 4, "expected four plot canvases");
     assertOk(await page.getByRole("heading", { name: "Lightcurve" }).isVisible(), "Lightcurve heading was not visible");
+    assertOk((await page.locator(".phase-anchor-control").textContent())?.includes("phase to"), "phase anchor control was not visible");
+    assertOk((await page.getByRole("button", { name: "min light" }).getAttribute("aria-pressed")) === "true", "min-light phase anchor should start active");
+    await page.getByRole("button", { name: "max light" }).click();
+    assertOk((await page.getByRole("button", { name: "max light" }).getAttribute("aria-pressed")) === "true", "max-light phase anchor did not activate");
+    await page.getByRole("button", { name: "min light" }).click();
+    assertOk((await page.getByRole("button", { name: "min light" }).getAttribute("aria-pressed")) === "true", "min-light phase anchor did not reactivate");
     assertOk(await page.getByRole("heading", { name: "RV Curve" }).isVisible(), "RV Curve heading was not visible");
     assertOk(await page.getByRole("heading", { name: "History" }).isVisible(), "History heading was not visible");
     const bodyText = await page.locator("body").innerText();

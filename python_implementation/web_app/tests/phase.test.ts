@@ -60,7 +60,23 @@ describe("phase folding", () => {
     const reference = phase.reference!;
     expect(reference.period).toBeCloseTo(1, 12);
     expect(reference.startTau).toBeCloseTo(1.5, 12);
-    reference.minimumRows.forEach((row, index) => {
+    expect(reference.anchor).toBe("min");
+    reference.anchorRows.forEach((row, index) => {
+      expect((row.tau - reference.startTau) / reference.period).toBeCloseTo(index, 12);
+    });
+    expect(phase.rows[0].tau).toBeCloseTo(0, 12);
+    expect(phase.rows.at(-1)!.tau).toBeCloseTo(2, 12);
+  });
+
+  it("can anchor two-cycle phase at three consecutive luminosity maxima", () => {
+    const phase = buildTwoCyclePhase(syntheticRows(), { warmupTau: 0, minAmplitude: 0.1, minSeparation: 0.5, anchor: "max" });
+    expect(phase.reason).toBe("ok");
+    const reference = phase.reference!;
+    expect(reference.anchor).toBe("max");
+    expect(reference.period).toBeCloseTo(1, 12);
+    expect(reference.startTau).toBeCloseTo(1, 12);
+    expect(reference.maximumRows?.map((row) => row.tau)).toEqual([1, 2, 3]);
+    reference.anchorRows.forEach((row, index) => {
       expect((row.tau - reference.startTau) / reference.period).toBeCloseTo(index, 12);
     });
     expect(phase.rows[0].tau).toBeCloseTo(0, 12);
@@ -70,7 +86,7 @@ describe("phase folding", () => {
   it("uses max-to-max cycle boundaries when selecting minimum-light anchors", () => {
     const phase = buildTwoCyclePhase(rowsWithSpuriousMinimum(), { warmupTau: 0, minAmplitude: 0.1, minSeparation: 0.5 });
     expect(phase.reason).toBe("ok");
-    expect(phase.reference?.minimumRows.map((row) => row.tau)).toEqual([1.5, 2.5, 3.5]);
+    expect(phase.reference?.minimumRows?.map((row) => row.tau)).toEqual([1.5, 2.5, 3.5]);
     expect(phase.rows[0].tau).toBeCloseTo(0, 12);
     expect(phase.rows.at(-1)!.tau).toBeCloseTo(2, 12);
   });

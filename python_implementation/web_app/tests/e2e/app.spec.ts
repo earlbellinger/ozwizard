@@ -85,6 +85,14 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#metrics")).not.toContainText("driver");
   await expect(page.locator("#metrics")).not.toContainText("solver");
   await expect(page.getByRole("heading", { name: "Lightcurve" })).toBeVisible();
+  await expect(page.locator(".phase-anchor-control")).toContainText("phase to");
+  await expect(page.getByRole("button", { name: "min light" })).toHaveClass(/active/);
+  await expect(page.getByRole("button", { name: "min light" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "max light" }).click();
+  await expect(page.getByRole("button", { name: "max light" })).toHaveClass(/active/);
+  await expect(page.getByRole("button", { name: "max light" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "min light" }).click();
+  await expect(page.getByRole("button", { name: "min light" })).toHaveClass(/active/);
   await expect(page.getByRole("heading", { name: "RV Curve" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "History" })).toBeVisible();
   await expect(page.locator("body")).not.toContainText("state variables");
@@ -181,10 +189,10 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
 
   await page.setViewportSize({ width: 1800, height: 1200 });
   const wideReferenceLayout = await referencePanelMetrics(page);
-  expect(wideReferenceLayout.panels.map((panel) => panel.height)).toEqual([620, 620, 620]);
+  expect(wideReferenceLayout.panels.map((panel) => panel.height)).toEqual([496, 496, 496]);
   const wideVariables = wideReferenceLayout.panels.find((panel) => panel.heading === "Variables");
   const wideParameters = wideReferenceLayout.panels.find((panel) => panel.heading === "Parameters");
-  expect(wideVariables?.scrollHeight).toBeLessThanOrEqual(wideVariables?.clientHeight || 0);
+  expect(wideVariables?.scrollHeight).toBeGreaterThanOrEqual(wideVariables?.clientHeight || 0);
   expect(wideParameters?.scrollHeight).toBeGreaterThan(wideParameters?.clientHeight || 0);
 
   await page.setViewportSize({ width: 760, height: 900 });

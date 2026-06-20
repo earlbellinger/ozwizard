@@ -12,7 +12,7 @@ import {
   sample,
   solveModel
 } from "./model";
-import { buildTwoCyclePhase, type PhaseResult } from "./phase";
+import { buildTwoCyclePhase, type PhaseAnchor, type PhaseResult } from "./phase";
 import { SOLVER_NAMES, type SolverName } from "./solvers";
 
 declare global {
@@ -30,6 +30,7 @@ let selectedPreset = DEFAULT_PRESET_NAME;
 let activePreset = DEFAULT_PRESET_NAME;
 let latestRows: Row[] = [];
 let latestResult = solveModel(state);
+let phaseAnchor: PhaseAnchor = "min";
 let debounceTimer = 0;
 let mathTypesetTimer = 0;
 let mathTypesetRunning = false;
@@ -297,6 +298,14 @@ function buildControls(): void {
     });
   });
 
+  document.querySelectorAll<HTMLButtonElement>("[data-phase-anchor]").forEach((button) => {
+    button.addEventListener("click", () => {
+      phaseAnchor = button.dataset.phaseAnchor === "max" ? "max" : "min";
+      updatePhaseAnchorButtons();
+      drawAll();
+    });
+  });
+
   document.querySelectorAll<HTMLButtonElement>("[data-driver]").forEach((button) => {
     button.addEventListener("click", () => {
       state.driver = button.dataset.driver === "abs-v" ? "abs-v" : "h";
@@ -313,6 +322,7 @@ function buildControls(): void {
   window.addEventListener("resize", drawAll);
   updateDriverButtons();
   updatePhaseModeButtons();
+  updatePhaseAnchorButtons();
   updateSolverButtons();
   updateEquationBlocks();
   updateAllSliderLabels();
@@ -662,7 +672,7 @@ function buildParameterTable(): void {
     `;
   numericalTable.innerHTML = controlRows(CONTROL_GROUPS.integration) + `
       <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">solver</td><td>${meaning("Numerical method: RK45 default, DOP853 reference, or historical midpoint.")}</td></tr>
-      <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">phase window</td><td>${meaning("Reference cycles use the first valid minimum-light luminosity window; final cycles use the latest valid window.")}</td></tr>
+      <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">phase window</td><td>${meaning("Reference cycles use the first valid luminosity window; final cycles use the latest valid window; the lightcurve control chooses min- or max-light phase zero.")}</td></tr>
     `;
   queueMathTypeset();
 }
@@ -796,6 +806,14 @@ function updateDriverButtons(): void {
 function updatePhaseModeButtons(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-phase-mode]").forEach((button) => {
     button.classList.toggle("active", button.dataset.phaseMode === state.phaseMode);
+  });
+}
+
+function updatePhaseAnchorButtons(): void {
+  document.querySelectorAll<HTMLButtonElement>("[data-phase-anchor]").forEach((button) => {
+    const active = button.dataset.phaseAnchor === phaseAnchor;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
   });
 }
 
@@ -1281,6 +1299,8 @@ function phaseUnavailableLabel(phase: PhaseResult): string | undefined {
       return "phase unavailable: not enough samples";
     case "not_enough_minima":
       return "phase unavailable: fewer than three luminosity minima";
+    case "not_enough_maxima":
+      return "phase unavailable: fewer than three luminosity maxima";
     case "amplitude_below_threshold":
       return "phase unavailable: luminosity cycles are below threshold";
     case "reference_out_of_range":
@@ -1292,7 +1312,8 @@ function phaseForRows(rows: Row[]): PhaseResult {
   return buildTwoCyclePhase(rows, {
     warmupTau: state.phaseWarmupTau,
     minAmplitude: state.phaseMinAmplitude,
-    selection: state.phaseMode === "final" ? "last" : "first"
+    selection: state.phaseMode === "final" ? "last" : "first",
+    anchor: phaseAnchor
   });
 }
 

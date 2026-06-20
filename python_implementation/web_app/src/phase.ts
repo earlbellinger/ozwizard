@@ -1,5 +1,7 @@
 import type { Row } from "./model";
 
+export type PhaseAnchor = "min" | "max";
+
 export interface PhaseReference {
   startTau: number;
   midTau: number;
@@ -7,7 +9,10 @@ export interface PhaseReference {
   period: number;
   warmupTau: number;
   minAmplitude: number;
-  minimumRows: [Row, Row, Row];
+  anchor: PhaseAnchor;
+  anchorRows: [Row, Row, Row];
+  minimumRows?: [Row, Row, Row];
+  maximumRows?: [Row, Row, Row];
 }
 
 export interface PhaseOptions {
@@ -15,6 +20,7 @@ export interface PhaseOptions {
   minAmplitude?: number;
   minSeparation?: number;
   selection?: "first" | "last";
+  anchor?: PhaseAnchor;
   reference?: PhaseReference | null;
 }
 
@@ -22,7 +28,7 @@ export interface PhaseResult {
   rows: Row[];
   reference: PhaseReference | null;
   period: number | null;
-  reason: "ok" | "not_enough_rows" | "not_enough_minima" | "amplitude_below_threshold" | "reference_out_of_range";
+  reason: "ok" | "not_enough_rows" | "not_enough_minima" | "not_enough_maxima" | "amplitude_below_threshold" | "reference_out_of_range";
 }
 
 function defaultWarmupTau(rows: readonly Row[]): number {
@@ -105,13 +111,14 @@ function minimumSeparationFromMaxima(maxima: readonly Row[], requested?: number)
   return period ? Math.max(0.75, period * 0.55) : 0.75;
 }
 
-function buildReferenceFromMinima(
+function buildReferenceFromAnchors(
   rows: readonly Row[],
-  minimumRows: [Row, Row, Row],
+  anchorRows: [Row, Row, Row],
+  anchor: PhaseAnchor,
   warmupTau: number,
   minAmplitude: number
 ): PhaseResult | null {
-  const [first, second, third] = minimumRows;
+  const [first, second, third] = anchorRows;
   const firstCycleAmplitude = cycleAmplitude(rows, first.tau, second.tau);
   const secondCycleAmplitude = cycleAmplitude(rows, second.tau, third.tau);
   if (firstCycleAmplitude < minAmplitude || secondCycleAmplitude < minAmplitude) return null;
@@ -125,9 +132,37 @@ function buildReferenceFromMinima(
     period,
     warmupTau,
     minAmplitude,
-    minimumRows
+    anchor,
+    anchorRows,
+    minimumRows: anchor === "min" ? anchorRows : undefined,
+    maximumRows: anchor === "max" ? anchorRows : undefined
   };
   return foldRowsToReference(rows, reference);
+}
+
+function buildReferenceFromMinima(
+  rows: readonly Row[],
+  minimumRows: [Row, Row, Row],
+  warmupTau: number,
+  minAmplitude: number
+): PhaseResult | null {
+  return buildReferenceFromAnchors(rows, minimumRows, "min", warmupTau, minAmplitude);
+}
+
+function buildMaxLightReference(rows: readonly Row[], maxima: readonly Row[], warmupTau: number, minAmplitude: number, selection?: "first" | "last"): PhaseResult {
+  if (maxima.length < 3) {
+    return { rows: [], reference: null, period: null, reason: "not_enough_maxima" };
+  }
+
+  const start = selection === "last" ? maxima.length - 3 : 0;
+  const end = selection === "last" ? -1 : maxima.length - 3;
+  const direction = selection === "last" ? -1 : 1;
+  for (let i = start; selection === "last" ? i > end : i <= end; i += direction) {
+    const result = buildReferenceFromAnchors(rows, [maxima[i], maxima[i + 1], maxima[i + 2]], "max", warmupTau, minAmplitude);
+    if (result) return result;
+  }
+
+  return { rows: [], reference: null, period: null, reason: "amplitude_below_threshold" };
 }
 
 function buildReference(rows: readonly Row[], options: PhaseOptions): PhaseResult {
@@ -138,6 +173,9 @@ function buildReference(rows: readonly Row[], options: PhaseOptions): PhaseResul
   const warmupTau = phaseWarmupTau(rows, options.warmupTau);
   const minAmplitude = options.minAmplitude ?? 1e-4;
   const maxima = findLuminosityMaxima(rows, warmupTau, options.minSeparation);
+  if (options.anchor === "max") {
+    return buildMaxLightReference(rows, maxima, warmupTau, minAmplitude, options.selection);
+  }
 
   if (maxima.length >= 4) {
     const start = options.selection === "last" ? maxima.length - 4 : 0;
