@@ -23,7 +23,11 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto("/wizard_of_oz.html");
   await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
+  const pianoToggle = page.locator("#pianoToggle");
   const sonificationToggle = page.locator("#sonificationToggle");
+  await expect(pianoToggle).not.toBeDisabled();
+  await expect(pianoToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator("#pianoPanel")).toBeHidden();
   await expect(sonificationToggle).not.toBeDisabled();
   await expect(sonificationToggle).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("button", { name: "Start lightcurve sonification" })).toBeVisible();
@@ -53,6 +57,44 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.getByRole("button", { name: "Stop lightcurve sonification" })).toBeVisible();
   await sonificationToggle.click();
   await expect(sonificationToggle).toHaveAttribute("aria-pressed", "false");
+  await pianoToggle.click();
+  await expect(pianoToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#pianoPanel")).toBeVisible();
+  await expect(sonificationToggle).toBeDisabled();
+  await expect(sonificationToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByLabel("shown piano octaves")).toHaveValue("3");
+  await expect(page.locator("#sonificationHz")).toHaveText("C3-B4");
+  await expect(page.locator(".piano-key")).toHaveCount(24);
+  await expect(page.locator(".white-key")).toHaveCount(14);
+  await expect(page.locator(".black-key")).toHaveCount(10);
+  await expect(page.locator("#pianoAttackValue")).toHaveText("15 ms");
+  await expect(page.locator("#pianoDecayValue")).toHaveText("0.22 s");
+  await expect(page.locator("#pianoReleaseValue")).toHaveText("0.36 s");
+  await expect(page.locator("#pianoVolumeValue")).toHaveText("45%");
+  const hasAdsrPaint = await page.locator("#adsrCanvas").evaluate((canvas) => {
+    const node = canvas as HTMLCanvasElement;
+    const ctx = node.getContext("2d");
+    if (!ctx) return false;
+    return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
+  });
+  expect(hasAdsrPaint).toBe(true);
+  await page.locator("#sonificationPitch").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "4";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#sonificationHz")).toHaveText("C4-B5");
+  await expect(page.locator(".piano-key[data-midi='60']")).toHaveCount(1);
+  await page.keyboard.down("z");
+  await expect(page.locator(".piano-key[data-midi='60']")).toHaveClass(/active/);
+  await page.keyboard.up("z");
+  await expect(page.locator(".piano-key[data-midi='60']")).not.toHaveClass(/active/);
+  await pianoToggle.click();
+  await expect(page.locator("#pianoPanel")).toBeHidden();
+  await expect(sonificationToggle).not.toBeDisabled();
+  await expect(sonificationToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByLabel("reference pitch")).toHaveValue("69");
+  await expect(page.locator("#sonificationHz")).toHaveText("440 Hz");
   await expect(page.getByAltText("OZwizard logo")).toBeVisible();
   await expect(page.getByAltText("OZwizard logo")).toHaveJSProperty("naturalWidth", 498);
   await expect(page.locator("#sidebarControls")).toHaveAttribute("open", "");
@@ -129,8 +171,9 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("body")).not.toContainText("total, radiative, convective");
   await expect.poll(async () => (await page.locator("body").innerText()).includes("\\(")).toBe(false);
 
-  const canvases = page.locator("canvas");
+  const canvases = page.locator(".plot-panel canvas");
   await expect(canvases).toHaveCount(4);
+  await expect(page.locator("#adsrCanvas")).toHaveCount(1);
   await expect(page.locator("#lightLegend")).toHaveCount(0);
   await expect(page.locator("#velocityLegend")).toHaveCount(0);
   const tauCell = page.locator("[data-symbol='tau']").first();

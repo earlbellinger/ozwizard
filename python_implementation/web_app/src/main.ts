@@ -44,6 +44,11 @@ const stagedMathUpdates = new Map<HTMLElement, StagedMathUpdate>();
 const PIANO_MIN_NOTE = 21;
 const PIANO_MAX_NOTE = 108;
 const MIDDLE_C_NOTE = 60;
+const PIANO_VISIBLE_OCTAVES = 2;
+const PIANO_MIN_START_OCTAVE = 1;
+const PIANO_MAX_START_OCTAVE = 6;
+const PIANO_DEFAULT_START_OCTAVE = 3;
+const PIANO_SUSTAIN_LEVEL = 0.38;
 const SONIFICATION_ATTACK_SECONDS = 1;
 const SONIFICATION_RELEASE_SECONDS = 0.14;
 const SONIFICATION_OUTPUT_GAIN = 0.12;
@@ -64,6 +69,13 @@ let sonificationMasterGain: GainNode | null = null;
 let sonificationStopTimer = 0;
 const sonificationVoices = new Set<SonificationVoice>();
 let sonificationActive = false;
+let pianoModeActive = false;
+let pianoStartOctave = PIANO_DEFAULT_START_OCTAVE;
+let pianoMasterGain: GainNode | null = null;
+let pianoEnvelope: PianoEnvelope = { attack: 0.015, decay: 0.22, release: 0.36 };
+let pianoVolume = 0.45;
+const activePianoVoices = new Map<string, PianoVoice>();
+const activePianoMidiCounts = new Map<number, number>();
 const TAU_TICKS = [1, 3, 10, 30, 100, 300, 1000];
 const THEME = {
   axisGrid: "#26334E",
@@ -119,6 +131,56 @@ interface SonificationVoice {
   gain: GainNode;
   stopped: boolean;
 }
+
+interface PianoEnvelope {
+  attack: number;
+  decay: number;
+  release: number;
+}
+
+interface PianoVoice {
+  oscillator: OscillatorNode;
+  gain: GainNode;
+  midi: number;
+  startedAt: number;
+  attack: number;
+  decay: number;
+  sustain: number;
+  released: boolean;
+}
+
+interface KeyboardBinding {
+  code: string;
+  label: string;
+  offset: number;
+}
+
+const PIANO_KEYBOARD_BINDINGS: KeyboardBinding[] = [
+  { code: "KeyZ", label: "Z", offset: 0 },
+  { code: "KeyS", label: "S", offset: 1 },
+  { code: "KeyX", label: "X", offset: 2 },
+  { code: "KeyD", label: "D", offset: 3 },
+  { code: "KeyC", label: "C", offset: 4 },
+  { code: "KeyV", label: "V", offset: 5 },
+  { code: "KeyG", label: "G", offset: 6 },
+  { code: "KeyB", label: "B", offset: 7 },
+  { code: "KeyH", label: "H", offset: 8 },
+  { code: "KeyN", label: "N", offset: 9 },
+  { code: "KeyJ", label: "J", offset: 10 },
+  { code: "KeyM", label: "M", offset: 11 },
+  { code: "KeyQ", label: "Q", offset: 12 },
+  { code: "Digit2", label: "2", offset: 13 },
+  { code: "KeyW", label: "W", offset: 14 },
+  { code: "Digit3", label: "3", offset: 15 },
+  { code: "KeyE", label: "E", offset: 16 },
+  { code: "KeyR", label: "R", offset: 17 },
+  { code: "Digit5", label: "5", offset: 18 },
+  { code: "KeyT", label: "T", offset: 19 },
+  { code: "Digit6", label: "6", offset: 20 },
+  { code: "KeyY", label: "Y", offset: 21 },
+  { code: "Digit7", label: "7", offset: 22 },
+  { code: "KeyU", label: "U", offset: 23 }
+];
 
 const INTERACTIVE_CANVASES: Record<string, InteractivePlotId> = {
   timeCanvas: "time",
@@ -304,47 +366,119 @@ function formatHz(value: number): string {
   return String(Math.round(value));
 }
 
+function midiToOctave(midi: number): number {
+  return Math.floor(midi / 12) - 1;
+}
+
+function noteNameForMidi(midi: number): string {
+  const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  return `${names[((midi % 12) + 12) % 12]}${midiToOctave(midi)}`;
+}
+
+function firstVisiblePianoMidi(): number {
+  return 12 * (pianoStartOctave + 1);
+}
+
+function pianoOctaveLabel(): string {
+  const first = firstVisiblePianoMidi();
+  const last = first + PIANO_VISIBLE_OCTAVES * 12 - 1;
+  return `${noteNameForMidi(first)}-${noteNameForMidi(last)}`;
+}
+
+function keyboardMidiForCode(code: string): number | null {
+  const binding = PIANO_KEYBOARD_BINDINGS.find((item) => item.code === code);
+  if (!binding) return null;
+  return firstVisiblePianoMidi() + binding.offset;
+}
+
+function keyboardLabelForOffset(offset: number): string {
+  return PIANO_KEYBOARD_BINDINGS.find((item) => item.offset === offset)?.label || "";
+}
+
 function setupSonificationControls(): void {
+  const piano = el<HTMLButtonElement>("pianoToggle");
   const toggle = el<HTMLButtonElement>("sonificationToggle");
   const pitch = el<HTMLInputElement>("sonificationPitch");
   const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-  pitch.min = String(PIANO_MIN_NOTE);
-  pitch.max = String(PIANO_MAX_NOTE);
-  pitch.step = "1";
-  pitch.value = String(sonificationReferenceNote);
-  pitch.addEventListener("input", (event) => {
-    sonificationReferenceNote = Number((event.target as HTMLInputElement).value);
-    sonificationReferenceHz = noteToFrequency(sonificationReferenceNote);
-    updateSonificationPitchLabel();
-    updateSonificationFrequency();
-    updateSonificationWaveform();
-  });
+  pitch.addEventListener("input", handleSonificationSliderInput);
   if (!AudioContextCtor) {
+    piano.disabled = true;
+    piano.title = "Audio is not supported in this browser";
+    piano.setAttribute("aria-label", "Piano unavailable");
     toggle.disabled = true;
     toggle.title = "Audio is not supported in this browser";
     toggle.setAttribute("aria-label", "Lightcurve sonification unavailable");
   } else {
+    piano.addEventListener("click", togglePianoMode);
     toggle.addEventListener("click", () => {
       void toggleSonification();
     });
   }
-  updateSonificationPitchLabel();
+  setupPianoControls();
+  updateHeaderAudioControls();
   updateSonificationToggleUi();
+  updatePianoToggleUi();
+  window.addEventListener("keydown", handlePianoKeyDown);
+  window.addEventListener("keyup", handlePianoKeyUp);
+  window.addEventListener("blur", releaseAllPianoNotes);
 }
 
-function updateSonificationPitchLabel(): void {
+function handleSonificationSliderInput(event: Event): void {
+  const input = event.target as HTMLInputElement;
+  if (pianoModeActive) {
+    pianoStartOctave = Number(input.value);
+    updateHeaderAudioControls();
+    buildPianoKeyboard();
+    return;
+  }
+  sonificationReferenceNote = Number(input.value);
+  sonificationReferenceHz = noteToFrequency(sonificationReferenceNote);
+  updateHeaderAudioControls();
+  updateSonificationFrequency();
+  updateSonificationWaveform();
+}
+
+function updateHeaderAudioControls(): void {
+  const slider = document.getElementById("sonificationPitch");
+  if (slider instanceof HTMLInputElement) {
+    if (pianoModeActive) {
+      slider.min = String(PIANO_MIN_START_OCTAVE);
+      slider.max = String(PIANO_MAX_START_OCTAVE);
+      slider.step = "1";
+      slider.value = String(pianoStartOctave);
+      slider.setAttribute("aria-label", "shown piano octaves");
+      slider.title = "Shown piano octaves";
+    } else {
+      slider.min = String(PIANO_MIN_NOTE);
+      slider.max = String(PIANO_MAX_NOTE);
+      slider.step = "1";
+      slider.value = String(sonificationReferenceNote);
+      slider.setAttribute("aria-label", "reference pitch");
+      slider.title = "Reference pitch";
+    }
+  }
   const label = document.getElementById("sonificationHz");
-  if (label) label.textContent = `${formatHz(sonificationReferenceHz)} Hz`;
+  if (label) label.textContent = pianoModeActive ? pianoOctaveLabel() : `${formatHz(sonificationReferenceHz)} Hz`;
 }
 
 function updateSonificationToggleUi(): void {
   const toggle = document.getElementById("sonificationToggle");
   if (!(toggle instanceof HTMLButtonElement)) return;
-  if (toggle.disabled) {
+  if (!(window.AudioContext || window.webkitAudioContext)) {
+    toggle.disabled = true;
     toggle.classList.remove("active");
     toggle.setAttribute("aria-pressed", "false");
     return;
   }
+  if (pianoModeActive) {
+    toggle.classList.remove("active");
+    toggle.disabled = true;
+    toggle.setAttribute("aria-pressed", "false");
+    toggle.setAttribute("aria-label", "Continuous sonification muted in piano mode");
+    toggle.title = "Continuous sonification muted in piano mode";
+    return;
+  }
+  toggle.disabled = false;
   const action = sonificationActive ? "Stop" : "Start";
   toggle.classList.toggle("active", sonificationActive);
   toggle.setAttribute("aria-pressed", String(sonificationActive));
@@ -352,7 +486,224 @@ function updateSonificationToggleUi(): void {
   toggle.title = `${action} lightcurve sonification`;
 }
 
+function updatePianoToggleUi(): void {
+  const toggle = document.getElementById("pianoToggle");
+  if (!(toggle instanceof HTMLButtonElement)) return;
+  toggle.classList.toggle("active", pianoModeActive);
+  toggle.setAttribute("aria-pressed", String(pianoModeActive));
+  toggle.setAttribute("aria-label", `${pianoModeActive ? "Hide" : "Show"} lightcurve piano`);
+  toggle.title = `${pianoModeActive ? "Hide" : "Show"} lightcurve piano`;
+}
+
+function togglePianoMode(): void {
+  pianoModeActive = !pianoModeActive;
+  if (pianoModeActive) {
+    stopSonification();
+    buildPianoKeyboard();
+    setPianoPanelVisible(true);
+  } else {
+    releaseAllPianoNotes();
+    setPianoPanelVisible(false);
+  }
+  updateHeaderAudioControls();
+  updateSonificationToggleUi();
+  updatePianoToggleUi();
+  drawAdsrVisualization();
+}
+
+function setPianoPanelVisible(visible: boolean): void {
+  const panel = document.getElementById("pianoPanel");
+  if (!panel) return;
+  panel.hidden = !visible;
+}
+
+function setupPianoControls(): void {
+  const bindEnvelopeSlider = (id: string, key: keyof PianoEnvelope) => {
+    const input = document.getElementById(id);
+    if (!(input instanceof HTMLInputElement)) return;
+    input.value = String(pianoEnvelope[key]);
+    input.addEventListener("input", () => {
+      pianoEnvelope = { ...pianoEnvelope, [key]: Number(input.value) };
+      updatePianoControlLabels();
+      drawAdsrVisualization();
+    });
+  };
+  bindEnvelopeSlider("pianoAttack", "attack");
+  bindEnvelopeSlider("pianoDecay", "decay");
+  bindEnvelopeSlider("pianoRelease", "release");
+  const volume = document.getElementById("pianoVolume");
+  if (volume instanceof HTMLInputElement) {
+    volume.value = String(pianoVolume);
+    volume.addEventListener("input", () => {
+      pianoVolume = Number(volume.value);
+      updatePianoControlLabels();
+      updatePianoVolume();
+    });
+  }
+  buildPianoKeyboard();
+  updatePianoControlLabels();
+  drawAdsrVisualization();
+}
+
+function updatePianoControlLabels(): void {
+  const labels: Record<string, string> = {
+    pianoAttackValue: formatDuration(pianoEnvelope.attack),
+    pianoDecayValue: formatDuration(pianoEnvelope.decay),
+    pianoReleaseValue: formatDuration(pianoEnvelope.release),
+    pianoVolumeValue: `${Math.round(pianoVolume * 100)}%`
+  };
+  Object.entries(labels).forEach(([id, value]) => {
+    const node = document.getElementById(id);
+    if (node) node.textContent = value;
+  });
+}
+
+function formatDuration(seconds: number): string {
+  return seconds < 0.1 ? `${Math.round(seconds * 1000)} ms` : `${seconds.toFixed(2).replace(/\.?0+$/, "")} s`;
+}
+
+function buildPianoKeyboard(): void {
+  const container = document.getElementById("pianoKeys");
+  if (!container) return;
+  const firstMidi = firstVisiblePianoMidi();
+  const lastMidi = firstMidi + PIANO_VISIBLE_OCTAVES * 12 - 1;
+  container.innerHTML = '<div class="white-keys"></div><div class="black-keys"></div>';
+  const whiteKeys = container.querySelector<HTMLDivElement>(".white-keys");
+  const blackKeys = container.querySelector<HTMLDivElement>(".black-keys");
+  if (!whiteKeys || !blackKeys) return;
+  const whiteCount = Array.from({ length: lastMidi - firstMidi + 1 }, (_unused, index) => firstMidi + index)
+    .filter((midi) => !isBlackPianoKey(midi)).length;
+  let whiteIndex = 0;
+  for (let midi = firstMidi; midi <= lastMidi; midi += 1) {
+    const isBlack = isBlackPianoKey(midi);
+    const key = buildPianoKey(midi, isBlack);
+    if (isBlack) {
+      key.style.left = `calc(${((whiteIndex / whiteCount) * 100).toFixed(4)}% - var(--black-key-width) / 2)`;
+      blackKeys.appendChild(key);
+    } else {
+      whiteKeys.appendChild(key);
+      whiteIndex += 1;
+    }
+    updatePianoKeyState(midi);
+  }
+}
+
+function buildPianoKey(midi: number, isBlack: boolean): HTMLButtonElement {
+  const key = document.createElement("button");
+  key.type = "button";
+  key.className = `piano-key ${isBlack ? "black-key" : "white-key"}`;
+  key.dataset.midi = String(midi);
+  key.setAttribute("aria-label", `Play ${noteNameForMidi(midi)}`);
+  const offset = midi - firstVisiblePianoMidi();
+  const keyboardLabel = keyboardLabelForOffset(offset);
+  key.innerHTML = `
+    <span class="piano-note-label">${noteNameForMidi(midi)}</span>
+    <span class="piano-key-label">${keyboardLabel}</span>
+  `;
+  key.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    key.setPointerCapture(event.pointerId);
+    void startPianoNote(`pointer:${event.pointerId}`, midi);
+  });
+  key.addEventListener("pointerup", (event) => {
+    releasePianoNote(`pointer:${event.pointerId}`);
+    if (key.hasPointerCapture(event.pointerId)) key.releasePointerCapture(event.pointerId);
+  });
+  key.addEventListener("pointercancel", (event) => releasePianoNote(`pointer:${event.pointerId}`));
+  return key;
+}
+
+function isBlackPianoKey(midi: number): boolean {
+  return [1, 3, 6, 8, 10].includes(((midi % 12) + 12) % 12);
+}
+
+function updatePianoKeyState(midi: number): void {
+  document.querySelectorAll<HTMLButtonElement>(`.piano-key[data-midi="${midi}"]`).forEach((key) => {
+    key.classList.toggle("active", (activePianoMidiCounts.get(midi) || 0) > 0);
+  });
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLInputElement
+    || target instanceof HTMLTextAreaElement
+    || target instanceof HTMLSelectElement
+    || (target instanceof HTMLElement && target.isContentEditable);
+}
+
+function handlePianoKeyDown(event: KeyboardEvent): void {
+  if (!pianoModeActive || event.repeat || isTypingTarget(event.target)) return;
+  const midi = keyboardMidiForCode(event.code);
+  if (midi === null) return;
+  event.preventDefault();
+  void startPianoNote(`key:${event.code}`, midi);
+}
+
+function handlePianoKeyUp(event: KeyboardEvent): void {
+  if (!pianoModeActive) return;
+  if (!PIANO_KEYBOARD_BINDINGS.some((binding) => binding.code === event.code)) return;
+  event.preventDefault();
+  releasePianoNote(`key:${event.code}`);
+}
+
+function drawAdsrVisualization(): void {
+  const canvas = document.getElementById("adsrCanvas");
+  if (!(canvas instanceof HTMLCanvasElement)) return;
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(260, Math.floor(rect.width || 360));
+  const height = Math.max(120, Math.floor(rect.height || 130));
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+  const pad = { left: 22, top: 14, right: 12, bottom: 20 };
+  const plot = {
+    left: pad.left,
+    top: pad.top,
+    width: width - pad.left - pad.right,
+    height: height - pad.top - pad.bottom
+  };
+  const hold = 0.45;
+  const total = Math.max(0.2, pianoEnvelope.attack + pianoEnvelope.decay + hold + pianoEnvelope.release);
+  const x = (seconds: number) => plot.left + (seconds / total) * plot.width;
+  const y = (amplitude: number) => plot.top + plot.height - amplitude * plot.height;
+  const attackEnd = pianoEnvelope.attack;
+  const decayEnd = attackEnd + pianoEnvelope.decay;
+  const releaseStart = decayEnd + hold;
+  const releaseEnd = releaseStart + pianoEnvelope.release;
+
+  ctx.strokeStyle = THEME.axisGrid;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
+  ctx.fillStyle = THEME.axisText;
+  ctx.font = "11px Inter, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText("amp", 0, plot.top - 2);
+  ctx.textAlign = "right";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(`${formatDuration(total)}`, width - 2, height - 2);
+
+  ctx.beginPath();
+  ctx.moveTo(x(0), y(0));
+  ctx.lineTo(x(attackEnd), y(1));
+  ctx.lineTo(x(decayEnd), y(PIANO_SUSTAIN_LEVEL));
+  ctx.lineTo(x(releaseStart), y(PIANO_SUSTAIN_LEVEL));
+  ctx.lineTo(x(releaseEnd), y(0));
+  ctx.strokeStyle = "#FFD166";
+  ctx.lineWidth = 2.2;
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(255, 209, 102, 0.12)";
+  ctx.lineTo(x(0), y(0));
+  ctx.closePath();
+  ctx.fill();
+}
+
 async function toggleSonification(): Promise<void> {
+  if (pianoModeActive) return;
   if (sonificationActive) {
     stopSonification();
     return;
@@ -484,6 +835,96 @@ function disconnectSonificationVoice(voice: SonificationVoice): void {
   voice.gain.disconnect();
   sonificationVoices.delete(voice);
   if (sonificationVoice === voice) sonificationVoice = null;
+}
+
+function ensurePianoMasterGain(context: AudioContext): GainNode {
+  if (pianoMasterGain) return pianoMasterGain;
+  pianoMasterGain = context.createGain();
+  pianoMasterGain.gain.setValueAtTime(pianoVolume, context.currentTime);
+  pianoMasterGain.connect(context.destination);
+  return pianoMasterGain;
+}
+
+function updatePianoVolume(): void {
+  const context = sonificationContext;
+  if (!context || !pianoMasterGain) return;
+  pianoMasterGain.gain.setTargetAtTime(pianoVolume, context.currentTime, 0.02);
+}
+
+async function startPianoNote(sourceId: string, midi: number): Promise<void> {
+  if (!pianoModeActive || activePianoVoices.has(sourceId)) return;
+  const note = clamp(Math.round(midi), PIANO_MIN_NOTE, PIANO_MAX_NOTE);
+  const context = ensureAudioContext();
+  if (!context) return;
+  await context.resume();
+  const output = ensurePianoMasterGain(context);
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  const now = context.currentTime;
+  const attack = Math.max(0.001, pianoEnvelope.attack);
+  const decay = Math.max(0.001, pianoEnvelope.decay);
+  oscillator.frequency.setValueAtTime(noteToFrequency(note), now);
+  const wave = createSonificationPeriodicWave(context);
+  if (wave) oscillator.setPeriodicWave(wave);
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(1, now + attack);
+  gain.gain.linearRampToValueAtTime(PIANO_SUSTAIN_LEVEL, now + attack + decay);
+  oscillator.connect(gain);
+  gain.connect(output);
+  const voice: PianoVoice = {
+    oscillator,
+    gain,
+    midi: note,
+    startedAt: now,
+    attack,
+    decay,
+    sustain: PIANO_SUSTAIN_LEVEL,
+    released: false
+  };
+  oscillator.addEventListener("ended", () => disconnectPianoVoice(sourceId, voice), { once: true });
+  activePianoVoices.set(sourceId, voice);
+  activePianoMidiCounts.set(note, (activePianoMidiCounts.get(note) || 0) + 1);
+  updatePianoKeyState(note);
+  oscillator.start(now);
+}
+
+function releasePianoNote(sourceId: string): void {
+  const voice = activePianoVoices.get(sourceId);
+  const context = sonificationContext;
+  if (!voice || !context || voice.released) return;
+  voice.released = true;
+  activePianoVoices.delete(sourceId);
+  const count = (activePianoMidiCounts.get(voice.midi) || 1) - 1;
+  if (count > 0) activePianoMidiCounts.set(voice.midi, count);
+  else activePianoMidiCounts.delete(voice.midi);
+  updatePianoKeyState(voice.midi);
+  const now = context.currentTime;
+  const release = Math.max(0.01, pianoEnvelope.release);
+  const amplitude = estimatePianoVoiceAmplitude(voice, now);
+  voice.gain.gain.cancelScheduledValues(now);
+  voice.gain.gain.setValueAtTime(amplitude, now);
+  voice.gain.gain.linearRampToValueAtTime(0, now + release);
+  voice.oscillator.stop(now + release + 0.03);
+}
+
+function estimatePianoVoiceAmplitude(voice: PianoVoice, now: number): number {
+  const elapsed = Math.max(0, now - voice.startedAt);
+  if (elapsed <= voice.attack) return clamp(elapsed / voice.attack, 0, 1);
+  if (elapsed <= voice.attack + voice.decay) {
+    const decayProgress = (elapsed - voice.attack) / voice.decay;
+    return 1 - (1 - voice.sustain) * clamp(decayProgress, 0, 1);
+  }
+  return voice.sustain;
+}
+
+function releaseAllPianoNotes(): void {
+  Array.from(activePianoVoices.keys()).forEach(releasePianoNote);
+}
+
+function disconnectPianoVoice(sourceId: string, voice: PianoVoice): void {
+  voice.oscillator.disconnect();
+  voice.gain.disconnect();
+  if (activePianoVoices.get(sourceId) === voice) activePianoVoices.delete(sourceId);
 }
 
 function createSonificationPeriodicWave(context: AudioContext): PeriodicWave | null {
@@ -665,6 +1106,7 @@ function buildControls(): void {
   el<HTMLButtonElement>("downloadCsv").addEventListener("click", downloadCsv);
   setupInteractivePlots();
   window.addEventListener("resize", drawAll);
+  window.addEventListener("resize", drawAdsrVisualization);
   updateDriverButtons();
   updatePhaseModeButtons();
   updatePhaseAnchorButtons();

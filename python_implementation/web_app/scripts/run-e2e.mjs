@@ -60,7 +60,11 @@ async function runPlaywrightChecks() {
     await page.getByRole("heading", { name: "OZwizard" }).waitFor({ state: "visible", timeout: 15000 });
     console.log("page loaded");
 
+    const pianoToggle = page.locator("#pianoToggle");
     const sonificationToggle = page.locator("#sonificationToggle");
+    assertOk(!(await pianoToggle.isDisabled()), "piano toggle should be enabled");
+    assertOk((await pianoToggle.getAttribute("aria-pressed")) === "false", "piano panel should start closed");
+    assertOk(!(await page.locator("#pianoPanel").isVisible()), "piano panel should start hidden");
     assertOk(!(await sonificationToggle.isDisabled()), "sonification toggle should be enabled");
     assertOk((await sonificationToggle.getAttribute("aria-pressed")) === "false", "sonification should start muted");
     assertOk((await page.locator("#sonificationHz").textContent()) === "262 Hz", "sonification should default to middle C");
@@ -88,6 +92,30 @@ async function runPlaywrightChecks() {
     assertOk((await sonificationToggle.getAttribute("aria-pressed")) === "true", "sonification did not turn on");
     await sonificationToggle.click();
     assertOk((await sonificationToggle.getAttribute("aria-pressed")) === "false", "sonification did not turn off");
+    await pianoToggle.click();
+    assertOk((await pianoToggle.getAttribute("aria-pressed")) === "true", "piano mode did not turn on");
+    assertOk(await page.locator("#pianoPanel").isVisible(), "piano panel did not open");
+    assertOk(await sonificationToggle.isDisabled(), "continuous speaker should be disabled in piano mode");
+    assertOk((await page.getByLabel("shown piano octaves").inputValue()) === "3", "piano octave slider should start at C3-B4");
+    assertOk((await page.locator("#sonificationHz").textContent()) === "C3-B4", "piano mode should show visible octaves");
+    assertOk((await page.locator(".piano-key").count()) === 24, "piano should render two octaves of keys");
+    assertOk((await page.locator("#pianoVolumeValue").textContent()) === "45%", "piano volume default should render");
+    await page.locator("#sonificationPitch").evaluate((input) => {
+      input.value = "4";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    assertOk((await page.locator("#sonificationHz").textContent()) === "C4-B5", "piano octave slider should update visible octaves");
+    await page.keyboard.down("z");
+    assertOk((await page.locator(".piano-key[data-midi='60']").getAttribute("class"))?.includes("active"), "keyboard Z should press visible C");
+    await page.keyboard.up("z");
+    const cKeyClassAfterRelease = await page.locator(".piano-key[data-midi='60']").getAttribute("class");
+    assertOk(!cKeyClassAfterRelease?.includes("active"), "keyboard Z should release visible C");
+    await pianoToggle.click();
+    assertOk(!(await page.locator("#pianoPanel").isVisible()), "piano panel did not close");
+    assertOk(!(await sonificationToggle.isDisabled()), "speaker should re-enable after piano mode closes");
+    assertOk((await sonificationToggle.getAttribute("aria-pressed")) === "false", "speaker should stay muted after piano mode closes");
+    assertOk((await page.getByLabel("reference pitch").inputValue()) === "69", "reference pitch slider should be restored after piano mode");
+    assertOk((await page.locator("#sonificationHz").textContent()) === "440 Hz", "reference pitch readout should return after piano mode");
 
     const logo = page.getByAltText("OZwizard logo");
     await logo.waitFor({ state: "visible", timeout: 15000 });
@@ -189,7 +217,8 @@ async function runPlaywrightChecks() {
     const parameterOverflow = await page.locator(".parameters-panel").evaluate((node) => getComputedStyle(node).overflowY);
     assertOk(parameterOverflow === "auto", `parameters panel should scroll vertically, saw ${parameterOverflow}`);
 
-    assertOk(await page.locator("canvas").count() === 4, "expected four plot canvases");
+    assertOk(await page.locator(".plot-panel canvas").count() === 4, "expected four plot canvases");
+    assertOk(await page.locator("#adsrCanvas").count() === 1, "expected one ADSR canvas");
     assertOk(await page.getByRole("heading", { name: "Lightcurve" }).isVisible(), "Lightcurve heading was not visible");
     assertOk((await page.locator(".phase-anchor-control").textContent())?.includes("phase to"), "phase anchor control was not visible");
     assertOk((await page.getByRole("button", { name: "min light" }).getAttribute("aria-pressed")) === "true", "min-light phase anchor should start active");

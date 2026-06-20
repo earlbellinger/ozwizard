@@ -241,14 +241,15 @@
     .sonification-control {
       --accent: var(--logo-gold-bright);
       display: grid;
-      grid-template-columns: 26px minmax(42px, 1fr) 48px;
+      grid-template-columns: 26px 26px minmax(34px, 1fr) 48px;
       align-items: center;
       gap: 4px;
-      min-width: 120px;
-      width: 124px;
-      flex: 0 1 124px;
+      min-width: 150px;
+      width: 154px;
+      flex: 0 1 154px;
     }
 
+    .piano-toggle,
     .speaker-toggle {
       width: 26px;
       height: 26px;
@@ -264,23 +265,27 @@
       line-height: 1;
     }
 
+    .piano-toggle:hover:not(:disabled),
     .speaker-toggle:hover:not(:disabled) {
       border-color: var(--line-strong);
       background: var(--paper-high);
       color: var(--ink);
     }
 
+    .piano-toggle.active,
     .speaker-toggle.active {
       border-color: rgba(255, 209, 102, 0.72);
       color: var(--logo-gold-bright);
       background: rgba(240, 189, 61, 0.12);
     }
 
+    .piano-toggle:disabled,
     .speaker-toggle:disabled {
       cursor: default;
       opacity: 0.55;
     }
 
+    .piano-toggle svg,
     .speaker-toggle svg {
       width: 17px;
       height: 17px;
@@ -316,6 +321,147 @@
       font-variant-numeric: tabular-nums;
       text-align: right;
       white-space: nowrap;
+    }
+
+    .piano-panel {
+      border: 1px solid var(--line);
+      background: var(--paper);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 14px;
+      box-shadow: 0 14px 34px var(--shadow), inset 0 1px 0 rgba(238, 245, 255, 0.03);
+    }
+
+    .piano-panel[hidden] {
+      display: none;
+    }
+
+    .piano-panel-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .piano-keyboard {
+      --black-key-width: 5.4%;
+      position: relative;
+      min-height: 168px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #050814;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    .white-keys {
+      display: grid;
+      grid-template-columns: repeat(14, minmax(0, 1fr));
+      height: 100%;
+      min-height: 168px;
+    }
+
+    .black-keys {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .piano-key {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 5px;
+      border-radius: 0;
+      cursor: pointer;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      padding: 0 2px 10px;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .white-key {
+      min-width: 0;
+      min-height: 168px;
+      border: 0;
+      border-right: 1px solid #1b2436;
+      background: linear-gradient(180deg, #f3f7ff, #b8c3d9);
+      color: #121827;
+    }
+
+    .white-key:last-child {
+      border-right: 0;
+    }
+
+    .black-key {
+      pointer-events: auto;
+      position: absolute;
+      top: 0;
+      width: var(--black-key-width);
+      height: 62%;
+      border: 1px solid #050814;
+      border-radius: 0 0 5px 5px;
+      background: linear-gradient(180deg, #1d2638, #050814);
+      color: var(--ink);
+      z-index: 2;
+      padding-bottom: 8px;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.34);
+    }
+
+    .piano-key.active {
+      filter: brightness(1.16);
+      box-shadow: inset 0 0 0 2px rgba(255, 209, 102, 0.82);
+    }
+
+    .black-key.active {
+      box-shadow: inset 0 0 0 2px rgba(255, 209, 102, 0.82), 0 8px 16px rgba(0, 0, 0, 0.34);
+    }
+
+    .piano-note-label {
+      font-weight: 760;
+    }
+
+    .piano-key-label {
+      color: currentColor;
+      opacity: 0.64;
+      font-size: 10px;
+      min-height: 12px;
+    }
+
+    .piano-synth-controls {
+      display: grid;
+      grid-template-rows: auto minmax(120px, 1fr);
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .piano-slider-grid {
+      display: grid;
+      gap: 7px;
+    }
+
+    .piano-slider {
+      display: grid;
+      grid-template-columns: 58px minmax(0, 1fr) 52px;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .piano-slider span:last-child {
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .adsr-canvas {
+      width: 100%;
+      height: 132px;
+      min-height: 132px;
     }
 
     .subtitle {
@@ -1069,9 +1215,13 @@
       }
 
       .sonification-control {
-        grid-template-columns: 26px minmax(38px, 1fr) 48px;
-        width: 120px;
-        flex-basis: 120px;
+        grid-template-columns: 26px 26px minmax(30px, 1fr) 48px;
+        width: 150px;
+        flex-basis: 150px;
+      }
+
+      .piano-panel-layout {
+        grid-template-columns: 1fr;
       }
 
       .preset-grid {
@@ -1113,6 +1263,17 @@
               <div class="brand-title-row">
                 <h1>OZwizard</h1>
                 <div class="sonification-control" aria-label="Lightcurve sonification">
+                  <button class="piano-toggle" type="button" id="pianoToggle" aria-label="Show lightcurve piano" aria-pressed="false" title="Show lightcurve piano">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M3 6h18v12H3z"></path>
+                      <path d="M7 6v12"></path>
+                      <path d="M11 6v12"></path>
+                      <path d="M16 6v12"></path>
+                      <path d="M6 6v7"></path>
+                      <path d="M10 6v7"></path>
+                      <path d="M15 6v7"></path>
+                    </svg>
+                  </button>
                   <button class="speaker-toggle" type="button" id="sonificationToggle" aria-label="Start lightcurve sonification" aria-pressed="false" title="Start lightcurve sonification">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M11 5 6 9H3v6h3l5 4V5z"></path>
@@ -1183,6 +1344,37 @@
       <div class="plots-header">
         <div class="metrics" id="metrics"></div>
       </div>
+
+      <section class="piano-panel" id="pianoPanel" hidden>
+        <div class="piano-panel-layout">
+          <div class="piano-keyboard" id="pianoKeys" aria-label="Lightcurve piano keyboard"></div>
+          <div class="piano-synth-controls">
+            <div class="piano-slider-grid">
+              <label class="piano-slider">
+                <span>Attack</span>
+                <input id="pianoAttack" type="range" min="0.001" max="0.2" step="0.001" value="0.015">
+                <span id="pianoAttackValue">15 ms</span>
+              </label>
+              <label class="piano-slider">
+                <span>Decay</span>
+                <input id="pianoDecay" type="range" min="0.03" max="1.2" step="0.01" value="0.22">
+                <span id="pianoDecayValue">0.22 s</span>
+              </label>
+              <label class="piano-slider">
+                <span>Release</span>
+                <input id="pianoRelease" type="range" min="0.03" max="1.8" step="0.01" value="0.36">
+                <span id="pianoReleaseValue">0.36 s</span>
+              </label>
+              <label class="piano-slider">
+                <span>Volume</span>
+                <input id="pianoVolume" type="range" min="0" max="1" step="0.01" value="0.45">
+                <span id="pianoVolumeValue">45%</span>
+              </label>
+            </div>
+            <canvas class="adsr-canvas" id="adsrCanvas" aria-label="ADSR amplitude envelope"></canvas>
+          </div>
+        </div>
+      </section>
 
       <section class="plot-grid">
         <div class="plot-panel">
