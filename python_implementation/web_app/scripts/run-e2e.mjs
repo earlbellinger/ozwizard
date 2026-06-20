@@ -78,12 +78,12 @@ async function runPlaywrightChecks() {
       metadata.description === "Interactive one-zone convection and pulsation explorer for Stellingwerf-style stellar-envelope models.",
       "meta description should describe OZwizard"
     );
-    assertOk(metadata.canonical === "https://earlbellinger.github.io/apps/ozwizard/", "canonical URL should target the deployed app");
+    assertOk(metadata.canonical === "https://earlbellinger.com/apps/ozwizard/", "canonical URL should target the deployed app");
     assertOk(metadata.icon32 === "./assets/favicon-32x32.png", "32px favicon link should be present");
     assertOk(metadata.appleTouchIcon === "./assets/apple-touch-icon.png", "Apple touch icon link should be present");
     assertOk(metadata.manifest === "./site.webmanifest", "web manifest link should be present");
     assertOk(
-      metadata.ogImage === "https://earlbellinger.github.io/apps/ozwizard/assets/ozwizard-social-card.png",
+      metadata.ogImage === "https://earlbellinger.com/apps/ozwizard/assets/ozwizard-social-card.png",
       "Open Graph image should use the deployed social card"
     );
     assertOk(metadata.twitterCard === "summary_large_image", "Twitter card should use a large preview image");
@@ -133,6 +133,7 @@ async function runPlaywrightChecks() {
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     assertOk((await page.locator("#sonificationHz").textContent()) === "C4-B5", "piano octave slider should update visible octaves");
+    await page.getByLabel("shown piano octaves").focus();
     await page.keyboard.down("z");
     assertOk((await page.locator(".piano-key[data-midi='60']").getAttribute("class"))?.includes("active"), "keyboard Z should press visible C");
     await page.keyboard.up("z");

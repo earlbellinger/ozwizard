@@ -1218,7 +1218,10 @@
     });
   }
   function isTypingTarget(target) {
-    return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target instanceof HTMLElement && target.isContentEditable;
+    if (target instanceof HTMLInputElement) {
+      return !["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"].includes(target.type);
+    }
+    return target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target instanceof HTMLElement && target.isContentEditable;
   }
   function handlePianoKeyDown(event) {
     if (!pianoModeActive || event.repeat || isTypingTarget(event.target)) return;

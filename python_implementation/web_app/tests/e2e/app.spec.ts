@@ -197,11 +197,11 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(metadata).toEqual({
     title: "OZwizard | Interactive Stellar Pulsation Explorer",
     description: "Interactive one-zone convection and pulsation explorer for Stellingwerf-style stellar-envelope models.",
-    canonical: "https://earlbellinger.github.io/apps/ozwizard/",
+    canonical: "https://earlbellinger.com/apps/ozwizard/",
     icon32: "./assets/favicon-32x32.png",
     appleTouchIcon: "./assets/apple-touch-icon.png",
     manifest: "./site.webmanifest",
-    ogImage: "https://earlbellinger.github.io/apps/ozwizard/assets/ozwizard-social-card.png",
+    ogImage: "https://earlbellinger.com/apps/ozwizard/assets/ozwizard-social-card.png",
     twitterCard: "summary_large_image"
   });
   const pianoToggle = page.locator("#pianoToggle");
@@ -266,6 +266,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   });
   await expect(page.locator("#sonificationHz")).toHaveText("C4-B5");
   await expect(page.locator(".piano-key[data-midi='60']")).toHaveCount(1);
+  await page.getByLabel("shown piano octaves").focus();
   await page.keyboard.down("z");
   await expect(page.locator(".piano-key[data-midi='60']")).toHaveClass(/active/);
   await page.keyboard.up("z");
@@ -487,20 +488,24 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(wideVariables?.scrollHeight).toBeGreaterThanOrEqual(wideVariables?.clientHeight || 0);
   expect(wideParameters?.scrollHeight).toBeGreaterThan(wideParameters?.clientHeight || 0);
 
-  await page.setViewportSize({ width: 760, height: 900 });
+  await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-layout", "stacked");
   await expect(page.locator("#sidebarControls")).not.toHaveAttribute("open", "");
   await expect(page.locator("#sidebarControls > summary")).toBeVisible();
   await page.locator("#sidebarControls > summary").click();
   await expect(page.locator("#physicalControls")).toBeVisible();
-  const mobileMeaningFontSizes = await page.locator(".variable-table tbody td:last-child").evaluateAll((cells) => {
+  const mobileMeaningType = await page.locator(".variable-table tbody td:last-child").evaluateAll((cells) => {
     const sizes = new Set<string>();
+    const textAdjustments = new Set<string>();
     cells.forEach((cell) => {
-      sizes.add(getComputedStyle(cell).fontSize);
+      const cellStyle = getComputedStyle(cell);
+      sizes.add(cellStyle.fontSize);
+      textAdjustments.add(cellStyle.webkitTextSizeAdjust);
       cell.querySelectorAll("mjx-container").forEach((math) => sizes.add(getComputedStyle(math).fontSize));
     });
-    return [...sizes];
+    return { sizes: [...sizes], textAdjustments: [...textAdjustments] };
   });
-  expect(mobileMeaningFontSizes).toEqual(["13px"]);
+  expect(mobileMeaningType.sizes).toEqual(["13px"]);
+  expect(mobileMeaningType.textAdjustments).toEqual(["100%"]);
   expect(pageErrors).toEqual([]);
 });
