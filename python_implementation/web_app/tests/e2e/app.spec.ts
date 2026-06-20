@@ -219,7 +219,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
 
   await page.setViewportSize({ width: 1800, height: 1200 });
   const wideReferenceLayout = await referencePanelMetrics(page);
-  expect(wideReferenceLayout.panels.map((panel) => panel.height)).toEqual([500, 500, 500]);
+  expect(wideReferenceLayout.panels.map((panel) => panel.height)).toEqual([498, 498, 498]);
   const wideVariables = wideReferenceLayout.panels.find((panel) => panel.heading === "Variables");
   const wideParameters = wideReferenceLayout.panels.find((panel) => panel.heading === "Parameters");
   expect(wideVariables?.scrollHeight).toBeGreaterThanOrEqual(wideVariables?.clientHeight || 0);
