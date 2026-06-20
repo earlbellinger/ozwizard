@@ -222,12 +222,100 @@
       min-width: 0;
     }
 
+    .brand-title-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex-wrap: nowrap;
+    }
+
     h1 {
       margin: 0;
       font-size: 26px;
       letter-spacing: 0;
       line-height: 1.05;
       color: var(--ink);
+    }
+
+    .sonification-control {
+      --accent: var(--logo-gold-bright);
+      display: grid;
+      grid-template-columns: 26px minmax(42px, 1fr) 48px;
+      align-items: center;
+      gap: 4px;
+      min-width: 120px;
+      width: 124px;
+      flex: 0 1 124px;
+    }
+
+    .speaker-toggle {
+      width: 26px;
+      height: 26px;
+      display: inline-grid;
+      place-items: center;
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--canvas);
+      color: var(--muted);
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .speaker-toggle:hover:not(:disabled) {
+      border-color: var(--line-strong);
+      background: var(--paper-high);
+      color: var(--ink);
+    }
+
+    .speaker-toggle.active {
+      border-color: rgba(255, 209, 102, 0.72);
+      color: var(--logo-gold-bright);
+      background: rgba(240, 189, 61, 0.12);
+    }
+
+    .speaker-toggle:disabled {
+      cursor: default;
+      opacity: 0.55;
+    }
+
+    .speaker-toggle svg {
+      width: 17px;
+      height: 17px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2;
+    }
+
+    .speaker-toggle::after {
+      content: "";
+      position: absolute;
+      width: 22px;
+      height: 2px;
+      border-radius: 999px;
+      background: var(--bad);
+      transform: rotate(-42deg);
+      transition: opacity 120ms ease;
+    }
+
+    .speaker-toggle[aria-pressed="true"]::after {
+      opacity: 0;
+    }
+
+    .sonification-slider {
+      min-width: 0;
+    }
+
+    .sonification-reading {
+      color: var(--muted);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      white-space: nowrap;
     }
 
     .subtitle {
@@ -980,6 +1068,12 @@
         height: 64px;
       }
 
+      .sonification-control {
+        grid-template-columns: 26px minmax(38px, 1fr) 48px;
+        width: 120px;
+        flex-basis: 120px;
+      }
+
       .preset-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
@@ -1016,7 +1110,20 @@
           <div class="brand-main">
             <img class="brand-logo" src="/assets/ozwizard-logo.png" alt="OZwizard logo" data-ozwizard-logo>
             <div class="brand-copy">
-              <h1>OZwizard</h1>
+              <div class="brand-title-row">
+                <h1>OZwizard</h1>
+                <div class="sonification-control" aria-label="Lightcurve sonification">
+                  <button class="speaker-toggle" type="button" id="sonificationToggle" aria-label="Start lightcurve sonification" aria-pressed="false" title="Start lightcurve sonification">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M11 5 6 9H3v6h3l5 4V5z"></path>
+                      <path d="M15.5 8.5a5 5 0 0 1 0 7"></path>
+                      <path d="M18.5 5.5a9 9 0 0 1 0 13"></path>
+                    </svg>
+                  </button>
+                  <input class="sonification-slider" id="sonificationPitch" type="range" min="21" max="108" step="1" value="60" aria-label="reference pitch">
+                  <span class="sonification-reading" id="sonificationHz">262 Hz</span>
+                </div>
+              </div>
               <p class="subtitle">Interactive one-zone convection and pulsation explorer by <a href="https://earlbellinger.com" target="_blank" rel="noopener">Earl Bellinger</a>.</p>
             </div>
           </div>

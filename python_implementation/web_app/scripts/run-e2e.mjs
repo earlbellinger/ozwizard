@@ -60,6 +60,35 @@ async function runPlaywrightChecks() {
     await page.getByRole("heading", { name: "OZwizard" }).waitFor({ state: "visible", timeout: 15000 });
     console.log("page loaded");
 
+    const sonificationToggle = page.locator("#sonificationToggle");
+    assertOk(!(await sonificationToggle.isDisabled()), "sonification toggle should be enabled");
+    assertOk((await sonificationToggle.getAttribute("aria-pressed")) === "false", "sonification should start muted");
+    assertOk((await page.locator("#sonificationHz").textContent()) === "262 Hz", "sonification should default to middle C");
+    const sonificationLayout = await page.locator(".brand-title-row").evaluate((row) => {
+      const title = row.querySelector("h1").getBoundingClientRect();
+      const control = row.querySelector(".sonification-control").getBoundingClientRect();
+      return {
+        titleRight: title.right,
+        controlLeft: control.left,
+        titleCenterY: title.top + title.height / 2,
+        controlCenterY: control.top + control.height / 2
+      };
+    });
+    assertOk(sonificationLayout.controlLeft > sonificationLayout.titleRight, "sonification controls should sit to the right of OZwizard");
+    assertOk(
+      Math.abs(sonificationLayout.controlCenterY - sonificationLayout.titleCenterY) < 6,
+      "sonification controls should stay on the OZwizard title row"
+    );
+    await page.locator("#sonificationPitch").evaluate((input) => {
+      input.value = "69";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    assertOk((await page.locator("#sonificationHz").textContent()) === "440 Hz", "sonification pitch slider should reach A4");
+    await sonificationToggle.click();
+    assertOk((await sonificationToggle.getAttribute("aria-pressed")) === "true", "sonification did not turn on");
+    await sonificationToggle.click();
+    assertOk((await sonificationToggle.getAttribute("aria-pressed")) === "false", "sonification did not turn off");
+
     const logo = page.getByAltText("OZwizard logo");
     await logo.waitFor({ state: "visible", timeout: 15000 });
     const logoSize = await logo.evaluate((node) => ({
@@ -99,7 +128,11 @@ async function runPlaywrightChecks() {
     assertOk(tauTickPositions[4] === "66.6667%", `tau=100 tick should be at 66.6667%, saw ${tauTickPositions[4]}`);
     assertOk(tauTickPositions[5] === "82.5707%", `tau=300 tick should use log placement, saw ${tauTickPositions[5]}`);
     assertOk((await page.locator("#statusPill").count()) === 0, "status pill should be folded into model output");
-    await page.waitForFunction(() => document.querySelector("#metrics")?.textContent?.includes("models"), null, { timeout: 15000 });
+    await page.waitForFunction(
+      () => document.querySelector("#metrics")?.textContent?.includes("fixed-time complete"),
+      null,
+      { timeout: 15000 }
+    );
     const initialMetrics = await page.locator("#metrics").textContent();
     assertOk(initialMetrics?.includes("stop") && initialMetrics.includes("fixed-time complete"), "metrics did not include the stop result");
     assertOk(initialMetrics?.includes("models"), "metrics did not render");

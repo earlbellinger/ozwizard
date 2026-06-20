@@ -22,6 +22,7 @@ declare global {
       typesetClear?: (elements?: Element[]) => void;
       typesetPromise?: (elements?: Element[]) => Promise<void>;
     };
+    webkitAudioContext?: typeof AudioContext;
   }
 }
 
@@ -40,7 +41,29 @@ let mathRenderVersion = 0;
 const mathTypesetTargets = new Set<HTMLElement>();
 const stagedMathUpdates = new Map<HTMLElement, StagedMathUpdate>();
 
+const PIANO_MIN_NOTE = 21;
+const PIANO_MAX_NOTE = 108;
+const MIDDLE_C_NOTE = 60;
+const SONIFICATION_ATTACK_SECONDS = 1;
+const SONIFICATION_RELEASE_SECONDS = 0.14;
+const SONIFICATION_OUTPUT_GAIN = 0.12;
+const SONIFICATION_FREQUENCY_GLIDE_SECONDS = 0.035;
+const SONIFICATION_WAVEFORM_CROSSFADE_SECONDS = 0.18;
+const SONIFICATION_MAX_SAMPLES = 2400;
+const SONIFICATION_WAVEFORM_SAMPLES = 512;
+const SONIFICATION_WAVEFORM_SMOOTH_PASSES = 5;
+const SONIFICATION_MAX_HARMONICS = 32;
 const controlElements = new Map<ControlParameterKey, HTMLInputElement>();
+let sonificationReferenceNote = MIDDLE_C_NOTE;
+let sonificationReferenceHz = noteToFrequency(MIDDLE_C_NOTE);
+let sonificationSamples: SonificationSample[] = [];
+let sonificationWaveformSignature = "";
+let sonificationContext: AudioContext | null = null;
+let sonificationVoice: SonificationVoice | null = null;
+let sonificationMasterGain: GainNode | null = null;
+let sonificationStopTimer = 0;
+const sonificationVoices = new Set<SonificationVoice>();
+let sonificationActive = false;
 const TAU_TICKS = [1, 3, 10, 30, 100, 300, 1000];
 const THEME = {
   axisGrid: "#26334E",
@@ -84,6 +107,17 @@ interface PlotSelection {
 interface StagedMathUpdate {
   html: string;
   version: number;
+}
+
+interface SonificationSample {
+  phase: number;
+  value: number;
+}
+
+interface SonificationVoice {
+  oscillator: OscillatorNode;
+  gain: GainNode;
+  stopped: boolean;
 }
 
 const INTERACTIVE_CANVASES: Record<string, InteractivePlotId> = {
@@ -262,8 +296,319 @@ function el<T extends HTMLElement>(id: string): T {
   return node as T;
 }
 
+function noteToFrequency(note: number): number {
+  return 440 * 2 ** ((note - 69) / 12);
+}
+
+function formatHz(value: number): string {
+  return String(Math.round(value));
+}
+
+function setupSonificationControls(): void {
+  const toggle = el<HTMLButtonElement>("sonificationToggle");
+  const pitch = el<HTMLInputElement>("sonificationPitch");
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  pitch.min = String(PIANO_MIN_NOTE);
+  pitch.max = String(PIANO_MAX_NOTE);
+  pitch.step = "1";
+  pitch.value = String(sonificationReferenceNote);
+  pitch.addEventListener("input", (event) => {
+    sonificationReferenceNote = Number((event.target as HTMLInputElement).value);
+    sonificationReferenceHz = noteToFrequency(sonificationReferenceNote);
+    updateSonificationPitchLabel();
+    updateSonificationFrequency();
+    updateSonificationWaveform();
+  });
+  if (!AudioContextCtor) {
+    toggle.disabled = true;
+    toggle.title = "Audio is not supported in this browser";
+    toggle.setAttribute("aria-label", "Lightcurve sonification unavailable");
+  } else {
+    toggle.addEventListener("click", () => {
+      void toggleSonification();
+    });
+  }
+  updateSonificationPitchLabel();
+  updateSonificationToggleUi();
+}
+
+function updateSonificationPitchLabel(): void {
+  const label = document.getElementById("sonificationHz");
+  if (label) label.textContent = `${formatHz(sonificationReferenceHz)} Hz`;
+}
+
+function updateSonificationToggleUi(): void {
+  const toggle = document.getElementById("sonificationToggle");
+  if (!(toggle instanceof HTMLButtonElement)) return;
+  if (toggle.disabled) {
+    toggle.classList.remove("active");
+    toggle.setAttribute("aria-pressed", "false");
+    return;
+  }
+  const action = sonificationActive ? "Stop" : "Start";
+  toggle.classList.toggle("active", sonificationActive);
+  toggle.setAttribute("aria-pressed", String(sonificationActive));
+  toggle.setAttribute("aria-label", `${action} lightcurve sonification`);
+  toggle.title = `${action} lightcurve sonification`;
+}
+
+async function toggleSonification(): Promise<void> {
+  if (sonificationActive) {
+    stopSonification();
+    return;
+  }
+  await startSonification();
+}
+
+function ensureAudioContext(): AudioContext | null {
+  if (sonificationContext) return sonificationContext;
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) return null;
+  sonificationContext = new AudioContextCtor();
+  return sonificationContext;
+}
+
+async function startSonification(): Promise<void> {
+  const context = ensureAudioContext();
+  if (!context) return;
+  await context.resume();
+  if (sonificationStopTimer) {
+    window.clearTimeout(sonificationStopTimer);
+    sonificationStopTimer = 0;
+  }
+  stopSonificationGraph();
+  const masterGain = context.createGain();
+  const now = context.currentTime;
+  masterGain.gain.setValueAtTime(0, now);
+  masterGain.gain.linearRampToValueAtTime(SONIFICATION_OUTPUT_GAIN, now + SONIFICATION_ATTACK_SECONDS);
+  masterGain.connect(context.destination);
+  sonificationMasterGain = masterGain;
+  sonificationVoice = createSonificationVoice(context, masterGain, 1);
+  sonificationActive = true;
+  updateSonificationToggleUi();
+}
+
+function stopSonification(): void {
+  if (!sonificationActive && !sonificationMasterGain && !sonificationVoices.size) return;
+  const context = sonificationContext;
+  const masterGain = sonificationMasterGain;
+  sonificationActive = false;
+  updateSonificationToggleUi();
+  if (!context || !masterGain) {
+    stopSonificationGraph();
+    return;
+  }
+  const now = context.currentTime;
+  masterGain.gain.cancelScheduledValues(now);
+  masterGain.gain.setTargetAtTime(0, now, SONIFICATION_RELEASE_SECONDS / 3);
+  const stopAt = now + SONIFICATION_RELEASE_SECONDS;
+  sonificationVoices.forEach((voice) => stopSonificationVoice(voice, stopAt));
+  sonificationStopTimer = window.setTimeout(() => {
+    sonificationStopTimer = 0;
+    if (!sonificationActive) stopSonificationGraph();
+  }, (SONIFICATION_RELEASE_SECONDS + 0.03) * 1000);
+}
+
+function stopSonificationGraph(): void {
+  if (sonificationStopTimer) {
+    window.clearTimeout(sonificationStopTimer);
+    sonificationStopTimer = 0;
+  }
+  sonificationVoices.forEach((voice) => {
+    stopSonificationVoice(voice, sonificationContext?.currentTime ?? 0);
+    disconnectSonificationVoice(voice);
+  });
+  sonificationMasterGain?.disconnect();
+  sonificationVoice = null;
+  sonificationMasterGain = null;
+}
+
+function updateSonificationFrequency(): void {
+  const context = sonificationContext;
+  if (!context || !sonificationActive) return;
+  const now = context.currentTime;
+  sonificationVoices.forEach((voice) => {
+    voice.oscillator.frequency.setTargetAtTime(sonificationReferenceHz, now, SONIFICATION_FREQUENCY_GLIDE_SECONDS);
+  });
+}
+
+function updateSonificationWaveform(): void {
+  const context = sonificationContext;
+  const masterGain = sonificationMasterGain;
+  if (!context || !masterGain || !sonificationActive) return;
+  const previousVoice = sonificationVoice;
+  const nextVoice = createSonificationVoice(context, masterGain, 0);
+  sonificationVoice = nextVoice;
+  const now = context.currentTime;
+  const fadeEnd = now + SONIFICATION_WAVEFORM_CROSSFADE_SECONDS;
+  nextVoice.gain.gain.cancelScheduledValues(now);
+  nextVoice.gain.gain.setValueAtTime(0, now);
+  nextVoice.gain.gain.linearRampToValueAtTime(1, fadeEnd);
+  if (previousVoice) {
+    previousVoice.gain.gain.cancelScheduledValues(now);
+    previousVoice.gain.gain.setValueAtTime(previousVoice.gain.gain.value, now);
+    previousVoice.gain.gain.linearRampToValueAtTime(0, fadeEnd);
+    stopSonificationVoice(previousVoice, fadeEnd + 0.02);
+  }
+}
+
+function createSonificationVoice(context: AudioContext, output: AudioNode, initialGain: number): SonificationVoice {
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  const now = context.currentTime;
+  oscillator.frequency.setValueAtTime(sonificationReferenceHz, now);
+  const wave = createSonificationPeriodicWave(context);
+  if (wave) oscillator.setPeriodicWave(wave);
+  gain.gain.setValueAtTime(initialGain, now);
+  oscillator.connect(gain);
+  gain.connect(output);
+  const voice: SonificationVoice = { oscillator, gain, stopped: false };
+  oscillator.addEventListener("ended", () => disconnectSonificationVoice(voice), { once: true });
+  sonificationVoices.add(voice);
+  oscillator.start(now);
+  return voice;
+}
+
+function stopSonificationVoice(voice: SonificationVoice, when: number): void {
+  if (voice.stopped) return;
+  voice.stopped = true;
+  try {
+    voice.oscillator.stop(Math.max(when, sonificationContext?.currentTime ?? 0));
+  } catch {
+    disconnectSonificationVoice(voice);
+  }
+}
+
+function disconnectSonificationVoice(voice: SonificationVoice): void {
+  voice.oscillator.disconnect();
+  voice.gain.disconnect();
+  sonificationVoices.delete(voice);
+  if (sonificationVoice === voice) sonificationVoice = null;
+}
+
+function createSonificationPeriodicWave(context: AudioContext): PeriodicWave | null {
+  const harmonicCount = Math.max(
+    1,
+    Math.min(SONIFICATION_MAX_HARMONICS, Math.floor((context.sampleRate / 2) / Math.max(sonificationReferenceHz, 1)))
+  );
+  const real = new Float32Array(harmonicCount + 1);
+  const imag = new Float32Array(harmonicCount + 1);
+  const waveformValues = circularSmooth(
+    Array.from({ length: SONIFICATION_WAVEFORM_SAMPLES }, (_unused, index) =>
+      sonificationValueAtPhase(index / SONIFICATION_WAVEFORM_SAMPLES)
+    ),
+    SONIFICATION_WAVEFORM_SMOOTH_PASSES
+  );
+  const mean = waveformValues.reduce((sum, value) => sum + value, 0) / waveformValues.length;
+  const centered = waveformValues.map((value) => value - mean);
+  const scale = Math.max(...centered.map((value) => Math.abs(value)), 1e-6);
+  const normalized = centered.map((value) => value / scale);
+  for (let harmonic = 1; harmonic <= harmonicCount; harmonic += 1) {
+    let realSum = 0;
+    let imagSum = 0;
+    for (let index = 0; index < normalized.length; index += 1) {
+      const angle = (2 * Math.PI * harmonic * index) / normalized.length;
+      realSum += normalized[index] * Math.cos(angle);
+      imagSum += normalized[index] * Math.sin(angle);
+    }
+    const cutoffPosition = harmonic / (harmonicCount + 1);
+    const lanczos = Math.sin(Math.PI * cutoffPosition) / (Math.PI * cutoffPosition);
+    const hann = 0.5 * (1 + Math.cos(Math.PI * cutoffPosition));
+    const taper = lanczos * lanczos * hann;
+    real[harmonic] = ((2 * realSum) / normalized.length) * taper;
+    imag[harmonic] = ((2 * imagSum) / normalized.length) * taper;
+  }
+  return context.createPeriodicWave(real, imag, { disableNormalization: false });
+}
+
+function circularSmooth(values: number[], passes: number): number[] {
+  let smoothed = [...values];
+  for (let pass = 0; pass < passes; pass += 1) {
+    smoothed = smoothed.map((value, index) => {
+      const previous = smoothed[(index - 1 + smoothed.length) % smoothed.length];
+      const next = smoothed[(index + 1) % smoothed.length];
+      return previous * 0.25 + value * 0.5 + next * 0.25;
+    });
+  }
+  return smoothed;
+}
+
+function sonificationValueAtPhase(phase: number): number {
+  if (!sonificationSamples.length) return Math.sin(2 * Math.PI * phase);
+  if (sonificationSamples.length === 1) return sonificationSamples[0].value;
+  if (phase <= sonificationSamples[0].phase) return sonificationSamples[0].value;
+  const last = sonificationSamples[sonificationSamples.length - 1];
+  if (phase >= last.phase) return last.value;
+  let lo = 0;
+  let hi = sonificationSamples.length - 1;
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (sonificationSamples[mid].phase <= phase) lo = mid;
+    else hi = mid;
+  }
+  const a = sonificationSamples[lo];
+  const b = sonificationSamples[hi];
+  const span = b.phase - a.phase;
+  if (span <= 0) return a.value;
+  const mix = (phase - a.phase) / span;
+  return a.value + (b.value - a.value) * mix;
+}
+
+function updateSonificationCurve(phase: PhaseResult): void {
+  const firstCycleRows = phase.rows.filter((row) => row.tau >= 0 && row.tau <= 1);
+  const nextSamples = firstCycleRows.length >= 3
+    ? buildSonificationSamples(firstCycleRows, [0, 1])
+    : buildSonificationSamples(latestRows);
+  const nextSignature = sonificationSampleSignature(nextSamples);
+  if (nextSignature === sonificationWaveformSignature) return;
+  sonificationSamples = nextSamples;
+  sonificationWaveformSignature = nextSignature;
+  updateSonificationWaveform();
+}
+
+function sonificationSampleSignature(samples: SonificationSample[]): string {
+  if (!samples.length) return "empty";
+  const step = Math.max(1, Math.floor(samples.length / 48));
+  const values: string[] = [String(samples.length)];
+  for (let index = 0; index < samples.length; index += step) {
+    const sample = samples[index];
+    values.push(`${sample.phase.toFixed(4)}:${sample.value.toFixed(4)}`);
+  }
+  const last = samples[samples.length - 1];
+  values.push(`${last.phase.toFixed(4)}:${last.value.toFixed(4)}`);
+  return values.join("|");
+}
+
+function buildSonificationSamples(rows: Row[], domain?: NumericRange): SonificationSample[] {
+  const finiteRows = rows.filter((row) => Number.isFinite(row.tau) && Number.isFinite(row.L));
+  if (!finiteRows.length) return [];
+  const start = domain?.[0] ?? finiteRows[0].tau;
+  const end = domain?.[1] ?? finiteRows[finiteRows.length - 1].tau;
+  if (end <= start) return [{ phase: 0, value: 0 }];
+  const inDomain = finiteRows.filter((row) => row.tau >= start && row.tau <= end);
+  if (!inDomain.length) return [];
+  const luminosities = inDomain.map((row) => row.L);
+  const minLuminosity = Math.min(...luminosities);
+  const maxLuminosity = Math.max(...luminosities);
+  const span = maxLuminosity - minLuminosity;
+  const samples = strideDownsample(inDomain, SONIFICATION_MAX_SAMPLES)
+    .map((row) => ({
+      phase: clamp((row.tau - start) / (end - start), 0, 1),
+      value: span > 1e-12 ? clamp(2 * ((row.L - minLuminosity) / span) - 1, -1, 1) : 0
+    }))
+    .sort((a, b) => a.phase - b.phase);
+  if (!samples.length) return [];
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+  if (first.phase > 0) samples.unshift({ phase: 0, value: first.value });
+  if (last.phase >= 1 - 1e-6) last.value = first.value;
+  else samples.push({ phase: 1, value: first.value });
+  return samples;
+}
+
 function buildControls(): void {
   setupResponsiveSidebarControls();
+  setupSonificationControls();
   buildPresetButtons();
   buildSolverButtons();
   buildSliderGroup("physicalControls", CONTROL_GROUPS.physical);
@@ -1352,6 +1697,7 @@ function drawAll(): void {
     || (!state.runUntilStable && latestResult.status === "complete");
   const final = rows[rows.length - 1];
   const phase = phaseForRows(rows);
+  updateSonificationCurve(phase);
   const metricsNode = el<HTMLDivElement>("metrics");
   const metricItems = [
     { label: "stop", value: stopReason, className: okStatus ? "status-ok" : "status-warn" },

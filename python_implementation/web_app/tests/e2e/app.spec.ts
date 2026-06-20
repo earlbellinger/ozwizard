@@ -23,6 +23,36 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto("/wizard_of_oz.html");
   await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
+  const sonificationToggle = page.locator("#sonificationToggle");
+  await expect(sonificationToggle).not.toBeDisabled();
+  await expect(sonificationToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: "Start lightcurve sonification" })).toBeVisible();
+  expect(await sonificationToggle.evaluate((node) => getComputedStyle(node, "::after").opacity)).toBe("1");
+  await expect(page.getByLabel("reference pitch")).toHaveValue("60");
+  await expect(page.locator("#sonificationHz")).toHaveText("262 Hz");
+  const sonificationLayout = await page.locator(".brand-title-row").evaluate((row) => {
+    const title = row.querySelector("h1")!.getBoundingClientRect();
+    const control = row.querySelector(".sonification-control")!.getBoundingClientRect();
+    return {
+      titleRight: title.right,
+      controlLeft: control.left,
+      titleCenterY: title.top + title.height / 2,
+      controlCenterY: control.top + control.height / 2
+    };
+  });
+  expect(sonificationLayout.controlLeft).toBeGreaterThan(sonificationLayout.titleRight);
+  expect(Math.abs(sonificationLayout.controlCenterY - sonificationLayout.titleCenterY)).toBeLessThan(6);
+  await page.locator("#sonificationPitch").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "69";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#sonificationHz")).toHaveText("440 Hz");
+  await sonificationToggle.click();
+  await expect(sonificationToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Stop lightcurve sonification" })).toBeVisible();
+  await sonificationToggle.click();
+  await expect(sonificationToggle).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByAltText("OZwizard logo")).toBeVisible();
   await expect(page.getByAltText("OZwizard logo")).toHaveJSProperty("naturalWidth", 498);
   await expect(page.locator("#sidebarControls")).toHaveAttribute("open", "");
