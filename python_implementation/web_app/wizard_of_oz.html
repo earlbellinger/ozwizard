@@ -706,9 +706,10 @@
       grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
       gap: 14px;
       align-items: start;
+      container-type: inline-size;
     }
 
-    @media (min-width: 1500px) {
+    @media (min-width: 1680px) {
       .reference-grid {
         grid-template-columns:
           minmax(460px, 0.88fr)
@@ -718,14 +719,21 @@
     }
 
     .reference-panel {
-      min-height: 100%;
+      height: auto;
+      min-height: 0;
     }
 
     .parameters-panel {
-      max-height: 620px;
-      overflow-y: auto;
+      max-height: none;
       scrollbar-color: var(--line-strong) var(--canvas);
       scrollbar-width: thin;
+    }
+
+    @container (min-width: 1108px) {
+      .reference-panel {
+        height: 620px;
+        overflow-y: auto;
+      }
     }
 
     .parameter-section {
@@ -904,9 +912,6 @@
         grid-template-columns: 1fr;
       }
 
-      .parameters-panel {
-        max-height: none;
-      }
     }
 
     @media (max-width: 760px) {

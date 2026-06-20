@@ -77,20 +77,20 @@ async function runPlaywrightChecks() {
     assertOk(new Set(solverRows).size === 1, "solver buttons should fit on one row");
     assertOk((await page.getByLabel("Compare selected solver to midpoint").count()) === 0, "midpoint comparison checkbox should be removed");
     const integrationControl = (name) => page.locator(`#integrationControls .slider-control:visible input[aria-label="${name}"]`);
-    assertOk(await integrationControl("modern relative tolerance").count() === 1, "RK45 should show modern relative tolerance");
-    assertOk(await integrationControl("modern absolute tolerance").count() === 1, "RK45 should show modern absolute tolerance");
-    assertOk(await integrationControl("legacy midpoint tolerance").count() === 0, "RK45 should hide legacy midpoint tolerance");
+    assertOk(await integrationControl("relative tol").count() === 1, "RK45 should show relative tol");
+    assertOk(await integrationControl("absolute tol").count() === 1, "RK45 should show absolute tol");
+    assertOk(await integrationControl("tolerance").count() === 0, "RK45 should hide midpoint tolerance");
     assertOk(await integrationControl("stability tolerance").count() === 0, "stability tolerance should be hidden unless auto-stop is enabled");
     await page.getByRole("button", { name: "Mid" }).click();
-    assertOk(await integrationControl("legacy midpoint tolerance").count() === 1, "midpoint should show legacy midpoint tolerance");
-    assertOk(await integrationControl("modern relative tolerance").count() === 0, "midpoint should hide modern relative tolerance");
-    assertOk(await integrationControl("modern absolute tolerance").count() === 0, "midpoint should hide modern absolute tolerance");
+    assertOk(await integrationControl("tolerance").count() === 1, "midpoint should show tolerance");
+    assertOk(await integrationControl("relative tol").count() === 0, "midpoint should hide relative tol");
+    assertOk(await integrationControl("absolute tol").count() === 0, "midpoint should hide absolute tol");
     await page.locator("#runUntilStable").check();
     assertOk(await integrationControl("stability tolerance").count() === 1, "stability tolerance should show when auto-stop is enabled");
     assertOk(await integrationControl("stable cycles required").count() === 1, "stable cycles should show when auto-stop is enabled");
     await page.getByRole("button", { name: "RK45" }).click();
-    assertOk(await integrationControl("modern relative tolerance").count() === 1, "RK45 should restore modern relative tolerance");
-    assertOk(await integrationControl("legacy midpoint tolerance").count() === 0, "RK45 should hide legacy tolerance after switching back");
+    assertOk(await integrationControl("relative tol").count() === 1, "RK45 should restore relative tol");
+    assertOk(await integrationControl("tolerance").count() === 0, "RK45 should hide midpoint tolerance after switching back");
     await page.locator("#runUntilStable").uncheck();
     assertOk(await integrationControl("stability tolerance").count() === 0, "stability tolerance should hide when auto-stop is disabled");
     const tauTickPositions = await page.locator("#integrationControls .slider-scale span").evaluateAll((spans) =>
@@ -140,7 +140,7 @@ async function runPlaywrightChecks() {
     });
     await page.locator("[data-reset-key='r0']").click();
     assertOk((await page.locator("[data-value-for='tEnd']").textContent()) === "100", "default tau_max value should render as 100");
-    const maxTauLabel = await page.locator("input[aria-label='maximum integration time']").evaluate((input) => {
+    const maxTauLabel = await page.locator("input[aria-label='max time']").evaluate((input) => {
       const slider = input;
       slider.value = "3";
       slider.dispatchEvent(new Event("input", { bubbles: true }));

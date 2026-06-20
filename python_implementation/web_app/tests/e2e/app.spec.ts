@@ -1,5 +1,22 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+
+async function referencePanelMetrics(page: Page) {
+  return page.evaluate(() => {
+    const grid = document.querySelector<HTMLElement>(".reference-grid");
+    if (!grid) throw new Error("missing reference grid");
+    const panels = [...document.querySelectorAll<HTMLElement>(".reference-grid > .reference-panel")];
+    return {
+      gridColumns: getComputedStyle(grid).gridTemplateColumns,
+      panels: panels.map((node) => ({
+        heading: node.querySelector("h3")?.textContent || "",
+        height: Math.round(node.getBoundingClientRect().height),
+        clientHeight: node.clientHeight,
+        scrollHeight: node.scrollHeight
+      }))
+    };
+  });
+}
 
 test("app renders solver controls, canvases, and output metrics", async ({ page }) => {
   const pageErrors: string[] = [];
@@ -26,14 +43,14 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.getByLabel("Compare selected solver to midpoint")).toHaveCount(0);
   await expect(page.locator("#runUntilStable")).not.toBeChecked();
   const integrationControl = (name: string) => page.locator(`#integrationControls .slider-control:visible input[aria-label="${name}"]`);
-  await expect(integrationControl("modern relative tolerance")).toHaveCount(1);
-  await expect(integrationControl("modern absolute tolerance")).toHaveCount(1);
-  await expect(integrationControl("legacy midpoint tolerance")).toHaveCount(0);
+  await expect(integrationControl("relative tol")).toHaveCount(1);
+  await expect(integrationControl("absolute tol")).toHaveCount(1);
+  await expect(integrationControl("tolerance")).toHaveCount(0);
   await expect(integrationControl("stability tolerance")).toHaveCount(0);
   await page.getByRole("button", { name: "Mid" }).click();
-  await expect(integrationControl("legacy midpoint tolerance")).toHaveCount(1);
-  await expect(integrationControl("modern relative tolerance")).toHaveCount(0);
-  await expect(integrationControl("modern absolute tolerance")).toHaveCount(0);
+  await expect(integrationControl("tolerance")).toHaveCount(1);
+  await expect(integrationControl("relative tol")).toHaveCount(0);
+  await expect(integrationControl("absolute tol")).toHaveCount(0);
   await page.locator("#runUntilStable").check();
   await expect(integrationControl("stability tolerance")).toHaveCount(1);
   await expect(integrationControl("stable cycles required")).toHaveCount(1);
@@ -41,7 +58,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await page.locator("#runUntilStable").uncheck();
   await expect(page.locator("#integrationControls .slider-scale span").nth(4)).toHaveAttribute("style", /66\.6667%/);
   await expect(page.locator("#integrationControls .slider-scale span").nth(5)).toHaveAttribute("style", /82\.5707%/);
-  const maxTauLabel = await page.locator("input[aria-label='maximum integration time']").evaluate((input) => {
+  const maxTauLabel = await page.locator("input[aria-label='max time']").evaluate((input) => {
     const slider = input as HTMLInputElement;
     slider.value = "3";
     slider.dispatchEvent(new Event("input", { bubbles: true }));
@@ -134,7 +151,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await page.locator("[data-driver='h']").click();
   await expect(page.locator("#odeEquations")).toHaveAttribute("data-driver-mode", "h");
 
-  await page.locator("input[aria-label='maximum integration time']").evaluate((input) => {
+  await page.locator("input[aria-label='max time']").evaluate((input) => {
     const slider = input as HTMLInputElement;
     slider.value = "3";
     slider.dispatchEvent(new Event("input", { bubbles: true }));
@@ -155,6 +172,20 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(path).toBeTruthy();
   const csv = await readFile(path!, "utf8");
   expect(csv.split(/\r?\n/, 1)[0]).toBe("tau,R,V,H,Uc,Lr,Lc,L");
+
+  await page.setViewportSize({ width: 1300, height: 1200 });
+  const mediumReferenceLayout = await referencePanelMetrics(page);
+  expect(mediumReferenceLayout.gridColumns.split(" ")).toHaveLength(2);
+  const mediumHeights = mediumReferenceLayout.panels.map((panel) => panel.height);
+  expect(new Set(mediumHeights).size).toBeGreaterThan(1);
+
+  await page.setViewportSize({ width: 1800, height: 1200 });
+  const wideReferenceLayout = await referencePanelMetrics(page);
+  expect(wideReferenceLayout.panels.map((panel) => panel.height)).toEqual([620, 620, 620]);
+  const wideVariables = wideReferenceLayout.panels.find((panel) => panel.heading === "Variables");
+  const wideParameters = wideReferenceLayout.panels.find((panel) => panel.heading === "Parameters");
+  expect(wideVariables?.scrollHeight).toBeLessThanOrEqual(wideVariables?.clientHeight || 0);
+  expect(wideParameters?.scrollHeight).toBeGreaterThan(wideParameters?.clientHeight || 0);
 
   await page.setViewportSize({ width: 760, height: 900 });
   await expect(page.locator("#sidebarControls")).not.toHaveAttribute("open", "");
