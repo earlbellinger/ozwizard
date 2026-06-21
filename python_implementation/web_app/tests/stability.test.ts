@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PRESETS } from "../src/model";
-import { cepheidStripCoordinate, linearStability, polynomialRoots } from "../src/stability";
+import { analyticStabilityConditions, cepheidStripCoordinate, linearStability, polynomialRoots } from "../src/stability";
 
 describe("linear stability helpers", () => {
   it("finds polynomial roots for real and complex pairs", () => {
@@ -28,5 +28,42 @@ describe("linear stability helpers", () => {
     expect(blue).toBeLessThan(strip);
     expect(strip).toBeCloseTo(0.5, 12);
     expect(red).toBeGreaterThan(strip);
+  });
+
+  it("translates the S72 analytic stability criteria into app parameters", () => {
+    const base = PRESETS["Instability-strip convection"];
+    const stability = analyticStabilityConditions(base);
+
+    expect(stability.m).toBeCloseTo(10, 12);
+    expect(stability.dynamic.value).toBeCloseTo(base.gamma1, 12);
+    expect(stability.dynamic.threshold).toBeCloseTo(4 / base.m, 12);
+    expect(stability.dynamic.stable).toBe(true);
+    expect(stability.secular.value).toBeCloseTo(4 + base.m * base.n + (base.m - 4) * (base.s + 4), 12);
+    expect(stability.secular.stable).toBe(true);
+    expect(stability.pulsational.value).toBeCloseTo(4 + base.m * (base.n - (base.s + 4) * (base.gamma1 - 1)), 12);
+    expect(stability.pulsational.stable).toBe(false);
+    expect(stability.allStable).toBe(false);
+  });
+
+  it("evaluates S72 criteria at the equilibrium thin shell form factor for radius-dependent geometry", () => {
+    const base = PRESETS["Radius-dependent strip"];
+    const stability = analyticStabilityConditions({ ...base, m: 15, n: 0, s: 8, gamma1: 1.5 });
+
+    expect(stability.m).toBeCloseTo(15, 12);
+    expect(stability.dynamic.stable).toBe(true);
+    expect(stability.secular.stable).toBe(true);
+    expect(stability.pulsational.value).toBeCloseTo(4 + 15 * (0 - 12 * 0.5), 12);
+    expect(stability.pulsational.stable).toBe(true);
+    expect(stability.allStable).toBe(true);
+  });
+
+  it("marks failed S72 dynamic and secular conditions independently", () => {
+    const base = PRESETS["Instability-strip convection"];
+    const stability = analyticStabilityConditions({ ...base, m: 3, n: 0, s: 8, gamma1: 1.1 });
+
+    expect(stability.dynamic.threshold).toBeCloseTo(4 / 3, 12);
+    expect(stability.dynamic.stable).toBe(false);
+    expect(stability.secular.value).toBeCloseTo(4 + 3 * 0 + (3 - 4) * (8 + 4), 12);
+    expect(stability.secular.stable).toBe(false);
   });
 });

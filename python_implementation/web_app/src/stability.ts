@@ -1,6 +1,7 @@
-import { derivatives, type ModelParameters } from "./model";
+import { derivedPowers, derivatives, mAt, type ModelParameters } from "./model";
 
 export type StabilityKind = "stable" | "pulsational" | "dynamic" | "neutral";
+export type AnalyticStabilityKind = "dynamic" | "secular" | "pulsational";
 
 export interface ComplexRoot {
   re: number;
@@ -14,7 +15,67 @@ export interface StabilityResult {
   roots: ComplexRoot[];
 }
 
+export interface AnalyticStabilityCondition {
+  kind: AnalyticStabilityKind;
+  stable: boolean;
+  value: number;
+  threshold: number;
+  margin: number;
+  expression: string;
+}
+
+export interface AnalyticStabilityResult {
+  m: number;
+  b: number;
+  dynamic: AnalyticStabilityCondition;
+  secular: AnalyticStabilityCondition;
+  pulsational: AnalyticStabilityCondition;
+  allStable: boolean;
+}
+
 const EQUILIBRIUM_STATE = [1, 0, 1, 1] as const;
+
+export function analyticStabilityConditions(parameters: ModelParameters): AnalyticStabilityResult {
+  const radius = 1;
+  const m = mAt(radius, parameters);
+  const powers = derivedPowers(radius, parameters);
+  const dynamicValue = parameters.gamma1;
+  const dynamicThreshold = 4 / m;
+  const secularValue = 4 + m * parameters.n + (m - 4) * (parameters.s + 4);
+  const pulsationalValue = powers.b;
+  const dynamic: AnalyticStabilityCondition = {
+    kind: "dynamic",
+    stable: dynamicValue > dynamicThreshold,
+    value: dynamicValue,
+    threshold: dynamicThreshold,
+    margin: dynamicValue - dynamicThreshold,
+    expression: "Gamma1 > 4 / chi0"
+  };
+  const secular: AnalyticStabilityCondition = {
+    kind: "secular",
+    stable: secularValue > 0,
+    value: secularValue,
+    threshold: 0,
+    margin: secularValue,
+    expression: "4 + chi0 n + (chi0 - 4)(s + 4) > 0"
+  };
+  const pulsational: AnalyticStabilityCondition = {
+    kind: "pulsational",
+    stable: pulsationalValue < 0,
+    value: pulsationalValue,
+    threshold: 0,
+    margin: -pulsationalValue,
+    expression: "b = 4 + chi0[n - (s + 4)(Gamma1 - 1)] < 0"
+  };
+  return {
+    m,
+    b: powers.b,
+    dynamic,
+    secular,
+    pulsational,
+    allStable: dynamic.stable && secular.stable && pulsational.stable
+  };
+}
 
 function cAdd(a: ComplexRoot, b: ComplexRoot): ComplexRoot {
   return { re: a.re + b.re, im: a.im + b.im };

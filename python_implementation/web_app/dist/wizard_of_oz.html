@@ -1440,37 +1440,15 @@
       margin-top: 14px;
     }
 
-    .stellingwerf-reference-panel {
+    .reference-plot-grid {
       margin-top: 14px;
     }
 
-    .stellingwerf-canvas-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(400px, 1fr));
-      gap: 14px;
-    }
-
-    .stellingwerf-canvas-card {
-      min-width: 0;
-    }
-
-    .stellingwerf-canvas-card h4 {
-      color: var(--muted);
-      font-size: 12px;
-      letter-spacing: 0;
-      margin: 0 0 6px;
-      font-weight: 700;
-    }
-
-    .stellingwerf-canvas-card canvas {
+    .reference-plot-panel canvas {
       height: 310px;
     }
 
-    .stellingwerf-phase-panel {
-      margin-top: 14px;
-    }
-
-    .stellingwerf-phase-panel canvas {
+    .reference-plot-panel[data-reference-panel="phase"] canvas {
       height: 340px;
     }
 
@@ -1793,10 +1771,6 @@
         flex-direction: column;
       }
 
-      .stellingwerf-canvas-grid {
-        grid-template-columns: 1fr;
-      }
-
       .plot-grid > .plot-panel {
         flex: 0 1 auto;
       }
@@ -1858,6 +1832,11 @@
       #lightCanvas,
       #velocityCanvas {
         height: 176px;
+      }
+
+      .reference-plot-panel canvas,
+      .reference-plot-panel[data-reference-panel="phase"] canvas {
+        height: 260px;
       }
 
       canvas.model-canvas {
@@ -2140,31 +2119,33 @@
         <canvas id="fourierCanvas"></canvas>
       </section>
 
-      <section class="content-panel stellingwerf-reference-panel" id="stellingwerfReferencePanel">
-        <div class="plot-title">
-          <div class="plot-title-left">
-            <h3>Stellingwerf Stability Guide</h3>
+      <section class="plot-grid reference-plot-grid" id="referencePlotGrid">
+        <div class="plot-panel reference-plot-panel" data-reference-panel="stability">
+          <div class="plot-title">
+            <div class="plot-title-left">
+              <h3>Stability Map</h3>
+            </div>
           </div>
+          <canvas id="stabilityMapCanvas" aria-label="zeta zeta_c stability map"></canvas>
         </div>
-        <div class="stellingwerf-canvas-grid">
-          <div class="stellingwerf-canvas-card">
-            <h4>Fig. 1 style \(\ozZeta{\zeta}\)-\(\ozZetac{\zeta_c}\) stability atlas</h4>
-            <canvas id="stabilityMapCanvas" aria-label="Stellingwerf zeta zeta_c stability map"></canvas>
-          </div>
-          <div class="stellingwerf-canvas-card">
-            <h4>Fig. 2 style \(\ozGammac{\gamma_c}\) instability strip guide</h4>
-            <canvas id="cepheidGuideCanvas" aria-label="Stellingwerf instability strip guide"></canvas>
-          </div>
-        </div>
-      </section>
 
-      <section class="content-panel stellingwerf-phase-panel" id="stellingwerfPhasePanel">
-        <div class="plot-title">
-          <div class="plot-title-left">
-            <h3>Fig. 6 style \(\ozPressure{H}(\ozRadius{R})\), \(\ozConvective{U_c}(\ozRadius{R})\), \(\ozPressure{P}(\ozRadius{R})\) phase portrait</h3>
+        <div class="plot-panel reference-plot-panel" data-reference-panel="strip">
+          <div class="plot-title">
+            <div class="plot-title-left">
+              <h3>Instability Strip Guide</h3>
+            </div>
           </div>
+          <canvas id="cepheidGuideCanvas" aria-label="instability strip guide"></canvas>
         </div>
-        <canvas id="phasePortraitCanvas" aria-label="Stellingwerf H of R, U_c of R, and pressure of R phase portrait"></canvas>
+
+        <div class="plot-panel reference-plot-panel" data-reference-panel="phase">
+          <div class="plot-title">
+            <div class="plot-title-left">
+              <h3>Pressure-Convection Portrait</h3>
+            </div>
+          </div>
+          <canvas id="phasePortraitCanvas" aria-label="H of R, U_c of R, and pressure of R phase portrait"></canvas>
+        </div>
       </section>
 
       <section class="notes-grid">

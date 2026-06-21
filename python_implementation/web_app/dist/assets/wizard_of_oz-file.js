@@ -313,7 +313,7 @@
       ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", 0.05, 12, 0.05, 1, COLORS.zeta],
       ["zetac", `\\(${TEX.zetac}\\)`, "convective response", 0, 12, 0.05, 1, COLORS.zetac],
       ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.5, COLORS.gammac],
-      ["m", `\\(${TEX.m}\\)`, "shell form factor", 3, 20, 0.1, 10, COLORS.m],
+      ["m", `\\(${TEX.m}\\)`, "Thin shell form factor", 3, 20, 0.1, 10, COLORS.m],
       ["gamma1", `\\(${TEX.gamma1}\\)`, "adiabatic exponent", 1.01, 1.67, 0.01, 1.1, COLORS.gamma1],
       ["n", `\\(${TEX.n}\\)`, "\u03BA-\u03C1 exponent", 0, 3, 0.05, 1, COLORS.n],
       ["s", `\\(${TEX.s}\\)`, "\u03BA-T exponent", 0, 8, 0.1, 3, COLORS.s],
@@ -341,7 +341,7 @@
     zeta: `Ratio of the model dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\).`,
     zetac: `Ratio of the model dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\).`,
     gammac: `Equilibrium convective luminosity fraction \\(${TEX.gammac}=${TEX.Lc}_{0}/${TEX.L}_{0}\\). The complementary radiative fraction is \\(${TEX_EXTRA.gammaR}=1-${TEX.gammac}\\).`,
-    m: `Reference shell form factor that sets \\(${TEX_EXTRA.eta}\\), the shell's inner boundary radius as a fraction of the reference outer radius. Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\).`,
+    m: `Thin shell form factor that sets \\(${TEX_EXTRA.eta}\\), the shell's inner boundary radius as a fraction of the reference outer radius. Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\).`,
     gamma1: `First adiabatic exponent used in the \\(${TEX.H}\\) response.`,
     n: `Density exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
     s: `Temperature exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
@@ -1284,6 +1284,47 @@
 
   // src/stability.ts
   var EQUILIBRIUM_STATE = [1, 0, 1, 1];
+  function analyticStabilityConditions(parameters) {
+    const radius = 1;
+    const m = mAt(radius, parameters);
+    const powers = derivedPowers(radius, parameters);
+    const dynamicValue = parameters.gamma1;
+    const dynamicThreshold = 4 / m;
+    const secularValue = 4 + m * parameters.n + (m - 4) * (parameters.s + 4);
+    const pulsationalValue = powers.b;
+    const dynamic = {
+      kind: "dynamic",
+      stable: dynamicValue > dynamicThreshold,
+      value: dynamicValue,
+      threshold: dynamicThreshold,
+      margin: dynamicValue - dynamicThreshold,
+      expression: "Gamma1 > 4 / chi0"
+    };
+    const secular = {
+      kind: "secular",
+      stable: secularValue > 0,
+      value: secularValue,
+      threshold: 0,
+      margin: secularValue,
+      expression: "4 + chi0 n + (chi0 - 4)(s + 4) > 0"
+    };
+    const pulsational = {
+      kind: "pulsational",
+      stable: pulsationalValue < 0,
+      value: pulsationalValue,
+      threshold: 0,
+      margin: -pulsationalValue,
+      expression: "b = 4 + chi0[n - (s + 4)(Gamma1 - 1)] < 0"
+    };
+    return {
+      m,
+      b: powers.b,
+      dynamic,
+      secular,
+      pulsational,
+      allStable: dynamic.stable && secular.stable && pulsational.stable
+    };
+  }
   function cAdd(a, b) {
     return { re: a.re + b.re, im: a.im + b.im };
   }
@@ -1578,6 +1619,10 @@
   var gridColorbarRegions = /* @__PURE__ */ new Map();
   var fourierPointHits = [];
   var activeGridCanvasInteraction = null;
+  var SLIDER_RANGE_DOUBLE_TAP_MS = 360;
+  var SLIDER_RANGE_DOUBLE_TAP_DISTANCE = 22;
+  var activeSliderTapStart = null;
+  var lastSliderTap = null;
   var DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
   var STABILITY_MAP_RESOLUTION = 54;
   var stabilityMapCache = /* @__PURE__ */ new Map();
@@ -1595,6 +1640,21 @@
     const decimal = digits === 0 ? fixed : fixed.replace(/\.?0+$/, "");
     const scientific = value.toExponential(2).replace(/\.?0+e/, "e");
     return scientific.length < decimal.length ? scientific : decimal;
+  }
+  function s72State(stable) {
+    return stable ? "stable" : "unstable";
+  }
+  function s72MetricClass(stable) {
+    return stable ? "status-ok" : "status-bad";
+  }
+  function s72DynamicMetric(stability) {
+    return `\\(${TEX.gamma1}=${fmt(stability.dynamic.value, 2)} > 4/${TEX.m}=${fmt(stability.dynamic.threshold, 2)}\\)`;
+  }
+  function s72SecularMetric(stability) {
+    return `\\(4+${TEX.m}${TEX.n}+(${TEX.m}-4)(${TEX.s}+4)=${fmt(stability.secular.value, 2)} > 0\\)`;
+  }
+  function s72PulsationalMetric(stability) {
+    return `\\(b=4+${TEX.m}[${TEX.n}-(${TEX.s}+4)(${TEX.gamma1}-1)]=${fmt(stability.b, 2)} < 0\\)`;
   }
   function fmtFixed(value, digits) {
     if (!Number.isFinite(value)) return "n/a";
@@ -2702,6 +2762,44 @@
     updateGridRangeUi();
     scheduleGridCompute();
   }
+  function toggleGridRangeFromSliderGesture(key) {
+    if (!gridState.enabled) {
+      setGridModeEnabled(true);
+      enableGridRange(key);
+      return;
+    }
+    toggleGridRange(key);
+  }
+  function sliderGestureTarget(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.closest("[data-reset-key]")) return false;
+    return Boolean(target.closest(".slider-track") || target.closest("input[type='range']"));
+  }
+  function beginSliderTap(event, key) {
+    if (event.pointerType !== "touch" || !sliderGestureTarget(event)) return;
+    activeSliderTapStart = { key, pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+  }
+  function finishSliderTap(event, key) {
+    if (event.pointerType !== "touch" || !activeSliderTapStart || activeSliderTapStart.key !== key || activeSliderTapStart.pointerId !== event.pointerId) return;
+    const start = activeSliderTapStart;
+    activeSliderTapStart = null;
+    const travel = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+    if (travel > SLIDER_RANGE_DOUBLE_TAP_DISTANCE) {
+      lastSliderTap = null;
+      return;
+    }
+    const now = window.performance.now();
+    const previous = lastSliderTap;
+    const doubleTap = Boolean(
+      previous && previous.key === key && now - previous.time <= SLIDER_RANGE_DOUBLE_TAP_MS && Math.hypot(event.clientX - previous.x, event.clientY - previous.y) <= SLIDER_RANGE_DOUBLE_TAP_DISTANCE
+    );
+    lastSliderTap = { key, time: now, x: event.clientX, y: event.clientY };
+    if (!doubleTap) return;
+    event.preventDefault();
+    lastSliderTap = null;
+    toggleGridRangeFromSliderGesture(key);
+  }
   function syncGridRangeCenter(key) {
     const range2 = gridState.ranges.get(key);
     if (!range2) return;
@@ -3568,14 +3666,14 @@
       const updateBounds = () => updateGridRangeBounds(key, Number(lower.value), Number(upper.value));
       lower.addEventListener("input", updateBounds);
       upper.addEventListener("input", updateBounds);
+      wrapper.addEventListener("pointerdown", (event) => beginSliderTap(event, key));
+      wrapper.addEventListener("pointerup", (event) => finishSliderTap(event, key));
+      wrapper.addEventListener("pointercancel", (event) => {
+        if (activeSliderTapStart?.key === key && activeSliderTapStart.pointerId === event.pointerId) activeSliderTapStart = null;
+      });
       wrapper.addEventListener("contextmenu", (event) => {
         event.preventDefault();
-        if (!gridState.enabled) {
-          setGridModeEnabled(true);
-          enableGridRange(key);
-          return;
-        }
-        toggleGridRange(key);
+        toggleGridRangeFromSliderGesture(key);
       });
       wrapper.querySelector("[data-reset-key]")?.addEventListener("click", () => restoreParameterDefault(key));
       container.appendChild(wrapper);
@@ -5343,10 +5441,17 @@
     const okStatus = latestResult.message === "equilibrium" || latestResult.message === "limit_cycle" || !state.runUntilStable && latestResult.status === "complete";
     const final = rows[rows.length - 1];
     const phase = phaseForRows(rows);
+    const s72Stability = analyticStabilityConditions(stabilityDisplayParameters());
     updateGridLoopSliderMarkers();
     updateSonificationSourceControls();
     updateSonificationCurve(phase);
     const metricsNode = el("metrics");
+    metricsNode.dataset.s72Dynamic = s72State(s72Stability.dynamic.stable);
+    metricsNode.dataset.s72Secular = s72State(s72Stability.secular.stable);
+    metricsNode.dataset.s72Pulsational = s72State(s72Stability.pulsational.stable);
+    metricsNode.dataset.s72All = s72State(s72Stability.allStable);
+    metricsNode.dataset.s72M = fmt(s72Stability.m, 6);
+    metricsNode.dataset.s72B = fmt(s72Stability.b, 6);
     const metricItems = [
       { label: "stop", value: stopReason, className: okStatus ? "status-ok" : "status-warn" },
       { label: `final \\(${TEX.tau}\\)`, value: final ? fmt(final.tau || 0, 4) : "n/a" },
@@ -5355,9 +5460,30 @@
       { label: "rejected", value: latestResult.stats.rejectedSteps },
       { label: "max err", value: fmt(latestResult.stats.maxNormalizedError, 3) },
       { label: "period", value: phase.period ? fmt(phase.period, 3) : "n/a" },
-      { label: "phase", value: phase.reason === "ok" ? "available" : "unavailable" }
+      { label: "phase", value: phase.reason === "ok" ? "available" : "unavailable" },
+      {
+        label: "dyn",
+        value: s72DynamicMetric(s72Stability),
+        className: s72MetricClass(s72Stability.dynamic.stable),
+        stabilityKind: "dynamic"
+      },
+      {
+        label: "sec",
+        value: s72SecularMetric(s72Stability),
+        className: s72MetricClass(s72Stability.secular.stable),
+        stabilityKind: "secular"
+      },
+      {
+        label: "puls",
+        value: s72PulsationalMetric(s72Stability),
+        className: s72MetricClass(s72Stability.pulsational.stable),
+        stabilityKind: "pulsational"
+      }
     ];
-    const metricsHtml = metricItems.map(({ label, value, className }) => `<span class="metric${className ? ` ${className}` : ""}">${label}<b>${value}</b></span>`).join("");
+    const metricsHtml = metricItems.map(({ label, value, className, stabilityKind }) => {
+      const stabilityAttribute = stabilityKind ? ` data-stability-kind="${stabilityKind}"` : "";
+      return `<span class="metric${className ? ` ${className}` : ""}"${stabilityAttribute}>${label}<b>${value}</b></span>`;
+    }).join("");
     stageMathHtml(metricsNode, metricsHtml);
     queueMathTypeset([metricsNode]);
     const phaseMessage = gridState.enabled && activeGridRanges().length && !gridState.results.length ? gridState.statusText : phaseUnavailableLabel(phase);

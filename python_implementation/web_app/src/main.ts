@@ -37,7 +37,14 @@ import {
   shellGeometryFromModel,
   type RgbColor
 } from "./visualization";
-import { cepheidStripCoordinate, linearStability, type StabilityKind } from "./stability";
+import {
+  analyticStabilityConditions,
+  cepheidStripCoordinate,
+  linearStability,
+  type AnalyticStabilityKind,
+  type AnalyticStabilityResult,
+  type StabilityKind
+} from "./stability";
 
 declare global {
   interface Window {
@@ -384,6 +391,10 @@ let activeSelection: PlotSelection | null = null;
 const gridColorbarRegions = new Map<string, GridColorbarRegion>();
 let fourierPointHits: FourierPointHit[] = [];
 let activeGridCanvasInteraction: GridCanvasInteraction | null = null;
+const SLIDER_RANGE_DOUBLE_TAP_MS = 360;
+const SLIDER_RANGE_DOUBLE_TAP_DISTANCE = 22;
+let activeSliderTapStart: { key: ControlParameterKey; pointerId: number; x: number; y: number } | null = null;
+let lastSliderTap: { key: ControlParameterKey; time: number; x: number; y: number } | null = null;
 const DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
 const STABILITY_MAP_RESOLUTION = 54;
 const stabilityMapCache = new Map<string, StabilityKind[]>();
@@ -402,6 +413,33 @@ function fmt(value: number, digits = 4): string {
   const decimal = digits === 0 ? fixed : fixed.replace(/\.?0+$/, "");
   const scientific = value.toExponential(2).replace(/\.?0+e/, "e");
   return scientific.length < decimal.length ? scientific : decimal;
+}
+
+interface StatusMetricItem {
+  label: string;
+  value: string | number;
+  className?: string;
+  stabilityKind?: AnalyticStabilityKind;
+}
+
+function s72State(stable: boolean): "stable" | "unstable" {
+  return stable ? "stable" : "unstable";
+}
+
+function s72MetricClass(stable: boolean): "status-ok" | "status-bad" {
+  return stable ? "status-ok" : "status-bad";
+}
+
+function s72DynamicMetric(stability: AnalyticStabilityResult): string {
+  return `\\(${TEX.gamma1}=${fmt(stability.dynamic.value, 2)} > 4/${TEX.m}=${fmt(stability.dynamic.threshold, 2)}\\)`;
+}
+
+function s72SecularMetric(stability: AnalyticStabilityResult): string {
+  return `\\(4+${TEX.m}${TEX.n}+(${TEX.m}-4)(${TEX.s}+4)=${fmt(stability.secular.value, 2)} > 0\\)`;
+}
+
+function s72PulsationalMetric(stability: AnalyticStabilityResult): string {
+  return `\\(b=4+${TEX.m}[${TEX.n}-(${TEX.s}+4)(${TEX.gamma1}-1)]=${fmt(stability.b, 2)} < 0\\)`;
 }
 
 function fmtFixed(value: number, digits: number): string {
@@ -1626,6 +1664,51 @@ function enableGridRange(key: ControlParameterKey): void {
   scheduleGridCompute();
 }
 
+function toggleGridRangeFromSliderGesture(key: ControlParameterKey): void {
+  if (!gridState.enabled) {
+    setGridModeEnabled(true);
+    enableGridRange(key);
+    return;
+  }
+  toggleGridRange(key);
+}
+
+function sliderGestureTarget(event: PointerEvent): boolean {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.closest("[data-reset-key]")) return false;
+  return Boolean(target.closest(".slider-track") || target.closest("input[type='range']"));
+}
+
+function beginSliderTap(event: PointerEvent, key: ControlParameterKey): void {
+  if (event.pointerType !== "touch" || !sliderGestureTarget(event)) return;
+  activeSliderTapStart = { key, pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+}
+
+function finishSliderTap(event: PointerEvent, key: ControlParameterKey): void {
+  if (event.pointerType !== "touch" || !activeSliderTapStart || activeSliderTapStart.key !== key || activeSliderTapStart.pointerId !== event.pointerId) return;
+  const start = activeSliderTapStart;
+  activeSliderTapStart = null;
+  const travel = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+  if (travel > SLIDER_RANGE_DOUBLE_TAP_DISTANCE) {
+    lastSliderTap = null;
+    return;
+  }
+  const now = window.performance.now();
+  const previous = lastSliderTap;
+  const doubleTap = Boolean(
+    previous
+    && previous.key === key
+    && now - previous.time <= SLIDER_RANGE_DOUBLE_TAP_MS
+    && Math.hypot(event.clientX - previous.x, event.clientY - previous.y) <= SLIDER_RANGE_DOUBLE_TAP_DISTANCE
+  );
+  lastSliderTap = { key, time: now, x: event.clientX, y: event.clientY };
+  if (!doubleTap) return;
+  event.preventDefault();
+  lastSliderTap = null;
+  toggleGridRangeFromSliderGesture(key);
+}
+
 function syncGridRangeCenter(key: ControlParameterKey): void {
   const range = gridState.ranges.get(key);
   if (!range) return;
@@ -2595,14 +2678,14 @@ function buildSliderGroup(containerId: string, controls: ControlDef[]): void {
     const updateBounds = () => updateGridRangeBounds(key, Number(lower.value), Number(upper.value));
     lower.addEventListener("input", updateBounds);
     upper.addEventListener("input", updateBounds);
+    wrapper.addEventListener("pointerdown", (event) => beginSliderTap(event, key));
+    wrapper.addEventListener("pointerup", (event) => finishSliderTap(event, key));
+    wrapper.addEventListener("pointercancel", (event) => {
+      if (activeSliderTapStart?.key === key && activeSliderTapStart.pointerId === event.pointerId) activeSliderTapStart = null;
+    });
     wrapper.addEventListener("contextmenu", (event) => {
       event.preventDefault();
-      if (!gridState.enabled) {
-        setGridModeEnabled(true);
-        enableGridRange(key);
-        return;
-      }
-      toggleGridRange(key);
+      toggleGridRangeFromSliderGesture(key);
     });
     wrapper.querySelector<HTMLButtonElement>("[data-reset-key]")?.addEventListener("click", () => restoreParameterDefault(key));
     container.appendChild(wrapper);
@@ -4742,11 +4825,18 @@ function drawAll(): void {
     || (!state.runUntilStable && latestResult.status === "complete");
   const final = rows[rows.length - 1];
   const phase = phaseForRows(rows);
+  const s72Stability = analyticStabilityConditions(stabilityDisplayParameters());
   updateGridLoopSliderMarkers();
   updateSonificationSourceControls();
   updateSonificationCurve(phase);
   const metricsNode = el<HTMLDivElement>("metrics");
-  const metricItems = [
+  metricsNode.dataset.s72Dynamic = s72State(s72Stability.dynamic.stable);
+  metricsNode.dataset.s72Secular = s72State(s72Stability.secular.stable);
+  metricsNode.dataset.s72Pulsational = s72State(s72Stability.pulsational.stable);
+  metricsNode.dataset.s72All = s72State(s72Stability.allStable);
+  metricsNode.dataset.s72M = fmt(s72Stability.m, 6);
+  metricsNode.dataset.s72B = fmt(s72Stability.b, 6);
+  const metricItems: StatusMetricItem[] = [
     { label: "stop", value: stopReason, className: okStatus ? "status-ok" : "status-warn" },
     { label: `final \\(${TEX.tau}\\)`, value: final ? fmt(final.tau || 0, 4) : "n/a" },
     { label: "models", value: rows.length },
@@ -4754,10 +4844,31 @@ function drawAll(): void {
     { label: "rejected", value: latestResult.stats.rejectedSteps },
     { label: "max err", value: fmt(latestResult.stats.maxNormalizedError, 3) },
     { label: "period", value: phase.period ? fmt(phase.period, 3) : "n/a" },
-    { label: "phase", value: phase.reason === "ok" ? "available" : "unavailable" }
+    { label: "phase", value: phase.reason === "ok" ? "available" : "unavailable" },
+    {
+      label: "dyn",
+      value: s72DynamicMetric(s72Stability),
+      className: s72MetricClass(s72Stability.dynamic.stable),
+      stabilityKind: "dynamic"
+    },
+    {
+      label: "sec",
+      value: s72SecularMetric(s72Stability),
+      className: s72MetricClass(s72Stability.secular.stable),
+      stabilityKind: "secular"
+    },
+    {
+      label: "puls",
+      value: s72PulsationalMetric(s72Stability),
+      className: s72MetricClass(s72Stability.pulsational.stable),
+      stabilityKind: "pulsational"
+    }
   ];
   const metricsHtml = metricItems
-    .map(({ label, value, className }) => `<span class="metric${className ? ` ${className}` : ""}">${label}<b>${value}</b></span>`)
+    .map(({ label, value, className, stabilityKind }) => {
+      const stabilityAttribute = stabilityKind ? ` data-stability-kind="${stabilityKind}"` : "";
+      return `<span class="metric${className ? ` ${className}` : ""}"${stabilityAttribute}>${label}<b>${value}</b></span>`;
+    })
     .join("");
   stageMathHtml(metricsNode, metricsHtml);
   queueMathTypeset([metricsNode]);

@@ -43,7 +43,7 @@ describe("shell visualization helpers", () => {
     expect(phaseRowAt(rows, 2.25)?.R).toBeCloseTo(1.5, 12);
   });
 
-  it("derives shell thickness from the form factor", () => {
+  it("derives shell thickness from the thin shell form factor", () => {
     expect(shellGeometryFor(1, 3)).toMatchObject({
       eta: 0,
       outerRadius: 1,

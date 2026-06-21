@@ -289,12 +289,14 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-layout")) === "stacked", "geometry equation should keep eta on its own line");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.89", "eta should match the default chi0 value");
     const sourceText = await page.evaluate(async () => (await fetch("/src/main.ts")).text());
+    const modelText = await page.evaluate(async () => (await fetch("/src/model.ts")).text());
     const htmlText = await page.evaluate(async () => (await fetch("/wizard_of_oz.html")).text());
     assertOk(
       sourceText.includes("\\\\ozChiZero{\\\\chi_0}") && sourceText.includes("\\\\ozChi{\\\\chi}") && sourceText.includes("\\\\ozEta{\\\\eta}") && sourceText.includes("\\\\ozNeutral{\\\\gamma_r}") && htmlText.includes("\\ozChi{\\chi}"),
       "web app source should use separate chi, chi0, and eta notation"
     );
-    assertOk(!sourceText.includes("User-tunable reference shell form factor"), "chi0 meaning should not start with User-tunable");
+    assertOk(modelText.includes("Thin shell form factor"), "chi0 should use Thin shell form factor terminology");
+    assertOk(!modelText.includes("Reference shell form factor"), "chi0 should not use old Reference shell form factor terminology");
     assertOk(!sourceText.includes("free-fall/dynamical") && !htmlText.includes("free-fall/dynamical"), "web app should use dynamical time wording consistently");
     assertOk(sourceText.includes("\\\\ozChi{\\\\chi_0}") === false, "chi0 should not use the active chi color macro");
     assertOk(!sourceText.includes("\\\\mathrm{eff}") && !htmlText.includes("\\mathrm{eff}"), "web app source should not use chi_eff notation");
@@ -414,7 +416,7 @@ async function runPlaywrightChecks() {
       input.value = "1";
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    assertOk(await page.locator(".plot-panel canvas:visible").count() === 5, "expected five visible plot canvases");
+    assertOk(await page.locator("#plotGrid .plot-panel canvas:visible").count() === 5, "expected five visible plot canvases");
     const modelBox = await page.locator("#modelCanvas").boundingBox();
     const modelPanelBox = await page.locator("[data-plot-panel='model']").boundingBox();
     const lightBox = await page.locator("#lightCanvas").boundingBox();
@@ -492,7 +494,7 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#hiddenPlotControls").textContent())?.includes("Shell"), "hidden plot controls should include Shell");
     assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "4", "four visible plots should be tracked");
     assertOk((await page.locator("#plotGrid").getAttribute("data-plot-columns")) === null, "plot grid should not force a column mode after hiding a plot");
-    assertOk(await page.locator(".plot-panel canvas:visible").count() === 4, "expected four visible plot canvases after hiding Shell");
+    assertOk(await page.locator("#plotGrid .plot-panel canvas:visible").count() === 4, "expected four visible plot canvases after hiding Shell");
     await page.locator("#hiddenPlotControls [data-plot-toggle='model']").check();
     assertOk(await page.locator("[data-plot-panel='model']").isVisible(), "Shell panel should return when rechecked");
     assertOk(!(await page.locator("#hiddenPlotControls").isVisible()), "hidden plot controls should hide again when all plots are visible");
@@ -668,7 +670,7 @@ async function runPlaywrightChecks() {
     await page.locator("#variableM").check();
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "radius-dependent", "luminosity equations did not switch to radius-dependent geometry");
     const timeLegendHtmlBeforeMSlider = await page.locator("#timeLegend").innerHTML();
-    await page.locator("input[aria-label='shell form factor']").evaluate((input) => {
+    await page.locator("input[aria-label='Thin shell form factor']").evaluate((input) => {
       const slider = input;
       slider.value = "15";
       slider.dispatchEvent(new Event("input", { bubbles: true }));
@@ -677,7 +679,7 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("#metrics mjx-container").count() > 0, "rendered output metrics should remain visible while chi changes");
     assertOk((await page.locator("#timeLegend").innerHTML()) === timeLegendHtmlBeforeMSlider, "plot legend should not be rebuilt while chi changes");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.93", "eta did not update when chi changed");
-    await page.locator("input[aria-label='shell form factor']").evaluate((input) => {
+    await page.locator("input[aria-label='Thin shell form factor']").evaluate((input) => {
       const slider = input;
       slider.value = "3";
       slider.dispatchEvent(new Event("input", { bubbles: true }));
