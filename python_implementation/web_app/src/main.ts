@@ -139,6 +139,7 @@ let latestPhaseSample: Row[] = [];
 let latestPhaseMessage: string | undefined;
 let latestPhasePeriodLabel = "phase (period = n/a τ)";
 let latestPhaseLuminosityRange: NumericRange = [0, 1];
+let latestPhaseParameters: ModelParameters = state;
 let sonificationReferenceNote = MIDDLE_C_NOTE;
 let sonificationReferenceHz = noteToFrequency(MIDDLE_C_NOTE);
 let sonificationSamples: SonificationSample[] = [];
@@ -434,6 +435,8 @@ let suppressNextStabilityClick = false;
 let lastTouchStabilityToggleAt = 0;
 const DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
 const STABILITY_MAP_RESOLUTION = 54;
+const STRIP_LOG_RATIO_MIN = -2;
+const STRIP_LOG_RATIO_MAX = 2;
 const stabilityMapCache = new Map<string, StabilityKind[]>();
 const PLOT_LAYOUT = {
   left: 84,
@@ -1607,12 +1610,13 @@ function sonificationValueAtPhase(phase: number): number {
   return a.value + (b.value - a.value) * mix;
 }
 
-function updateSonificationCurve(phase: PhaseResult): void {
-  const firstCycleRows = phase.rows.filter((row) => row.tau >= 0 && row.tau <= 1);
+function updateSonificationCurve(phaseRows: Row[], fallbackRows: Row[], parameters: ModelParameters): void {
+  const firstCycleRows = phaseRows.filter((row) => row.tau >= 0 && row.tau <= 1);
   const nextSamples = firstCycleRows.length >= 3
-    ? buildSonificationSamples(firstCycleRows, [0, 1])
-    : buildSonificationSamples(latestRows);
+    ? buildSonificationSamples(firstCycleRows, [0, 1], parameters)
+    : buildSonificationSamples(fallbackRows, undefined, parameters);
   const nextSignature = sonificationSampleSignature(nextSamples);
+  document.getElementById("pianoPanel")?.setAttribute("data-sonification-signature", nextSignature);
   if (nextSignature === sonificationWaveformSignature) return;
   sonificationSamples = nextSamples;
   sonificationWaveformSignature = nextSignature;
@@ -1633,30 +1637,30 @@ function sonificationSampleSignature(samples: SonificationSample[]): string {
   return values.join("|");
 }
 
-function acousticPressure(row: Row): number {
-  const m = mAt(row.R, state);
-  return row.H * row.R ** (-m * state.gamma1);
+function acousticPressure(row: Row, parameters = state): number {
+  const m = mAt(row.R, parameters);
+  return row.H * row.R ** (-m * parameters.gamma1);
 }
 
-function acousticPressureSignal(row: Row): number {
-  const pressure = acousticPressure(row);
+function acousticPressureSignal(row: Row, parameters = state): number {
+  const pressure = acousticPressure(row, parameters);
   return pressure > 0 ? pressure : NaN;
 }
 
-function sonificationSignal(row: Row): number {
+function sonificationSignal(row: Row, parameters: ModelParameters): number {
   switch (sonificationSource) {
     case "luminosity":
       return row.L;
     case "velocity":
       return row.V;
     case "pressure":
-      return acousticPressureSignal(row);
+      return acousticPressureSignal(row, parameters);
   }
 }
 
-function buildSonificationSamples(rows: Row[], domain?: NumericRange): SonificationSample[] {
+function buildSonificationSamples(rows: Row[], domain: NumericRange | undefined, parameters: ModelParameters): SonificationSample[] {
   const finiteRows = rows
-    .map((row) => ({ row, value: sonificationSignal(row) }))
+    .map((row) => ({ row, value: sonificationSignal(row, parameters) }))
     .filter((sample) => Number.isFinite(sample.row.tau) && Number.isFinite(sample.value));
   if (!finiteRows.length) return [];
   const start = domain?.[0] ?? finiteRows[0].row.tau;
@@ -3802,20 +3806,28 @@ function drawGridColorbar(
   _ylim?: NumericRange,
   canvasId = "fourierCanvas"
 ): void {
-  if (!gridState.enabled) {
+  const clearRegion = () => {
     gridColorbarRegions.delete(canvasId);
+    const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
+    if (!canvas) return;
+    delete canvas.dataset.gridColorbar;
+    delete canvas.dataset.gridColorbarKey;
+    delete canvas.dataset.gridColorbarHit;
+  };
+  if (!gridState.enabled) {
+    clearRegion();
     return;
   }
   const range = currentLoopRange();
   const current = currentGridResult();
   if (!range || !current) {
-    gridColorbarRegions.delete(canvasId);
+    clearRegion();
     return;
   }
   const value = current.variedValues[range.key];
   const sliderValue = current.sliderValues[range.key];
   if (value === undefined || sliderValue === undefined) {
-    gridColorbarRegions.delete(canvasId);
+    clearRegion();
     return;
   }
   const width = Math.min(150, Math.max(112, plot.width * 0.24));
@@ -3837,6 +3849,12 @@ function drawGridColorbar(
   if (canvas) {
     canvas.dataset.gridColorbar = "ready";
     canvas.dataset.gridColorbarKey = range.key;
+    canvas.dataset.gridColorbarHit = [
+      Math.round(left - 12),
+      Math.round(top - 10),
+      Math.round(left + width + 12),
+      Math.round(top + 50)
+    ].join(",");
   }
   const lowerValue = parameterValueFromSlider(range.key, range.lowerSliderValue);
   const upperValue = parameterValueFromSlider(range.key, range.upperSliderValue);
@@ -4360,6 +4378,96 @@ function drawDashedCurve(
   ctx.restore();
 }
 
+function effectiveTemperatureProxy(row: Row): number | null {
+  if (!Number.isFinite(row.L) || !Number.isFinite(row.R) || row.L <= 0 || row.R <= 0) return null;
+  const value = (row.L / (row.R * row.R)) ** 0.25;
+  return Number.isFinite(value) ? value : null;
+}
+
+function stripTeffTrack(
+  rows: readonly Row[],
+  phase: number,
+  centerX: number
+): { left: number; right: number; current: number; logRange: number; valueRange: NumericRange } | null {
+  const values = rows
+    .map(effectiveTemperatureProxy)
+    .filter((value): value is number => value !== null);
+  if (values.length < 2) return null;
+  const logs = values.map((value) => Math.log10(value));
+  const minLog = Math.min(...logs);
+  const maxLog = Math.max(...logs);
+  const logRange = maxLog - minLog;
+  if (!Number.isFinite(logRange) || logRange < 1e-5) return null;
+  const span = clamp(logRange * 5, 0.045, 0.22);
+  const left = clamp(centerX - span / 2, 0.02, 0.98 - span);
+  const right = left + span;
+  const phaseRow = phaseRowAt(rows, phase);
+  const currentTeff = phaseRow ? effectiveTemperatureProxy(phaseRow) : null;
+  const currentLog = currentTeff === null ? (minLog + maxLog) / 2 : Math.log10(currentTeff);
+  const current = left + clamp((currentLog - minLog) / logRange, 0, 1) * span;
+  return {
+    left,
+    right,
+    current,
+    logRange,
+    valueRange: [Math.min(...values), Math.max(...values)]
+  };
+}
+
+function drawStripTeffTrack(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  sx: (x: number) => number,
+  sy: (gamma: number) => number,
+  parameters: Pick<ModelParameters, "zeta" | "zetac" | "gammac">,
+  rows: readonly Row[],
+  options: { color: string; alpha: number; marker: boolean; label: boolean; phase?: number }
+): boolean {
+  const centerX = cepheidStripCoordinate(parameters);
+  const track = stripTeffTrack(rows, options.phase ?? currentAnimationPhase, centerX);
+  if (!track) return false;
+  const y = sy(parameters.gammac);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.width, plot.height);
+  ctx.clip();
+  ctx.lineCap = "round";
+  ctx.strokeStyle = colorWithAlpha(options.color, options.alpha);
+  ctx.lineWidth = options.marker ? 2.6 : 1.4;
+  ctx.beginPath();
+  ctx.moveTo(sx(track.left), y);
+  ctx.lineTo(sx(track.right), y);
+  ctx.stroke();
+  ctx.lineWidth = 1.1;
+  ctx.strokeStyle = colorWithAlpha(options.color, Math.min(1, options.alpha + 0.18));
+  [track.left, track.right].forEach((x) => {
+    ctx.beginPath();
+    ctx.moveTo(sx(x), y - 5);
+    ctx.lineTo(sx(x), y + 5);
+    ctx.stroke();
+  });
+  if (options.marker) {
+    drawReferenceMarker(ctx, sx(track.current), y, PHASE_MARKER_COLOR, 4.8);
+  }
+  ctx.restore();
+
+  if (options.label) {
+    const labelX = clamp(sx(track.left), plot.left + 8, plot.left + plot.width - 100);
+    const labelY = clamp(y - 14, plot.top + 14, plot.top + plot.height - 8);
+    drawCanvasMathFragments(
+      ctx,
+      [
+        { text: "phase " },
+        { text: "T", subscript: "eff", color: PHASE_MARKER_COLOR, weight: 600 }
+      ],
+      labelX,
+      labelY,
+      { align: "left" }
+    );
+  }
+  return true;
+}
+
 function drawCepheidGuide(): void {
   const canvas = document.getElementById("cepheidGuideCanvas");
   if (!(canvas instanceof HTMLCanvasElement)) return;
@@ -4380,10 +4488,10 @@ function drawCepheidGuide(): void {
 
   canvas.dataset.cepheidMode = gridState.enabled ? "grid" : "single";
   canvas.dataset.instabilityMode = gridState.enabled ? "grid" : "single";
-  canvas.dataset.xAxisLabel = "T_eff";
-  canvas.dataset.xAxisDirection = "decreasing-right";
+  canvas.dataset.xAxisLabel = "log10(zetac/zeta)";
+  canvas.dataset.xAxisDirection = "redward-right";
   canvas.dataset.editableParameters = "zetac,gammac";
-  canvas.dataset.stellingwerfLabels = "gamma_c,T_eff";
+  canvas.dataset.stellingwerfLabels = "gamma_c,log10_zeta_c_over_zeta,Teff_proxy";
 
   ctx.fillStyle = "rgba(25, 43, 77, 0.5)";
   ctx.fillRect(plot.left, plot.top, plot.width, plot.height);
@@ -4414,10 +4522,17 @@ function drawCepheidGuide(): void {
   }
   ctx.restore();
 
-  drawAxes(ctx, plot, [1, 0], [0, 1], "", "", THEME.axisText, THEME.axisText, 22);
+  drawAxes(ctx, plot, [STRIP_LOG_RATIO_MIN, STRIP_LOG_RATIO_MAX], [0, 1], "", "", THEME.axisText, THEME.axisText, 22);
   drawCanvasMathFragments(
     ctx,
-    [{ text: "T", subscript: "eff", color: THEME.axisText, weight: 600 }],
+    [
+      { text: "log", subscript: "10", color: THEME.axisText, weight: 600 },
+      { text: "(" },
+      { text: "ζ", subscript: "c", color: COLORS.zetac, weight: 600 },
+      { text: "/" },
+      { text: "ζ", color: COLORS.zeta, weight: 600 },
+      { text: ")" }
+    ],
     plot.left + plot.width / 2,
     plot.top + plot.height + 42
   );
@@ -4453,9 +4568,20 @@ function drawCepheidGuide(): void {
     return { x: sx(x), y: sy(gamma) };
   });
   drawDashedCurve(ctx, locus);
+  ctx.fillStyle = "rgba(238, 245, 255, 0.68)";
+  ctx.font = "11px Inter, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText("schematic locus", sx(0.54), sy(0.42));
 
   const overlays = stabilityOverlayResults();
   overlays.forEach((result) => {
+    drawStripTeffTrack(ctx, plot, sx, sy, result.parameters, result.phaseRows, {
+      color: THEME.axisText,
+      alpha: 0.18,
+      marker: false,
+      label: false
+    });
     drawReferenceMarker(
       ctx,
       sx(cepheidStripCoordinate(result.parameters)),
@@ -4474,9 +4600,27 @@ function drawCepheidGuide(): void {
       ctx.lineTo(sx(cepheidStripCoordinate(path[i].parameters)), sy(path[i].parameters.gammac));
       ctx.stroke();
     }
+    path.forEach((result) => {
+      drawStripTeffTrack(ctx, plot, sx, sy, result.parameters, result.phaseRows, {
+        color: gridResultColor(result, 0.44),
+        alpha: 1,
+        marker: false,
+        label: false
+      });
+    });
   }
   const current = currentGridResult();
   const parameters = current?.parameters || state;
+  const currentRows = current?.phaseRows ?? latestPhaseRows;
+  const hasTeffTrack = drawStripTeffTrack(ctx, plot, sx, sy, parameters, currentRows, {
+    color: current ? gridResultColor(current, 0.86) : COLORS.L,
+    alpha: current ? 1 : 0.86,
+    marker: true,
+    label: true
+  });
+  canvas.dataset.teffPhaseTrack = hasTeffTrack ? "available" : "unavailable";
+  if (hasTeffTrack) canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
+  else delete canvas.dataset.currentPhase;
   drawReferenceMarker(
     ctx,
     sx(cepheidStripCoordinate(parameters)),
@@ -4910,7 +5054,7 @@ function drawPhasePlots(): void {
 
   if (sonificationSource === "pressure") {
     drawSeries("pressureCanvas", [
-      { label: "P", color: COLORS.H, rows: latestPhaseSample, x: (row) => row.tau, y: acousticPressureSignal }
+      { label: "P", color: COLORS.H, rows: latestPhaseSample, x: (row) => row.tau, y: (row) => acousticPressureSignal(row, latestPhaseParameters) }
     ], {
       xlabel: latestPhasePeriodLabel,
       ylabel: "pressure",
@@ -5211,6 +5355,7 @@ function drawModelVisualization(): void {
 function drawAnimatedPhaseViews(): void {
   drawModelVisualization();
   drawPhasePlots();
+  drawCepheidGuide();
   drawPhasePortraitPanel();
 }
 
@@ -5249,11 +5394,11 @@ function drawAll(): void {
     || (!state.runUntilStable && latestResult.status === "complete");
   const final = rows[rows.length - 1];
   const phase = phaseForRows(rows);
+  const gridResult = gridState.enabled ? currentGridResult() : null;
   const stabilityParameters = stabilityDisplayParameters();
   const s72Stability = analyticStabilityConditions(stabilityParameters);
   updateGridLoopSliderMarkers();
   updateSonificationSourceControls();
-  updateSonificationCurve(phase);
   const metricsNode = el<HTMLDivElement>("metrics");
   hideStabilityChipValues(true);
   metricsNode.dataset.s72Dynamic = s72State(s72Stability.dynamic.stable);
@@ -5311,12 +5456,14 @@ function drawAll(): void {
   const phaseMessage = gridState.enabled && activeGridRanges().length && !gridState.results.length
     ? gridState.statusText
     : phaseUnavailableLabel(phase);
-  const phasePeriod = gridState.enabled ? currentGridResult()?.period ?? phase.period : phase.period;
-  latestPhaseRows = gridState.enabled ? currentGridResult()?.phaseRows ?? phase.rows : phase.rows;
+  const phasePeriod = gridResult?.period ?? phase.period;
+  latestPhaseRows = gridResult?.phaseRows ?? phase.rows;
+  latestPhaseParameters = gridResult?.parameters ?? state;
   latestPhaseSample = latestPhaseRows.length ? downsample(latestPhaseRows, 1800, ["L", "V", "H"]) : [];
   latestPhaseMessage = phaseMessage;
   latestPhasePeriodLabel = `phase (period = ${phasePeriod ? fmt(phasePeriod, 3) : "n/a"} τ)`;
   latestPhaseLuminosityRange = rawRange(latestPhaseRows.map((row) => row.L));
+  updateSonificationCurve(latestPhaseRows, gridResult ? latestPhaseRows : rows, latestPhaseParameters);
   drawModelVisualization();
   drawPhasePlots();
 

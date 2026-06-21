@@ -133,7 +133,7 @@ async function runPlaywrightChecks() {
     const pressureSource = page.locator("[data-sonify-source='pressure']");
     assertOk((await luminositySource.getAttribute("aria-pressed")) === "true", "luminosity should be the default sonification source");
     assertOk(!(await page.locator("#pressurePhasePanel").isVisible()), "pressure panel should start hidden for luminosity sonification");
-    await velocitySource.click();
+    await velocitySource.evaluate((button) => button.click());
     assertOk((await velocitySource.getAttribute("aria-pressed")) === "true", "radial velocity source did not activate");
     assertOk(!(await page.locator("#pressurePhasePanel").isVisible()), "pressure panel should stay hidden for radial velocity sonification");
     await pressureSource.click();
@@ -624,6 +624,20 @@ async function runPlaywrightChecks() {
     await page.waitForFunction(() => document.querySelector("#gridStatusText")?.textContent?.includes("Grid complete"), null, { timeout: 15000 });
     assertOk(await page.locator("[data-control-key='gammac'] [data-grid-loop-marker]").isVisible(), "selected loop slider should show the animated value marker");
     assertOk(await page.locator("[data-control-key='r0'] [data-grid-loop-marker]").isHidden(), "non-selected range slider should hide the animated value marker");
+    await page.locator("#gridLoopControls input[value='r0']").check();
+    await velocitySource.evaluate((button) => button.click());
+    await pianoToggle.click();
+    assertOk(await page.locator("#pianoPanel").isVisible(), "piano panel should open in grid mode");
+    await page.waitForFunction(() => Boolean(document.querySelector("#pianoPanel")?.getAttribute("data-sonification-signature")), null, { timeout: 5000 });
+    const gridPianoSignature = await page.locator("#pianoPanel").getAttribute("data-sonification-signature");
+    await page.waitForFunction((previous) => {
+      const current = document.querySelector("#pianoPanel")?.getAttribute("data-sonification-signature");
+      return Boolean(current && current !== previous);
+    }, gridPianoSignature, { timeout: 5000 });
+    assertOk((await page.locator("#pianoPanel").getAttribute("data-sonification-signature")) !== gridPianoSignature, "piano waveform should follow the grid loop model");
+    await pianoToggle.click();
+    await page.locator("#gridLoopControls input[value='gammac']").check();
+    await page.waitForFunction(() => document.querySelector("#lightCanvas")?.getAttribute("data-grid-colorbar-key") === "gammac", null, { timeout: 5000 });
     const fourierHasPaint = await page.locator("#fourierCanvas").evaluate((canvas) => {
       const ctx = canvas.getContext("2d");
       if (!ctx) return false;

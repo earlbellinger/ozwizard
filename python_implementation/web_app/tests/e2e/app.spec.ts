@@ -643,11 +643,16 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(phaseDelta(resumedPhase, releasePhase)).toBeGreaterThan(0.04);
   const portraitPhaseAfterResume = Number(await page.locator("#phasePortraitCanvas").getAttribute("data-current-phase"));
   expect(phaseDelta(portraitPhaseAfterResume, resumedPhase)).toBeLessThan(0.08);
+  const stripPhaseAfterResume = Number(await page.locator("#cepheidGuideCanvas").getAttribute("data-current-phase"));
+  expect(phaseDelta(stripPhaseAfterResume, resumedPhase)).toBeLessThan(0.08);
   await page.waitForTimeout(260);
   const portraitPhaseLater = Number(await page.locator("#phasePortraitCanvas").getAttribute("data-current-phase"));
+  const stripPhaseLater = Number(await page.locator("#cepheidGuideCanvas").getAttribute("data-current-phase"));
   const lightPhaseLater = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
   expect(phaseDelta(portraitPhaseLater, portraitPhaseAfterResume)).toBeGreaterThan(0.04);
   expect(phaseDelta(portraitPhaseLater, lightPhaseLater)).toBeLessThan(0.08);
+  expect(phaseDelta(stripPhaseLater, stripPhaseAfterResume)).toBeGreaterThan(0.04);
+  expect(phaseDelta(stripPhaseLater, lightPhaseLater)).toBeLessThan(0.08);
   await expect(page.locator("#modelCanvas")).toHaveAttribute("data-luminosity-arc-labels", "gamma_c L_c,L,gamma_r L_r");
   await expect(page.locator("#modelCanvas")).toHaveAttribute("data-geometry-guides", "R=1,eta,minR,maxR");
   await expect(page.locator("#plotGrid")).not.toHaveAttribute("data-plot-columns", /.+/);
@@ -669,10 +674,12 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-editable-parameters", "zetac,zeta");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-cepheid-mode", "single");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-instability-mode", "single");
-  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-x-axis-label", "T_eff");
-  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-x-axis-direction", "decreasing-right");
+  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-x-axis-label", "log10(zetac/zeta)");
+  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-x-axis-direction", "redward-right");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-editable-parameters", "zetac,gammac");
-  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-stellingwerf-labels", "gamma_c,T_eff");
+  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-stellingwerf-labels", "gamma_c,log10_zeta_c_over_zeta,Teff_proxy");
+  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-teff-phase-track", "available");
+  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-current-phase", /\d+\.\d+/);
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-phase-portrait-mode", "single");
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-phase-portrait-rows", /[1-9]\d*/);
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-current-phase", /\d+\.\d+/);
@@ -810,6 +817,17 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#gridStatusText")).toContainText("Grid complete", { timeout: 15000 });
   await expect(page.locator("[data-control-key='gammac'] [data-grid-loop-marker]")).toBeVisible();
   await expect(page.locator("[data-control-key='r0'] [data-grid-loop-marker]")).toBeHidden();
+  await page.locator("#gridLoopControls input[value='r0']").check();
+  await velocitySource.evaluate((button) => (button as HTMLButtonElement).click());
+  await pianoToggle.click();
+  await expect(page.locator("#pianoPanel")).toBeVisible();
+  await expect(page.locator("#pianoPanel")).toHaveAttribute("data-sonification-signature", /.+/);
+  const gridPianoSignature = await page.locator("#pianoPanel").getAttribute("data-sonification-signature");
+  await expect.poll(async () => page.locator("#pianoPanel").getAttribute("data-sonification-signature"), { timeout: 5000 })
+    .not.toBe(gridPianoSignature);
+  await pianoToggle.click();
+  await page.locator("#gridLoopControls input[value='gammac']").check();
+  await expect(page.locator("#lightCanvas")).toHaveAttribute("data-grid-colorbar-key", "gammac", { timeout: 5000 });
   await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-stability-mode", "grid");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-cepheid-mode", "grid");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-instability-mode", "grid");
@@ -827,10 +845,16 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await page.locator("#lightCanvas").scrollIntoViewIfNeeded();
   const lightCanvasBox = await page.locator("#lightCanvas").boundingBox();
   expect(lightCanvasBox).not.toBeNull();
-  await page.mouse.move(lightCanvasBox!.x + lightCanvasBox!.width - 48, lightCanvasBox!.y + 34);
+  const lightColorbarHit = await page.locator("#lightCanvas").getAttribute("data-grid-colorbar-hit");
+  expect(lightColorbarHit).toBeTruthy();
+  const [lightColorbarLeft, lightColorbarTop, lightColorbarRight, lightColorbarBottom] = lightColorbarHit!.split(",").map(Number);
+  await page.mouse.move(
+    lightCanvasBox!.x + (lightColorbarLeft + lightColorbarRight) / 2,
+    lightCanvasBox!.y + (lightColorbarTop + lightColorbarBottom) / 2
+  );
   await page.mouse.down();
   await expect(page.locator("#lightCanvas")).toHaveAttribute("data-grid-interaction", "colorbar");
-  await page.mouse.move(lightCanvasBox!.x + lightCanvasBox!.width - 150, lightCanvasBox!.y + 34);
+  await page.mouse.move(lightCanvasBox!.x + lightColorbarLeft + 8, lightCanvasBox!.y + (lightColorbarTop + lightColorbarBottom) / 2);
   await page.mouse.up();
   await expect(page.locator("#lightCanvas")).not.toHaveAttribute("data-grid-interaction", "colorbar");
 
