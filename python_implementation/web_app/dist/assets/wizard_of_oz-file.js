@@ -5117,6 +5117,7 @@
     canvas.dataset.stabilityExtent = fmtFixed(extent, 1);
     canvas.dataset.editableParameters = "zetac,zeta";
     canvas.dataset.stellingwerfLabels = "zeta,zeta_c,gamma_c";
+    canvas.dataset.axisLabels = "convective response zeta_c,thermal response zeta";
     kinds.forEach((kind, index) => {
       const row = Math.floor(index / STABILITY_MAP_RESOLUTION);
       const column = index % STABILITY_MAP_RESOLUTION;
@@ -5126,16 +5127,22 @@
     drawAxes(ctx, plot, [0, extent], [0, extent], "", "", THEME.axisText, THEME.axisText, 20);
     drawCanvasMathFragments(
       ctx,
-      [{ text: "\u03B6", subscript: "c", color: COLORS.zetac, weight: 600 }],
+      [
+        { text: "convective response ", color: COLORS.zetac, weight: 600 },
+        { text: "\u03B6", subscript: "c", color: COLORS.zetac, weight: 600 }
+      ],
       plot.left + plot.width / 2,
       plot.top + plot.height + 42
     );
     drawCanvasMathFragments(
       ctx,
-      [{ text: "\u03B6", color: COLORS.zeta, weight: 600 }],
+      [
+        { text: "thermal response ", color: COLORS.zeta, weight: 600 },
+        { text: "\u03B6", color: COLORS.zeta, weight: 600 }
+      ],
       20,
       plot.top + plot.height / 2,
-      { rotate: -Math.PI / 2 }
+      { rotate: -Math.PI / 2, fontSize: 11 }
     );
     drawStabilityLinearizedLabel(ctx, plot.left, 16, parameters.gammac);
     drawReferenceLegend(ctx, plot.left + 150, 15, [
@@ -5220,7 +5227,7 @@
       drawCanvasMathFragments(
         ctx,
         [
-          { text: "phase " },
+          { text: "phase effective temperature ", color: PHASE_MARKER_COLOR, weight: 600 },
           { text: "T", subscript: "eff", color: PHASE_MARKER_COLOR, weight: 600 }
         ],
         labelX,
@@ -5249,10 +5256,11 @@
     referencePlotRenderStates.set("cepheidGuideCanvas", { plot, xlim: [0, 1], ylim: [0, 1], width, height });
     canvas.dataset.cepheidMode = gridState.enabled ? "grid" : "single";
     canvas.dataset.instabilityMode = gridState.enabled ? "grid" : "single";
-    canvas.dataset.xAxisLabel = "log10(zetac/zeta)";
+    canvas.dataset.xAxisLabel = "log10(zetac/zeta) convective/thermal response";
     canvas.dataset.xAxisDirection = "redward-right";
     canvas.dataset.editableParameters = "zetac,gammac";
     canvas.dataset.stellingwerfLabels = "gamma_c,log10_zeta_c_over_zeta,Teff_proxy";
+    canvas.dataset.axisLabels = "log10(zeta_c/zeta) convective/thermal response,convective flux fraction gamma_c";
     ctx.fillStyle = "rgba(25, 43, 77, 0.5)";
     ctx.fillRect(plot.left, plot.top, plot.width, plot.height);
     ctx.fillStyle = "rgba(69, 137, 118, 0.38)";
@@ -5289,23 +5297,30 @@
         { text: "\u03B6", subscript: "c", color: COLORS.zetac, weight: 600 },
         { text: "/" },
         { text: "\u03B6", color: COLORS.zeta, weight: 600 },
-        { text: ")" }
+        { text: ") " },
+        { text: "convective response", color: COLORS.zetac, weight: 600 },
+        { text: "/" },
+        { text: "thermal response", color: COLORS.zeta, weight: 600 }
       ],
       plot.left + plot.width / 2,
-      plot.top + plot.height + 42
+      plot.top + plot.height + 46,
+      { fontSize: 10.5, subscriptSize: 7 }
     );
     ctx.fillStyle = THEME.axisText;
     ctx.font = "12px Inter, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText("blue", sx(0.08), plot.top + plot.height + 42);
-    ctx.fillText("red", sx(0.92), plot.top + plot.height + 42);
+    ctx.fillText("blue", sx(0.08), plot.top + plot.height + 25);
+    ctx.fillText("red", sx(0.92), plot.top + plot.height + 25);
     drawCanvasMathFragments(
       ctx,
-      [{ text: "\u03B3", subscript: "c", color: COLORS.gammac, weight: 600 }],
+      [
+        { text: "convective flux fraction ", color: COLORS.gammac, weight: 600 },
+        { text: "\u03B3", subscript: "c", color: COLORS.gammac, weight: 600 }
+      ],
       22,
       plot.top + plot.height / 2,
-      { rotate: -Math.PI / 2 }
+      { rotate: -Math.PI / 2, fontSize: 11 }
     );
     ctx.fillStyle = THEME.axisText;
     ctx.font = "700 13px Inter, sans-serif";
@@ -5513,6 +5528,7 @@
     canvas.dataset.phasePortraitMode = gridState.enabled ? "grid" : "single";
     canvas.dataset.phasePortraitRows = String(latestPhaseRows.length);
     canvas.dataset.stellingwerfLabels = "R,H,U_c,current_phase";
+    canvas.dataset.axisLabels = "radius R,thermal-pressure state H and convective velocity U_c";
     if (!latestPhaseRows.length) {
       delete canvas.dataset.currentPhase;
       drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
@@ -5527,7 +5543,7 @@
     drawCanvasMathFragments(
       ctx,
       [
-        { text: "radius " },
+        { text: "radius ", color: COLORS.R, weight: 600 },
         { text: "R", color: COLORS.R, weight: 600 }
       ],
       plot.left + plot.width / 2,
@@ -5536,13 +5552,15 @@
     drawCanvasMathFragments(
       ctx,
       [
+        { text: "thermal-pressure state ", color: COLORS.H, weight: 600 },
         { text: "H", color: COLORS.H, weight: 600 },
         { text: ", " },
+        { text: "convective velocity ", color: COLORS.Uc, weight: 600 },
         { text: "U", subscript: "c", color: COLORS.Uc, weight: 600 }
       ],
       22,
       plot.top + plot.height / 2,
-      { rotate: -Math.PI / 2 }
+      { rotate: -Math.PI / 2, fontSize: 10.5, subscriptSize: 7 }
     );
     drawPhasePortraitCurve(ctx, plot, xlim, ylim, rows, "H", COLORS.H);
     drawPhasePortraitCurve(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, [8, 5]);

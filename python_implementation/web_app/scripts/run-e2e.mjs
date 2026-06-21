@@ -647,13 +647,20 @@ async function runPlaywrightChecks() {
     await page.locator("#lightCanvas").scrollIntoViewIfNeeded();
     const lightCanvasBox = await page.locator("#lightCanvas").boundingBox();
     assertOk(Boolean(lightCanvasBox), "light canvas bounds were unavailable for colorbar scrub");
-    await page.mouse.move(lightCanvasBox.x + lightCanvasBox.width - 48, lightCanvasBox.y + 34);
+    const lightColorbarHit = await page.locator("#lightCanvas").getAttribute("data-grid-colorbar-hit");
+    assertOk(Boolean(lightColorbarHit), "phase colorbar should expose a hit box");
+    const [lightColorbarLeft, lightColorbarTop, lightColorbarRight, lightColorbarBottom] = lightColorbarHit.split(",").map(Number);
+    await page.mouse.move(
+      lightCanvasBox.x + (lightColorbarLeft + lightColorbarRight) / 2,
+      lightCanvasBox.y + (lightColorbarTop + lightColorbarBottom) / 2
+    );
     await page.mouse.down();
     assertOk((await page.locator("#lightCanvas").getAttribute("data-grid-interaction")) === "colorbar", "phase colorbar should enter scrub mode on pointer down");
-    await page.mouse.move(lightCanvasBox.x + lightCanvasBox.width - 150, lightCanvasBox.y + 34);
+    await page.mouse.move(lightCanvasBox.x + lightColorbarLeft + 8, lightCanvasBox.y + (lightColorbarTop + lightColorbarBottom) / 2);
     await page.mouse.up();
     assertOk((await page.locator("#lightCanvas").getAttribute("data-grid-interaction")) !== "colorbar", "phase colorbar should leave scrub mode on release");
     await page.locator("#fourierCanvas").scrollIntoViewIfNeeded();
+    await page.waitForFunction(() => Number(document.querySelector("#fourierCanvas")?.getAttribute("data-fourier-hit-count") || "0") > 0, null, { timeout: 5000 });
     const fourierHit = await page.locator("#fourierCanvas").getAttribute("data-first-fourier-hit");
     assertOk(Boolean(fourierHit), "Fourier canvas should expose a hit-test point");
     const [fourierHitX, fourierHitY] = fourierHit.split(",").map(Number);

@@ -672,18 +672,21 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-stability-mode", "single");
   await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-stellingwerf-labels", "zeta,zeta_c,gamma_c");
   await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-editable-parameters", "zetac,zeta");
+  await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-axis-labels", "convective response zeta_c,thermal response zeta");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-cepheid-mode", "single");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-instability-mode", "single");
-  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-x-axis-label", "log10(zetac/zeta)");
+  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-x-axis-label", "log10(zetac/zeta) convective/thermal response");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-x-axis-direction", "redward-right");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-editable-parameters", "zetac,gammac");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-stellingwerf-labels", "gamma_c,log10_zeta_c_over_zeta,Teff_proxy");
+  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-axis-labels", "log10(zeta_c/zeta) convective/thermal response,convective flux fraction gamma_c");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-teff-phase-track", "available");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-current-phase", /\d+\.\d+/);
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-phase-portrait-mode", "single");
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-phase-portrait-rows", /[1-9]\d*/);
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-current-phase", /\d+\.\d+/);
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-stellingwerf-labels", "R,H,U_c,current_phase");
+  await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-axis-labels", "radius R,thermal-pressure state H and convective velocity U_c");
   const zetaSlider = page.getByRole("slider", { name: "thermal response" });
   const zetacSlider = page.getByRole("slider", { name: "convective response" });
   const gammacSlider = page.getByRole("slider", { name: "convective flux fraction" });
@@ -859,6 +862,8 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#lightCanvas")).not.toHaveAttribute("data-grid-interaction", "colorbar");
 
   await page.locator("#fourierCanvas").scrollIntoViewIfNeeded();
+  await expect.poll(async () => Number(await page.locator("#fourierCanvas").getAttribute("data-fourier-hit-count") || "0"), { timeout: 5000 })
+    .toBeGreaterThan(0);
   const fourierHit = await page.locator("#fourierCanvas").getAttribute("data-first-fourier-hit");
   expect(fourierHit).toBeTruthy();
   const [fourierHitX, fourierHitY] = fourierHit!.split(",").map(Number);
