@@ -29,6 +29,34 @@ describe("one-zone model", () => {
     expect(tEndControl?.[6]).toBe(100);
   });
 
+  it("uses final-cycle phasing and tightened adaptive defaults", () => {
+    const maxStepControl = CONTROL_GROUPS.integration.find(([key]) => key === "maxStep");
+    const rtolControl = CONTROL_GROUPS.integration.find(([key]) => key === "logRtol");
+    const atolControl = CONTROL_GROUPS.integration.find(([key]) => key === "logAtol");
+    const errTolControl = CONTROL_GROUPS.integration.find(([key]) => key === "logErrTol");
+    const preset = PRESETS[DEFAULT_PRESET_NAME];
+    expect(preset.phaseMode).toBe("final");
+    expect(preset.maxStep).toBe(0.03);
+    expect(preset.logRtol).toBe(-11);
+    expect(preset.logAtol).toBe(-13);
+    expect(preset.logErrTol).toBe(-8);
+    expect(maxStepControl?.[3]).toBe(0.005);
+    expect(maxStepControl?.[4]).toBe(0.12);
+    expect(maxStepControl?.[6]).toBe(0.03);
+    expect(rtolControl?.slice(3, 7)).toEqual([-12, -8, 0.25, -11]);
+    expect(atolControl?.slice(3, 7)).toEqual([-14, -10, 0.25, -13]);
+    expect(errTolControl?.slice(3, 7)).toEqual([-9, -5, 0.25, -8]);
+  });
+
+  it("starts the default preset with convection enabled", () => {
+    const zetacControl = CONTROL_GROUPS.physical.find(([key]) => key === "zetac");
+    const gammacControl = CONTROL_GROUPS.physical.find(([key]) => key === "gammac");
+    expect(PRESETS[DEFAULT_PRESET_NAME].zetac).toBe(1);
+    expect(zetacControl?.[6]).toBe(1);
+    expect(PRESETS[DEFAULT_PRESET_NAME].gammac).toBe(0.2);
+    expect(gammacControl?.[6]).toBe(0.2);
+  });
+
   it("matches the Python derivative fixture for the instability-strip initial state", () => {
     const p = PRESETS[STRIP_PRESET];
     const actual = derivatives(0, [p.r0, p.v0, p.h0, p.uc0], p);
@@ -69,7 +97,14 @@ describe("one-zone model", () => {
   });
 
   it("classifies long outward drifts before exhausting stored rows", () => {
-    const result = solveModel({ ...PRESETS[STRIP_PRESET], tEnd: 240, runUntilStable: true });
+    const result = solveModel({
+      ...PRESETS[STRIP_PRESET],
+      tEnd: 240,
+      maxStep: 0.08,
+      logRtol: -9,
+      logAtol: -11,
+      runUntilStable: true
+    });
     expect(result.message).toBe("runaway_trend");
     expect(result.rows.at(-1)?.R).toBeGreaterThan(20);
     expect(result.rows.length).toBeLessThan(14000);
@@ -106,7 +141,11 @@ describe("one-zone model", () => {
   it("uses a Baker radiative pulsator default with usable phase behavior", () => {
     const p = PRESETS["Baker radiative pulsator"];
     const rows = solveModel(p).rows;
-    const phase = buildTwoCyclePhase(rows, { warmupTau: p.phaseWarmupTau, minAmplitude: p.phaseMinAmplitude });
+    const phase = buildTwoCyclePhase(rows, {
+      warmupTau: p.phaseWarmupTau,
+      minAmplitude: p.phaseMinAmplitude,
+      selection: p.phaseMode === "final" ? "last" : "first"
+    });
     const warmupTau = p.phaseWarmupTau ?? 0;
     expect(p.m).toBe(10);
     expect(p.gammac).toBe(0);
@@ -119,7 +158,8 @@ describe("one-zone model", () => {
       const result = solveModel(preset);
       const phase = buildTwoCyclePhase(result.rows, {
         warmupTau: preset.phaseWarmupTau,
-        minAmplitude: preset.phaseMinAmplitude
+        minAmplitude: preset.phaseMinAmplitude,
+        selection: preset.phaseMode === "final" ? "last" : "first"
       });
       if (name === RUNAWAY_PRESET) {
         expect(result.status, name).toBe("complete");
@@ -131,9 +171,9 @@ describe("one-zone model", () => {
     }
   });
 
-  it("freezes the convective luminosity channel for no-convection presets", () => {
+  it("freezes the convective luminosity channel for zero-response presets", () => {
     for (const [name, preset] of Object.entries(PRESETS)) {
-      if (preset.gammac !== 0) continue;
+      if (preset.gammac !== 0 || preset.zetac !== 0) continue;
       expect(preset.zetac, name).toBe(0);
       expect(preset.uc0, name).toBe(0);
       const result = solveModel(preset);

@@ -137,10 +137,10 @@ export const CONTROL_GROUPS: Record<"physical" | "initial" | "integration", Cont
   integration: [
     ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "max time", 0, 3, 0.01, 100, COLORS.tEnd],
     ["step", `\\(\\Delta ${TEX.tau}_0\\)`, "initial step", 0.0005, 0.02, 0.0005, 0.001, COLORS.step],
-    ["maxStep", `\\(\\Delta ${TEX.tau}_{\\max}\\)`, "max adaptive step", 0.005, 0.3, 0.005, 0.15, COLORS.maxStep],
-    ["logRtol", "\\(\\ozNeutral{\\log_{10} r_{tol}}\\)", "relative tol", -11, -5, 0.25, -8, COLORS.rtol],
-    ["logAtol", "\\(\\ozNeutral{\\log_{10} a_{tol}}\\)", "absolute tol", -13, -7, 0.25, -10, COLORS.atol],
-    ["logErrTol", "\\(\\ozNeutral{\\log_{10}\\epsilon}\\)", "tolerance", -8, -4, 0.25, -7, COLORS.errTol],
+    ["maxStep", `\\(\\Delta ${TEX.tau}_{\\max}\\)`, "max adaptive step", 0.005, 0.12, 0.005, 0.03, COLORS.maxStep],
+    ["logRtol", "\\(\\ozNeutral{\\log_{10} r_{tol}}\\)", "relative tol", -12, -8, 0.25, -11, COLORS.rtol],
+    ["logAtol", "\\(\\ozNeutral{\\log_{10} a_{tol}}\\)", "absolute tol", -14, -10, 0.25, -13, COLORS.atol],
+    ["logErrTol", "\\(\\ozNeutral{\\log_{10}\\epsilon}\\)", "tolerance", -9, -5, 0.25, -8, COLORS.errTol],
     ["logStabilityTol", "\\(\\ozNeutral{\\log_{10}\\epsilon_s}\\)", "stability tolerance", -4, -1, 0.25, -2.7, COLORS.errTol],
     ["stableCycles", "\\(\\ozNeutral{N_s}\\)", "stable cycles required", 3, 8, 1, 5, COLORS.errTol]
   ]
@@ -149,7 +149,7 @@ export const CONTROL_GROUPS: Record<"physical" | "initial" | "integration", Cont
 export const PARAMETER_DESCRIPTIONS: Partial<Record<keyof ModelParameters, string>> = {
   zeta: `Ratio of the model dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\).`,
   zetac: `Ratio of the model dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\).`,
-  gammac: `Equilibrium convective luminosity fraction \\(${TEX.gammac}=${TEX.Lc}_{0}/${TEX.L}_{0}\\).`,
+  gammac: `Equilibrium convective luminosity fraction \\(${TEX.gammac}=${TEX.Lc}_{0}/${TEX.L}_{0}\\). The complementary radiative fraction is \\(${TEX_EXTRA.gammaR}=1-${TEX.gammac}\\).`,
   m: `Reference shell form factor that sets \\(${TEX_EXTRA.eta}\\), the shell's inner boundary radius as a fraction of the reference outer radius. Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\).`,
   gamma1: `First adiabatic exponent used in the \\(${TEX.H}\\) response.`,
   n: `Density exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
@@ -171,15 +171,15 @@ export const PARAMETER_DESCRIPTIONS: Partial<Record<keyof ModelParameters, strin
 };
 
 const presetBase = {
-  maxStep: 0.15,
-  logRtol: -8,
-  logAtol: -10,
+  maxStep: 0.03,
+  logRtol: -11,
+  logAtol: -13,
   solver: "rk45" as SolverName,
   runUntilStable: true,
   logStabilityTol: -2.7,
   stableCycles: 5,
   phaseMinAmplitude: 1e-4,
-  phaseMode: "reference" as PhaseMode
+  phaseMode: "final" as PhaseMode
 };
 
 const paperBase = {
@@ -209,7 +209,7 @@ const overtoneBase = {
   uc0: 0,
   tEnd: 10,
   step: 0.001,
-  logErrTol: -7,
+  logErrTol: -8,
   variableM: true,
   driver: "h" as Driver,
   runUntilStable: false
@@ -218,16 +218,16 @@ const overtoneBase = {
 export const DEFAULT_PRESET_NAME = "RR Lyrae low-amplitude fundamental, damped";
 
 export const PRESETS: Record<string, ModelParameters> = {
-  "Baker radiative pulsator": { ...presetBase, referenceFamily: "baker", phaseWarmupTau: 4, zeta: 1, zetac: 0, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 0, tEnd: 24, step: 0.001, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
-  "Blue-edge convection": { ...paperBase, phaseWarmupTau: 24, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 40, step: 0.001, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
-  "Instability-strip convection": { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 15, step: 0.001, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
-  "Red-edge convection": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 14, step: 0.001, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
-  "Radius-dependent strip": { ...paperBase, phaseWarmupTau: 6, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 0.001, logErrTol: -7, variableM: true, driver: "h", runUntilStable: false },
-  "Fully convective runaway": { ...paperBase, phaseWarmupTau: 1, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 8, step: 0.001, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
-  "Thick convective shell": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 0.001, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
+  "Baker radiative pulsator": { ...presetBase, referenceFamily: "baker", phaseWarmupTau: 4, zeta: 1, zetac: 0, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 0, tEnd: 24, step: 0.001, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+  "Blue-edge convection": { ...paperBase, phaseWarmupTau: 24, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 40, step: 0.001, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+  "Instability-strip convection": { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 15, step: 0.001, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+  "Red-edge convection": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 14, step: 0.001, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+  "Radius-dependent strip": { ...paperBase, phaseWarmupTau: 6, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 0.001, logErrTol: -8, variableM: true, driver: "h", runUntilStable: false },
+  "Fully convective runaway": { ...paperBase, phaseWarmupTau: 1, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 8, step: 0.001, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+  "Thick convective shell": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 0.001, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
   "RR Lyrae fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.2 },
   "RR Lyrae low-amplitude fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.1 },
-  "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 100 },
+  "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, zetac: 1, gammac: 0.2, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 100 },
   "RR Lyrae first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.05 },
   "RR Lyrae first overtone, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 15, sourceExp: 2, cq: 7, r0: 1.05, tEnd: 80 },
   "RR Lyrae high-amplitude first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.1 },

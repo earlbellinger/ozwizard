@@ -174,6 +174,38 @@ test("audio voices start from the tap even when mobile WebKit keeps resume pendi
   expect(startsAfterPiano).toBeGreaterThan(startsBeforePiano);
 });
 
+test("grid mode falls back when workers are blocked", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.addInitScript(() => {
+    class BlockedWorker {
+      constructor() {
+        throw new Error("Worker blocked for test");
+      }
+    }
+    Object.defineProperty(window, "Worker", { configurable: true, value: BlockedWorker });
+  });
+  await page.goto("/wizard_of_oz.html");
+  await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
+  await page.getByLabel("Enable grid mode").check();
+  await expect(page.locator("[data-control-key='gammac']")).toHaveClass(/is-grid-range/);
+  await expect(page.getByLabel("convective flux fraction grid lower bound")).toHaveValue("0");
+  await expect(page.getByLabel("convective flux fraction grid upper bound")).toHaveValue("0.5");
+  await page.getByLabel("convective flux fraction grid lower bound").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "0";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.getByLabel("convective flux fraction grid upper bound").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "0.02";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#gridStatusText")).toContainText("Grid complete", { timeout: 15000 });
+  await expect(page.locator("#gridStatusText")).not.toContainText("unavailable");
+  expect(pageErrors).toEqual([]);
+});
+
 test("app renders solver controls, canvases, and output metrics", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -322,9 +354,9 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   const sectionActionLayouts = await page.locator(".section-title-with-actions").evaluateAll((nodes) =>
     nodes.map((node) => {
       const label = node.querySelector("span")?.getBoundingClientRect();
-      const actions = node.querySelector(".section-action-row")?.getBoundingClientRect();
-      const buttonHeights = [...node.querySelectorAll<HTMLButtonElement>(".section-action-row button")]
-        .map((button) => Math.round(button.getBoundingClientRect().height));
+      const actions = node.querySelector(".section-action-row, .grid-mode-control")?.getBoundingClientRect();
+      const buttonHeights = [...node.querySelectorAll<HTMLElement>(".section-action-row button, .grid-mode-control input")]
+        .map((control) => Math.round(control.getBoundingClientRect().height));
       if (!label || !actions) return null;
       return {
         label: node.querySelector("span")?.textContent?.trim() || "",
@@ -334,7 +366,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
       };
     }),
   );
-  expect(sectionActionLayouts.map((layout) => layout?.label)).toEqual(["Integration", "Convective Driver", "Phase Window"]);
+  expect(sectionActionLayouts.map((layout) => layout?.label)).toEqual(["Physical Parameters", "Integration", "Convective Driver", "Phase Window"]);
   for (const layout of sectionActionLayouts) {
     expect(layout).not.toBeNull();
     expect(layout!.actionsCenterY).toBe(layout!.labelCenterY);
@@ -346,6 +378,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#initialControls")).toBeHidden();
   await expect(page.locator("#presetButtons")).not.toBeVisible();
   await expect(page.locator("#presetSummaryLabel")).toContainText("RR Lyrae low-amplitude fundamental, damped");
+  await expect(page.locator("input[aria-label='convective response']")).toHaveValue("1");
   await page.locator("#presetPanel summary").click();
   await expect(page.locator("#presetButtons")).toBeVisible();
   await expect(page.locator("#presetPanel #resetPreset")).toBeVisible();
@@ -403,6 +436,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     .locator(".slider-name")
     .evaluate((node) => node.scrollWidth <= node.clientWidth + 1);
   expect(convectiveFluxLabelFit).toBe(true);
+  await expect(page.getByRole("slider", { name: "convective flux fraction" })).toHaveValue("0.2");
   const physicalControlsBox = await page.locator("#physicalControls").boundingBox();
   const geometryBox = await page.locator("#variableM").boundingBox();
   const driverBox = await page.locator("[data-driver='h']").boundingBox();
@@ -435,8 +469,190 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("body")).not.toContainText("total, radiative, convective");
   await expect.poll(async () => (await page.locator("body").innerText()).includes("\\(")).toBe(false);
 
+  await page.setViewportSize({ width: 1920, height: 1200 });
   const visibleCanvases = page.locator(".plot-panel canvas:visible");
-  await expect(visibleCanvases).toHaveCount(4);
+  await expect(page.getByRole("heading", { name: "Moving Shell" })).toBeVisible();
+  const modelSpeed = page.getByRole("slider", { name: "moving shell speed" });
+  await expect(page.locator("[data-plot-panel='model'] .plot-title .model-speed-control")).toBeVisible();
+  await expect(modelSpeed).toHaveValue("1");
+  await expect(page.locator("#modelSpeedValue")).toHaveText("1x");
+  await modelSpeed.evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "2";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#modelSpeedValue")).toHaveText("2x");
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-animation-speed", "2x");
+  await modelSpeed.evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "1";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(visibleCanvases).toHaveCount(5);
+  const modelBox = await page.locator("#modelCanvas").boundingBox();
+  const modelPanelBox = await page.locator("[data-plot-panel='model']").boundingBox();
+  const lightBox = await page.locator("#lightCanvas").boundingBox();
+  expect(modelBox).not.toBeNull();
+  expect(modelPanelBox).not.toBeNull();
+  expect(lightBox).not.toBeNull();
+  expect(Math.abs(modelBox!.width - modelBox!.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(modelBox!.height - lightBox!.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(modelPanelBox!.width - modelPanelBox!.height)).toBeLessThanOrEqual(2);
+  const plotLayout = await page.locator("#plotGrid").evaluate((grid) => {
+    const panels = [...grid.querySelectorAll<HTMLElement>("[data-plot-panel]")].map((panel) => {
+      const rect = panel.getBoundingClientRect();
+      return {
+        id: panel.dataset.plotPanel || "",
+        top: Math.round(rect.top),
+        width: Math.round(rect.width)
+      };
+    });
+    return {
+      display: getComputedStyle(grid).display,
+      flexWrap: getComputedStyle(grid).flexWrap,
+      panels
+    };
+  });
+  expect(plotLayout.display).toBe("flex");
+  expect(plotLayout.flexWrap).toBe("wrap");
+  const firstRow = plotLayout.panels.filter((panel) => panel.top === plotLayout.panels[0].top);
+  const secondRowTop = plotLayout.panels.find((panel) => panel.id === "time")?.top;
+  const secondRow = plotLayout.panels.filter((panel) => panel.top === secondRowTop);
+  expect(firstRow.map((panel) => panel.id)).toEqual(["model", "light", "velocity"]);
+  expect(firstRow.find((panel) => panel.id === "model")!.width).toBeLessThan(360);
+  expect(firstRow.find((panel) => panel.id === "light")!.width).toBeGreaterThan(500);
+  expect(firstRow.find((panel) => panel.id === "velocity")!.width).toBeGreaterThan(500);
+  expect(secondRow.map((panel) => panel.id)).toEqual(["time", "lum"]);
+  expect(secondRow.every((panel) => panel.width > 650)).toBe(true);
+  const hasModelPaint = await page.locator("#modelCanvas").evaluate((canvas) => {
+    const node = canvas as HTMLCanvasElement;
+    const ctx = node.getContext("2d");
+    if (!ctx) return false;
+    return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
+  });
+  expect(hasModelPaint).toBe(true);
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-luminosity-arc-labels", "gamma_c L_c,L,gamma_r L_r");
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-geometry-guides", "R=1,eta,minR,maxR");
+  await expect(page.locator("#plotGrid")).not.toHaveAttribute("data-plot-columns", /.+/);
+  await expect(page.locator("#hiddenPlotControls")).toBeHidden();
+  await expect(page.locator("#plotGrid")).toHaveCSS("display", "flex");
+  await expect(page.locator("#plotGrid")).toHaveCSS("flex-wrap", "wrap");
+  await expect(page.locator("#plotGrid")).toHaveCSS("--plot-panel-min-width", "400px");
+  await page.locator("[data-plot-toggle='model']").uncheck();
+  await expect(page.locator("[data-plot-panel='model']")).toBeHidden();
+  await expect(page.locator("#hiddenPlotControls")).toBeVisible();
+  await expect(page.locator("#hiddenPlotControls")).toContainText("Moving Shell");
+  await expect(page.locator("#plotGrid")).toHaveAttribute("data-visible-plots", "4");
+  await expect(page.locator("#plotGrid")).not.toHaveAttribute("data-plot-columns", /.+/);
+  await expect(page.locator(".plot-panel canvas:visible")).toHaveCount(4);
+  await page.locator("#hiddenPlotControls [data-plot-toggle='model']").check();
+  await expect(page.locator("[data-plot-panel='model']")).toBeVisible();
+  await expect(page.locator("#hiddenPlotControls")).toBeHidden();
+  await expect(page.locator("#plotGrid")).toHaveAttribute("data-visible-plots", "5");
+  await expect(page.locator("#plotGrid")).not.toHaveAttribute("data-plot-columns", /.+/);
+  await expect(page.getByLabel("Enable grid mode")).not.toBeChecked();
+  await expect(page.locator("#fourierGridPanel")).toBeHidden();
+  const fluxControl = page.getByRole("slider", { name: "convective flux fraction" })
+    .locator("xpath=ancestor::*[contains(@class, 'slider-control')]");
+  const fluxHeightBefore = await fluxControl.evaluate((node) => node.getBoundingClientRect().height);
+  await fluxControl.dispatchEvent("contextmenu");
+  await expect(page.getByLabel("Enable grid mode")).toBeChecked();
+  await expect(page.locator("[data-plot-panel='model']")).toBeHidden();
+  await expect(page.locator("[data-plot-panel='time']")).toBeHidden();
+  await expect(page.locator("[data-plot-panel='lum']")).toBeHidden();
+  await expect(page.locator("#hiddenPlotControls [data-plot-toggle='model']")).toBeDisabled();
+  await expect(page.locator("#hiddenPlotControls [data-plot-toggle='time']")).toBeDisabled();
+  await expect(page.locator("#hiddenPlotControls [data-plot-toggle='lum']")).toBeDisabled();
+  await expect(page.locator("#fourierGridPanel")).toBeVisible();
+  const loopSpeed = page.getByRole("slider", { name: "parameter loop speed" });
+  await expect(loopSpeed).toHaveValue("1");
+  await expect(page.locator("#gridLoopSpeedValue")).toHaveText("1x");
+  await loopSpeed.evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "2";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#gridLoopSpeedValue")).toHaveText("2x");
+  await expect(fluxControl).toHaveClass(/is-grid-range/);
+  const fluxHeightAfter = await fluxControl.evaluate((node) => node.getBoundingClientRect().height);
+  expect(Math.abs(fluxHeightAfter - fluxHeightBefore)).toBeLessThanOrEqual(1);
+  const radiusControl = page.getByRole("slider", { name: "initial radius" })
+    .locator("xpath=ancestor::*[contains(@class, 'slider-control')]");
+  await page.getByRole("slider", { name: "initial radius" }).click();
+  await expect(radiusControl).not.toHaveClass(/is-grid-range/);
+  await page.getByRole("slider", { name: "initial radius" }).evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "1.1";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await fluxControl.dispatchEvent("contextmenu");
+  await expect(fluxControl).not.toHaveClass(/is-grid-range/);
+  await fluxControl.dispatchEvent("contextmenu");
+  await radiusControl.dispatchEvent("contextmenu");
+  await page.getByLabel("convective flux fraction grid lower bound").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "0";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.getByLabel("convective flux fraction grid upper bound").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "0.02";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.getByLabel("initial radius grid lower bound").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "1.09";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.getByLabel("initial radius grid upper bound").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "1.11";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#gridLoopControls")).toBeVisible();
+  await expect(page.locator("#gridLoopControls input[type='radio']")).toHaveCount(2);
+  await expect(page.locator("#gridStatusText")).toContainText("Grid complete", { timeout: 15000 });
+  await expect(page.locator("[data-control-key='gammac'] [data-grid-loop-marker]")).toBeVisible();
+  await expect(page.locator("[data-control-key='r0'] [data-grid-loop-marker]")).toBeHidden();
+  const fourierHasPaint = await page.locator("#fourierCanvas").evaluate((canvas) => {
+    const node = canvas as HTMLCanvasElement;
+    const ctx = node.getContext("2d");
+    if (!ctx) return false;
+    return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
+  });
+  expect(fourierHasPaint).toBe(true);
+
+  await page.locator("#lightCanvas").scrollIntoViewIfNeeded();
+  const lightCanvasBox = await page.locator("#lightCanvas").boundingBox();
+  expect(lightCanvasBox).not.toBeNull();
+  await page.mouse.move(lightCanvasBox!.x + lightCanvasBox!.width - 48, lightCanvasBox!.y + 34);
+  await page.mouse.down();
+  await expect(page.locator("#lightCanvas")).toHaveAttribute("data-grid-interaction", "colorbar");
+  await page.mouse.move(lightCanvasBox!.x + lightCanvasBox!.width - 150, lightCanvasBox!.y + 34);
+  await page.mouse.up();
+  await expect(page.locator("#lightCanvas")).not.toHaveAttribute("data-grid-interaction", "colorbar");
+
+  await page.locator("#fourierCanvas").scrollIntoViewIfNeeded();
+  const fourierHit = await page.locator("#fourierCanvas").getAttribute("data-first-fourier-hit");
+  expect(fourierHit).toBeTruthy();
+  const [fourierHitX, fourierHitY] = fourierHit!.split(",").map(Number);
+  const fourierBox = await page.locator("#fourierCanvas").boundingBox();
+  expect(fourierBox).not.toBeNull();
+  await page.mouse.move(fourierBox!.x + fourierHitX, fourierBox!.y + fourierHitY);
+  await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-grid-hover", "true");
+  await page.mouse.down();
+  await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-grid-interaction", "fourier-hold");
+  await page.mouse.up();
+  await expect(page.locator("#fourierCanvas")).not.toHaveAttribute("data-grid-interaction", "fourier-hold");
+
+  await page.getByLabel("Enable grid mode").uncheck();
+  await expect(page.locator("#fourierGridPanel")).toBeHidden();
+  await expect(page.locator("[data-plot-panel='model']")).toBeVisible();
+  await expect(page.locator("[data-plot-panel='time']")).toBeVisible();
+  await expect(page.locator("[data-plot-panel='lum']")).toBeVisible();
+  await expect(page.locator("[data-plot-toggle='model']")).not.toBeDisabled();
+  await expect(page.locator("[data-plot-toggle='time']")).not.toBeDisabled();
+  await expect(page.locator("[data-plot-toggle='lum']")).not.toBeDisabled();
   await expect(page.locator("#adsrCanvas")).toHaveCount(1);
   await expect(page.locator("#lightLegend")).toHaveCount(0);
   await expect(page.locator("#velocityLegend")).toHaveCount(0);
@@ -501,6 +717,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(sourceText).toContain("\\\\ozChiZero{\\\\chi_0}");
   expect(sourceText).toContain("\\\\ozChi{\\\\chi}");
   expect(sourceText).toContain("\\\\ozEta{\\\\eta}");
+  expect(sourceText).toContain("\\\\ozNeutral{\\\\gamma_r}");
   expect(sourceText).not.toContain("User-tunable reference shell form factor");
   expect(sourceText).not.toContain("free-fall/dynamical");
   expect(htmlText).toContain("ozChiZero");
@@ -517,26 +734,32 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#timeLegend")).toContainText("radius");
   await expect(page.locator("#timeLegend")).toContainText("pressure factor");
   await expect(page.locator("#timeLegend")).not.toContainText("nonadiabatic pressure factor");
-  await expect(page.locator("#timeLegend")).not.toContainText("convective velocity");
-  await expect(page.locator("#lumLegend")).toContainText("total");
-  await expect(page.locator("#lumLegend")).not.toContainText("radiative");
-  await expect(page.locator("#lumLegend")).not.toContainText("convective");
-  await expect(page.locator("#lumLegend [data-plot-series]")).toHaveCount(0);
-  await page.locator("input[aria-label='convective response']").evaluate((input) => {
-    const slider = input as HTMLInputElement;
-    slider.value = "1";
-    slider.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await expect(page.locator("#timeLegend [data-plot-series='Uc']")).toHaveCount(1);
   await expect(page.locator("#timeLegend")).toContainText("convective velocity");
+  await expect(page.locator("#lumLegend")).toContainText("total");
   await expect(page.locator("#lumLegend")).toContainText("radiative");
   await expect(page.locator("#lumLegend")).toContainText("convective");
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-convection-active", "true");
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-luminosity-arc-labels", "gamma_c L_c,L,gamma_r L_r");
+  await expect(page.locator("input[aria-label='convective response']")).toHaveValue("1");
   await page.locator("input[aria-label='convective response']").evaluate((input) => {
     const slider = input as HTMLInputElement;
     slider.value = "0";
     slider.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await expect(page.locator("#timeLegend [data-plot-series='Uc']")).toHaveCount(0);
+  await expect(page.locator("#timeLegend")).not.toContainText("convective velocity");
+  await expect(page.locator("#lumLegend")).not.toContainText("radiative");
+  await expect(page.locator("#lumLegend")).not.toContainText("convective");
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-convection-active", "false");
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-luminosity-arc-labels", "");
+  await page.locator("input[aria-label='convective response']").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "1";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#timeLegend [data-plot-series='Uc']")).toHaveCount(1);
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-convection-active", "true");
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-luminosity-arc-labels", "gamma_c L_c,L,gamma_r L_r");
   const legendHtml = await page.locator("#timeLegend").innerHTML();
   expect(legendHtml).toContain("R");
   expect(legendHtml).toContain("H");

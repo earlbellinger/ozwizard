@@ -13,8 +13,30 @@ import {
   sample,
   solveModel
 } from "./model";
+import {
+  centerSliderSample,
+  defaultGridRange,
+  normalizeGridRange,
+  parameterValueFromSlider,
+  sliderMeta,
+  sliderValueFromParameter,
+  type GridCompleteMessage,
+  type GridModelResult,
+  type GridRange,
+  type GridWorkerMessage
+} from "./grid";
+import { computeGridWithMessages } from "./gridCompute";
 import { buildTwoCyclePhase, type PhaseAnchor, type PhaseResult } from "./phase";
 import { SOLVER_NAMES, type SolverName } from "./solvers";
+import {
+  blackbodyRgbForTemperature,
+  inferEffectiveTemperature,
+  phaseRowAt,
+  rgbCss,
+  shellGeometryFor,
+  shellGeometryFromModel,
+  type RgbColor
+} from "./visualization";
 
 declare global {
   interface Window {
@@ -61,12 +83,52 @@ const SONIFICATION_WAVEFORM_SMOOTH_PASSES = 5;
 const SONIFICATION_MAX_HARMONICS = 32;
 const PIANO_DEFAULT_ENVELOPE: PianoEnvelope = { attack: 0.015, decay: 0.22, release: 0.36 };
 const PIANO_DEFAULT_SUSTAIN_LEVEL = 0.38;
+const MODEL_ANIMATION_BASE_DURATION_MS = 8000;
+const MODEL_ANIMATION_MIN_SPEED = 0.25;
+const MODEL_ANIMATION_MAX_SPEED = 4;
+const GRID_LOOP_BASE_INTERVAL_MS = 90;
+const GRID_LOOP_MIN_SPEED = 0.25;
+const GRID_LOOP_MAX_SPEED = 4;
+const PHASE_MARKER_COLOR = "#FFD166";
 const SONIFICATION_SOURCE_LABELS: Record<SonificationSource, string> = {
   luminosity: "luminosity",
   velocity: "radial velocity",
   pressure: "pressure"
 };
 const controlElements = new Map<ControlParameterKey, HTMLInputElement>();
+const gridRangeElements = new Map<ControlParameterKey, GridRangeElements>();
+const gridState: GridModeState = {
+  enabled: false,
+  ranges: new Map(),
+  savedRanges: new Map(),
+  selectedLoopKey: null,
+  status: "idle",
+  statusText: "Grid off",
+  requestId: 0,
+  worker: null,
+  workerDisabled: false,
+  fallbackToken: 0,
+  debounceTimer: 0,
+  animationTimer: 0,
+  animationIndex: 0,
+  animationDirection: 1,
+  results: [],
+  pathResults: [],
+  hoverResult: null,
+  heldResult: null,
+  lastComplete: null,
+  restorePlotVisibility: null
+};
+let currentAnimationPhase = 0;
+let modelAnimationSpeed = 1;
+let gridLoopSpeed = 1;
+let modelAnimationFrame = 0;
+let modelAnimationStartTime: number | null = null;
+let latestPhaseRows: Row[] = [];
+let latestPhaseSample: Row[] = [];
+let latestPhaseMessage: string | undefined;
+let latestPhasePeriodLabel = "phase (period = n/a τ)";
+let latestPhaseLuminosityRange: NumericRange = [0, 1];
 let sonificationReferenceNote = MIDDLE_C_NOTE;
 let sonificationReferenceHz = noteToFrequency(MIDDLE_C_NOTE);
 let sonificationSamples: SonificationSample[] = [];
@@ -100,6 +162,7 @@ type PlotBox = { left: number; top: number; width: number; height: number };
 type NumericRange = [number, number];
 type InteractivePlotId = "time" | "lum";
 type PlotSeriesKey = "R" | "V" | "H" | "Uc" | "L" | "Lr" | "Lc";
+type UserPlotId = "model" | "light" | "velocity" | "time" | "lum";
 type SonificationSource = "luminosity" | "velocity" | "pressure";
 
 interface PlotView {
@@ -130,6 +193,63 @@ interface PlotSelection {
 interface StagedMathUpdate {
   html: string;
   version: number;
+}
+
+interface GridColorbarRegion {
+  canvasId: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  hitLeft: number;
+  hitTop: number;
+  hitRight: number;
+  hitBottom: number;
+}
+
+interface FourierPointHit {
+  result: GridModelResult;
+  x: number;
+  y: number;
+  radius: number;
+}
+
+interface GridCanvasInteraction {
+  type: "colorbar" | "fourier-hold";
+  canvasId: string;
+  pointerId: number;
+}
+
+type GridStatusKind = "idle" | "queued" | "running" | "coarsening" | "complete" | "error";
+
+interface GridModeState {
+  enabled: boolean;
+  ranges: Map<ControlParameterKey, GridRange>;
+  savedRanges: Map<ControlParameterKey, GridRange>;
+  selectedLoopKey: ControlParameterKey | null;
+  status: GridStatusKind;
+  statusText: string;
+  requestId: number;
+  worker: Worker | null;
+  workerDisabled: boolean;
+  fallbackToken: number;
+  debounceTimer: number;
+  animationTimer: number;
+  animationIndex: number;
+  animationDirection: 1 | -1;
+  results: GridModelResult[];
+  pathResults: GridModelResult[];
+  hoverResult: GridModelResult | null;
+  heldResult: GridModelResult | null;
+  lastComplete: GridCompleteMessage | null;
+  restorePlotVisibility: Pick<Record<UserPlotId, boolean>, "model" | "time" | "lum"> | null;
+}
+
+interface GridRangeElements {
+  wrapper: HTMLElement;
+  center: HTMLInputElement;
+  lower: HTMLInputElement;
+  upper: HTMLInputElement;
 }
 
 interface SonificationSample {
@@ -212,9 +332,28 @@ const plotVisibility: Record<InteractivePlotId, Record<string, boolean>> = {
   lum: { L: true, Lr: true, Lc: true }
 };
 
+const PLOT_PANEL_LABELS: Record<UserPlotId, string> = {
+  model: "Moving Shell",
+  light: "Lightcurve",
+  velocity: "RV Curve",
+  time: "History",
+  lum: "Luminosity Evolution"
+};
+
+const plotPanelVisibility: Record<UserPlotId, boolean> = {
+  model: true,
+  light: true,
+  velocity: true,
+  time: true,
+  lum: true
+};
+
 const plotRenderStates = new Map<string, PlotRenderState>();
 const legendSignatures = new Map<string, string>();
 let activeSelection: PlotSelection | null = null;
+const gridColorbarRegions = new Map<string, GridColorbarRegion>();
+let fourierPointHits: FourierPointHit[] = [];
+let activeGridCanvasInteraction: GridCanvasInteraction | null = null;
 const DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
 const PLOT_LAYOUT = {
   left: 84,
@@ -462,6 +601,10 @@ function updateSonificationSourceControls(): void {
   if (pressurePanel instanceof HTMLElement) pressurePanel.hidden = !pressureVisible;
   const plotGrid = document.querySelector<HTMLElement>(".plot-grid");
   if (plotGrid) plotGrid.dataset.pressureVisible = String(pressureVisible);
+  updatePlotGridColumns();
+  if (pressureVisible) {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(drawPhasePlots));
+  }
 }
 
 function handleSonificationSliderInput(event: Event): void {
@@ -1191,12 +1334,14 @@ function buildSonificationSamples(rows: Row[], domain?: NumericRange): Sonificat
 function buildControls(): void {
   setupResponsiveSidebarControls();
   setupSonificationControls();
+  setupModelSpeedControl();
   buildPresetButtons();
   buildSolverButtons();
   buildSliderGroup("physicalControls", CONTROL_GROUPS.physical);
   buildSliderGroup("initialControls", CONTROL_GROUPS.initial);
   rebuildIntegrationControls();
   buildParameterTable();
+  setupGridControls();
 
   const variableM = el<HTMLInputElement>("variableM");
   variableM.checked = state.variableM;
@@ -1221,6 +1366,7 @@ function buildControls(): void {
       state.phaseMode = button.dataset.phaseMode === "final" ? "final" : "reference";
       updatePhaseModeButtons();
       refreshActivePreset();
+      scheduleGridCompute();
       drawAll();
     });
   });
@@ -1229,6 +1375,7 @@ function buildControls(): void {
     button.addEventListener("click", () => {
       phaseAnchor = button.dataset.phaseAnchor === "max" ? "max" : "min";
       updatePhaseAnchorButtons();
+      scheduleGridCompute();
       drawAll();
     });
   });
@@ -1244,7 +1391,9 @@ function buildControls(): void {
   });
 
   el<HTMLButtonElement>("resetPreset").addEventListener("click", () => applyPreset(selectedPreset));
+  setupPlotPanelToggles();
   setupInteractivePlots();
+  setupGridCanvasInteractions();
   window.addEventListener("resize", drawAll);
   window.addEventListener("resize", drawAdsrVisualization);
   updateDriverButtons();
@@ -1254,6 +1403,642 @@ function buildControls(): void {
   updateEquationBlocks();
   updateAllSliderLabels();
   updateResetButtons();
+}
+
+function modelAnimationDurationMs(): number {
+  return MODEL_ANIMATION_BASE_DURATION_MS / modelAnimationSpeed;
+}
+
+function modelSpeedLabel(speed: number): string {
+  return `${fmt(speed, 2)}x`;
+}
+
+function setupModelSpeedControl(): void {
+  const input = el<HTMLInputElement>("modelSpeed");
+  const output = el<HTMLOutputElement>("modelSpeedValue");
+  const sync = () => {
+    modelAnimationSpeed = clamp(Number(input.value), MODEL_ANIMATION_MIN_SPEED, MODEL_ANIMATION_MAX_SPEED);
+    input.value = String(modelAnimationSpeed);
+    output.value = modelSpeedLabel(modelAnimationSpeed);
+    output.textContent = output.value;
+    modelAnimationStartTime = null;
+    drawAnimatedPhaseViews();
+  };
+  input.addEventListener("input", sync);
+  sync();
+}
+
+function setupGridLoopSpeedControl(): void {
+  const input = document.getElementById("gridLoopSpeed");
+  const output = document.getElementById("gridLoopSpeedValue");
+  if (!(input instanceof HTMLInputElement) || !(output instanceof HTMLOutputElement)) return;
+  const sync = () => {
+    gridLoopSpeed = clamp(Number(input.value), GRID_LOOP_MIN_SPEED, GRID_LOOP_MAX_SPEED);
+    input.value = String(gridLoopSpeed);
+    output.value = modelSpeedLabel(gridLoopSpeed);
+    output.textContent = output.value;
+    if (gridState.enabled && gridPathResults().length > 1) startGridAnimation();
+  };
+  input.addEventListener("input", sync);
+  sync();
+}
+
+function isUserPlotId(value: string | undefined): value is UserPlotId {
+  return value === "model" || value === "light" || value === "velocity" || value === "time" || value === "lum";
+}
+
+function setupPlotPanelToggles(): void {
+  document.querySelectorAll<HTMLInputElement>("[data-plot-toggle]").forEach((input) => {
+    const plotId = input.dataset.plotToggle;
+    if (!isUserPlotId(plotId)) return;
+    input.addEventListener("change", () => {
+      plotPanelVisibility[plotId] = input.checked;
+      updatePlotPanelVisibility();
+      drawAll();
+    });
+  });
+  updatePlotPanelVisibility();
+}
+
+function updatePlotPanelVisibility(): void {
+  const hiddenControls = el<HTMLDivElement>("hiddenPlotControls");
+  let hiddenCount = 0;
+  (Object.keys(plotPanelVisibility) as UserPlotId[]).forEach((plotId) => {
+    const forcedHidden = gridState.enabled && (plotId === "model" || plotId === "time" || plotId === "lum");
+    const visible = forcedHidden ? false : plotPanelVisibility[plotId];
+    const panel = document.querySelector<HTMLElement>(`[data-plot-panel="${plotId}"]`);
+    const control = document.querySelector<HTMLElement>(`[data-plot-control="${plotId}"]`);
+    const home = document.querySelector<HTMLElement>(`[data-plot-control-home="${plotId}"]`);
+    const input = control?.querySelector<HTMLInputElement>("[data-plot-toggle]");
+    if (!panel || !control || !home || !input) return;
+
+    input.checked = visible;
+    input.disabled = forcedHidden;
+    input.setAttribute("aria-label", `${visible ? "Hide" : "Show"} ${PLOT_PANEL_LABELS[plotId]} plot`);
+    if (visible) {
+      if (control.parentElement !== home) home.prepend(control);
+      panel.hidden = false;
+    } else {
+      panel.hidden = true;
+      hiddenControls.append(control);
+      hiddenCount += 1;
+    }
+  });
+  hiddenControls.hidden = hiddenCount === 0;
+  updatePlotGridColumns();
+}
+
+function updatePlotGridColumns(): void {
+  const plotGrid = document.getElementById("plotGrid");
+  if (!(plotGrid instanceof HTMLElement)) return;
+  const visibleCount = Array.from(plotGrid.querySelectorAll<HTMLElement>(".plot-panel"))
+    .filter((panel) => !panel.hidden)
+    .length;
+  plotGrid.dataset.visiblePlots = String(visibleCount);
+  plotGrid.hidden = visibleCount === 0;
+}
+
+function setupGridControls(): void {
+  const toggle = document.getElementById("gridModeToggle");
+  if (toggle instanceof HTMLInputElement) {
+    toggle.checked = gridState.enabled;
+      toggle.addEventListener("change", () => setGridModeEnabled(toggle.checked, { defaultGammaRange: toggle.checked }));
+  }
+  setupGridLoopSpeedControl();
+  updateGridRangeUi();
+  updateGridStatusUi();
+}
+
+function setGridModeEnabled(enabled: boolean, options: { defaultGammaRange?: boolean } = {}): void {
+  if (gridState.enabled === enabled) return;
+  gridState.enabled = enabled;
+  const toggle = document.getElementById("gridModeToggle");
+  if (toggle instanceof HTMLInputElement) toggle.checked = enabled;
+
+  if (enabled) {
+    gridState.restorePlotVisibility = {
+      model: plotPanelVisibility.model,
+      time: plotPanelVisibility.time,
+      lum: plotPanelVisibility.lum
+    };
+    plotPanelVisibility.model = false;
+    plotPanelVisibility.time = false;
+    plotPanelVisibility.lum = false;
+    gridState.status = "idle";
+    gridState.statusText = "Click a slider to define a grid range";
+    if (options.defaultGammaRange) setDefaultGammaGridRange();
+  } else {
+    cancelGridCompute();
+    stopGridAnimation();
+    gridState.results = [];
+    gridState.pathResults = [];
+    gridState.hoverResult = null;
+    gridState.heldResult = null;
+    gridState.lastComplete = null;
+    gridState.status = "idle";
+    gridState.statusText = "Grid off";
+    if (gridState.restorePlotVisibility) {
+      plotPanelVisibility.model = gridState.restorePlotVisibility.model;
+      plotPanelVisibility.time = gridState.restorePlotVisibility.time;
+      plotPanelVisibility.lum = gridState.restorePlotVisibility.lum;
+    }
+    gridState.restorePlotVisibility = null;
+  }
+
+  updatePlotPanelVisibility();
+  updateGridRangeUi();
+  updateGridStatusUi();
+  updateFourierPanelVisibility();
+  if (enabled) scheduleGridCompute();
+  drawAll();
+}
+
+function setDefaultGammaGridRange(): void {
+  const key: ControlParameterKey = "gammac";
+  const range = normalizeGridRange({
+    key,
+    lowerSliderValue: 0,
+    upperSliderValue: 0.5,
+    centerSliderValue: sliderInputValue(key),
+    nativeStep: sliderMeta(key).step
+  });
+  gridState.ranges.clear();
+  gridState.ranges.set(key, range);
+  gridState.savedRanges.set(key, range);
+  gridState.selectedLoopKey = key;
+}
+
+function toggleGridRange(key: ControlParameterKey): void {
+  if (gridState.ranges.has(key)) {
+    const current = gridState.ranges.get(key);
+    if (current) gridState.savedRanges.set(key, current);
+    gridState.ranges.delete(key);
+  } else {
+    enableGridRange(key);
+    return;
+  }
+  updateGridRangeUi();
+  scheduleGridCompute();
+  drawAll();
+}
+
+function enableGridRange(key: ControlParameterKey): void {
+  const existing = gridState.ranges.get(key);
+  const currentSliderValue = sliderInputValue(key);
+  const saved = gridState.savedRanges.get(key);
+  const range = normalizeGridRange(existing || saved || defaultGridRange(key, currentSliderValue));
+  gridState.ranges.set(key, { ...range, centerSliderValue: currentSliderValue });
+  if (!gridState.selectedLoopKey || !activeGridRangeKeys().includes(gridState.selectedLoopKey)) gridState.selectedLoopKey = key;
+  updateGridRangeUi();
+  scheduleGridCompute();
+}
+
+function syncGridRangeCenter(key: ControlParameterKey): void {
+  const range = gridState.ranges.get(key);
+  if (!range) return;
+  gridState.ranges.set(key, normalizeGridRange({ ...range, centerSliderValue: sliderInputValue(key) }));
+  refreshGridRangeUi(key);
+}
+
+function syncAllGridRangeCenters(): void {
+  Array.from(gridState.ranges.keys()).forEach(syncGridRangeCenter);
+}
+
+function updateGridRangeBounds(key: ControlParameterKey, lower: number, upper: number): void {
+  const current = gridState.ranges.get(key) || defaultGridRange(key, sliderInputValue(key));
+  const range = normalizeGridRange({
+    ...current,
+    lowerSliderValue: lower,
+    upperSliderValue: upper,
+    centerSliderValue: sliderInputValue(key),
+    nativeStep: sliderMeta(key).step
+  });
+  gridState.ranges.set(key, range);
+  gridState.savedRanges.set(key, range);
+  refreshGridRangeUi(key);
+  scheduleGridCompute();
+}
+
+function activeGridRangeKeys(): ControlParameterKey[] {
+  if (!gridState.enabled) return [];
+  return Array.from(gridState.ranges.keys()).filter((key) => {
+    const elements = gridRangeElements.get(key);
+    return Boolean(elements && !elements.wrapper.hidden);
+  });
+}
+
+function activeGridRanges(): GridRange[] {
+  return activeGridRangeKeys()
+    .map((key) => gridState.ranges.get(key))
+    .filter((range): range is GridRange => Boolean(range))
+    .map(normalizeGridRange);
+}
+
+function updateGridRangeUi(): void {
+  gridRangeElements.forEach((_elements, key) => refreshGridRangeUi(key));
+  updateGridLoopControls();
+}
+
+function refreshGridRangeUi(key: ControlParameterKey): void {
+  const elements = gridRangeElements.get(key);
+  if (!elements) return;
+  const active = gridState.enabled && gridState.ranges.has(key);
+  const range = gridState.ranges.get(key);
+  elements.wrapper.classList.toggle("is-grid-enabled", gridState.enabled);
+  elements.wrapper.classList.toggle("is-grid-range", active);
+  const controls = elements.wrapper.querySelector<HTMLElement>("[data-grid-range-controls]");
+  if (controls) controls.hidden = !active;
+  if (!range) return;
+  const normalized = normalizeGridRange(range);
+  elements.lower.value = String(normalized.lowerSliderValue);
+  elements.upper.value = String(normalized.upperSliderValue);
+  const meta = sliderMeta(key);
+  const span = Math.max(1e-12, meta.max - meta.min);
+  const left = ((normalized.lowerSliderValue - meta.min) / span) * 100;
+  const right = ((normalized.upperSliderValue - meta.min) / span) * 100;
+  controls?.style.setProperty("--grid-range-left", `${left.toFixed(4)}%`);
+  controls?.style.setProperty("--grid-range-right", `${right.toFixed(4)}%`);
+  elements.lower.title = `Lower bound: ${controlValueLabel(key, parameterValueFromSlider(key, normalized.lowerSliderValue))}`;
+  elements.upper.title = `Upper bound: ${controlValueLabel(key, parameterValueFromSlider(key, normalized.upperSliderValue))}`;
+  updateGridLoopSliderMarker(key);
+}
+
+function updateGridLoopSliderMarkers(): void {
+  gridRangeElements.forEach((_elements, key) => updateGridLoopSliderMarker(key));
+  gridRangeElements.forEach((_elements, key) => updateSliderLabel(key));
+}
+
+function updateGridLoopSliderMarker(key: ControlParameterKey): void {
+  const elements = gridRangeElements.get(key);
+  const marker = elements?.wrapper.querySelector<HTMLElement>("[data-grid-loop-marker]");
+  const controls = elements?.wrapper.querySelector<HTMLElement>("[data-grid-range-controls]");
+  if (!elements || !marker || !controls) return;
+  const current = currentGridResult();
+  const range = currentLoopRange();
+  const sliderValue = current?.sliderValues[key];
+  const active = gridState.enabled
+    && gridState.ranges.has(key)
+    && key === gridState.selectedLoopKey
+    && range?.key === key
+    && sliderValue !== undefined;
+  marker.hidden = !active;
+  elements.wrapper.classList.toggle("is-grid-looping", active);
+  if (!active || sliderValue === undefined || !range || !current) return;
+  const meta = sliderMeta(key);
+  const span = Math.max(1e-12, meta.max - meta.min);
+  const position = clamp(((sliderValue - meta.min) / span) * 100, 0, 100);
+  const value = current.variedValues[key] ?? parameterValueFromSlider(key, sliderValue);
+  controls.style.setProperty("--grid-loop-position", `${position.toFixed(4)}%`);
+  controls.style.setProperty("--grid-loop-color", parameterColorAt(value, range, 1));
+}
+
+function createGridWorker(): Worker | null {
+  try {
+    if (gridState.workerDisabled) return null;
+    const path = window.location.pathname.replace(/\\/g, "/");
+    const src = window.location.protocol === "file:"
+      ? (path.includes("/dist/") ? "./assets/grid-worker-file.js" : "./dist/assets/grid-worker-file.js")
+      : (path.includes("/dist/") ? "./assets/grid-worker-file.js" : "/src/gridWorker.ts");
+    return new Worker(src, { type: "module" });
+  } catch (error) {
+    gridState.workerDisabled = true;
+    console.warn("Grid worker blocked; falling back to in-tab grid computation", error);
+    return null;
+  }
+}
+
+function scheduleGridCompute(): void {
+  if (!gridState.enabled) return;
+  window.clearTimeout(gridState.debounceTimer);
+  const ranges = activeGridRanges();
+  if (!ranges.length) {
+    cancelGridCompute();
+    gridState.results = [];
+    gridState.pathResults = [];
+    gridState.hoverResult = null;
+    gridState.heldResult = null;
+    gridState.lastComplete = null;
+    gridState.status = "idle";
+    gridState.statusText = "Click a slider to define a grid range";
+    updateGridStatusUi();
+    updateFourierPanelVisibility();
+    return;
+  }
+  gridState.status = "queued";
+  gridState.statusText = "Grid queued";
+  updateGridStatusUi();
+  gridState.debounceTimer = window.setTimeout(startGridCompute, 140);
+}
+
+function startGridCompute(): void {
+  const ranges = activeGridRanges();
+  if (!gridState.enabled || !ranges.length) return;
+  const loopKey = gridState.selectedLoopKey && ranges.some((range) => range.key === gridState.selectedLoopKey)
+    ? gridState.selectedLoopKey
+    : ranges[0].key;
+  gridState.selectedLoopKey = loopKey;
+  gridState.requestId += 1;
+  gridState.results = [];
+  gridState.pathResults = [];
+  gridState.hoverResult = null;
+  gridState.heldResult = null;
+  gridState.lastComplete = null;
+  gridState.animationIndex = 0;
+  gridState.animationDirection = 1;
+  stopGridAnimation();
+  updateGridLoopControls();
+  const request = {
+    requestId: gridState.requestId,
+    baseParameters: { ...state },
+    ranges,
+    loopKey,
+    phase: {
+      warmupTau: state.phaseWarmupTau,
+      minAmplitude: state.phaseMinAmplitude,
+      selection: state.phaseMode === "final" ? "last" as const : "first" as const,
+      anchor: phaseAnchor
+    }
+  };
+
+  if (!gridState.worker && !gridState.workerDisabled) {
+    gridState.worker = createGridWorker();
+    if (gridState.worker) {
+      gridState.worker.addEventListener("message", (event: MessageEvent<GridWorkerMessage>) => handleGridWorkerMessage(event.data));
+      gridState.worker.addEventListener("error", () => {
+        gridState.worker?.terminate();
+        gridState.worker = null;
+        gridState.workerDisabled = true;
+        if (gridState.enabled && request.requestId === gridState.requestId) {
+          startGridFallbackCompute(request, "Using browser-tab grid compute");
+        }
+      });
+    }
+  }
+  if (!gridState.worker) {
+    startGridFallbackCompute(request, "Using browser-tab grid compute");
+    return;
+  }
+
+  gridState.status = "running";
+  gridState.statusText = `Grid running: 0 models`;
+  updateGridStatusUi();
+  gridState.worker.postMessage({
+    type: "compute-grid",
+    request
+  });
+}
+
+function cancelGridCompute(): void {
+  window.clearTimeout(gridState.debounceTimer);
+  gridState.requestId += 1;
+  gridState.fallbackToken += 1;
+  gridState.worker?.postMessage({ type: "cancel-grid", requestId: gridState.requestId });
+}
+
+function startGridFallbackCompute(request: {
+  requestId: number;
+  baseParameters: ModelParameters;
+  ranges: GridRange[];
+  loopKey: ControlParameterKey;
+  phase: {
+    warmupTau?: number;
+    minAmplitude: number;
+    selection: "first" | "last";
+    anchor: PhaseAnchor;
+  };
+}, statusText: string): void {
+  const token = gridState.fallbackToken + 1;
+  gridState.fallbackToken = token;
+  gridState.status = "running";
+  gridState.statusText = statusText;
+  updateGridStatusUi();
+  void computeGridWithMessages(request, {
+    post: (message) => {
+      if (token !== gridState.fallbackToken) return;
+      handleGridWorkerMessage(message);
+    },
+    isCanceled: () => token !== gridState.fallbackToken || request.requestId !== gridState.requestId || !gridState.enabled
+  }).catch((error) => {
+    if (token !== gridState.fallbackToken) return;
+    console.warn("Grid fallback failed", error);
+    gridState.status = "error";
+    gridState.statusText = "Grid computation failed";
+    updateGridStatusUi();
+  });
+}
+
+function handleGridWorkerMessage(message: GridWorkerMessage): void {
+  if (message.requestId !== gridState.requestId) return;
+  if (message.type === "grid-progress") {
+    gridState.status = "running";
+    gridState.statusText = `Grid running: ${message.completed}/${message.total} models`;
+    updateGridStatusUi();
+    return;
+  }
+  if (message.type === "grid-canceled-for-coarsening") {
+    gridState.status = "coarsening";
+    gridState.statusText = `Grid coarsening: stride ${message.stride}`;
+    updateGridStatusUi();
+    return;
+  }
+  if (message.type === "grid-canceled") {
+    return;
+  }
+  gridState.lastComplete = message;
+  gridState.results = message.results;
+  gridState.pathResults = message.pathResults;
+  gridState.status = "complete";
+  const suffix = message.coarsened ? `, stride ${message.stride}` : "";
+  gridState.statusText = `Grid complete: ${message.validPhase}/${message.total} phase models${suffix}`;
+  gridState.animationIndex = 0;
+  gridState.animationDirection = 1;
+  updateGridLoopControls();
+  updateGridStatusUi();
+  updateFourierPanelVisibility();
+  startGridAnimation();
+  drawAll();
+}
+
+function updateGridStatusUi(): void {
+  const bar = document.getElementById("gridStatusBar");
+  const text = document.getElementById("gridStatusText");
+  if (bar instanceof HTMLElement) bar.hidden = !gridState.enabled;
+  if (text instanceof HTMLElement) text.textContent = gridState.statusText;
+}
+
+function updateGridLoopControls(): void {
+  const container = document.getElementById("gridLoopControls");
+  if (!(container instanceof HTMLElement)) return;
+  const ranges = activeGridRanges();
+  if (!gridState.enabled || ranges.length <= 1) {
+    container.hidden = true;
+    container.innerHTML = "";
+    return;
+  }
+  container.hidden = false;
+  const signature = ranges.map((range) => `${range.key}:${range.lowerSliderValue}:${range.upperSliderValue}`).join("|");
+  if (container.dataset.signature === signature && container.childElementCount) {
+    container.querySelectorAll<HTMLInputElement>("input[type='radio']").forEach((input) => {
+      input.checked = input.value === gridState.selectedLoopKey;
+    });
+    return;
+  }
+  container.dataset.signature = signature;
+  container.innerHTML = `<span>loop</span>${ranges.map((range) => {
+    const name = controlDefForKey(range.key)?.[2] ?? controlShortLabel(range.key);
+    const symbol = controlSymbolHtml(range.key);
+    const color = controlColor(range.key);
+    return `
+      <label style="--color:${color}" aria-label="Loop by ${name}">
+        <input type="radio" name="gridLoopKey" value="${range.key}"${range.key === gridState.selectedLoopKey ? " checked" : ""}>
+        <span class="grid-loop-symbol">${symbol}</span>
+      </label>
+    `;
+  }).join("")}`;
+  queueMathTypeset([container]);
+  container.querySelectorAll<HTMLInputElement>("input[type='radio']").forEach((input) => {
+    input.addEventListener("change", () => {
+      if (!input.checked) return;
+      gridState.selectedLoopKey = input.value as ControlParameterKey;
+      gridState.animationIndex = 0;
+      gridState.animationDirection = 1;
+      gridState.pathResults = [];
+      updateGridLoopControls();
+      scheduleGridCompute();
+      drawAll();
+    });
+  });
+}
+
+function updateFourierPanelVisibility(): void {
+  const panel = document.getElementById("fourierGridPanel");
+  if (panel instanceof HTMLElement) panel.hidden = !gridState.enabled;
+}
+
+function startGridAnimation(): void {
+  stopGridAnimation();
+  const path = gridPathResults();
+  if (!gridState.enabled || path.length <= 1) return;
+  gridState.animationTimer = window.setInterval(() => {
+    const currentPath = gridPathResults();
+    if (currentPath.length <= 1) return;
+    const next = gridState.animationIndex + gridState.animationDirection;
+    if (next >= currentPath.length) {
+      gridState.animationDirection = -1;
+      gridState.animationIndex = Math.max(0, currentPath.length - 2);
+    } else if (next < 0) {
+      gridState.animationDirection = 1;
+      gridState.animationIndex = Math.min(1, currentPath.length - 1);
+    } else {
+      gridState.animationIndex = next;
+    }
+    drawAll();
+  }, GRID_LOOP_BASE_INTERVAL_MS / gridLoopSpeed);
+}
+
+function stopGridAnimation(): void {
+  if (gridState.animationTimer) {
+    window.clearInterval(gridState.animationTimer);
+    gridState.animationTimer = 0;
+  }
+}
+
+function gridPathResults(): GridModelResult[] {
+  const loopKey = gridState.selectedLoopKey;
+  if (!loopKey) return [];
+  if (gridState.pathResults.length) {
+    return [...gridState.pathResults]
+      .filter((result) => result.sliderValues[loopKey] !== undefined)
+      .sort((a, b) => (a.sliderValues[loopKey] ?? 0) - (b.sliderValues[loopKey] ?? 0));
+  }
+  if (!gridState.results.length) return [];
+  const ranges = activeGridRanges();
+  const centerByKey = new Map<ControlParameterKey, number>();
+  ranges.forEach((range) => {
+    if (range.key !== loopKey) centerByKey.set(range.key, centerSliderSample(range));
+  });
+  return gridState.results
+    .filter((result) => {
+      for (const [key, center] of centerByKey) {
+        const value = result.sliderValues[key];
+        if (value === undefined || Math.abs(value - center) > sliderMeta(key).step / 2 + 1e-9) return false;
+      }
+      return result.sliderValues[loopKey] !== undefined;
+    })
+    .sort((a, b) => (a.sliderValues[loopKey] ?? 0) - (b.sliderValues[loopKey] ?? 0));
+}
+
+function currentGridResult(): GridModelResult | null {
+  if (gridState.heldResult) return gridState.heldResult;
+  const path = gridPathResults();
+  if (!path.length) return null;
+  const index = Math.min(path.length - 1, Math.max(0, gridState.animationIndex));
+  return path[index] || null;
+}
+
+function currentLoopRange(): GridRange | null {
+  const loopKey = gridState.selectedLoopKey;
+  if (!loopKey) return null;
+  return activeGridRanges().find((range) => range.key === loopKey) || null;
+}
+
+function controlDefForKey(key: ControlParameterKey): ControlDef | undefined {
+  return [...CONTROL_GROUPS.physical, ...CONTROL_GROUPS.initial, ...CONTROL_GROUPS.integration]
+    .find(([controlKey]) => controlKey === key);
+}
+
+function controlSymbolHtml(key: ControlParameterKey): string {
+  return controlDefForKey(key)?.[1] ?? controlShortLabel(key);
+}
+
+function controlColor(key: ControlParameterKey): string {
+  return controlDefForKey(key)?.[7] ?? THEME.neutralSymbol;
+}
+
+function controlCanvasSymbol(key: ControlParameterKey): string {
+  const symbols: Partial<Record<ControlParameterKey, string>> = {
+    zeta: "ζ",
+    zetac: "ζc",
+    gammac: "γc",
+    m: "χ0",
+    gamma1: "Γ1",
+    n: "n",
+    s: "s",
+    sourceExp: "U",
+    cq: "Cq",
+    r0: "R0",
+    v0: "V0",
+    h0: "H0",
+    uc0: "Uc0",
+    tEnd: "τmax",
+    step: "Δτ0",
+    maxStep: "Δτmax",
+    logRtol: "log10 rtol",
+    logAtol: "log10 atol",
+    logErrTol: "log10 ε",
+    logStabilityTol: "log10 εs",
+    stableCycles: "Ns"
+  };
+  return symbols[key] ?? controlShortLabel(key);
+}
+
+function parameterColorAt(value: number, range: GridRange | null, alpha = 1): string {
+  if (!range) return colorWithAlpha("#FFD166", alpha);
+  const span = range.upperSliderValue - range.lowerSliderValue || 1;
+  const sliderValue = range.key === "tEnd" ? Math.log10(value) : value;
+  const t = clamp((sliderValue - range.lowerSliderValue) / span, 0, 1);
+  const a = { r: 96, g: 128, b: 208 };
+  const b = { r: 255, g: 209, b: 102 };
+  const r = Math.round(a.r + (b.r - a.r) * t);
+  const g = Math.round(a.g + (b.g - a.g) * t);
+  const blue = Math.round(a.b + (b.b - a.b) * t);
+  return alpha >= 1 ? `rgb(${r}, ${g}, ${blue})` : `rgba(${r}, ${g}, ${blue}, ${clamp(alpha, 0, 1)})`;
+}
+
+function gridResultColor(result: GridModelResult, alpha = 1): string {
+  const loopKey = gridState.selectedLoopKey;
+  if (!loopKey) return parameterColorAt(0, null, alpha);
+  return parameterColorAt(result.variedValues[loopKey] ?? 0, currentLoopRange(), alpha);
 }
 
 function setupResponsiveSidebarControls(): void {
@@ -1287,6 +2072,156 @@ function setupInteractivePlots(): void {
     });
   });
   updatePlotResetButtons();
+}
+
+function setupGridCanvasInteractions(): void {
+  ["lightCanvas", "velocityCanvas", "fourierCanvas"].forEach((canvasId) => {
+    const canvas = el<HTMLCanvasElement>(canvasId);
+    canvas.classList.add("grid-interaction-canvas");
+    canvas.addEventListener("pointerdown", (event) => beginGridCanvasInteraction(event, canvasId));
+    canvas.addEventListener("pointermove", (event) => updateGridCanvasInteraction(event, canvasId));
+    canvas.addEventListener("pointerup", (event) => finishGridCanvasInteraction(event, canvasId));
+    canvas.addEventListener("pointercancel", (event) => finishGridCanvasInteraction(event, canvasId));
+    canvas.addEventListener("pointerleave", () => clearFourierHover(canvasId));
+    canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+  });
+}
+
+function beginGridCanvasInteraction(event: PointerEvent, canvasId: string): void {
+  if (!gridState.enabled) return;
+  const canvas = event.currentTarget as HTMLCanvasElement;
+  const point = canvasPoint(canvas, event);
+  const colorbar = colorbarRegionAt(canvasId, point);
+  if (colorbar) {
+    event.preventDefault();
+    canvas.setPointerCapture(event.pointerId);
+    activeGridCanvasInteraction = { type: "colorbar", canvasId, pointerId: event.pointerId };
+    canvas.dataset.gridInteraction = "colorbar";
+    gridState.heldResult = null;
+    stopGridAnimation();
+    scrubGridColorbar(colorbar, point);
+    return;
+  }
+
+  if (canvasId === "fourierCanvas") {
+    const hit = fourierPointHitAt(point);
+    if (!hit) return;
+    event.preventDefault();
+    canvas.setPointerCapture(event.pointerId);
+    activeGridCanvasInteraction = { type: "fourier-hold", canvasId, pointerId: event.pointerId };
+    canvas.dataset.gridInteraction = "fourier-hold";
+    gridState.hoverResult = hit.result;
+    gridState.heldResult = hit.result;
+    stopGridAnimation();
+    drawAll();
+  }
+}
+
+function updateGridCanvasInteraction(event: PointerEvent, canvasId: string): void {
+  const canvas = event.currentTarget as HTMLCanvasElement;
+  const point = canvasPoint(canvas, event);
+  if (activeGridCanvasInteraction?.canvasId === canvasId && activeGridCanvasInteraction.pointerId === event.pointerId) {
+    event.preventDefault();
+    if (activeGridCanvasInteraction.type === "colorbar") {
+      const region = gridColorbarRegions.get(canvasId);
+      if (region) scrubGridColorbar(region, point);
+      return;
+    }
+    if (activeGridCanvasInteraction.type === "fourier-hold") {
+      const hit = fourierPointHitAt(point);
+      if (hit && hit.result !== gridState.heldResult) {
+        gridState.hoverResult = hit.result;
+        gridState.heldResult = hit.result;
+        drawAll();
+      }
+      return;
+    }
+  }
+
+  const overColorbar = Boolean(colorbarRegionAt(canvasId, point));
+  const overFourier = canvasId === "fourierCanvas" ? fourierPointHitAt(point) : null;
+  canvas.style.cursor = overColorbar ? "ew-resize" : overFourier ? "pointer" : "";
+  if (canvasId === "fourierCanvas") updateFourierHover(overFourier?.result ?? null, canvas);
+}
+
+function finishGridCanvasInteraction(event: PointerEvent, canvasId: string): void {
+  if (!activeGridCanvasInteraction || activeGridCanvasInteraction.canvasId !== canvasId || activeGridCanvasInteraction.pointerId !== event.pointerId) return;
+  const canvas = event.currentTarget as HTMLCanvasElement;
+  event.preventDefault();
+  if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+  delete canvas.dataset.gridInteraction;
+  activeGridCanvasInteraction = null;
+  gridState.heldResult = null;
+  startGridAnimation();
+  drawAll();
+}
+
+function clearFourierHover(canvasId: string): void {
+  if (canvasId !== "fourierCanvas" || activeGridCanvasInteraction) return;
+  const canvas = document.getElementById("fourierCanvas") as HTMLCanvasElement | null;
+  if (canvas) {
+    delete canvas.dataset.gridHover;
+    canvas.style.cursor = "";
+  }
+  if (!gridState.hoverResult) return;
+  gridState.hoverResult = null;
+  drawAll();
+}
+
+function colorbarRegionAt(canvasId: string, point: { x: number; y: number }): GridColorbarRegion | null {
+  const region = gridColorbarRegions.get(canvasId);
+  if (!region) return null;
+  return point.x >= region.hitLeft && point.x <= region.hitRight && point.y >= region.hitTop && point.y <= region.hitBottom
+    ? region
+    : null;
+}
+
+function scrubGridColorbar(region: GridColorbarRegion, point: { x: number; y: number }): void {
+  const loopKey = gridState.selectedLoopKey;
+  const range = currentLoopRange();
+  const path = gridPathResults();
+  if (!loopKey || !range || !path.length) return;
+  const fraction = clamp((point.x - region.left) / Math.max(1e-12, region.width), 0, 1);
+  const targetSliderValue = range.lowerSliderValue + fraction * (range.upperSliderValue - range.lowerSliderValue);
+  let bestIndex = 0;
+  let bestDistance = Infinity;
+  path.forEach((result, index) => {
+    const sliderValue = result.sliderValues[loopKey];
+    if (sliderValue === undefined) return;
+    const distance = Math.abs(sliderValue - targetSliderValue);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+  gridState.animationIndex = bestIndex;
+  gridState.hoverResult = null;
+  gridState.heldResult = null;
+  const canvas = document.getElementById(region.canvasId) as HTMLCanvasElement | null;
+  if (canvas) canvas.dataset.gridScrubIndex = String(bestIndex);
+  drawAll();
+}
+
+function fourierPointHitAt(point: { x: number; y: number }): FourierPointHit | null {
+  let best: FourierPointHit | null = null;
+  let bestDistance = Infinity;
+  fourierPointHits.forEach((hit) => {
+    const distance = Math.hypot(point.x - hit.x, point.y - hit.y);
+    const threshold = Math.max(9, hit.radius + 6);
+    if (distance <= threshold && distance < bestDistance) {
+      best = hit;
+      bestDistance = distance;
+    }
+  });
+  return best;
+}
+
+function updateFourierHover(result: GridModelResult | null, canvas: HTMLCanvasElement): void {
+  if (result === gridState.hoverResult) return;
+  gridState.hoverResult = result;
+  if (result) canvas.dataset.gridHover = "true";
+  else delete canvas.dataset.gridHover;
+  drawAll();
 }
 
 function canvasPoint(canvas: HTMLCanvasElement, event: PointerEvent | WheelEvent): { x: number; y: number } {
@@ -1518,13 +2453,17 @@ function updateIntegrationControlVisibility(): void {
     const key = wrapper.dataset.controlKey as ControlParameterKey | undefined;
     wrapper.hidden = !key || !visible.has(key);
   });
+  updateGridLoopControls();
 }
 
 function buildSliderGroup(containerId: string, controls: ControlDef[]): void {
   const container = el<HTMLDivElement>(containerId);
   container.querySelectorAll<HTMLButtonElement>("[data-reset-key]").forEach((button) => {
     const key = button.dataset.resetKey as ControlParameterKey | undefined;
-    if (key) controlElements.delete(key);
+    if (key) {
+      controlElements.delete(key);
+      gridRangeElements.delete(key);
+    }
   });
   container.innerHTML = "";
   controls.forEach(([key, symbol, name, min, max, step, _defaultValue, color]) => {
@@ -1538,23 +2477,48 @@ function buildSliderGroup(containerId: string, controls: ControlDef[]): void {
         <span class="slider-reading"><span class="slider-symbol">${symbol}</span><span class="slider-equals">=</span><span class="slider-value" data-value-for="${key}"></span></span>
       </div>
       <div class="slider-track">
-        <input type="range" min="${min}" max="${max}" step="${step}" value="${String(sliderInputValue(key))}" aria-label="${name}">
+        <input class="single-slider" type="range" min="${min}" max="${max}" step="${step}" value="${String(sliderInputValue(key))}" aria-label="${name}">
+        <div class="grid-range-controls" data-grid-range-controls hidden>
+          <div class="grid-range-fill" aria-hidden="true"></div>
+          <div class="grid-loop-marker" data-grid-loop-marker hidden aria-hidden="true"></div>
+          <div class="grid-range-inputs">
+            <input class="grid-bound grid-bound-low" data-grid-bound="lower" type="range" min="${min}" max="${max}" step="${step}" value="${String(sliderInputValue(key))}" aria-label="${name} grid lower bound">
+            <input class="grid-bound grid-bound-high" data-grid-bound="upper" type="range" min="${min}" max="${max}" step="${step}" value="${String(sliderInputValue(key))}" aria-label="${name} grid upper bound">
+          </div>
+        </div>
         ${key === "tEnd" ? tauScaleMarkup() : ""}
         </div>
       <button class="parameter-reset" type="button" data-reset-key="${key}" title="Restore ${name} to the ${selectedPreset} preset value" aria-label="Restore ${name} to the preset value">↺</button>
     `;
-    const input = wrapper.querySelector("input");
-    if (!input) throw new Error("missing slider input");
+    const input = wrapper.querySelector<HTMLInputElement>(".single-slider");
+    const lower = wrapper.querySelector<HTMLInputElement>("[data-grid-bound='lower']");
+    const upper = wrapper.querySelector<HTMLInputElement>("[data-grid-bound='upper']");
+    if (!input || !lower || !upper) throw new Error("missing slider input");
     input.addEventListener("input", (event) => {
       state[key] = valueFromSlider(key, Number((event.target as HTMLInputElement).value));
+      syncGridRangeCenter(key);
       updateSliderLabel(key);
       if (key === "m") updateEquationBlocks();
       refreshActivePreset();
       scheduleSolve();
     });
+    const updateBounds = () => updateGridRangeBounds(key, Number(lower.value), Number(upper.value));
+    lower.addEventListener("input", updateBounds);
+    upper.addEventListener("input", updateBounds);
+    wrapper.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      if (!gridState.enabled) {
+        setGridModeEnabled(true);
+        enableGridRange(key);
+        return;
+      }
+      toggleGridRange(key);
+    });
     wrapper.querySelector<HTMLButtonElement>("[data-reset-key]")?.addEventListener("click", () => restoreParameterDefault(key));
     container.appendChild(wrapper);
     controlElements.set(key, input);
+    gridRangeElements.set(key, { wrapper, center: input, lower, upper });
+    refreshGridRangeUi(key);
     updateSliderLabel(key);
   });
   queueMathTypeset([container]);
@@ -1570,17 +2534,25 @@ function tauScaleMarkup(): string {
 }
 
 function sliderInputValue(key: ControlParameterKey): number {
-  return key === "tEnd" ? Math.log10(state.tEnd) : state[key];
+  return sliderValueFromParameter(key, state);
 }
 
 function valueFromSlider(key: ControlParameterKey, value: number): number {
-  if (key !== "tEnd") return value;
-  return Math.min(1000, Math.max(1, 10 ** value));
+  return parameterValueFromSlider(key, value);
 }
 
 function controlValueLabel(key: ControlParameterKey, value: number): string {
   if (key !== "tEnd") return fmt(value, 5);
   return fmt(value, value >= 100 ? 0 : 1);
+}
+
+function controlShortLabel(key: ControlParameterKey): string {
+  if (key === "tEnd") return "tau_max";
+  if (key === "logRtol") return "log rtol";
+  if (key === "logAtol") return "log atol";
+  if (key === "logErrTol") return "log eps";
+  if (key === "logStabilityTol") return "log eps_s";
+  return String(key);
 }
 
 function buildParameterTable(): void {
@@ -1658,7 +2630,7 @@ function updateEquationBlocks(): void {
       \\ozRadius{R}^{-(\\ozChi{\\chi}-2)}
       \\ozConvective{U_c}^{3}\\\\[0.35em]
     \\ozLuminosity{L} &=
-      (1-\\ozGammac{\\gamma_c})\\ozRadiative{L_r}
+      \\ozNeutral{\\gamma_r}\\ozRadiative{L_r}
       + \\ozGammac{\\gamma_c}\\ozConvLum{L_c}
     \\end{aligned}
     \\]
@@ -1694,19 +2666,25 @@ function updateVariableInitials(): void {
 function updateSliderLabel(key: ControlParameterKey): void {
   const label = document.querySelector(`[data-value-for="${String(key)}"]`);
   if (!label) return;
-  const value = state[key];
+  const current = currentGridResult();
+  const dynamicValue = gridState.enabled && key === gridState.selectedLoopKey
+    ? current?.variedValues[key]
+    : undefined;
+  const value = dynamicValue ?? state[key];
   label.textContent = controlValueLabel(key, value);
   const input = controlElements.get(key);
   if (input) input.value = String(sliderInputValue(key));
 }
 
 function updateAllSliderLabels(): void {
+  syncAllGridRangeCenters();
   controlElements.forEach((_input, key) => updateSliderLabel(key));
   updateResetButtons();
 }
 
 function restoreParameterDefault(key: ControlParameterKey): void {
   state[key] = PRESETS[selectedPreset][key];
+  syncGridRangeCenter(key);
   updateSliderLabel(key);
   if (key === "m") updateEquationBlocks();
   refreshActivePreset();
@@ -1774,6 +2752,7 @@ function applyPreset(name: string): void {
 function scheduleSolve(): void {
   window.clearTimeout(debounceTimer);
   debounceTimer = window.setTimeout(solveAndDraw, 80);
+  scheduleGridCompute();
 }
 
 function solveAndDraw(): void {
@@ -1995,7 +2974,8 @@ function drawAxes(
   xlabel: string,
   ylabel: string,
   xlabelColor: string = THEME.axisText,
-  ylabelColor: string = THEME.axisText
+  ylabelColor: string = THEME.axisText,
+  ylabelX: number = PLOT_LAYOUT.yLabelX
 ): void {
   ctx.strokeStyle = THEME.axisGrid;
   ctx.lineWidth = 1;
@@ -2029,7 +3009,7 @@ function drawAxes(
   ctx.fillStyle = xlabelColor;
   ctx.fillText(xlabel, plot.left + plot.width / 2, plot.top + plot.height + 42);
   ctx.save();
-  ctx.translate(PLOT_LAYOUT.yLabelX, plot.top + plot.height / 2);
+  ctx.translate(ylabelX, plot.top + plot.height / 2);
   ctx.rotate(-Math.PI / 2);
   ctx.fillStyle = ylabelColor;
   ctx.fillText(ylabel, 0, 0);
@@ -2051,9 +3031,16 @@ function drawSeries(
     ylabelColor?: string;
     message?: string;
     denseEnvelope?: boolean;
+    phaseMarker?: { x: number; color: string };
+    afterDraw?: (ctx: CanvasRenderingContext2D, plot: PlotBox, xlim: NumericRange, ylim: NumericRange, canvasId: string) => void;
   }
 ): void {
   const canvas = el<HTMLCanvasElement>(canvasId);
+  const panel = canvas.closest<HTMLElement>(".plot-panel");
+  if (panel?.hidden) {
+    plotRenderStates.delete(canvasId);
+    return;
+  }
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   canvas.width = Math.max(320, Math.floor(rect.width * dpr));
@@ -2123,7 +3110,31 @@ function drawSeries(
     ctx.setLineDash([]);
   });
   ctx.restore();
+  if (options.phaseMarker) drawPhaseMarker(ctx, plot, xlim, options.phaseMarker);
+  options.afterDraw?.(ctx, plot, xlim, ylim, canvasId);
   drawSelectionOverlay(ctx, canvasId, plot);
+}
+
+function drawPhaseMarker(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  marker: { x: number; color: string }
+): void {
+  if (!Number.isFinite(marker.x) || marker.x < xlim[0] || marker.x > xlim[1]) return;
+  const x = plot.left + ((marker.x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.width, plot.height);
+  ctx.clip();
+  ctx.strokeStyle = marker.color;
+  ctx.lineWidth = 1.6;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(x, plot.top);
+  ctx.lineTo(x, plot.top + plot.height);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawSelectionOverlay(ctx: CanvasRenderingContext2D, canvasId: string, plot: PlotBox): void {
@@ -2144,6 +3155,281 @@ function drawSelectionOverlay(ctx: CanvasRenderingContext2D, canvasId: string, p
   ctx.setLineDash([4, 3]);
   ctx.fillRect(left, top, width, height);
   ctx.strokeRect(left, top, width, height);
+  ctx.restore();
+}
+
+function gridPhaseSeries(
+  quantity: "L" | "V",
+  color: string,
+  fallbackRows: Row[]
+): Series[] {
+  const accessor = (row: Row) => row[quantity];
+  if (!gridState.enabled || !gridState.results.length) {
+    return [{ label: quantity, color, rows: fallbackRows, x: (row) => row.tau, y: accessor }];
+  }
+  const path = gridPathResults();
+  const current = currentGridResult();
+  const series: Series[] = gridState.results.map((result) => ({
+    label: `grid-${result.id}`,
+    color: "rgba(190, 200, 216, 0.18)",
+    rows: result.phaseRows,
+    x: (row) => row.tau,
+    y: accessor,
+    width: 0.8
+  }));
+  path.forEach((result) => {
+    series.push({
+      label: `path-${result.id}`,
+      color: "rgba(190, 200, 216, 0.34)",
+      rows: result.phaseRows,
+      x: (row) => row.tau,
+      y: accessor,
+      width: 1.15
+    });
+  });
+  const highlighted = gridState.heldResult || gridState.hoverResult;
+  if (highlighted && highlighted !== current) {
+    series.push({
+      label: `highlight-${highlighted.id}`,
+      color: gridResultColor(highlighted, 0.98),
+      rows: highlighted.phaseRows,
+      x: (row) => row.tau,
+      y: accessor,
+      width: 3.4
+    });
+  }
+  if (current) {
+    series.push({
+      label: quantity,
+      color: gridResultColor(current, 0.98),
+      rows: current.phaseRows,
+      x: (row) => row.tau,
+      y: accessor,
+      width: 2.8
+    });
+  }
+  return series;
+}
+
+function drawGridColorbar(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  _xlim?: NumericRange,
+  _ylim?: NumericRange,
+  canvasId = "fourierCanvas"
+): void {
+  if (!gridState.enabled) {
+    gridColorbarRegions.delete(canvasId);
+    return;
+  }
+  const range = currentLoopRange();
+  const current = currentGridResult();
+  if (!range || !current) {
+    gridColorbarRegions.delete(canvasId);
+    return;
+  }
+  const value = current.variedValues[range.key];
+  const sliderValue = current.sliderValues[range.key];
+  if (value === undefined || sliderValue === undefined) {
+    gridColorbarRegions.delete(canvasId);
+    return;
+  }
+  const width = Math.min(150, Math.max(112, plot.width * 0.24));
+  const height = 9;
+  const left = plot.left + plot.width - width - 12;
+  const top = plot.top + 12;
+  gridColorbarRegions.set(canvasId, {
+    canvasId,
+    left,
+    top,
+    width,
+    height,
+    hitLeft: left - 12,
+    hitTop: top - 10,
+    hitRight: left + width + 12,
+    hitBottom: top + 50
+  });
+  const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
+  if (canvas) {
+    canvas.dataset.gridColorbar = "ready";
+    canvas.dataset.gridColorbarKey = range.key;
+  }
+  const lowerValue = parameterValueFromSlider(range.key, range.lowerSliderValue);
+  const upperValue = parameterValueFromSlider(range.key, range.upperSliderValue);
+  const gradient = ctx.createLinearGradient(left, top, left + width, top);
+  gradient.addColorStop(0, "#6080D0");
+  gradient.addColorStop(1, "#FFD166");
+  ctx.save();
+  ctx.fillStyle = "rgba(5, 8, 20, 0.68)";
+  ctx.fillRect(left - 8, top - 8, width + 16, 58);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(left, top, width, height);
+  ctx.strokeStyle = "rgba(238, 245, 255, 0.62)";
+  ctx.strokeRect(left, top, width, height);
+  const fraction = clamp((sliderValue - range.lowerSliderValue) / Math.max(1e-12, range.upperSliderValue - range.lowerSliderValue), 0, 1);
+  const markerX = left + fraction * width;
+  ctx.fillStyle = parameterColorAt(value, range);
+  ctx.strokeStyle = "#050814";
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.moveTo(markerX, top + height + 2);
+  ctx.lineTo(markerX - 5, top + height + 10);
+  ctx.lineTo(markerX + 5, top + height + 10);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = THEME.axisText;
+  ctx.font = "11px Inter, sans-serif";
+  ctx.textBaseline = "top";
+  ctx.textAlign = "left";
+  ctx.fillText(controlValueLabel(range.key, lowerValue), left, top + height + 13);
+  ctx.textAlign = "right";
+  ctx.fillText(controlValueLabel(range.key, upperValue), left + width, top + height + 13);
+  const symbol = controlCanvasSymbol(range.key);
+  const valueText = ` = ${controlValueLabel(range.key, value)}`;
+  ctx.font = "600 11px Inter, sans-serif";
+  const symbolWidth = ctx.measureText(symbol).width;
+  ctx.font = "11px Inter, sans-serif";
+  const valueWidth = ctx.measureText(valueText).width;
+  const labelLeft = left + width / 2 - (symbolWidth + valueWidth) / 2;
+  ctx.textAlign = "left";
+  ctx.font = "600 11px Inter, sans-serif";
+  ctx.fillStyle = controlColor(range.key);
+  ctx.fillText(symbol, labelLeft, top + height + 28);
+  ctx.font = "11px Inter, sans-serif";
+  ctx.fillStyle = THEME.axisText;
+  ctx.fillText(valueText, labelLeft + symbolWidth, top + height + 28);
+  ctx.restore();
+}
+
+function drawFourierPanel(): void {
+  const panel = document.getElementById("fourierGridPanel");
+  const canvas = document.getElementById("fourierCanvas");
+  if (!(panel instanceof HTMLElement) || !(canvas instanceof HTMLCanvasElement)) return;
+  panel.hidden = !gridState.enabled;
+  if (panel.hidden) {
+    fourierPointHits = [];
+    gridColorbarRegions.delete("fourierCanvas");
+    return;
+  }
+
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const columns = rect.width >= 1320 ? 4 : rect.width >= 780 ? 2 : 1;
+  const rows = Math.ceil(4 / columns);
+  const cssHeight = Math.max(260, rows * 214);
+  canvas.width = Math.max(320, Math.floor(rect.width * dpr));
+  canvas.height = Math.floor(cssHeight * dpr);
+  canvas.style.height = `${cssHeight}px`;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, rect.width, cssHeight);
+  fourierPointHits = [];
+  delete canvas.dataset.firstFourierHit;
+  canvas.dataset.fourierHitCount = "0";
+
+  const gridPoints = gridState.results.filter((result) => result.fourier);
+  const path = gridPathResults().filter((result) => result.fourier);
+  const allPoints = [...gridPoints, ...path];
+  if (!allPoints.length) {
+    gridColorbarRegions.delete("fourierCanvas");
+    ctx.fillStyle = THEME.axisText;
+    ctx.font = "13px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(gridState.status === "complete" ? "No Fourier diagnostics passed the amplitude filter" : gridState.statusText, rect.width / 2, cssHeight / 2);
+    return;
+  }
+
+  const current = currentGridResult();
+  const currentFourier = current?.fourier ? current : null;
+  const xlim = range(allPoints.map((point) => point.period), 0.05);
+  const panels = [
+    { label: "r21", value: (result: GridModelResult) => result.fourier!.r21 },
+    { label: "phi21", value: (result: GridModelResult) => result.fourier!.phi21 },
+    { label: "r31", value: (result: GridModelResult) => result.fourier!.r31 },
+    { label: "phi31", value: (result: GridModelResult) => result.fourier!.phi31 }
+  ];
+  const gap = 16;
+  const pad = { left: 78, right: 18, top: 24, bottom: 58 };
+  const panelWidth = (rect.width - gap * (columns - 1)) / columns;
+  const panelHeight = (cssHeight - gap * (rows - 1)) / rows;
+
+  panels.forEach((item, index) => {
+    const column = index % columns;
+    const rowIndex = Math.floor(index / columns);
+    const box = {
+      left: column * (panelWidth + gap) + pad.left,
+      top: rowIndex * (panelHeight + gap) + pad.top,
+      width: panelWidth - pad.left - pad.right,
+      height: panelHeight - pad.top - pad.bottom
+    };
+    const values = allPoints.map(item.value);
+    const ylim = range(values, 0.08);
+    drawAxes(ctx, box, xlim, ylim, "period/τ", item.label, THEME.axisText, THEME.axisText, Math.max(8, box.left - 70));
+    collectFourierPointHits(box, xlim, ylim, allPoints, item.value);
+    drawFourierPoints(ctx, box, xlim, ylim, gridPoints, item.value, "rgba(190, 200, 216, 0.28)", 2.4);
+    drawFourierPoints(ctx, box, xlim, ylim, path, item.value, (result) => gridResultColor(result, 0.72), 3.4);
+    const highlighted = gridState.heldResult || gridState.hoverResult;
+    if (highlighted?.fourier && highlighted !== currentFourier) drawFourierPoints(ctx, box, xlim, ylim, [highlighted], item.value, (result) => gridResultColor(result, 0.98), 5.4);
+    if (currentFourier) drawFourierPoints(ctx, box, xlim, ylim, [currentFourier], item.value, (result) => gridResultColor(result, 0.98), 6.2);
+  });
+
+  canvas.dataset.fourierHitCount = String(fourierPointHits.length);
+  const firstHit = fourierPointHits[0];
+  if (firstHit) canvas.dataset.firstFourierHit = `${firstHit.x.toFixed(1)},${firstHit.y.toFixed(1)}`;
+
+  drawGridColorbar(ctx, {
+    left: rect.width - 184,
+    top: 4,
+    width: 170,
+    height: 36
+  });
+}
+
+function collectFourierPointHits(
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  points: GridModelResult[],
+  value: (result: GridModelResult) => number
+): void {
+  const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  points.forEach((result) => {
+    const x = sx(result.period);
+    const y = sy(value(result));
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    fourierPointHits.push({ result, x, y, radius: 5 });
+  });
+}
+
+function drawFourierPoints(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  points: GridModelResult[],
+  value: (result: GridModelResult) => number,
+  color: string | ((result: GridModelResult) => string),
+  radius: number
+): void {
+  const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.width, plot.height);
+  ctx.clip();
+  points.forEach((point) => {
+    const x = sx(point.period);
+    const y = sy(value(point));
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    ctx.fillStyle = typeof color === "function" ? color(point) : color;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, 2 * Math.PI);
+    ctx.fill();
+  });
   ctx.restore();
 }
 
@@ -2284,6 +3570,395 @@ function visibleRows(plotId: InteractivePlotId, key: PlotSeriesKey, rows: Row[])
   return seriesIsVisible(plotId, key) ? rows : [];
 }
 
+function rawRange(values: number[]): NumericRange {
+  let min = Infinity;
+  let max = -Infinity;
+  values.forEach((value) => {
+    if (!Number.isFinite(value)) return;
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+  });
+  return Number.isFinite(min) && Number.isFinite(max) ? [min, max] : [0, 1];
+}
+
+function normalizedInRange(value: number, valueRange: NumericRange): number {
+  const span = valueRange[1] - valueRange[0];
+  if (!Number.isFinite(value) || span <= 1e-12) return clamp(value, 0, 1);
+  return clamp((value - valueRange[0]) / span, 0, 1);
+}
+
+function scaledRgb(color: RgbColor, scale: number): RgbColor {
+  return {
+    r: clamp(Math.round(color.r * scale), 0, 255),
+    g: clamp(Math.round(color.g * scale), 0, 255),
+    b: clamp(Math.round(color.b * scale), 0, 255)
+  };
+}
+
+function gammaR(): number {
+  return 1 - state.gammac;
+}
+
+function weightedRadiativeLuminosity(row: Row): number {
+  return gammaR() * row.Lr;
+}
+
+function weightedConvectiveLuminosity(row: Row): number {
+  return state.gammac * row.Lc;
+}
+
+function phaseMarker(): { x: number; color: string } | undefined {
+  if (gridState.enabled) return undefined;
+  return latestPhaseRows.length ? { x: currentAnimationPhase, color: PHASE_MARKER_COLOR } : undefined;
+}
+
+function drawPhasePlots(): void {
+  const marker = phaseMarker();
+  drawSeries("lightCanvas", gridPhaseSeries("L", COLORS.L, latestPhaseSample), {
+    xlabel: latestPhasePeriodLabel,
+    ylabel: "luminosity L",
+    ylabelColor: COLORS.L,
+    xlim: [0, 2],
+    ylim: latestPhaseSample.length || gridState.results.length ? undefined : [0, 1],
+    message: latestPhaseMessage,
+    phaseMarker: marker,
+    afterDraw: drawGridColorbar
+  });
+
+  drawSeries("velocityCanvas", gridPhaseSeries("V", COLORS.V, latestPhaseSample), {
+    xlabel: latestPhasePeriodLabel,
+    ylabel: "radial velocity V",
+    ylabelColor: COLORS.V,
+    xlim: [0, 2],
+    ylim: latestPhaseSample.length || gridState.results.length ? undefined : [0, 1],
+    message: latestPhaseMessage,
+    phaseMarker: marker,
+    afterDraw: drawGridColorbar
+  });
+
+  if (sonificationSource === "pressure") {
+    drawSeries("pressureCanvas", [
+      { label: "P", color: COLORS.H, rows: latestPhaseSample, x: (row) => row.tau, y: acousticPressureSignal }
+    ], {
+      xlabel: latestPhasePeriodLabel,
+      ylabel: "pressure",
+      ylabelColor: COLORS.H,
+      xlim: [0, 2],
+      ylim: latestPhaseSample.length ? undefined : [0, 1],
+      message: latestPhaseMessage,
+      phaseMarker: marker
+    });
+  }
+}
+
+function drawCanvasMessage(ctx: CanvasRenderingContext2D, width: number, height: number, message: string): void {
+  ctx.fillStyle = THEME.axisText;
+  ctx.font = "13px Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(message, width / 2, height / 2);
+}
+
+function drawAnnularSegment(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  outerRadius: number,
+  innerRadius: number,
+  startAngle: number,
+  endAngle: number,
+  fillStyle: string
+): void {
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, outerRadius, startAngle, endAngle);
+  if (innerRadius > 0) {
+    ctx.arc(centerX, centerY, innerRadius, endAngle, startAngle, true);
+  } else {
+    ctx.lineTo(centerX, centerY);
+  }
+  ctx.closePath();
+  ctx.fillStyle = fillStyle;
+  ctx.fill();
+}
+
+function maximumPhaseRadius(rows: readonly Row[]): number {
+  return Math.max(1.2, ...rows.map((row) => row.R).filter((value) => Number.isFinite(value) && value > 0));
+}
+
+function drawGuideCircle(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  radius: number,
+  strokeStyle: string,
+  lineDash: number[] = []
+): void {
+  if (radius <= 0) return;
+  ctx.save();
+  ctx.strokeStyle = strokeStyle;
+  ctx.lineWidth = 1;
+  ctx.setLineDash(lineDash);
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawModelReferenceGuides(
+  ctx: CanvasRenderingContext2D,
+  rows: readonly Row[],
+  centerX: number,
+  centerY: number,
+  radiusScale: number
+): void {
+  const equilibriumGeometry = shellGeometryFor(1, mAt(1, state));
+  const [minRadius, maxRadius] = rawRange(rows.map((row) => row.R));
+  const hasRadiusRange = rows.length > 1 && maxRadius - minRadius > 1e-4;
+
+  if (hasRadiusRange) {
+    drawGuideCircle(ctx, centerX, centerY, minRadius * radiusScale, colorWithAlpha(COLORS.R, 0.18), [3, 5]);
+    drawGuideCircle(ctx, centerX, centerY, maxRadius * radiusScale, colorWithAlpha(COLORS.R, 0.24), [7, 5]);
+  }
+
+  drawGuideCircle(ctx, centerX, centerY, radiusScale, "rgba(82, 100, 137, 0.42)");
+
+  const innerReferenceRadius = equilibriumGeometry.innerRadius * radiusScale;
+  if (innerReferenceRadius > 1) {
+    drawGuideCircle(ctx, centerX, centerY, innerReferenceRadius, "rgba(255, 184, 108, 0.34)", [4, 4]);
+  } else {
+    ctx.save();
+    ctx.fillStyle = "rgba(255, 184, 108, 0.36)";
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+type LuminosityLabelSubscript = "c" | "r";
+
+interface LuminosityLabelSymbol {
+  base: string;
+  subscript?: LuminosityLabelSubscript;
+}
+
+function measureLuminosityLabelSymbol(ctx: CanvasRenderingContext2D, symbol: LuminosityLabelSymbol): number {
+  ctx.font = "700 13px Inter, sans-serif";
+  const baseWidth = ctx.measureText(symbol.base).width;
+  if (!symbol.subscript) return baseWidth;
+  ctx.font = "700 9px Inter, sans-serif";
+  return baseWidth + 1 + ctx.measureText(symbol.subscript).width;
+}
+
+function drawLuminosityLabelSymbol(
+  ctx: CanvasRenderingContext2D,
+  symbol: LuminosityLabelSymbol,
+  x: number,
+  y: number
+): number {
+  ctx.textAlign = "left";
+  ctx.font = "700 13px Inter, sans-serif";
+  ctx.strokeText(symbol.base, x, y + 4);
+  ctx.fillText(symbol.base, x, y + 4);
+  const baseWidth = ctx.measureText(symbol.base).width;
+  if (!symbol.subscript) return baseWidth;
+
+  ctx.font = "700 9px Inter, sans-serif";
+  ctx.strokeText(symbol.subscript, x + baseWidth + 1, y + 8);
+  ctx.fillText(symbol.subscript, x + baseWidth + 1, y + 8);
+  return baseWidth + 1 + ctx.measureText(symbol.subscript).width;
+}
+
+function drawLuminosityArcLabel(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  color: string,
+  gammaSubscript?: LuminosityLabelSubscript,
+  luminositySubscript?: LuminosityLabelSubscript
+): void {
+  const symbols: LuminosityLabelSymbol[] = gammaSubscript
+    ? [
+        { base: "γ", subscript: gammaSubscript },
+        { base: "L", subscript: luminositySubscript }
+      ]
+    : [{ base: "L", subscript: luminositySubscript }];
+  const gap = gammaSubscript ? 3 : 0;
+
+  ctx.save();
+  ctx.textBaseline = "alphabetic";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(6, 11, 24, 0.92)";
+  ctx.lineWidth = 4;
+  ctx.fillStyle = colorWithAlpha(color, 0.98);
+  const widths = symbols.map((symbol) => measureLuminosityLabelSymbol(ctx, symbol));
+  const totalWidth = widths.reduce((sum, width) => sum + width, 0) + gap * (symbols.length - 1);
+  let cursor = x - totalWidth / 2;
+  symbols.forEach((symbol, index) => {
+    cursor += drawLuminosityLabelSymbol(ctx, symbol, cursor, y);
+    if (index < symbols.length - 1) cursor += gap;
+  });
+  ctx.restore();
+}
+
+function drawConvectionArcs(
+  ctx: CanvasRenderingContext2D,
+  row: Row,
+  centerX: number,
+  centerY: number,
+  radiusScale: number
+): void {
+  const equilibriumGeometry = shellGeometryFor(1, mAt(1, state));
+  const equilibriumThickness = Math.max(3, equilibriumGeometry.thickness * radiusScale);
+  const radius = radiusScale;
+  const segment = (Math.PI / 2) / 3;
+  const gap = 0.018;
+  const arcs: Array<{
+    value: number;
+    color: string;
+    gammaSubscript?: LuminosityLabelSubscript;
+    luminositySubscript?: LuminosityLabelSubscript;
+  }> = [
+    { value: weightedConvectiveLuminosity(row), color: COLORS.Lc, gammaSubscript: "c" as const, luminositySubscript: "c" as const },
+    { value: row.L, color: COLORS.L },
+    { value: weightedRadiativeLuminosity(row), color: COLORS.Lr, gammaSubscript: "r" as const, luminositySubscript: "r" as const }
+  ];
+  const arcWidths = arcs.map((arc) => clamp(equilibriumThickness * Math.max(0, arc.value), 2, equilibriumThickness * 3));
+  const fixedLabelOffset = Math.max(18, equilibriumThickness * 0.75 + 10);
+  const labelRadius = Math.min(
+    radius + fixedLabelOffset,
+    Math.max(0, Math.min(centerX, centerY) - 28)
+  );
+
+  ctx.save();
+  ctx.lineCap = "butt";
+  arcs.forEach((arc, index) => {
+    const startAngle = index * segment + gap;
+    const endAngle = (index + 1) * segment - gap;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+    ctx.strokeStyle = colorWithAlpha(arc.color, 0.96);
+    ctx.lineWidth = arcWidths[index];
+    ctx.stroke();
+  });
+
+  arcs.forEach((arc, index) => {
+    const angle = (index + 0.5) * segment;
+    drawLuminosityArcLabel(
+      ctx,
+      centerX + Math.cos(angle) * labelRadius,
+      centerY + Math.sin(angle) * labelRadius,
+      arc.color,
+      arc.gammaSubscript,
+      arc.luminositySubscript
+    );
+  });
+  ctx.restore();
+}
+
+function drawModelVisualization(): void {
+  const canvas = el<HTMLCanvasElement>("modelCanvas");
+  const panel = canvas.closest<HTMLElement>(".plot-panel");
+  if (panel?.hidden) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(260, rect.width || 320);
+  const height = Math.max(260, rect.height || width);
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+  canvas.dataset.animationSpeed = modelSpeedLabel(modelAnimationSpeed);
+
+  const row = latestPhaseRows.length ? phaseRowAt(latestPhaseRows, currentAnimationPhase) : null;
+  if (!row) {
+    canvas.dataset.convectionActive = "false";
+    canvas.dataset.luminosityArcLabels = "";
+    canvas.dataset.geometryGuides = "";
+    drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
+    return;
+  }
+
+  const size = Math.min(width, height);
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const maxRadius = maximumPhaseRadius(latestPhaseRows);
+  const radiusScale = (size * 0.36) / maxRadius;
+  const geometry = shellGeometryFromModel(row, state);
+  const luminosityLevel = normalizedInRange(row.L, latestPhaseLuminosityRange);
+  const temperature = inferEffectiveTemperature(row.L, row.R);
+  const blackbody = blackbodyRgbForTemperature(temperature);
+  const shellColor = scaledRgb(blackbody, 0.58 + luminosityLevel * 0.52);
+  const outerRadius = Math.max(2, geometry.outerRadius * radiusScale);
+  const innerRadius = Math.max(0, geometry.innerRadius * radiusScale);
+  const convectionActive = !convectiveResponseDisabled();
+  const shellAlpha = 0.5 + luminosityLevel * 0.4;
+
+  canvas.dataset.convectionActive = String(convectionActive);
+  canvas.dataset.currentPhase = fmtFixed(row.tau, 3);
+  canvas.dataset.luminosityArcLabels = convectionActive ? "gamma_c L_c,L,gamma_r L_r" : "";
+  canvas.dataset.geometryGuides = "R=1,eta,minR,maxR";
+
+  ctx.save();
+  drawModelReferenceGuides(ctx, latestPhaseRows, centerX, centerY, radiusScale);
+
+  ctx.shadowColor = rgbCss(blackbody, 0.65);
+  ctx.shadowBlur = 12 + luminosityLevel * 22;
+  drawAnnularSegment(
+    ctx,
+    centerX,
+    centerY,
+    outerRadius,
+    innerRadius,
+    convectionActive ? Math.PI / 2 : 0,
+    Math.PI * 2,
+    rgbCss(shellColor, shellAlpha)
+  );
+  ctx.shadowBlur = 0;
+
+  ctx.strokeStyle = rgbCss(blackbody, 0.84);
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, outerRadius, convectionActive ? Math.PI / 2 : 0, Math.PI * 2);
+  ctx.stroke();
+  if (innerRadius > 1) {
+    ctx.strokeStyle = rgbCss(blackbody, 0.34);
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, innerRadius, convectionActive ? Math.PI / 2 : 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  if (convectionActive) drawConvectionArcs(ctx, row, centerX, centerY, radiusScale);
+  ctx.restore();
+}
+
+function drawAnimatedPhaseViews(): void {
+  drawModelVisualization();
+  drawPhasePlots();
+}
+
+function startModelAnimationLoop(): void {
+  if (modelAnimationFrame) return;
+  const tick = (timestamp: number) => {
+    if (!document.hidden) {
+      if (modelAnimationStartTime === null) {
+        modelAnimationStartTime = timestamp - (currentAnimationPhase / 2) * modelAnimationDurationMs();
+      }
+      const duration = modelAnimationDurationMs();
+      const elapsed = (timestamp - modelAnimationStartTime) % duration;
+      currentAnimationPhase = (elapsed / duration) * 2;
+      drawAnimatedPhaseViews();
+    } else {
+      modelAnimationStartTime = null;
+    }
+    modelAnimationFrame = window.requestAnimationFrame(tick);
+  };
+  modelAnimationFrame = window.requestAnimationFrame(tick);
+}
+
 function drawAll(): void {
   const rows = latestRows;
   updateVariableInitials();
@@ -2296,6 +3971,7 @@ function drawAll(): void {
     || (!state.runUntilStable && latestResult.status === "complete");
   const final = rows[rows.length - 1];
   const phase = phaseForRows(rows);
+  updateGridLoopSliderMarkers();
   updateSonificationSourceControls();
   updateSonificationCurve(phase);
   const metricsNode = el<HTMLDivElement>("metrics");
@@ -2315,43 +3991,17 @@ function drawAll(): void {
   stageMathHtml(metricsNode, metricsHtml);
   queueMathTypeset([metricsNode]);
 
-  const phaseSample = phase.rows.length ? downsample(phase.rows, 1800, ["L", "V", "H"]) : [];
-  const phaseMessage = phaseUnavailableLabel(phase);
-  const phasePeriodLabel = `phase (period = ${phase.period ? fmt(phase.period, 3) : "n/a"} τ)`;
-  drawSeries("lightCanvas", [
-    { label: "L", color: COLORS.L, rows: phaseSample, x: (row) => row.tau, y: (row) => row.L }
-  ], {
-    xlabel: phasePeriodLabel,
-    ylabel: "luminosity L",
-    ylabelColor: COLORS.L,
-    xlim: [0, 2],
-    ylim: phaseSample.length ? undefined : [0, 1],
-    message: phaseMessage
-  });
-
-  drawSeries("velocityCanvas", [
-    { label: "V", color: COLORS.V, rows: phaseSample, x: (row) => row.tau, y: (row) => row.V }
-  ], {
-    xlabel: phasePeriodLabel,
-    ylabel: "radial velocity V",
-    ylabelColor: COLORS.V,
-    xlim: [0, 2],
-    ylim: phaseSample.length ? undefined : [0, 1],
-    message: phaseMessage
-  });
-
-  if (sonificationSource === "pressure") {
-    drawSeries("pressureCanvas", [
-      { label: "P", color: COLORS.H, rows: phaseSample, x: (row) => row.tau, y: acousticPressureSignal }
-    ], {
-      xlabel: phasePeriodLabel,
-      ylabel: "pressure",
-      ylabelColor: COLORS.H,
-      xlim: [0, 2],
-      ylim: phaseSample.length ? undefined : [0, 1],
-      message: phaseMessage
-    });
-  }
+  const phaseMessage = gridState.enabled && activeGridRanges().length && !gridState.results.length
+    ? gridState.statusText
+    : phaseUnavailableLabel(phase);
+  const phasePeriod = gridState.enabled ? currentGridResult()?.period ?? phase.period : phase.period;
+  latestPhaseRows = gridState.enabled ? currentGridResult()?.phaseRows ?? phase.rows : phase.rows;
+  latestPhaseSample = latestPhaseRows.length ? downsample(latestPhaseRows, 1800, ["L", "V", "H"]) : [];
+  latestPhaseMessage = phaseMessage;
+  latestPhasePeriodLabel = `phase (period = ${phasePeriod ? fmt(phasePeriod, 3) : "n/a"} τ)`;
+  latestPhaseLuminosityRange = rawRange(latestPhaseRows.map((row) => row.L));
+  drawModelVisualization();
+  drawPhasePlots();
 
   const timeXlim = integrationTimeRange();
   const convectionOff = convectiveResponseDisabled();
@@ -2392,8 +4042,8 @@ function drawAll(): void {
   ];
   if (!convectionOff) {
     lumSeries.push(
-      { label: "Lr", color: COLORS.Lr, rows: visibleRows("lum", "Lr", sampledLumRows), x: (row) => row.tau, y: (row) => row.Lr },
-      { label: "Lc", color: COLORS.Lc, rows: visibleRows("lum", "Lc", sampledLumRows), x: (row) => row.tau, y: (row) => row.Lc }
+      { label: "gamma_r Lr", color: COLORS.Lr, rows: visibleRows("lum", "Lr", sampledLumRows), x: (row) => row.tau, y: (row) => weightedRadiativeLuminosity(row) },
+      { label: "gamma_c Lc", color: COLORS.Lc, rows: visibleRows("lum", "Lc", sampledLumRows), x: (row) => row.tau, y: (row) => weightedConvectiveLuminosity(row) }
     );
   }
   drawSeries("lumCanvas", lumSeries, {
@@ -2410,15 +4060,17 @@ function drawAll(): void {
     ? [{ label: `\\(${TEX.L}\\) total`, color: COLORS.L }]
     : [
         { key: "L", label: `\\(${TEX.L}\\) total`, color: COLORS.L, toggleLabel: "total luminosity" },
-        { key: "Lr", label: `\\(${TEX.Lr}\\) radiative`, color: COLORS.Lr, toggleLabel: "radiative luminosity" },
-        { key: "Lc", label: `\\(${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
+        { key: "Lr", label: `\\(\\ozNeutral{\\gamma_r}\\,${TEX.Lr}\\) radiative`, color: COLORS.Lr, toggleLabel: "radiative luminosity" },
+        { key: "Lc", label: `\\(${TEX.gammac}\\,${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
       ];
   drawLegend("lumLegend", lumLegendItems, convectionOff ? {} : { plotId: "lum" });
+  drawFourierPanel();
 }
 
 function startApp(): void {
   buildControls();
   solveAndDraw();
+  startModelAnimationLoop();
   window.addEventListener("load", () => queueMathTypeset());
 }
 

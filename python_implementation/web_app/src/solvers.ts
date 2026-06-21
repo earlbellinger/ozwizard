@@ -45,14 +45,14 @@ interface StepResult {
 export function defaultSolverOptions(overrides: Partial<SolverOptions> = {}): SolverOptions {
   return {
     solver: DEFAULT_SOLVER,
-    rtol: 1e-8,
-    atol: 1e-10,
+    rtol: 1e-11,
+    atol: 1e-13,
     initialStep: 0.001,
-    maxStep: 0.15,
+    maxStep: 0.03,
     minStep: 1e-10,
     maxRows: 500000,
     maxAcceptedSteps: 500000,
-    errTol: 1e-7,
+    errTol: 1e-8,
     ...overrides
   };
 }

@@ -219,6 +219,7 @@
         var(--bg);
       padding: 16px 18px 28px;
       min-width: 0;
+      container-type: inline-size;
     }
 
     .brand {
@@ -584,6 +585,25 @@
       margin-left: auto;
     }
 
+    .grid-mode-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-left: auto;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      letter-spacing: 0;
+      text-transform: none;
+      white-space: nowrap;
+    }
+
+    .grid-mode-control input {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--logo-gold);
+    }
+
     .control-section > summary.section-title {
       cursor: pointer;
       display: flex;
@@ -779,6 +799,15 @@
       background: var(--paper-high);
     }
 
+    .slider-control.is-grid-enabled {
+      cursor: context-menu;
+    }
+
+    .slider-control.is-grid-range {
+      background: linear-gradient(180deg, rgba(240, 189, 61, 0.08), rgba(17, 27, 51, 0.92));
+      border-color: color-mix(in srgb, var(--logo-gold-bright) 30%, var(--line));
+    }
+
     .slider-label {
       display: grid;
       grid-template-columns: minmax(0, 1fr) var(--slider-reading-width);
@@ -830,6 +859,8 @@
       grid-template-columns: minmax(0, 1fr);
       align-items: center;
       min-width: 0;
+      min-height: 18px;
+      position: relative;
     }
 
     .parameter-reset {
@@ -860,6 +891,11 @@
       height: 18px;
     }
 
+    .slider-control.is-grid-range .single-slider {
+      opacity: 0;
+      pointer-events: none;
+    }
+
     .slider-scale {
       grid-column: 1 / 2;
       display: block;
@@ -884,6 +920,119 @@
 
     .slider-scale span[data-scale-edge="end"] {
       transform: translateX(-100%);
+    }
+
+    .grid-range-controls {
+      --grid-range-left: 0%;
+      --grid-range-right: 100%;
+      --grid-loop-position: 50%;
+      --grid-loop-color: var(--logo-gold-bright);
+      display: block;
+      height: 18px;
+      inset: 0 0 auto;
+      pointer-events: none;
+      position: absolute;
+      z-index: 2;
+    }
+
+    .grid-range-controls[hidden] {
+      display: none;
+    }
+
+    .grid-range-controls::before {
+      background: color-mix(in srgb, var(--accent, var(--focus)) 26%, var(--line));
+      border-radius: 999px;
+      content: "";
+      height: 4px;
+      left: 0;
+      position: absolute;
+      right: 0;
+      top: 7px;
+    }
+
+    .grid-range-fill {
+      background: linear-gradient(90deg, rgba(255, 209, 102, 0.78), color-mix(in srgb, var(--accent, var(--focus)) 60%, var(--logo-gold-bright)));
+      border-radius: 999px;
+      box-shadow: 0 0 0 1px rgba(255, 209, 102, 0.24);
+      height: 4px;
+      left: var(--grid-range-left);
+      pointer-events: none;
+      position: absolute;
+      right: calc(100% - var(--grid-range-right));
+      top: 7px;
+    }
+
+    .grid-loop-marker {
+      background: var(--grid-loop-color);
+      border: 2px solid var(--canvas);
+      border-radius: 50%;
+      box-shadow: 0 0 0 1px rgba(238, 245, 255, 0.8), 0 0 12px color-mix(in srgb, var(--grid-loop-color) 76%, transparent);
+      height: 10px;
+      left: var(--grid-loop-position);
+      pointer-events: none;
+      position: absolute;
+      top: 9px;
+      transform: translate(-50%, -50%);
+      width: 10px;
+      z-index: 4;
+    }
+
+    .grid-loop-marker[hidden] {
+      display: none;
+    }
+
+    .grid-range-inputs {
+      height: 18px;
+      position: relative;
+    }
+
+    .grid-range-inputs input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      height: 18px;
+      inset: 0;
+      margin: 0;
+      pointer-events: none;
+      position: absolute;
+      width: 100%;
+    }
+
+    .grid-range-inputs input[type="range"]::-webkit-slider-runnable-track {
+      background: transparent;
+      border: 0;
+      height: 4px;
+    }
+
+    .grid-range-inputs input[type="range"]::-moz-range-track {
+      background: transparent;
+      border: 0;
+      height: 4px;
+    }
+
+    .grid-range-inputs input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      background: var(--logo-gold-bright);
+      border: 2px solid var(--canvas);
+      border-radius: 50%;
+      box-shadow: 0 0 0 1px rgba(255, 209, 102, 0.72), 0 2px 5px rgba(0, 0, 0, 0.4);
+      cursor: ew-resize;
+      height: 16px;
+      margin-top: -6px;
+      pointer-events: auto;
+      width: 16px;
+    }
+
+    .grid-range-inputs input[type="range"]::-moz-range-thumb {
+      background: var(--logo-gold-bright);
+      border: 2px solid var(--canvas);
+      border-radius: 50%;
+      box-shadow: 0 0 0 1px rgba(255, 209, 102, 0.72), 0 2px 5px rgba(0, 0, 0, 0.4);
+      cursor: ew-resize;
+      height: 12px;
+      pointer-events: auto;
+      width: 12px;
     }
 
     .plots-header {
@@ -923,14 +1072,33 @@
       color: currentColor;
     }
 
+    .hidden-plot-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: -4px 0 12px;
+    }
+
+    .hidden-plot-controls[hidden] {
+      display: none;
+    }
+
     .plot-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+      --plot-panel-min-width: 400px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: stretch;
       gap: 14px;
     }
 
-    .plot-grid[data-pressure-visible="true"] {
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+    .plot-grid[hidden] {
+      display: none;
+    }
+
+    .plot-grid > .plot-panel {
+      flex: 1 1 var(--plot-panel-min-width);
+      min-width: min(100%, var(--plot-panel-min-width));
     }
 
     .plot-panel,
@@ -953,10 +1121,151 @@
       min-height: 22px;
     }
 
+    .plot-title-left {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .plot-enable-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .plot-enable-control input {
+      width: 15px;
+      height: 15px;
+      accent-color: var(--logo-gold);
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+
+    .plot-title .plot-enable-control span {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .hidden-plot-controls .plot-enable-control {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--paper-raised);
+      padding: 6px 9px;
+      box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.03);
+    }
+
+    .hidden-plot-controls .plot-enable-control:hover {
+      border-color: var(--line-strong);
+      background: var(--paper-high);
+    }
+
+    .hidden-plot-controls .plot-enable-control:has(input:disabled) {
+      opacity: 0.6;
+      cursor: default;
+    }
+
+    .hidden-plot-controls .plot-enable-control span {
+      position: static;
+      width: auto;
+      height: auto;
+      padding: 0;
+      margin: 0;
+      overflow: visible;
+      clip: auto;
+      color: var(--muted);
+    }
+
     .plot-heading {
       display: grid;
       gap: 2px;
       min-width: 0;
+    }
+
+    .grid-status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(17, 27, 51, 0.74);
+      color: var(--muted);
+      font-size: 12px;
+      margin: -4px 0 12px;
+      padding: 7px 9px;
+    }
+
+    .grid-status-bar[hidden] {
+      display: none;
+    }
+
+    .grid-loop-controls {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      gap: 7px;
+    }
+
+    .grid-loop-controls[hidden] {
+      display: none;
+    }
+
+    .grid-loop-controls span {
+      color: var(--subtle);
+      font-weight: 700;
+    }
+
+    .grid-loop-controls label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--ink);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .grid-loop-controls input {
+      accent-color: var(--color, var(--logo-gold));
+    }
+
+    .grid-loop-symbol {
+      color: var(--color, var(--ink));
+      font-weight: 700;
+    }
+
+    .grid-loop-speed-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    .grid-loop-speed-control input {
+      accent-color: var(--logo-gold);
+      width: 86px;
+    }
+
+    .grid-loop-speed-control output {
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+      min-width: 32px;
+      text-align: right;
     }
 
     .plot-title h3,
@@ -1019,6 +1328,38 @@
       box-shadow: inset 0 1px 0 rgba(255, 209, 102, 0.2), 0 0 0 1px rgba(240, 189, 61, 0.08);
     }
 
+    .model-speed-control {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .model-speed-control span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .model-speed-control input {
+      width: 70px;
+      height: 18px;
+      margin: 0;
+      accent-color: var(--logo-gold);
+      cursor: pointer;
+    }
+
+    .model-speed-control output {
+      min-width: 25px;
+      color: var(--ink);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+
     .plot-reset {
       width: 28px;
       height: 28px;
@@ -1053,9 +1394,38 @@
       border-radius: 6px;
     }
 
+    .model-canvas-wrap {
+      width: min(100%, 260px);
+      height: 260px;
+      aspect-ratio: 1 / 1;
+      margin: 0 auto;
+    }
+
+    .plot-panel[data-plot-panel="model"] {
+      --model-panel-size: 316px;
+      width: min(100%, var(--model-panel-size));
+      flex: 0 0 min(100%, var(--model-panel-size));
+      min-width: 0;
+      overflow-x: hidden;
+    }
+
+    canvas.model-canvas {
+      width: 100%;
+      height: 100%;
+    }
+
     canvas.interactive-canvas {
       cursor: crosshair;
       touch-action: none;
+    }
+
+    canvas.grid-interaction-canvas {
+      cursor: default;
+      touch-action: none;
+    }
+
+    .fourier-grid-panel {
+      margin-top: 14px;
     }
 
     .legend {
@@ -1367,11 +1737,14 @@
       }
 
       .slider-list,
-      .plot-grid,
       .notes-grid,
       .reference-grid,
       .plots-header {
         grid-template-columns: 1fr;
+      }
+
+      .plot-grid {
+        flex-direction: column;
       }
 
       .brand {
@@ -1426,6 +1799,19 @@
 
       canvas {
         height: 230px;
+      }
+
+      canvas.model-canvas {
+        height: 100%;
+      }
+
+      .model-canvas-wrap {
+        width: min(100%, 230px);
+        height: 230px;
+      }
+
+      .plot-panel[data-plot-panel="model"] {
+        --model-panel-size: 286px;
       }
     }
   </style>
@@ -1484,7 +1870,13 @@
           </details>
 
           <details class="control-section" id="physicalControlSection" open>
-            <summary class="section-title">Physical Parameters</summary>
+            <summary class="section-title section-title-with-actions">
+              <span>Physical Parameters</span>
+              <label class="grid-mode-control" title="Enable parameter grid sweeps">
+                Grid
+                <input id="gridModeToggle" type="checkbox" aria-label="Enable grid mode">
+              </label>
+            </summary>
             <div class="slider-list" id="physicalControls"></div>
             <label class="toggle-line">
               <span>Use radius-dependent geometry \(\ozChi{\chi}(\ozRadius{R})\)</span>
@@ -1520,8 +1912,8 @@
           <div class="section-title section-title-with-actions">
             <span>Phase Window</span>
             <div class="driver-row section-action-row" id="phaseModeButtons">
-              <button type="button" data-phase-mode="reference" class="active">Reference</button>
-              <button type="button" data-phase-mode="final">Final</button>
+              <button type="button" data-phase-mode="reference">Reference</button>
+              <button type="button" data-phase-mode="final" class="active">Final</button>
             </div>
           </div>
 
@@ -1532,6 +1924,16 @@
     <main>
       <div class="plots-header">
         <div class="metrics" id="metrics"></div>
+      </div>
+      <div class="hidden-plot-controls" id="hiddenPlotControls" aria-label="Hidden plot controls" hidden></div>
+      <div class="grid-status-bar" id="gridStatusBar" hidden>
+        <div class="grid-loop-controls" id="gridLoopControls" hidden></div>
+        <label class="grid-loop-speed-control" aria-label="Parameter loop speed control">
+          speed
+          <input id="gridLoopSpeed" type="range" min="0.25" max="4" step="0.25" value="1" aria-label="parameter loop speed">
+          <output id="gridLoopSpeedValue" for="gridLoopSpeed">1x</output>
+        </label>
+        <span id="gridStatusText">Grid off</span>
       </div>
 
       <section class="piano-panel" id="pianoPanel" hidden>
@@ -1575,10 +1977,36 @@
         </div>
       </section>
 
-      <section class="plot-grid" data-pressure-visible="false">
-        <div class="plot-panel">
+      <section class="plot-grid" id="plotGrid" data-pressure-visible="false" data-visible-plots="5">
+        <div class="plot-panel" data-plot-panel="model">
           <div class="plot-title">
-            <h3>Lightcurve</h3>
+            <div class="plot-title-left" data-plot-control-home="model">
+              <label class="plot-enable-control" data-plot-control="model">
+                <input type="checkbox" data-plot-toggle="model" checked aria-label="Hide Moving Shell plot">
+                <span>Moving Shell</span>
+              </label>
+              <h3>Moving Shell</h3>
+            </div>
+            <label class="model-speed-control" aria-label="Moving Shell animation speed control">
+              <span>speed</span>
+              <input id="modelSpeed" type="range" min="0.25" max="4" step="0.25" value="1" aria-label="moving shell speed">
+              <output id="modelSpeedValue" for="modelSpeed">1x</output>
+            </label>
+          </div>
+          <div class="model-canvas-wrap">
+            <canvas class="model-canvas" id="modelCanvas" aria-label="Moving shell visualization"></canvas>
+          </div>
+        </div>
+
+        <div class="plot-panel" data-plot-panel="light">
+          <div class="plot-title">
+            <div class="plot-title-left" data-plot-control-home="light">
+              <label class="plot-enable-control" data-plot-control="light">
+                <input type="checkbox" data-plot-toggle="light" checked aria-label="Hide Lightcurve plot">
+                <span>Lightcurve</span>
+              </label>
+              <h3>Lightcurve</h3>
+            </div>
             <div class="phase-anchor-control" aria-label="Phase alignment">
               <span>phase to</span>
               <button type="button" data-phase-anchor="min" class="active" aria-pressed="true">min light</button>
@@ -1588,9 +2016,15 @@
           <canvas id="lightCanvas"></canvas>
         </div>
 
-        <div class="plot-panel">
+        <div class="plot-panel" data-plot-panel="velocity">
           <div class="plot-title">
-            <h3>RV Curve</h3>
+            <div class="plot-title-left" data-plot-control-home="velocity">
+              <label class="plot-enable-control" data-plot-control="velocity">
+                <input type="checkbox" data-plot-toggle="velocity" checked aria-label="Hide RV Curve plot">
+                <span>RV Curve</span>
+              </label>
+              <h3>RV Curve</h3>
+            </div>
           </div>
           <canvas id="velocityCanvas"></canvas>
         </div>
@@ -1602,9 +2036,13 @@
           <canvas id="pressureCanvas"></canvas>
         </div>
 
-        <div class="plot-panel">
+        <div class="plot-panel" data-plot-panel="time">
           <div class="plot-title">
-            <div class="plot-heading">
+            <div class="plot-title-left" data-plot-control-home="time">
+              <label class="plot-enable-control" data-plot-control="time">
+                <input type="checkbox" data-plot-toggle="time" checked aria-label="Hide History plot">
+                <span>History</span>
+              </label>
               <h3>History</h3>
             </div>
             <div class="plot-tools">
@@ -1615,9 +2053,13 @@
           <div class="legend" id="timeLegend"></div>
         </div>
 
-        <div class="plot-panel">
+        <div class="plot-panel" data-plot-panel="lum">
           <div class="plot-title">
-            <div class="plot-heading">
+            <div class="plot-title-left" data-plot-control-home="lum">
+              <label class="plot-enable-control" data-plot-control="lum">
+                <input type="checkbox" data-plot-toggle="lum" checked aria-label="Hide Luminosity Evolution plot">
+                <span>Luminosity Evolution</span>
+              </label>
               <h3>Luminosity Evolution</h3>
             </div>
             <div class="plot-tools">
@@ -1628,6 +2070,15 @@
           <div class="legend" id="lumLegend"></div>
         </div>
 
+      </section>
+
+      <section class="plot-panel fourier-grid-panel" id="fourierGridPanel" hidden>
+        <div class="plot-title">
+          <div class="plot-title-left">
+            <h3>Fourier Diagnostics</h3>
+          </div>
+        </div>
+        <canvas id="fourierCanvas"></canvas>
       </section>
 
       <section class="notes-grid">
@@ -1652,7 +2103,7 @@
                 <tr><td class="symbol-cell" style="--color:var(--convective)">\(\ozConvective{U_c}\)</td><td>Convective velocity</td><td class="initial-cell" id="initialUc"></td><td>Time-dependent turbulent/convective velocity scale</td></tr>
                 <tr><td class="symbol-cell" style="--color:var(--radiative)">\(\ozRadiative{L_r}\)</td><td>Radiative luminosity</td><td class="initial-cell" id="initialLr"></td><td>Radiative luminosity-like flux leaving the shell</td></tr>
                 <tr><td class="symbol-cell" style="--color:var(--conv-lum)">\(\ozConvLum{L_c}\)</td><td>Convective luminosity</td><td class="initial-cell" id="initialLc"></td><td>Convective luminosity-like flux proportional to \(\ozConvective{U_c}^{3}\)</td></tr>
-                <tr><td class="symbol-cell" style="--color:var(--luminosity)">\(\ozLuminosity{L}\)</td><td>Total luminosity</td><td class="initial-cell" id="initialL"></td><td>Weighted sum \(\ozLuminosity{L}=(1-\ozGammac{\gamma_c})\ozRadiative{L_r}+\ozGammac{\gamma_c}\ozConvLum{L_c}\)</td></tr>
+                <tr><td class="symbol-cell" style="--color:var(--luminosity)">\(\ozLuminosity{L}\)</td><td>Total luminosity</td><td class="initial-cell" id="initialL"></td><td>Weighted sum \(\ozLuminosity{L}=\ozNeutral{\gamma_r}\ozRadiative{L_r}+\ozGammac{\gamma_c}\ozConvLum{L_c}\)</td></tr>
               </tbody>
             </table>
           </div>

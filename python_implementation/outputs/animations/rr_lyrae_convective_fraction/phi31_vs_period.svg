@@ -1,0 +1,278 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640">
+  <rect width="100%" height="100%" fill="#08111f"/>
+  <text x="480" y="38" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="21" font-weight="700" fill="#d9e7ff">RR Lyrae convective fraction sequence</text>
+  <text x="480" y="62" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">Fourier phase <tspan font-style="italic">&phi;<tspan baseline-shift="sub" font-size="70%">31</tspan></tspan> = <tspan font-style="italic">&phi;<tspan baseline-shift="sub" font-size="70%">3</tspan></tspan> - 3<tspan font-style="italic">&phi;<tspan baseline-shift="sub" font-size="70%">1</tspan></tspan> from the last two minimum-light cycles; models with <tspan font-style="italic">A<tspan baseline-shift="sub" font-size="70%">1</tspan></tspan> or <tspan font-style="italic">A<tspan baseline-shift="sub" font-size="70%">3</tspan></tspan> &lt; 0.0001 removed.</text>
+  <rect x="108" y="92" width="650" height="420" rx="6" fill="#0c1728" stroke="#526489" stroke-width="1.2"/>
+<line x1="108.00" y1="92" x2="108.00" y2="512" stroke="#26334e" stroke-width="1"/>
+<text x="108.00" y="540" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">2.355</text>
+<line x1="238.00" y1="92" x2="238.00" y2="512" stroke="#26334e" stroke-width="1"/>
+<text x="238.00" y="540" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">2.392</text>
+<line x1="368.00" y1="92" x2="368.00" y2="512" stroke="#26334e" stroke-width="1"/>
+<text x="368.00" y="540" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">2.428</text>
+<line x1="498.00" y1="92" x2="498.00" y2="512" stroke="#26334e" stroke-width="1"/>
+<text x="498.00" y="540" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">2.465</text>
+<line x1="628.00" y1="92" x2="628.00" y2="512" stroke="#26334e" stroke-width="1"/>
+<text x="628.00" y="540" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">2.501</text>
+<line x1="758.00" y1="92" x2="758.00" y2="512" stroke="#26334e" stroke-width="1"/>
+<text x="758.00" y="540" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">2.538</text>
+<line x1="108" y1="512.00" x2="758" y2="512.00" stroke="#26334e" stroke-width="1"/>
+<text x="94" y="516.00" text-anchor="end" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">0.47</text>
+<line x1="108" y1="407.00" x2="758" y2="407.00" stroke="#26334e" stroke-width="1"/>
+<text x="94" y="411.00" text-anchor="end" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">1.23</text>
+<line x1="108" y1="302.00" x2="758" y2="302.00" stroke="#26334e" stroke-width="1"/>
+<text x="94" y="306.00" text-anchor="end" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">1.99</text>
+<line x1="108" y1="197.00" x2="758" y2="197.00" stroke="#26334e" stroke-width="1"/>
+<text x="94" y="201.00" text-anchor="end" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">2.74</text>
+<line x1="108" y1="92.00" x2="758" y2="92.00" stroke="#26334e" stroke-width="1"/>
+<text x="94" y="96.00" text-anchor="end" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">3.5</text>
+  
+    <circle cx="142.82" cy="477.00" r="5.2" fill="#c4ce64" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.52, period=2.365, phi31=0.7236</title>
+    </circle>
+
+    <circle cx="157.48" cy="459.51" r="5.2" fill="#bdcd64" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.51, period=2.3691, phi31=0.8497</title>
+    </circle>
+
+    <circle cx="172.16" cy="441.66" r="5.2" fill="#b5cd63" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.5, period=2.3732, phi31=0.9785</title>
+    </circle>
+
+    <circle cx="187.51" cy="423.71" r="5.2" fill="#aecd63" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.49, period=2.3776, phi31=1.1079</title>
+    </circle>
+
+    <circle cx="202.64" cy="405.64" r="5.2" fill="#a7cc63" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.48, period=2.3818, phi31=1.2382</title>
+    </circle>
+
+    <circle cx="218.21" cy="387.78" r="5.2" fill="#9fcc63" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.47, period=2.3862, phi31=1.367</title>
+    </circle>
+
+    <circle cx="233.81" cy="370.14" r="5.2" fill="#98cb62" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.46, period=2.3906, phi31=1.4942</title>
+    </circle>
+
+    <circle cx="249.41" cy="352.47" r="5.2" fill="#91cb62" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.45, period=2.395, phi31=1.6216</title>
+    </circle>
+
+    <circle cx="265.14" cy="335.15" r="5.2" fill="#89cb62" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.44, period=2.3994, phi31=1.7465</title>
+    </circle>
+
+    <circle cx="280.83" cy="318.90" r="5.2" fill="#82ca61" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.43, period=2.4038, phi31=1.8636</title>
+    </circle>
+
+    <circle cx="296.50" cy="302.39" r="5.2" fill="#7aca61" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.42, period=2.4082, phi31=1.9827</title>
+    </circle>
+
+    <circle cx="312.24" cy="286.91" r="5.2" fill="#73c961" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.41, period=2.4126, phi31=2.0943</title>
+    </circle>
+
+    <circle cx="327.82" cy="271.68" r="5.2" fill="#6cc961" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.4, period=2.417, phi31=2.2041</title>
+    </circle>
+
+    <circle cx="343.07" cy="257.24" r="5.2" fill="#64c960" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.39, period=2.4213, phi31=2.3083</title>
+    </circle>
+
+    <circle cx="358.52" cy="243.67" r="5.2" fill="#5dc860" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.38, period=2.4256, phi31=2.4061</title>
+    </circle>
+
+    <circle cx="373.52" cy="230.37" r="5.2" fill="#56c860" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.37, period=2.4299, phi31=2.502</title>
+    </circle>
+
+    <circle cx="388.52" cy="218.14" r="5.2" fill="#4ec760" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.36, period=2.4341, phi31=2.5902</title>
+    </circle>
+
+    <circle cx="403.30" cy="205.85" r="5.2" fill="#47c75f" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.35, period=2.4382, phi31=2.6788</title>
+    </circle>
+
+    <circle cx="417.75" cy="195.06" r="5.2" fill="#3fc75f" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.34, period=2.4423, phi31=2.7566</title>
+    </circle>
+
+    <circle cx="432.08" cy="184.47" r="5.2" fill="#38c65f" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.33, period=2.4463, phi31=2.833</title>
+    </circle>
+
+    <circle cx="446.05" cy="175.47" r="5.2" fill="#31c65f" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.32, period=2.4503, phi31=2.8979</title>
+    </circle>
+
+    <circle cx="459.78" cy="166.04" r="5.2" fill="#29c55e" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.31, period=2.4541, phi31=2.9659</title>
+    </circle>
+
+    <circle cx="473.18" cy="157.54" r="5.2" fill="#22c55e" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.3, period=2.4579, phi31=3.0272</title>
+    </circle>
+
+    <circle cx="486.34" cy="148.96" r="5.2" fill="#23c363" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.29, period=2.4616, phi31=3.089</title>
+    </circle>
+
+    <circle cx="499.24" cy="142.51" r="5.2" fill="#24c168" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.28, period=2.4652, phi31=3.1356</title>
+    </circle>
+
+    <circle cx="511.73" cy="136.66" r="5.2" fill="#25be6d" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.27, period=2.4687, phi31=3.1778</title>
+    </circle>
+
+    <circle cx="523.87" cy="132.56" r="5.2" fill="#25bc72" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.26, period=2.4722, phi31=3.2073</title>
+    </circle>
+
+    <circle cx="535.76" cy="129.87" r="5.2" fill="#26ba77" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.25, period=2.4755, phi31=3.2267</title>
+    </circle>
+
+    <circle cx="547.34" cy="127.00" r="5.2" fill="#27b87c" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.24, period=2.4788, phi31=3.2474</title>
+    </circle>
+
+    <circle cx="558.51" cy="129.85" r="5.2" fill="#28b581" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.23, period=2.4819, phi31=3.2268</title>
+    </circle>
+
+    <circle cx="569.30" cy="139.92" r="5.2" fill="#29b387" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.22, period=2.4849, phi31=3.1543</title>
+    </circle>
+
+    <circle cx="579.78" cy="159.67" r="5.2" fill="#2ab18c" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.21, period=2.4879, phi31=3.0118</title>
+    </circle>
+
+    <circle cx="589.89" cy="205.06" r="5.2" fill="#2aaf91" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.2, period=2.4907, phi31=2.6845</title>
+    </circle>
+
+    <circle cx="599.71" cy="284.13" r="5.2" fill="#2bac96" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.19, period=2.4935, phi31=2.1144</title>
+    </circle>
+
+    <circle cx="609.12" cy="359.66" r="5.2" fill="#2caa9b" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.18, period=2.4961, phi31=1.5697</title>
+    </circle>
+
+    <circle cx="618.29" cy="397.15" r="5.2" fill="#2da8a0" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.17, period=2.4987, phi31=1.2994</title>
+    </circle>
+
+    <circle cx="627.00" cy="415.59" r="5.2" fill="#2ea6a5" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.16, period=2.5012, phi31=1.1665</title>
+    </circle>
+
+    <circle cx="635.40" cy="424.22" r="5.2" fill="#2fa4aa" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.15, period=2.5035, phi31=1.1042</title>
+    </circle>
+
+    <circle cx="643.48" cy="428.15" r="5.2" fill="#2fa1af" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.14, period=2.5058, phi31=1.0759</title>
+    </circle>
+
+    <circle cx="651.19" cy="429.51" r="5.2" fill="#309fb4" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.13, period=2.508, phi31=1.066</title>
+    </circle>
+
+    <circle cx="658.61" cy="429.68" r="5.2" fill="#319db9" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.12, period=2.51, phi31=1.0648</title>
+    </circle>
+
+    <circle cx="665.67" cy="428.95" r="5.2" fill="#329bbe" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.11, period=2.512, phi31=1.0701</title>
+    </circle>
+
+    <circle cx="672.42" cy="427.38" r="5.2" fill="#3398c3" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.1, period=2.5139, phi31=1.0814</title>
+    </circle>
+
+    <circle cx="678.84" cy="425.80" r="5.2" fill="#3496c8" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.09, period=2.5157, phi31=1.0928</title>
+    </circle>
+
+    <circle cx="684.94" cy="424.00" r="5.2" fill="#3494cd" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.08, period=2.5175, phi31=1.1058</title>
+    </circle>
+
+    <circle cx="690.75" cy="421.56" r="5.2" fill="#3592d3" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.07, period=2.5191, phi31=1.1234</title>
+    </circle>
+
+    <circle cx="696.22" cy="419.52" r="5.2" fill="#368fd8" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.06, period=2.5206, phi31=1.1381</title>
+    </circle>
+
+    <circle cx="701.45" cy="416.99" r="5.2" fill="#378ddd" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.05, period=2.5221, phi31=1.1564</title>
+    </circle>
+
+    <circle cx="706.37" cy="414.66" r="5.2" fill="#388be2" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.04, period=2.5235, phi31=1.1731</title>
+    </circle>
+
+    <circle cx="711.05" cy="412.54" r="5.2" fill="#3989e7" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.03, period=2.5248, phi31=1.1885</title>
+    </circle>
+
+    <circle cx="715.35" cy="409.93" r="5.2" fill="#3986ec" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.02, period=2.526, phi31=1.2072</title>
+    </circle>
+
+    <circle cx="719.43" cy="407.97" r="5.2" fill="#3a84f1" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0.01, period=2.5272, phi31=1.2214</title>
+    </circle>
+
+    <circle cx="723.18" cy="405.28" r="5.2" fill="#3b82f6" stroke="#08111f" stroke-width="1.2">
+      <title>gamma_c=0, period=2.5282, phi31=1.2408</title>
+    </circle>
+  <text x="433" y="572" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="15" fill="#d9e7ff">period (&tau;)</text>
+  <text x="40" y="302" text-anchor="middle" transform="rotate(-90 40 302)" font-family="Inter, Arial, sans-serif" font-size="15" fill="#d9e7ff"><tspan font-style="italic">&phi;<tspan baseline-shift="sub" font-size="70%">31</tspan></tspan> (rad)</text>
+  <rect x="825" y="92" width="24" height="420" fill="none" stroke="#526489" stroke-width="1"/>
+  <rect x="825" y="92.00" width="24" height="17.30" fill="#f6d166"/>
+<rect x="825" y="108.80" width="24" height="17.30" fill="#e4d065"/>
+<rect x="825" y="125.60" width="24" height="17.30" fill="#d3cf64"/>
+<rect x="825" y="142.40" width="24" height="17.30" fill="#c1ce64"/>
+<rect x="825" y="159.20" width="24" height="17.30" fill="#afcd63"/>
+<rect x="825" y="176.00" width="24" height="17.30" fill="#9ecc62"/>
+<rect x="825" y="192.80" width="24" height="17.30" fill="#8ccb62"/>
+<rect x="825" y="209.60" width="24" height="17.30" fill="#7aca61"/>
+<rect x="825" y="226.40" width="24" height="17.30" fill="#69c961"/>
+<rect x="825" y="243.20" width="24" height="17.30" fill="#57c860"/>
+<rect x="825" y="260.00" width="24" height="17.30" fill="#45c75f"/>
+<rect x="825" y="276.80" width="24" height="17.30" fill="#34c65f"/>
+<rect x="825" y="293.60" width="24" height="17.30" fill="#22c55e"/>
+<rect x="825" y="310.40" width="24" height="17.30" fill="#24c06a"/>
+<rect x="825" y="327.20" width="24" height="17.30" fill="#26ba76"/>
+<rect x="825" y="344.00" width="24" height="17.30" fill="#28b582"/>
+<rect x="825" y="360.80" width="24" height="17.30" fill="#2ab08f"/>
+<rect x="825" y="377.60" width="24" height="17.30" fill="#2caa9b"/>
+<rect x="825" y="394.40" width="24" height="17.30" fill="#2ea5a7"/>
+<rect x="825" y="411.20" width="24" height="17.30" fill="#309fb3"/>
+<rect x="825" y="428.00" width="24" height="17.30" fill="#329abf"/>
+<rect x="825" y="444.80" width="24" height="17.30" fill="#3495cb"/>
+<rect x="825" y="461.60" width="24" height="17.30" fill="#368fd8"/>
+<rect x="825" y="478.40" width="24" height="17.30" fill="#388ae4"/>
+<rect x="825" y="495.20" width="24" height="17.30" fill="#3a85f0"/>
+  <rect x="825" y="92" width="24" height="420" fill="none" stroke="#526489" stroke-width="1"/>
+  <line x1="849" y1="512.00" x2="857" y2="512.00" stroke="#526489" stroke-width="1"/>
+      <text x="863" y="516.00" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">0</text>
+<line x1="849" y1="372.00" x2="857" y2="372.00" stroke="#526489" stroke-width="1"/>
+      <text x="863" y="376.00" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">0.2</text>
+<line x1="849" y1="232.00" x2="857" y2="232.00" stroke="#526489" stroke-width="1"/>
+      <text x="863" y="236.00" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">0.4</text>
+<line x1="849" y1="92.00" x2="857" y2="92.00" stroke="#526489" stroke-width="1"/>
+      <text x="863" y="96.00" font-family="Inter, Arial, sans-serif" font-size="13" fill="#9aa8bd">0.6</text>
+  <text x="837" y="76" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="14" fill="#d9e7ff"><tspan font-style="italic">&gamma;<tspan baseline-shift="sub" font-size="70%">c</tspan></tspan></text>
+</svg>

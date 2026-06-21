@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build && npm run build:file",
-    "build:file": "esbuild src/main.ts --bundle --format=iife --target=es2020 --outfile=dist/assets/wizard_of_oz-file.js",
+    "build:file": "esbuild src/main.ts --bundle --format=iife --target=es2020 --outfile=dist/assets/wizard_of_oz-file.js && esbuild src/gridWorker.ts --bundle --format=iife --target=es2020 --outfile=dist/assets/grid-worker-file.js",
     "animate:convective-fraction": "node scripts/build-convective-fraction-animation.mjs",
+    "plot:convective-fraction-fourier": "node scripts/plot-convective-fraction-fourier.mjs",
+    "plot:convective-fraction-phi31": "npm run plot:convective-fraction-fourier",
     "test": "vitest run",
     "test:e2e": "node scripts/run-e2e.mjs"
   },

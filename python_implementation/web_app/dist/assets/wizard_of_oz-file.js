@@ -10,14 +10,14 @@
   function defaultSolverOptions(overrides = {}) {
     return {
       solver: DEFAULT_SOLVER,
-      rtol: 1e-8,
-      atol: 1e-10,
+      rtol: 1e-11,
+      atol: 1e-13,
       initialStep: 1e-3,
-      maxStep: 0.15,
+      maxStep: 0.03,
       minStep: 1e-10,
       maxRows: 5e5,
       maxAcceptedSteps: 5e5,
-      errTol: 1e-7,
+      errTol: 1e-8,
       ...overrides
     };
   }
@@ -329,10 +329,10 @@
     integration: [
       ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "max time", 0, 3, 0.01, 100, COLORS.tEnd],
       ["step", `\\(\\Delta ${TEX.tau}_0\\)`, "initial step", 5e-4, 0.02, 5e-4, 1e-3, COLORS.step],
-      ["maxStep", `\\(\\Delta ${TEX.tau}_{\\max}\\)`, "max adaptive step", 5e-3, 0.3, 5e-3, 0.15, COLORS.maxStep],
-      ["logRtol", "\\(\\ozNeutral{\\log_{10} r_{tol}}\\)", "relative tol", -11, -5, 0.25, -8, COLORS.rtol],
-      ["logAtol", "\\(\\ozNeutral{\\log_{10} a_{tol}}\\)", "absolute tol", -13, -7, 0.25, -10, COLORS.atol],
-      ["logErrTol", "\\(\\ozNeutral{\\log_{10}\\epsilon}\\)", "tolerance", -8, -4, 0.25, -7, COLORS.errTol],
+      ["maxStep", `\\(\\Delta ${TEX.tau}_{\\max}\\)`, "max adaptive step", 5e-3, 0.12, 5e-3, 0.03, COLORS.maxStep],
+      ["logRtol", "\\(\\ozNeutral{\\log_{10} r_{tol}}\\)", "relative tol", -12, -8, 0.25, -11, COLORS.rtol],
+      ["logAtol", "\\(\\ozNeutral{\\log_{10} a_{tol}}\\)", "absolute tol", -14, -10, 0.25, -13, COLORS.atol],
+      ["logErrTol", "\\(\\ozNeutral{\\log_{10}\\epsilon}\\)", "tolerance", -9, -5, 0.25, -8, COLORS.errTol],
       ["logStabilityTol", "\\(\\ozNeutral{\\log_{10}\\epsilon_s}\\)", "stability tolerance", -4, -1, 0.25, -2.7, COLORS.errTol],
       ["stableCycles", "\\(\\ozNeutral{N_s}\\)", "stable cycles required", 3, 8, 1, 5, COLORS.errTol]
     ]
@@ -340,7 +340,7 @@
   var PARAMETER_DESCRIPTIONS = {
     zeta: `Ratio of the model dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\).`,
     zetac: `Ratio of the model dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\).`,
-    gammac: `Equilibrium convective luminosity fraction \\(${TEX.gammac}=${TEX.Lc}_{0}/${TEX.L}_{0}\\).`,
+    gammac: `Equilibrium convective luminosity fraction \\(${TEX.gammac}=${TEX.Lc}_{0}/${TEX.L}_{0}\\). The complementary radiative fraction is \\(${TEX_EXTRA.gammaR}=1-${TEX.gammac}\\).`,
     m: `Reference shell form factor that sets \\(${TEX_EXTRA.eta}\\), the shell's inner boundary radius as a fraction of the reference outer radius. Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\).`,
     gamma1: `First adiabatic exponent used in the \\(${TEX.H}\\) response.`,
     n: `Density exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
@@ -361,15 +361,15 @@
     stableCycles: "Number of repeated cycles required before a limit cycle is classified stable."
   };
   var presetBase = {
-    maxStep: 0.15,
-    logRtol: -8,
-    logAtol: -10,
+    maxStep: 0.03,
+    logRtol: -11,
+    logAtol: -13,
     solver: "rk45",
     runUntilStable: true,
     logStabilityTol: -2.7,
     stableCycles: 5,
     phaseMinAmplitude: 1e-4,
-    phaseMode: "reference"
+    phaseMode: "final"
   };
   var paperBase = {
     ...presetBase,
@@ -396,23 +396,23 @@
     uc0: 0,
     tEnd: 10,
     step: 1e-3,
-    logErrTol: -7,
+    logErrTol: -8,
     variableM: true,
     driver: "h",
     runUntilStable: false
   };
   var DEFAULT_PRESET_NAME = "RR Lyrae low-amplitude fundamental, damped";
   var PRESETS = {
-    "Baker radiative pulsator": { ...presetBase, referenceFamily: "baker", phaseWarmupTau: 4, zeta: 1, zetac: 0, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 0, tEnd: 24, step: 1e-3, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
-    "Blue-edge convection": { ...paperBase, phaseWarmupTau: 24, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 40, step: 1e-3, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
-    "Instability-strip convection": { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 15, step: 1e-3, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
-    "Red-edge convection": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 14, step: 1e-3, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
-    "Radius-dependent strip": { ...paperBase, phaseWarmupTau: 6, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 1e-3, logErrTol: -7, variableM: true, driver: "h", runUntilStable: false },
-    "Fully convective runaway": { ...paperBase, phaseWarmupTau: 1, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 8, step: 1e-3, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
-    "Thick convective shell": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 1e-3, logErrTol: -7, variableM: false, driver: "h", runUntilStable: false },
+    "Baker radiative pulsator": { ...presetBase, referenceFamily: "baker", phaseWarmupTau: 4, zeta: 1, zetac: 0, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 0, tEnd: 24, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+    "Blue-edge convection": { ...paperBase, phaseWarmupTau: 24, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 40, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+    "Instability-strip convection": { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 15, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+    "Red-edge convection": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 14, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+    "Radius-dependent strip": { ...paperBase, phaseWarmupTau: 6, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 1e-3, logErrTol: -8, variableM: true, driver: "h", runUntilStable: false },
+    "Fully convective runaway": { ...paperBase, phaseWarmupTau: 1, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 8, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+    "Thick convective shell": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
     "RR Lyrae fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.2 },
     "RR Lyrae low-amplitude fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.1 },
-    "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 100 },
+    "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, zetac: 1, gammac: 0.2, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 100 },
     "RR Lyrae first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.05 },
     "RR Lyrae first overtone, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 15, sourceExp: 2, cq: 7, r0: 1.05, tEnd: 80 },
     "RR Lyrae high-amplitude first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.1 },
@@ -571,6 +571,224 @@
       message,
       stats: result.stats
     };
+  }
+
+  // src/grid.ts
+  var CONTROL_META = /* @__PURE__ */ new Map();
+  Object.values(CONTROL_GROUPS).forEach((controls) => {
+    controls.forEach(([key, _symbol, _name, min, max, step2, defaultValue]) => {
+      CONTROL_META.set(key, { key, min, max, step: step2, defaultValue });
+    });
+  });
+  function sliderMeta(key) {
+    const meta = CONTROL_META.get(key);
+    if (!meta) throw new Error(`Missing control metadata for ${String(key)}`);
+    return meta;
+  }
+  function decimalPlaces(value) {
+    const text = String(value);
+    if (text.includes("e-")) return Number(text.split("e-")[1]);
+    const decimal = text.split(".")[1];
+    return decimal ? decimal.length : 0;
+  }
+  function roundToNativeStep(value, step2) {
+    const digits = Math.min(12, Math.max(0, decimalPlaces(step2) + 2));
+    return Number(value.toFixed(digits));
+  }
+  function sliderValueFromParameter(key, parameters) {
+    return key === "tEnd" ? Math.log10(parameters.tEnd) : Number(parameters[key]);
+  }
+  function parameterValueFromSlider(key, sliderValue) {
+    if (key !== "tEnd") return sliderValue;
+    return Math.min(1e3, Math.max(1, 10 ** sliderValue));
+  }
+  function normalizeGridRange(range2) {
+    const meta = sliderMeta(range2.key);
+    const low = Math.min(range2.lowerSliderValue, range2.upperSliderValue);
+    const high = Math.max(range2.lowerSliderValue, range2.upperSliderValue);
+    return {
+      ...range2,
+      lowerSliderValue: clampToMeta(low, meta),
+      upperSliderValue: clampToMeta(high, meta),
+      centerSliderValue: clampToMeta(range2.centerSliderValue, meta),
+      nativeStep: meta.step
+    };
+  }
+  function defaultGridRange(key, currentSliderValue) {
+    const meta = sliderMeta(key);
+    const current = clampToMeta(currentSliderValue, meta);
+    const distanceToMin = Math.abs(current - meta.min);
+    const distanceToMax = Math.abs(meta.max - current);
+    const target = distanceToMax >= distanceToMin ? meta.max : meta.min;
+    const edge = current + (target - current) / 2;
+    return normalizeGridRange({
+      key,
+      lowerSliderValue: Math.min(current, edge),
+      upperSliderValue: Math.max(current, edge),
+      centerSliderValue: current,
+      nativeStep: meta.step
+    });
+  }
+  function generateSliderSamples(rangeInput, stride = 1) {
+    const range2 = normalizeGridRange(rangeInput);
+    const meta = sliderMeta(range2.key);
+    const step2 = meta.step;
+    const firstIndex = Math.ceil((range2.lowerSliderValue - meta.min) / step2 - 1e-9);
+    const lastIndex = Math.floor((range2.upperSliderValue - meta.min) / step2 + 1e-9);
+    const effectiveStride = Math.max(1, Math.floor(stride));
+    const samples = [];
+    for (let index = firstIndex; index <= lastIndex; index += effectiveStride) {
+      samples.push(roundToNativeStep(meta.min + index * step2, step2));
+    }
+    const upper = roundToNativeStep(meta.min + lastIndex * step2, step2);
+    if (Number.isFinite(upper) && samples.at(-1) !== upper) samples.push(upper);
+    return [...new Set(samples.filter((sample2) => sample2 >= meta.min - 1e-9 && sample2 <= meta.max + 1e-9))];
+  }
+  function centerSliderSample(rangeInput) {
+    const range2 = normalizeGridRange(rangeInput);
+    const samples = generateSliderSamples(range2, 1);
+    if (!samples.length) return roundToNativeStep(range2.centerSliderValue, range2.nativeStep);
+    return samples.reduce(
+      (best, sample2) => Math.abs(sample2 - range2.centerSliderValue) < Math.abs(best - range2.centerSliderValue) ? sample2 : best,
+      samples[0]
+    );
+  }
+  function meanSliderSample(rangeInput) {
+    const range2 = normalizeGridRange(rangeInput);
+    return Number(((range2.lowerSliderValue + range2.upperSliderValue) / 2).toFixed(12));
+  }
+  function fallbackSliderSamples(rangeInput, selected) {
+    const range2 = normalizeGridRange(rangeInput);
+    if (!selected) return [centerSliderSample(range2)];
+    const low = roundToNativeStep(range2.lowerSliderValue, range2.nativeStep);
+    const center = centerSliderSample(range2);
+    const high = roundToNativeStep(range2.upperSliderValue, range2.nativeStep);
+    return [.../* @__PURE__ */ new Set([low, center, high])].sort((a, b) => a - b);
+  }
+  function estimateGridCoarseness(total, completed, elapsedMs, dimensionCount, targetMs = 1e3) {
+    if (completed <= 0 || elapsedMs <= 0 || total <= 0) {
+      return { stride: 1, estimatedTotalMs: null, zeroCompletedFallback: true };
+    }
+    const estimatedTotalMs = elapsedMs * total / completed;
+    const reduction = Math.max(1, estimatedTotalMs / targetMs);
+    const exponent = 1 / Math.max(1, dimensionCount);
+    return {
+      stride: Math.max(1, Math.ceil(reduction ** exponent)),
+      estimatedTotalMs,
+      zeroCompletedFallback: false
+    };
+  }
+  function buildRangeSamples(ranges, loopKey, options = {}) {
+    return ranges.map((range2) => ({
+      key: range2.key,
+      centerSliderValue: normalizeGridRange(range2).centerSliderValue,
+      samples: addCenterSample(
+        options.zeroCompletedFallback ? fallbackSliderSamples(range2, range2.key === loopKey) : generateSliderSamples(range2, options.stride ?? 1),
+        range2
+      )
+    }));
+  }
+  function buildLoopPathSamples(ranges, loopKey) {
+    return ranges.map((rangeInput) => {
+      const range2 = normalizeGridRange(rangeInput);
+      const mean = meanSliderSample(range2);
+      return {
+        key: range2.key,
+        centerSliderValue: mean,
+        samples: range2.key === loopKey ? generateSliderSamples(range2, 1) : [mean]
+      };
+    });
+  }
+  function gridTotal(samples) {
+    return samples.reduce((total, item) => total * Math.max(1, item.samples.length), 1);
+  }
+  function clampToMeta(value, meta) {
+    return Math.min(meta.max, Math.max(meta.min, value));
+  }
+  function addCenterSample(samples, range2) {
+    const center = centerSliderSample(range2);
+    return [.../* @__PURE__ */ new Set([...samples, center])].sort((a, b) => a - b);
+  }
+
+  // src/fourier.ts
+  var TWO_PI = 2 * Math.PI;
+  var HARMONICS = 3;
+  var MIN_FOURIER_AMPLITUDE = 1e-4;
+  function solveLinearSystem(matrix, rhs) {
+    const n = rhs.length;
+    const augmented = matrix.map((row, index) => [...row, rhs[index]]);
+    for (let column = 0; column < n; column += 1) {
+      let pivot = column;
+      for (let row = column + 1; row < n; row += 1) {
+        if (Math.abs(augmented[row][column]) > Math.abs(augmented[pivot][column])) pivot = row;
+      }
+      if (Math.abs(augmented[pivot][column]) < 1e-12) return null;
+      if (pivot !== column) [augmented[pivot], augmented[column]] = [augmented[column], augmented[pivot]];
+      const scale = augmented[column][column];
+      for (let j = column; j <= n; j += 1) augmented[column][j] /= scale;
+      for (let row = 0; row < n; row += 1) {
+        if (row === column) continue;
+        const factor = augmented[row][column];
+        for (let j = column; j <= n; j += 1) augmented[row][j] -= factor * augmented[column][j];
+      }
+    }
+    return augmented.map((row) => row[n]);
+  }
+  function fourierBasis(phase) {
+    const wrappedPhase = phase >= 2 ? 0 : (phase % 1 + 1) % 1;
+    const basis = [1];
+    for (let harmonic = 1; harmonic <= HARMONICS; harmonic += 1) {
+      const angle = TWO_PI * harmonic * wrappedPhase;
+      basis.push(Math.cos(angle), Math.sin(angle));
+    }
+    return basis;
+  }
+  function wrapTwoPi(angle) {
+    return (angle % TWO_PI + TWO_PI) % TWO_PI;
+  }
+  function computeFourierParameters(phaseRows) {
+    const finiteRows = phaseRows.filter(
+      (row) => Number.isFinite(row.tau) && Number.isFinite(row.L)
+    );
+    const parameterCount = 1 + 2 * HARMONICS;
+    if (finiteRows.length < parameterCount) return null;
+    const normal = Array.from({ length: parameterCount }, () => Array(parameterCount).fill(0));
+    const rhs = Array(parameterCount).fill(0);
+    for (const row of finiteRows) {
+      const basis = fourierBasis(row.tau);
+      for (let i = 0; i < parameterCount; i += 1) {
+        rhs[i] += basis[i] * row.L;
+        for (let j = 0; j < parameterCount; j += 1) normal[i][j] += basis[i] * basis[j];
+      }
+    }
+    const coefficients = solveLinearSystem(normal, rhs);
+    if (!coefficients) return null;
+    const harmonics = [];
+    for (let harmonic = 1; harmonic <= HARMONICS; harmonic += 1) {
+      const cosine = coefficients[2 * harmonic - 1];
+      const sine = coefficients[2 * harmonic];
+      const amplitude = Math.hypot(cosine, sine);
+      const phase = Math.atan2(-sine, cosine);
+      harmonics.push({ amplitude, phase });
+    }
+    const [h1, h2, h3] = harmonics;
+    if (!h1 || !h2 || !h3 || h1.amplitude <= 0) return null;
+    return {
+      phi1: wrapTwoPi(h1.phase),
+      phi2: wrapTwoPi(h2.phase),
+      phi3: wrapTwoPi(h3.phase),
+      phi21: wrapTwoPi(h2.phase - 2 * h1.phase),
+      phi31: wrapTwoPi(h3.phase - 3 * h1.phase),
+      r21: h2.amplitude / h1.amplitude,
+      r31: h3.amplitude / h1.amplitude,
+      amplitude1: h1.amplitude,
+      amplitude2: h2.amplitude,
+      amplitude3: h3.amplitude,
+      coefficients
+    };
+  }
+  function hasUsableFourierAmplitudes(fourier, minimum = MIN_FOURIER_AMPLITUDE) {
+    return Boolean(fourier && fourier.amplitude1 >= minimum && fourier.amplitude2 >= minimum && fourier.amplitude3 >= minimum);
   }
 
   // src/phase.ts
@@ -738,6 +956,302 @@
     return buildReference(rows, options);
   }
 
+  // src/gridCompute.ts
+  async function computeGridWithMessages(request, callbacks) {
+    const nativeSamples = buildRangeSamples(request.ranges, request.loopKey, { stride: 1 });
+    const native = await runGridPass(request, nativeSamples, callbacks, 2e3);
+    if (callbacks.isCanceled()) {
+      callbacks.post({ type: "grid-canceled", requestId: request.requestId });
+      return;
+    }
+    if (native.completed) {
+      const path2 = request.ranges.length <= 1 ? native : await runLoopPathPass(request, callbacks);
+      if (callbacks.isCanceled()) {
+        callbacks.post({ type: "grid-canceled", requestId: request.requestId });
+        return;
+      }
+      postComplete(request, native, path2.results, 1, false, false, callbacks);
+      return;
+    }
+    const estimate = estimateGridCoarseness(native.total, native.attempted, native.elapsedMs, Math.max(1, request.ranges.length));
+    callbacks.post({
+      type: "grid-canceled-for-coarsening",
+      requestId: request.requestId,
+      completed: native.attempted,
+      total: native.total,
+      elapsedMs: native.elapsedMs,
+      stride: estimate.stride,
+      estimatedTotalMs: estimate.estimatedTotalMs
+    });
+    const coarsenedSamples = buildRangeSamples(request.ranges, request.loopKey, {
+      stride: estimate.stride,
+      zeroCompletedFallback: estimate.zeroCompletedFallback
+    });
+    const coarsened = await runGridPass(request, coarsenedSamples, callbacks);
+    if (callbacks.isCanceled()) {
+      callbacks.post({ type: "grid-canceled", requestId: request.requestId });
+      return;
+    }
+    const path = await runLoopPathPass(request, callbacks);
+    if (callbacks.isCanceled()) {
+      callbacks.post({ type: "grid-canceled", requestId: request.requestId });
+      return;
+    }
+    postComplete(request, coarsened, path.results, estimate.stride, true, estimate.zeroCompletedFallback, callbacks);
+  }
+  async function runLoopPathPass(request, callbacks) {
+    const pathSamples = buildLoopPathSamples(request.ranges, request.loopKey);
+    return runGridPass(request, pathSamples, callbacks, void 0, false);
+  }
+  async function runGridPass(request, samples, callbacks, deadlineMs, reportProgress = true) {
+    const started = performance.now();
+    const total = gridTotal(samples);
+    const stats = {
+      results: [],
+      total,
+      attempted: 0,
+      validPhase: 0,
+      validFourier: 0,
+      phaseUnavailable: 0,
+      failed: 0,
+      elapsedMs: 0,
+      completed: true
+    };
+    if (!samples.length || total <= 0) {
+      stats.elapsedMs = performance.now() - started;
+      return stats;
+    }
+    for (const sliderValues of sliderCombinations(samples)) {
+      if (callbacks.isCanceled()) {
+        stats.completed = false;
+        break;
+      }
+      const elapsed = performance.now() - started;
+      if (deadlineMs !== void 0 && elapsed > deadlineMs && stats.attempted < total) {
+        stats.completed = false;
+        break;
+      }
+      addGridModel(request, samples, sliderValues, stats);
+      stats.attempted += 1;
+      if (stats.attempted % 4 === 0 || stats.attempted === total) {
+        stats.elapsedMs = performance.now() - started;
+        if (reportProgress) {
+          callbacks.post({
+            type: "grid-progress",
+            requestId: request.requestId,
+            completed: stats.attempted,
+            total,
+            elapsedMs: stats.elapsedMs
+          });
+        }
+        await yieldToBrowser();
+      }
+    }
+    stats.elapsedMs = performance.now() - started;
+    return stats;
+  }
+  function addGridModel(request, samples, sliderValues, stats) {
+    const parameters = { ...request.baseParameters };
+    const variedValues = {};
+    for (const item of samples) {
+      const sliderValue = sliderValues[item.key];
+      if (sliderValue === void 0) continue;
+      const parameterValue = parameterValueFromSlider(item.key, sliderValue);
+      setNumericParameter(parameters, item.key, parameterValue);
+      variedValues[item.key] = parameterValue;
+    }
+    try {
+      const solved = solveModel(parameters);
+      const phase = buildTwoCyclePhase(solved.rows, request.phase);
+      if (phase.reason !== "ok" || !phase.period || phase.rows.length < 8) {
+        stats.phaseUnavailable += 1;
+        return;
+      }
+      const phaseRows = strideDownsample(phase.rows, 420);
+      const rawFourier = computeFourierParameters(phase.rows);
+      const fourier = hasUsableFourierAmplitudes(rawFourier) ? rawFourier : null;
+      if (fourier) stats.validFourier += 1;
+      stats.validPhase += 1;
+      stats.results.push({
+        id: stats.results.length,
+        parameters,
+        sliderValues: { ...sliderValues },
+        variedValues,
+        phaseRows,
+        period: phase.period,
+        fourier
+      });
+    } catch (_error) {
+      stats.failed += 1;
+    }
+  }
+  function setNumericParameter(parameters, key, value) {
+    parameters[key] = value;
+  }
+  function* sliderCombinations(samples) {
+    function* visit(index, current) {
+      if (index >= samples.length) {
+        yield { ...current };
+        return;
+      }
+      const item = samples[index];
+      for (const sample2 of item.samples) {
+        current[item.key] = sample2;
+        yield* visit(index + 1, current);
+      }
+      delete current[item.key];
+    }
+    yield* visit(0, {});
+  }
+  function strideDownsample(rows, maxPoints) {
+    if (rows.length <= maxPoints) return [...rows];
+    const stride = Math.ceil(rows.length / maxPoints);
+    const sampled = rows.filter((_row, index) => index % stride === 0);
+    const last = rows.at(-1);
+    if (last && sampled.at(-1) !== last) sampled.push(last);
+    return sampled;
+  }
+  function yieldToBrowser() {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  function postComplete(request, stats, pathResults, stride, coarsened, zeroCompletedFallback, callbacks) {
+    callbacks.post({
+      type: "grid-complete",
+      requestId: request.requestId,
+      results: stats.results,
+      pathResults,
+      total: stats.total,
+      attempted: stats.attempted,
+      validPhase: stats.validPhase,
+      validFourier: stats.validFourier,
+      phaseUnavailable: stats.phaseUnavailable,
+      failed: stats.failed,
+      elapsedMs: stats.elapsedMs,
+      stride,
+      coarsened,
+      zeroCompletedFallback
+    });
+  }
+
+  // src/visualization.ts
+  var BLACKBODY_REFERENCE_TEMPERATURE = 6500;
+  var BLACKBODY_RGB_10DEG_TABLE = [
+    { temperature: 1e3, r: 255, g: 56, b: 0 },
+    { temperature: 1500, r: 255, g: 109, b: 0 },
+    { temperature: 2e3, r: 255, g: 137, b: 18 },
+    { temperature: 2500, r: 255, g: 161, b: 72 },
+    { temperature: 3e3, r: 255, g: 180, b: 107 },
+    { temperature: 3500, r: 255, g: 196, b: 137 },
+    { temperature: 4e3, r: 255, g: 209, b: 163 },
+    { temperature: 4500, r: 255, g: 219, b: 186 },
+    { temperature: 5e3, r: 255, g: 228, b: 206 },
+    { temperature: 5500, r: 255, g: 236, b: 224 },
+    { temperature: 6e3, r: 255, g: 243, b: 239 },
+    { temperature: 6500, r: 255, g: 249, b: 253 },
+    { temperature: 7e3, r: 245, g: 243, b: 255 },
+    { temperature: 7500, r: 235, g: 238, b: 255 },
+    { temperature: 8e3, r: 227, g: 233, b: 255 },
+    { temperature: 8500, r: 220, g: 229, b: 255 },
+    { temperature: 9e3, r: 214, g: 225, b: 255 },
+    { temperature: 9500, r: 208, g: 222, b: 255 },
+    { temperature: 1e4, r: 204, g: 219, b: 255 },
+    { temperature: 10500, r: 200, g: 217, b: 255 },
+    { temperature: 11e3, r: 196, g: 215, b: 255 },
+    { temperature: 11500, r: 193, g: 213, b: 255 },
+    { temperature: 12e3, r: 191, g: 211, b: 255 },
+    { temperature: 12500, r: 188, g: 210, b: 255 },
+    { temperature: 13e3, r: 186, g: 208, b: 255 }
+  ];
+  function clamp2(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+  function interpolateNumber(a, b, fraction) {
+    return a + (b - a) * fraction;
+  }
+  function normalizeFoldedPhase(phase) {
+    if (!Number.isFinite(phase)) return 0;
+    if (phase === 2) return 2;
+    return (phase % 2 + 2) % 2;
+  }
+  function phaseRowAt(rows, phase) {
+    if (!rows.length) return null;
+    const target = normalizeFoldedPhase(phase);
+    if (target <= rows[0].tau) return rows[0];
+    const last = rows[rows.length - 1];
+    if (target >= last.tau) return last;
+    let lo = 0;
+    let hi = rows.length - 1;
+    while (hi - lo > 1) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (rows[mid].tau <= target) lo = mid;
+      else hi = mid;
+    }
+    const a = rows[lo];
+    const b = rows[hi];
+    if (a.tau === b.tau) return a;
+    const fraction = (target - a.tau) / (b.tau - a.tau);
+    const blend = (key) => interpolateNumber(a[key], b[key], fraction);
+    return {
+      tau: target,
+      R: blend("R"),
+      V: blend("V"),
+      H: blend("H"),
+      Uc: blend("Uc"),
+      Lr: blend("Lr"),
+      Lc: blend("Lc"),
+      L: blend("L")
+    };
+  }
+  function inferEffectiveTemperature(luminosity, radius, referenceTemperature = BLACKBODY_REFERENCE_TEMPERATURE) {
+    if (luminosity <= 0 || radius <= 0 || !Number.isFinite(luminosity + radius + referenceTemperature)) {
+      return referenceTemperature;
+    }
+    return referenceTemperature * (luminosity / radius ** 2) ** 0.25;
+  }
+  function clampBlackbodyTemperature(temperature) {
+    const first = BLACKBODY_RGB_10DEG_TABLE[0].temperature;
+    const last = BLACKBODY_RGB_10DEG_TABLE[BLACKBODY_RGB_10DEG_TABLE.length - 1].temperature;
+    return clamp2(Number.isFinite(temperature) ? temperature : BLACKBODY_REFERENCE_TEMPERATURE, first, last);
+  }
+  function blackbodyRgbForTemperature(temperature) {
+    const clamped = clampBlackbodyTemperature(temperature);
+    const first = BLACKBODY_RGB_10DEG_TABLE[0];
+    if (clamped <= first.temperature) return { r: first.r, g: first.g, b: first.b };
+    for (let index = 1; index < BLACKBODY_RGB_10DEG_TABLE.length; index += 1) {
+      const next = BLACKBODY_RGB_10DEG_TABLE[index];
+      if (clamped > next.temperature) continue;
+      const prev = BLACKBODY_RGB_10DEG_TABLE[index - 1];
+      const fraction = (clamped - prev.temperature) / (next.temperature - prev.temperature);
+      return {
+        r: Math.round(interpolateNumber(prev.r, next.r, fraction)),
+        g: Math.round(interpolateNumber(prev.g, next.g, fraction)),
+        b: Math.round(interpolateNumber(prev.b, next.b, fraction))
+      };
+    }
+    const last = BLACKBODY_RGB_10DEG_TABLE[BLACKBODY_RGB_10DEG_TABLE.length - 1];
+    return { r: last.r, g: last.g, b: last.b };
+  }
+  function rgbCss(color, alpha = 1) {
+    return alpha >= 1 ? `rgb(${color.r}, ${color.g}, ${color.b})` : `rgba(${color.r}, ${color.g}, ${color.b}, ${clamp2(alpha, 0, 1)})`;
+  }
+  function shellGeometryFor(radius, formFactor) {
+    const outerRadius = Number.isFinite(radius) ? Math.max(0, radius) : 1;
+    const safeFormFactor = Number.isFinite(formFactor) && formFactor > 0 ? formFactor : 3;
+    const eta = Math.cbrt(Math.max(0, 1 - 3 / safeFormFactor));
+    const innerRadius = outerRadius * eta;
+    const thickness = Math.max(0, outerRadius - innerRadius);
+    return {
+      eta,
+      outerRadius,
+      innerRadius,
+      thickness,
+      thicknessFraction: outerRadius > 0 ? thickness / outerRadius : 0
+    };
+  }
+  function shellGeometryFromModel(row, parameters) {
+    return shellGeometryFor(row.R, mAt(row.R, parameters));
+  }
+
   // src/main.ts
   var state = { ...PRESETS[DEFAULT_PRESET_NAME] };
   var selectedPreset = DEFAULT_PRESET_NAME;
@@ -772,12 +1286,52 @@
   var SONIFICATION_MAX_HARMONICS = 32;
   var PIANO_DEFAULT_ENVELOPE = { attack: 0.015, decay: 0.22, release: 0.36 };
   var PIANO_DEFAULT_SUSTAIN_LEVEL = 0.38;
+  var MODEL_ANIMATION_BASE_DURATION_MS = 8e3;
+  var MODEL_ANIMATION_MIN_SPEED = 0.25;
+  var MODEL_ANIMATION_MAX_SPEED = 4;
+  var GRID_LOOP_BASE_INTERVAL_MS = 90;
+  var GRID_LOOP_MIN_SPEED = 0.25;
+  var GRID_LOOP_MAX_SPEED = 4;
+  var PHASE_MARKER_COLOR = "#FFD166";
   var SONIFICATION_SOURCE_LABELS = {
     luminosity: "luminosity",
     velocity: "radial velocity",
     pressure: "pressure"
   };
   var controlElements = /* @__PURE__ */ new Map();
+  var gridRangeElements = /* @__PURE__ */ new Map();
+  var gridState = {
+    enabled: false,
+    ranges: /* @__PURE__ */ new Map(),
+    savedRanges: /* @__PURE__ */ new Map(),
+    selectedLoopKey: null,
+    status: "idle",
+    statusText: "Grid off",
+    requestId: 0,
+    worker: null,
+    workerDisabled: false,
+    fallbackToken: 0,
+    debounceTimer: 0,
+    animationTimer: 0,
+    animationIndex: 0,
+    animationDirection: 1,
+    results: [],
+    pathResults: [],
+    hoverResult: null,
+    heldResult: null,
+    lastComplete: null,
+    restorePlotVisibility: null
+  };
+  var currentAnimationPhase = 0;
+  var modelAnimationSpeed = 1;
+  var gridLoopSpeed = 1;
+  var modelAnimationFrame = 0;
+  var modelAnimationStartTime = null;
+  var latestPhaseRows = [];
+  var latestPhaseSample = [];
+  var latestPhaseMessage;
+  var latestPhasePeriodLabel = "phase (period = n/a \u03C4)";
+  var latestPhaseLuminosityRange = [0, 1];
   var sonificationReferenceNote = MIDDLE_C_NOTE;
   var sonificationReferenceHz = noteToFrequency(MIDDLE_C_NOTE);
   var sonificationSamples = [];
@@ -845,9 +1399,26 @@
     time: { R: true, V: true, H: true, Uc: true },
     lum: { L: true, Lr: true, Lc: true }
   };
+  var PLOT_PANEL_LABELS = {
+    model: "Moving Shell",
+    light: "Lightcurve",
+    velocity: "RV Curve",
+    time: "History",
+    lum: "Luminosity Evolution"
+  };
+  var plotPanelVisibility = {
+    model: true,
+    light: true,
+    velocity: true,
+    time: true,
+    lum: true
+  };
   var plotRenderStates = /* @__PURE__ */ new Map();
   var legendSignatures = /* @__PURE__ */ new Map();
   var activeSelection = null;
+  var gridColorbarRegions = /* @__PURE__ */ new Map();
+  var fourierPointHits = [];
+  var activeGridCanvasInteraction = null;
   var DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
   var PLOT_LAYOUT = {
     left: 84,
@@ -1065,6 +1636,10 @@
     if (pressurePanel instanceof HTMLElement) pressurePanel.hidden = !pressureVisible;
     const plotGrid = document.querySelector(".plot-grid");
     if (plotGrid) plotGrid.dataset.pressureVisible = String(pressureVisible);
+    updatePlotGridColumns();
+    if (pressureVisible) {
+      window.requestAnimationFrame(() => window.requestAnimationFrame(drawPhasePlots));
+    }
   }
   function handleSonificationSliderInput(event) {
     const input = event.target;
@@ -1515,7 +2090,7 @@
   }
   function startPianoNote(sourceId, midi) {
     if (!pianoModeActive || activePianoVoices.has(sourceId)) return;
-    const note = clamp2(Math.round(midi), PIANO_MIN_NOTE, PIANO_MAX_NOTE);
+    const note = clamp3(Math.round(midi), PIANO_MIN_NOTE, PIANO_MAX_NOTE);
     const context = ensureAudioContext();
     if (!context) return;
     unlockAudioContext(context);
@@ -1525,7 +2100,7 @@
     const now = context.currentTime;
     const attack = Math.max(1e-3, pianoEnvelope.attack);
     const decay = Math.max(1e-3, pianoEnvelope.decay);
-    const sustain = clamp2(pianoSustainLevel, 0, 1);
+    const sustain = clamp3(pianoSustainLevel, 0, 1);
     oscillator.frequency.setValueAtTime(noteToFrequency(note), now);
     const wave = createSonificationPeriodicWave(context);
     if (wave) oscillator.setPeriodicWave(wave);
@@ -1571,10 +2146,10 @@
   }
   function estimatePianoVoiceAmplitude(voice, now) {
     const elapsed = Math.max(0, now - voice.startedAt);
-    if (elapsed <= voice.attack) return clamp2(elapsed / voice.attack, 0, 1);
+    if (elapsed <= voice.attack) return clamp3(elapsed / voice.attack, 0, 1);
     if (elapsed <= voice.attack + voice.decay) {
       const decayProgress = (elapsed - voice.attack) / voice.decay;
-      return 1 - (1 - voice.sustain) * clamp2(decayProgress, 0, 1);
+      return 1 - (1 - voice.sustain) * clamp3(decayProgress, 0, 1);
     }
     return voice.sustain;
   }
@@ -1716,9 +2291,9 @@
     const minValue = Math.min(...sourceValues);
     const maxValue = Math.max(...sourceValues);
     const span = maxValue - minValue;
-    const samples = strideDownsample(inDomain, SONIFICATION_MAX_SAMPLES).map((sample2) => ({
-      phase: clamp2((sample2.row.tau - start) / (end - start), 0, 1),
-      value: span > 1e-12 ? clamp2(2 * ((sample2.value - minValue) / span) - 1, -1, 1) : 0
+    const samples = strideDownsample2(inDomain, SONIFICATION_MAX_SAMPLES).map((sample2) => ({
+      phase: clamp3((sample2.row.tau - start) / (end - start), 0, 1),
+      value: span > 1e-12 ? clamp3(2 * ((sample2.value - minValue) / span) - 1, -1, 1) : 0
     })).sort((a, b) => a.phase - b.phase);
     if (!samples.length) return [];
     const first = samples[0];
@@ -1731,12 +2306,14 @@
   function buildControls() {
     setupResponsiveSidebarControls();
     setupSonificationControls();
+    setupModelSpeedControl();
     buildPresetButtons();
     buildSolverButtons();
     buildSliderGroup("physicalControls", CONTROL_GROUPS.physical);
     buildSliderGroup("initialControls", CONTROL_GROUPS.initial);
     rebuildIntegrationControls();
     buildParameterTable();
+    setupGridControls();
     const variableM = el("variableM");
     variableM.checked = state.variableM;
     variableM.addEventListener("change", (event) => {
@@ -1758,6 +2335,7 @@
         state.phaseMode = button.dataset.phaseMode === "final" ? "final" : "reference";
         updatePhaseModeButtons();
         refreshActivePreset();
+        scheduleGridCompute();
         drawAll();
       });
     });
@@ -1765,6 +2343,7 @@
       button.addEventListener("click", () => {
         phaseAnchor = button.dataset.phaseAnchor === "max" ? "max" : "min";
         updatePhaseAnchorButtons();
+        scheduleGridCompute();
         drawAll();
       });
     });
@@ -1778,7 +2357,9 @@
       });
     });
     el("resetPreset").addEventListener("click", () => applyPreset(selectedPreset));
+    setupPlotPanelToggles();
     setupInteractivePlots();
+    setupGridCanvasInteractions();
     window.addEventListener("resize", drawAll);
     window.addEventListener("resize", drawAdsrVisualization);
     updateDriverButtons();
@@ -1788,6 +2369,566 @@
     updateEquationBlocks();
     updateAllSliderLabels();
     updateResetButtons();
+  }
+  function modelAnimationDurationMs() {
+    return MODEL_ANIMATION_BASE_DURATION_MS / modelAnimationSpeed;
+  }
+  function modelSpeedLabel(speed) {
+    return `${fmt(speed, 2)}x`;
+  }
+  function setupModelSpeedControl() {
+    const input = el("modelSpeed");
+    const output = el("modelSpeedValue");
+    const sync = () => {
+      modelAnimationSpeed = clamp3(Number(input.value), MODEL_ANIMATION_MIN_SPEED, MODEL_ANIMATION_MAX_SPEED);
+      input.value = String(modelAnimationSpeed);
+      output.value = modelSpeedLabel(modelAnimationSpeed);
+      output.textContent = output.value;
+      modelAnimationStartTime = null;
+      drawAnimatedPhaseViews();
+    };
+    input.addEventListener("input", sync);
+    sync();
+  }
+  function setupGridLoopSpeedControl() {
+    const input = document.getElementById("gridLoopSpeed");
+    const output = document.getElementById("gridLoopSpeedValue");
+    if (!(input instanceof HTMLInputElement) || !(output instanceof HTMLOutputElement)) return;
+    const sync = () => {
+      gridLoopSpeed = clamp3(Number(input.value), GRID_LOOP_MIN_SPEED, GRID_LOOP_MAX_SPEED);
+      input.value = String(gridLoopSpeed);
+      output.value = modelSpeedLabel(gridLoopSpeed);
+      output.textContent = output.value;
+      if (gridState.enabled && gridPathResults().length > 1) startGridAnimation();
+    };
+    input.addEventListener("input", sync);
+    sync();
+  }
+  function isUserPlotId(value) {
+    return value === "model" || value === "light" || value === "velocity" || value === "time" || value === "lum";
+  }
+  function setupPlotPanelToggles() {
+    document.querySelectorAll("[data-plot-toggle]").forEach((input) => {
+      const plotId = input.dataset.plotToggle;
+      if (!isUserPlotId(plotId)) return;
+      input.addEventListener("change", () => {
+        plotPanelVisibility[plotId] = input.checked;
+        updatePlotPanelVisibility();
+        drawAll();
+      });
+    });
+    updatePlotPanelVisibility();
+  }
+  function updatePlotPanelVisibility() {
+    const hiddenControls = el("hiddenPlotControls");
+    let hiddenCount = 0;
+    Object.keys(plotPanelVisibility).forEach((plotId) => {
+      const forcedHidden = gridState.enabled && (plotId === "model" || plotId === "time" || plotId === "lum");
+      const visible = forcedHidden ? false : plotPanelVisibility[plotId];
+      const panel = document.querySelector(`[data-plot-panel="${plotId}"]`);
+      const control = document.querySelector(`[data-plot-control="${plotId}"]`);
+      const home = document.querySelector(`[data-plot-control-home="${plotId}"]`);
+      const input = control?.querySelector("[data-plot-toggle]");
+      if (!panel || !control || !home || !input) return;
+      input.checked = visible;
+      input.disabled = forcedHidden;
+      input.setAttribute("aria-label", `${visible ? "Hide" : "Show"} ${PLOT_PANEL_LABELS[plotId]} plot`);
+      if (visible) {
+        if (control.parentElement !== home) home.prepend(control);
+        panel.hidden = false;
+      } else {
+        panel.hidden = true;
+        hiddenControls.append(control);
+        hiddenCount += 1;
+      }
+    });
+    hiddenControls.hidden = hiddenCount === 0;
+    updatePlotGridColumns();
+  }
+  function updatePlotGridColumns() {
+    const plotGrid = document.getElementById("plotGrid");
+    if (!(plotGrid instanceof HTMLElement)) return;
+    const visibleCount = Array.from(plotGrid.querySelectorAll(".plot-panel")).filter((panel) => !panel.hidden).length;
+    plotGrid.dataset.visiblePlots = String(visibleCount);
+    plotGrid.hidden = visibleCount === 0;
+  }
+  function setupGridControls() {
+    const toggle = document.getElementById("gridModeToggle");
+    if (toggle instanceof HTMLInputElement) {
+      toggle.checked = gridState.enabled;
+      toggle.addEventListener("change", () => setGridModeEnabled(toggle.checked, { defaultGammaRange: toggle.checked }));
+    }
+    setupGridLoopSpeedControl();
+    updateGridRangeUi();
+    updateGridStatusUi();
+  }
+  function setGridModeEnabled(enabled, options = {}) {
+    if (gridState.enabled === enabled) return;
+    gridState.enabled = enabled;
+    const toggle = document.getElementById("gridModeToggle");
+    if (toggle instanceof HTMLInputElement) toggle.checked = enabled;
+    if (enabled) {
+      gridState.restorePlotVisibility = {
+        model: plotPanelVisibility.model,
+        time: plotPanelVisibility.time,
+        lum: plotPanelVisibility.lum
+      };
+      plotPanelVisibility.model = false;
+      plotPanelVisibility.time = false;
+      plotPanelVisibility.lum = false;
+      gridState.status = "idle";
+      gridState.statusText = "Click a slider to define a grid range";
+      if (options.defaultGammaRange) setDefaultGammaGridRange();
+    } else {
+      cancelGridCompute();
+      stopGridAnimation();
+      gridState.results = [];
+      gridState.pathResults = [];
+      gridState.hoverResult = null;
+      gridState.heldResult = null;
+      gridState.lastComplete = null;
+      gridState.status = "idle";
+      gridState.statusText = "Grid off";
+      if (gridState.restorePlotVisibility) {
+        plotPanelVisibility.model = gridState.restorePlotVisibility.model;
+        plotPanelVisibility.time = gridState.restorePlotVisibility.time;
+        plotPanelVisibility.lum = gridState.restorePlotVisibility.lum;
+      }
+      gridState.restorePlotVisibility = null;
+    }
+    updatePlotPanelVisibility();
+    updateGridRangeUi();
+    updateGridStatusUi();
+    updateFourierPanelVisibility();
+    if (enabled) scheduleGridCompute();
+    drawAll();
+  }
+  function setDefaultGammaGridRange() {
+    const key = "gammac";
+    const range2 = normalizeGridRange({
+      key,
+      lowerSliderValue: 0,
+      upperSliderValue: 0.5,
+      centerSliderValue: sliderInputValue(key),
+      nativeStep: sliderMeta(key).step
+    });
+    gridState.ranges.clear();
+    gridState.ranges.set(key, range2);
+    gridState.savedRanges.set(key, range2);
+    gridState.selectedLoopKey = key;
+  }
+  function toggleGridRange(key) {
+    if (gridState.ranges.has(key)) {
+      const current = gridState.ranges.get(key);
+      if (current) gridState.savedRanges.set(key, current);
+      gridState.ranges.delete(key);
+    } else {
+      enableGridRange(key);
+      return;
+    }
+    updateGridRangeUi();
+    scheduleGridCompute();
+    drawAll();
+  }
+  function enableGridRange(key) {
+    const existing = gridState.ranges.get(key);
+    const currentSliderValue = sliderInputValue(key);
+    const saved = gridState.savedRanges.get(key);
+    const range2 = normalizeGridRange(existing || saved || defaultGridRange(key, currentSliderValue));
+    gridState.ranges.set(key, { ...range2, centerSliderValue: currentSliderValue });
+    if (!gridState.selectedLoopKey || !activeGridRangeKeys().includes(gridState.selectedLoopKey)) gridState.selectedLoopKey = key;
+    updateGridRangeUi();
+    scheduleGridCompute();
+  }
+  function syncGridRangeCenter(key) {
+    const range2 = gridState.ranges.get(key);
+    if (!range2) return;
+    gridState.ranges.set(key, normalizeGridRange({ ...range2, centerSliderValue: sliderInputValue(key) }));
+    refreshGridRangeUi(key);
+  }
+  function syncAllGridRangeCenters() {
+    Array.from(gridState.ranges.keys()).forEach(syncGridRangeCenter);
+  }
+  function updateGridRangeBounds(key, lower, upper) {
+    const current = gridState.ranges.get(key) || defaultGridRange(key, sliderInputValue(key));
+    const range2 = normalizeGridRange({
+      ...current,
+      lowerSliderValue: lower,
+      upperSliderValue: upper,
+      centerSliderValue: sliderInputValue(key),
+      nativeStep: sliderMeta(key).step
+    });
+    gridState.ranges.set(key, range2);
+    gridState.savedRanges.set(key, range2);
+    refreshGridRangeUi(key);
+    scheduleGridCompute();
+  }
+  function activeGridRangeKeys() {
+    if (!gridState.enabled) return [];
+    return Array.from(gridState.ranges.keys()).filter((key) => {
+      const elements = gridRangeElements.get(key);
+      return Boolean(elements && !elements.wrapper.hidden);
+    });
+  }
+  function activeGridRanges() {
+    return activeGridRangeKeys().map((key) => gridState.ranges.get(key)).filter((range2) => Boolean(range2)).map(normalizeGridRange);
+  }
+  function updateGridRangeUi() {
+    gridRangeElements.forEach((_elements, key) => refreshGridRangeUi(key));
+    updateGridLoopControls();
+  }
+  function refreshGridRangeUi(key) {
+    const elements = gridRangeElements.get(key);
+    if (!elements) return;
+    const active = gridState.enabled && gridState.ranges.has(key);
+    const range2 = gridState.ranges.get(key);
+    elements.wrapper.classList.toggle("is-grid-enabled", gridState.enabled);
+    elements.wrapper.classList.toggle("is-grid-range", active);
+    const controls = elements.wrapper.querySelector("[data-grid-range-controls]");
+    if (controls) controls.hidden = !active;
+    if (!range2) return;
+    const normalized = normalizeGridRange(range2);
+    elements.lower.value = String(normalized.lowerSliderValue);
+    elements.upper.value = String(normalized.upperSliderValue);
+    const meta = sliderMeta(key);
+    const span = Math.max(1e-12, meta.max - meta.min);
+    const left = (normalized.lowerSliderValue - meta.min) / span * 100;
+    const right = (normalized.upperSliderValue - meta.min) / span * 100;
+    controls?.style.setProperty("--grid-range-left", `${left.toFixed(4)}%`);
+    controls?.style.setProperty("--grid-range-right", `${right.toFixed(4)}%`);
+    elements.lower.title = `Lower bound: ${controlValueLabel(key, parameterValueFromSlider(key, normalized.lowerSliderValue))}`;
+    elements.upper.title = `Upper bound: ${controlValueLabel(key, parameterValueFromSlider(key, normalized.upperSliderValue))}`;
+    updateGridLoopSliderMarker(key);
+  }
+  function updateGridLoopSliderMarkers() {
+    gridRangeElements.forEach((_elements, key) => updateGridLoopSliderMarker(key));
+    gridRangeElements.forEach((_elements, key) => updateSliderLabel(key));
+  }
+  function updateGridLoopSliderMarker(key) {
+    const elements = gridRangeElements.get(key);
+    const marker = elements?.wrapper.querySelector("[data-grid-loop-marker]");
+    const controls = elements?.wrapper.querySelector("[data-grid-range-controls]");
+    if (!elements || !marker || !controls) return;
+    const current = currentGridResult();
+    const range2 = currentLoopRange();
+    const sliderValue = current?.sliderValues[key];
+    const active = gridState.enabled && gridState.ranges.has(key) && key === gridState.selectedLoopKey && range2?.key === key && sliderValue !== void 0;
+    marker.hidden = !active;
+    elements.wrapper.classList.toggle("is-grid-looping", active);
+    if (!active || sliderValue === void 0 || !range2 || !current) return;
+    const meta = sliderMeta(key);
+    const span = Math.max(1e-12, meta.max - meta.min);
+    const position = clamp3((sliderValue - meta.min) / span * 100, 0, 100);
+    const value = current.variedValues[key] ?? parameterValueFromSlider(key, sliderValue);
+    controls.style.setProperty("--grid-loop-position", `${position.toFixed(4)}%`);
+    controls.style.setProperty("--grid-loop-color", parameterColorAt(value, range2, 1));
+  }
+  function createGridWorker() {
+    try {
+      if (gridState.workerDisabled) return null;
+      const path = window.location.pathname.replace(/\\/g, "/");
+      const src = window.location.protocol === "file:" ? path.includes("/dist/") ? "./assets/grid-worker-file.js" : "./dist/assets/grid-worker-file.js" : path.includes("/dist/") ? "./assets/grid-worker-file.js" : "/src/gridWorker.ts";
+      return new Worker(src, { type: "module" });
+    } catch (error) {
+      gridState.workerDisabled = true;
+      console.warn("Grid worker blocked; falling back to in-tab grid computation", error);
+      return null;
+    }
+  }
+  function scheduleGridCompute() {
+    if (!gridState.enabled) return;
+    window.clearTimeout(gridState.debounceTimer);
+    const ranges = activeGridRanges();
+    if (!ranges.length) {
+      cancelGridCompute();
+      gridState.results = [];
+      gridState.pathResults = [];
+      gridState.hoverResult = null;
+      gridState.heldResult = null;
+      gridState.lastComplete = null;
+      gridState.status = "idle";
+      gridState.statusText = "Click a slider to define a grid range";
+      updateGridStatusUi();
+      updateFourierPanelVisibility();
+      return;
+    }
+    gridState.status = "queued";
+    gridState.statusText = "Grid queued";
+    updateGridStatusUi();
+    gridState.debounceTimer = window.setTimeout(startGridCompute, 140);
+  }
+  function startGridCompute() {
+    const ranges = activeGridRanges();
+    if (!gridState.enabled || !ranges.length) return;
+    const loopKey = gridState.selectedLoopKey && ranges.some((range2) => range2.key === gridState.selectedLoopKey) ? gridState.selectedLoopKey : ranges[0].key;
+    gridState.selectedLoopKey = loopKey;
+    gridState.requestId += 1;
+    gridState.results = [];
+    gridState.pathResults = [];
+    gridState.hoverResult = null;
+    gridState.heldResult = null;
+    gridState.lastComplete = null;
+    gridState.animationIndex = 0;
+    gridState.animationDirection = 1;
+    stopGridAnimation();
+    updateGridLoopControls();
+    const request = {
+      requestId: gridState.requestId,
+      baseParameters: { ...state },
+      ranges,
+      loopKey,
+      phase: {
+        warmupTau: state.phaseWarmupTau,
+        minAmplitude: state.phaseMinAmplitude,
+        selection: state.phaseMode === "final" ? "last" : "first",
+        anchor: phaseAnchor
+      }
+    };
+    if (!gridState.worker && !gridState.workerDisabled) {
+      gridState.worker = createGridWorker();
+      if (gridState.worker) {
+        gridState.worker.addEventListener("message", (event) => handleGridWorkerMessage(event.data));
+        gridState.worker.addEventListener("error", () => {
+          gridState.worker?.terminate();
+          gridState.worker = null;
+          gridState.workerDisabled = true;
+          if (gridState.enabled && request.requestId === gridState.requestId) {
+            startGridFallbackCompute(request, "Using browser-tab grid compute");
+          }
+        });
+      }
+    }
+    if (!gridState.worker) {
+      startGridFallbackCompute(request, "Using browser-tab grid compute");
+      return;
+    }
+    gridState.status = "running";
+    gridState.statusText = `Grid running: 0 models`;
+    updateGridStatusUi();
+    gridState.worker.postMessage({
+      type: "compute-grid",
+      request
+    });
+  }
+  function cancelGridCompute() {
+    window.clearTimeout(gridState.debounceTimer);
+    gridState.requestId += 1;
+    gridState.fallbackToken += 1;
+    gridState.worker?.postMessage({ type: "cancel-grid", requestId: gridState.requestId });
+  }
+  function startGridFallbackCompute(request, statusText) {
+    const token = gridState.fallbackToken + 1;
+    gridState.fallbackToken = token;
+    gridState.status = "running";
+    gridState.statusText = statusText;
+    updateGridStatusUi();
+    void computeGridWithMessages(request, {
+      post: (message) => {
+        if (token !== gridState.fallbackToken) return;
+        handleGridWorkerMessage(message);
+      },
+      isCanceled: () => token !== gridState.fallbackToken || request.requestId !== gridState.requestId || !gridState.enabled
+    }).catch((error) => {
+      if (token !== gridState.fallbackToken) return;
+      console.warn("Grid fallback failed", error);
+      gridState.status = "error";
+      gridState.statusText = "Grid computation failed";
+      updateGridStatusUi();
+    });
+  }
+  function handleGridWorkerMessage(message) {
+    if (message.requestId !== gridState.requestId) return;
+    if (message.type === "grid-progress") {
+      gridState.status = "running";
+      gridState.statusText = `Grid running: ${message.completed}/${message.total} models`;
+      updateGridStatusUi();
+      return;
+    }
+    if (message.type === "grid-canceled-for-coarsening") {
+      gridState.status = "coarsening";
+      gridState.statusText = `Grid coarsening: stride ${message.stride}`;
+      updateGridStatusUi();
+      return;
+    }
+    if (message.type === "grid-canceled") {
+      return;
+    }
+    gridState.lastComplete = message;
+    gridState.results = message.results;
+    gridState.pathResults = message.pathResults;
+    gridState.status = "complete";
+    const suffix = message.coarsened ? `, stride ${message.stride}` : "";
+    gridState.statusText = `Grid complete: ${message.validPhase}/${message.total} phase models${suffix}`;
+    gridState.animationIndex = 0;
+    gridState.animationDirection = 1;
+    updateGridLoopControls();
+    updateGridStatusUi();
+    updateFourierPanelVisibility();
+    startGridAnimation();
+    drawAll();
+  }
+  function updateGridStatusUi() {
+    const bar = document.getElementById("gridStatusBar");
+    const text = document.getElementById("gridStatusText");
+    if (bar instanceof HTMLElement) bar.hidden = !gridState.enabled;
+    if (text instanceof HTMLElement) text.textContent = gridState.statusText;
+  }
+  function updateGridLoopControls() {
+    const container = document.getElementById("gridLoopControls");
+    if (!(container instanceof HTMLElement)) return;
+    const ranges = activeGridRanges();
+    if (!gridState.enabled || ranges.length <= 1) {
+      container.hidden = true;
+      container.innerHTML = "";
+      return;
+    }
+    container.hidden = false;
+    const signature = ranges.map((range2) => `${range2.key}:${range2.lowerSliderValue}:${range2.upperSliderValue}`).join("|");
+    if (container.dataset.signature === signature && container.childElementCount) {
+      container.querySelectorAll("input[type='radio']").forEach((input) => {
+        input.checked = input.value === gridState.selectedLoopKey;
+      });
+      return;
+    }
+    container.dataset.signature = signature;
+    container.innerHTML = `<span>loop</span>${ranges.map((range2) => {
+      const name = controlDefForKey(range2.key)?.[2] ?? controlShortLabel(range2.key);
+      const symbol = controlSymbolHtml(range2.key);
+      const color = controlColor(range2.key);
+      return `
+      <label style="--color:${color}" aria-label="Loop by ${name}">
+        <input type="radio" name="gridLoopKey" value="${range2.key}"${range2.key === gridState.selectedLoopKey ? " checked" : ""}>
+        <span class="grid-loop-symbol">${symbol}</span>
+      </label>
+    `;
+    }).join("")}`;
+    queueMathTypeset([container]);
+    container.querySelectorAll("input[type='radio']").forEach((input) => {
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        gridState.selectedLoopKey = input.value;
+        gridState.animationIndex = 0;
+        gridState.animationDirection = 1;
+        gridState.pathResults = [];
+        updateGridLoopControls();
+        scheduleGridCompute();
+        drawAll();
+      });
+    });
+  }
+  function updateFourierPanelVisibility() {
+    const panel = document.getElementById("fourierGridPanel");
+    if (panel instanceof HTMLElement) panel.hidden = !gridState.enabled;
+  }
+  function startGridAnimation() {
+    stopGridAnimation();
+    const path = gridPathResults();
+    if (!gridState.enabled || path.length <= 1) return;
+    gridState.animationTimer = window.setInterval(() => {
+      const currentPath = gridPathResults();
+      if (currentPath.length <= 1) return;
+      const next = gridState.animationIndex + gridState.animationDirection;
+      if (next >= currentPath.length) {
+        gridState.animationDirection = -1;
+        gridState.animationIndex = Math.max(0, currentPath.length - 2);
+      } else if (next < 0) {
+        gridState.animationDirection = 1;
+        gridState.animationIndex = Math.min(1, currentPath.length - 1);
+      } else {
+        gridState.animationIndex = next;
+      }
+      drawAll();
+    }, GRID_LOOP_BASE_INTERVAL_MS / gridLoopSpeed);
+  }
+  function stopGridAnimation() {
+    if (gridState.animationTimer) {
+      window.clearInterval(gridState.animationTimer);
+      gridState.animationTimer = 0;
+    }
+  }
+  function gridPathResults() {
+    const loopKey = gridState.selectedLoopKey;
+    if (!loopKey) return [];
+    if (gridState.pathResults.length) {
+      return [...gridState.pathResults].filter((result) => result.sliderValues[loopKey] !== void 0).sort((a, b) => (a.sliderValues[loopKey] ?? 0) - (b.sliderValues[loopKey] ?? 0));
+    }
+    if (!gridState.results.length) return [];
+    const ranges = activeGridRanges();
+    const centerByKey = /* @__PURE__ */ new Map();
+    ranges.forEach((range2) => {
+      if (range2.key !== loopKey) centerByKey.set(range2.key, centerSliderSample(range2));
+    });
+    return gridState.results.filter((result) => {
+      for (const [key, center] of centerByKey) {
+        const value = result.sliderValues[key];
+        if (value === void 0 || Math.abs(value - center) > sliderMeta(key).step / 2 + 1e-9) return false;
+      }
+      return result.sliderValues[loopKey] !== void 0;
+    }).sort((a, b) => (a.sliderValues[loopKey] ?? 0) - (b.sliderValues[loopKey] ?? 0));
+  }
+  function currentGridResult() {
+    if (gridState.heldResult) return gridState.heldResult;
+    const path = gridPathResults();
+    if (!path.length) return null;
+    const index = Math.min(path.length - 1, Math.max(0, gridState.animationIndex));
+    return path[index] || null;
+  }
+  function currentLoopRange() {
+    const loopKey = gridState.selectedLoopKey;
+    if (!loopKey) return null;
+    return activeGridRanges().find((range2) => range2.key === loopKey) || null;
+  }
+  function controlDefForKey(key) {
+    return [...CONTROL_GROUPS.physical, ...CONTROL_GROUPS.initial, ...CONTROL_GROUPS.integration].find(([controlKey]) => controlKey === key);
+  }
+  function controlSymbolHtml(key) {
+    return controlDefForKey(key)?.[1] ?? controlShortLabel(key);
+  }
+  function controlColor(key) {
+    return controlDefForKey(key)?.[7] ?? THEME.neutralSymbol;
+  }
+  function controlCanvasSymbol(key) {
+    const symbols = {
+      zeta: "\u03B6",
+      zetac: "\u03B6c",
+      gammac: "\u03B3c",
+      m: "\u03C70",
+      gamma1: "\u03931",
+      n: "n",
+      s: "s",
+      sourceExp: "U",
+      cq: "Cq",
+      r0: "R0",
+      v0: "V0",
+      h0: "H0",
+      uc0: "Uc0",
+      tEnd: "\u03C4max",
+      step: "\u0394\u03C40",
+      maxStep: "\u0394\u03C4max",
+      logRtol: "log10 rtol",
+      logAtol: "log10 atol",
+      logErrTol: "log10 \u03B5",
+      logStabilityTol: "log10 \u03B5s",
+      stableCycles: "Ns"
+    };
+    return symbols[key] ?? controlShortLabel(key);
+  }
+  function parameterColorAt(value, range2, alpha = 1) {
+    if (!range2) return colorWithAlpha("#FFD166", alpha);
+    const span = range2.upperSliderValue - range2.lowerSliderValue || 1;
+    const sliderValue = range2.key === "tEnd" ? Math.log10(value) : value;
+    const t = clamp3((sliderValue - range2.lowerSliderValue) / span, 0, 1);
+    const a = { r: 96, g: 128, b: 208 };
+    const b = { r: 255, g: 209, b: 102 };
+    const r = Math.round(a.r + (b.r - a.r) * t);
+    const g = Math.round(a.g + (b.g - a.g) * t);
+    const blue = Math.round(a.b + (b.b - a.b) * t);
+    return alpha >= 1 ? `rgb(${r}, ${g}, ${blue})` : `rgba(${r}, ${g}, ${blue}, ${clamp3(alpha, 0, 1)})`;
+  }
+  function gridResultColor(result, alpha = 1) {
+    const loopKey = gridState.selectedLoopKey;
+    if (!loopKey) return parameterColorAt(0, null, alpha);
+    return parameterColorAt(result.variedValues[loopKey] ?? 0, currentLoopRange(), alpha);
   }
   function setupResponsiveSidebarControls() {
     const details = document.getElementById("sidebarControls");
@@ -1819,17 +2960,154 @@
     });
     updatePlotResetButtons();
   }
+  function setupGridCanvasInteractions() {
+    ["lightCanvas", "velocityCanvas", "fourierCanvas"].forEach((canvasId) => {
+      const canvas = el(canvasId);
+      canvas.classList.add("grid-interaction-canvas");
+      canvas.addEventListener("pointerdown", (event) => beginGridCanvasInteraction(event, canvasId));
+      canvas.addEventListener("pointermove", (event) => updateGridCanvasInteraction(event, canvasId));
+      canvas.addEventListener("pointerup", (event) => finishGridCanvasInteraction(event, canvasId));
+      canvas.addEventListener("pointercancel", (event) => finishGridCanvasInteraction(event, canvasId));
+      canvas.addEventListener("pointerleave", () => clearFourierHover(canvasId));
+      canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+    });
+  }
+  function beginGridCanvasInteraction(event, canvasId) {
+    if (!gridState.enabled) return;
+    const canvas = event.currentTarget;
+    const point = canvasPoint(canvas, event);
+    const colorbar = colorbarRegionAt(canvasId, point);
+    if (colorbar) {
+      event.preventDefault();
+      canvas.setPointerCapture(event.pointerId);
+      activeGridCanvasInteraction = { type: "colorbar", canvasId, pointerId: event.pointerId };
+      canvas.dataset.gridInteraction = "colorbar";
+      gridState.heldResult = null;
+      stopGridAnimation();
+      scrubGridColorbar(colorbar, point);
+      return;
+    }
+    if (canvasId === "fourierCanvas") {
+      const hit = fourierPointHitAt(point);
+      if (!hit) return;
+      event.preventDefault();
+      canvas.setPointerCapture(event.pointerId);
+      activeGridCanvasInteraction = { type: "fourier-hold", canvasId, pointerId: event.pointerId };
+      canvas.dataset.gridInteraction = "fourier-hold";
+      gridState.hoverResult = hit.result;
+      gridState.heldResult = hit.result;
+      stopGridAnimation();
+      drawAll();
+    }
+  }
+  function updateGridCanvasInteraction(event, canvasId) {
+    const canvas = event.currentTarget;
+    const point = canvasPoint(canvas, event);
+    if (activeGridCanvasInteraction?.canvasId === canvasId && activeGridCanvasInteraction.pointerId === event.pointerId) {
+      event.preventDefault();
+      if (activeGridCanvasInteraction.type === "colorbar") {
+        const region = gridColorbarRegions.get(canvasId);
+        if (region) scrubGridColorbar(region, point);
+        return;
+      }
+      if (activeGridCanvasInteraction.type === "fourier-hold") {
+        const hit = fourierPointHitAt(point);
+        if (hit && hit.result !== gridState.heldResult) {
+          gridState.hoverResult = hit.result;
+          gridState.heldResult = hit.result;
+          drawAll();
+        }
+        return;
+      }
+    }
+    const overColorbar = Boolean(colorbarRegionAt(canvasId, point));
+    const overFourier = canvasId === "fourierCanvas" ? fourierPointHitAt(point) : null;
+    canvas.style.cursor = overColorbar ? "ew-resize" : overFourier ? "pointer" : "";
+    if (canvasId === "fourierCanvas") updateFourierHover(overFourier?.result ?? null, canvas);
+  }
+  function finishGridCanvasInteraction(event, canvasId) {
+    if (!activeGridCanvasInteraction || activeGridCanvasInteraction.canvasId !== canvasId || activeGridCanvasInteraction.pointerId !== event.pointerId) return;
+    const canvas = event.currentTarget;
+    event.preventDefault();
+    if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+    delete canvas.dataset.gridInteraction;
+    activeGridCanvasInteraction = null;
+    gridState.heldResult = null;
+    startGridAnimation();
+    drawAll();
+  }
+  function clearFourierHover(canvasId) {
+    if (canvasId !== "fourierCanvas" || activeGridCanvasInteraction) return;
+    const canvas = document.getElementById("fourierCanvas");
+    if (canvas) {
+      delete canvas.dataset.gridHover;
+      canvas.style.cursor = "";
+    }
+    if (!gridState.hoverResult) return;
+    gridState.hoverResult = null;
+    drawAll();
+  }
+  function colorbarRegionAt(canvasId, point) {
+    const region = gridColorbarRegions.get(canvasId);
+    if (!region) return null;
+    return point.x >= region.hitLeft && point.x <= region.hitRight && point.y >= region.hitTop && point.y <= region.hitBottom ? region : null;
+  }
+  function scrubGridColorbar(region, point) {
+    const loopKey = gridState.selectedLoopKey;
+    const range2 = currentLoopRange();
+    const path = gridPathResults();
+    if (!loopKey || !range2 || !path.length) return;
+    const fraction = clamp3((point.x - region.left) / Math.max(1e-12, region.width), 0, 1);
+    const targetSliderValue = range2.lowerSliderValue + fraction * (range2.upperSliderValue - range2.lowerSliderValue);
+    let bestIndex = 0;
+    let bestDistance = Infinity;
+    path.forEach((result, index) => {
+      const sliderValue = result.sliderValues[loopKey];
+      if (sliderValue === void 0) return;
+      const distance = Math.abs(sliderValue - targetSliderValue);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = index;
+      }
+    });
+    gridState.animationIndex = bestIndex;
+    gridState.hoverResult = null;
+    gridState.heldResult = null;
+    const canvas = document.getElementById(region.canvasId);
+    if (canvas) canvas.dataset.gridScrubIndex = String(bestIndex);
+    drawAll();
+  }
+  function fourierPointHitAt(point) {
+    let best = null;
+    let bestDistance = Infinity;
+    fourierPointHits.forEach((hit) => {
+      const distance = Math.hypot(point.x - hit.x, point.y - hit.y);
+      const threshold = Math.max(9, hit.radius + 6);
+      if (distance <= threshold && distance < bestDistance) {
+        best = hit;
+        bestDistance = distance;
+      }
+    });
+    return best;
+  }
+  function updateFourierHover(result, canvas) {
+    if (result === gridState.hoverResult) return;
+    gridState.hoverResult = result;
+    if (result) canvas.dataset.gridHover = "true";
+    else delete canvas.dataset.gridHover;
+    drawAll();
+  }
   function canvasPoint(canvas, event) {
     const rect = canvas.getBoundingClientRect();
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
-  function clamp2(value, min, max) {
+  function clamp3(value, min, max) {
     return Math.min(max, Math.max(min, value));
   }
   function clampPointToPlot(point, plot) {
     return {
-      x: clamp2(point.x, plot.left, plot.left + plot.width),
-      y: clamp2(point.y, plot.top, plot.top + plot.height)
+      x: clamp3(point.x, plot.left, plot.left + plot.width),
+      y: clamp3(point.y, plot.top, plot.top + plot.height)
     };
   }
   function pointInPlot(point, plot) {
@@ -2026,12 +3304,16 @@
       const key = wrapper.dataset.controlKey;
       wrapper.hidden = !key || !visible.has(key);
     });
+    updateGridLoopControls();
   }
   function buildSliderGroup(containerId, controls) {
     const container = el(containerId);
     container.querySelectorAll("[data-reset-key]").forEach((button) => {
       const key = button.dataset.resetKey;
-      if (key) controlElements.delete(key);
+      if (key) {
+        controlElements.delete(key);
+        gridRangeElements.delete(key);
+      }
     });
     container.innerHTML = "";
     controls.forEach(([key, symbol, name, min, max, step2, _defaultValue, color]) => {
@@ -2045,23 +3327,48 @@
         <span class="slider-reading"><span class="slider-symbol">${symbol}</span><span class="slider-equals">=</span><span class="slider-value" data-value-for="${key}"></span></span>
       </div>
       <div class="slider-track">
-        <input type="range" min="${min}" max="${max}" step="${step2}" value="${String(sliderInputValue(key))}" aria-label="${name}">
+        <input class="single-slider" type="range" min="${min}" max="${max}" step="${step2}" value="${String(sliderInputValue(key))}" aria-label="${name}">
+        <div class="grid-range-controls" data-grid-range-controls hidden>
+          <div class="grid-range-fill" aria-hidden="true"></div>
+          <div class="grid-loop-marker" data-grid-loop-marker hidden aria-hidden="true"></div>
+          <div class="grid-range-inputs">
+            <input class="grid-bound grid-bound-low" data-grid-bound="lower" type="range" min="${min}" max="${max}" step="${step2}" value="${String(sliderInputValue(key))}" aria-label="${name} grid lower bound">
+            <input class="grid-bound grid-bound-high" data-grid-bound="upper" type="range" min="${min}" max="${max}" step="${step2}" value="${String(sliderInputValue(key))}" aria-label="${name} grid upper bound">
+          </div>
+        </div>
         ${key === "tEnd" ? tauScaleMarkup() : ""}
         </div>
       <button class="parameter-reset" type="button" data-reset-key="${key}" title="Restore ${name} to the ${selectedPreset} preset value" aria-label="Restore ${name} to the preset value">\u21BA</button>
     `;
-      const input = wrapper.querySelector("input");
-      if (!input) throw new Error("missing slider input");
+      const input = wrapper.querySelector(".single-slider");
+      const lower = wrapper.querySelector("[data-grid-bound='lower']");
+      const upper = wrapper.querySelector("[data-grid-bound='upper']");
+      if (!input || !lower || !upper) throw new Error("missing slider input");
       input.addEventListener("input", (event) => {
         state[key] = valueFromSlider(key, Number(event.target.value));
+        syncGridRangeCenter(key);
         updateSliderLabel(key);
         if (key === "m") updateEquationBlocks();
         refreshActivePreset();
         scheduleSolve();
       });
+      const updateBounds = () => updateGridRangeBounds(key, Number(lower.value), Number(upper.value));
+      lower.addEventListener("input", updateBounds);
+      upper.addEventListener("input", updateBounds);
+      wrapper.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        if (!gridState.enabled) {
+          setGridModeEnabled(true);
+          enableGridRange(key);
+          return;
+        }
+        toggleGridRange(key);
+      });
       wrapper.querySelector("[data-reset-key]")?.addEventListener("click", () => restoreParameterDefault(key));
       container.appendChild(wrapper);
       controlElements.set(key, input);
+      gridRangeElements.set(key, { wrapper, center: input, lower, upper });
+      refreshGridRangeUi(key);
       updateSliderLabel(key);
     });
     queueMathTypeset([container]);
@@ -2075,15 +3382,22 @@
     }).join("")}</div>`;
   }
   function sliderInputValue(key) {
-    return key === "tEnd" ? Math.log10(state.tEnd) : state[key];
+    return sliderValueFromParameter(key, state);
   }
   function valueFromSlider(key, value) {
-    if (key !== "tEnd") return value;
-    return Math.min(1e3, Math.max(1, 10 ** value));
+    return parameterValueFromSlider(key, value);
   }
   function controlValueLabel(key, value) {
     if (key !== "tEnd") return fmt(value, 5);
     return fmt(value, value >= 100 ? 0 : 1);
+  }
+  function controlShortLabel(key) {
+    if (key === "tEnd") return "tau_max";
+    if (key === "logRtol") return "log rtol";
+    if (key === "logAtol") return "log atol";
+    if (key === "logErrTol") return "log eps";
+    if (key === "logStabilityTol") return "log eps_s";
+    return String(key);
   }
   function buildParameterTable() {
     const tunableTable = el("tunableParameterTable");
@@ -2154,7 +3468,7 @@
       \\ozRadius{R}^{-(\\ozChi{\\chi}-2)}
       \\ozConvective{U_c}^{3}\\\\[0.35em]
     \\ozLuminosity{L} &=
-      (1-\\ozGammac{\\gamma_c})\\ozRadiative{L_r}
+      \\ozNeutral{\\gamma_r}\\ozRadiative{L_r}
       + \\ozGammac{\\gamma_c}\\ozConvLum{L_c}
     \\end{aligned}
     \\]
@@ -2188,17 +3502,21 @@
   function updateSliderLabel(key) {
     const label = document.querySelector(`[data-value-for="${String(key)}"]`);
     if (!label) return;
-    const value = state[key];
+    const current = currentGridResult();
+    const dynamicValue = gridState.enabled && key === gridState.selectedLoopKey ? current?.variedValues[key] : void 0;
+    const value = dynamicValue ?? state[key];
     label.textContent = controlValueLabel(key, value);
     const input = controlElements.get(key);
     if (input) input.value = String(sliderInputValue(key));
   }
   function updateAllSliderLabels() {
+    syncAllGridRangeCenters();
     controlElements.forEach((_input, key) => updateSliderLabel(key));
     updateResetButtons();
   }
   function restoreParameterDefault(key) {
     state[key] = PRESETS[selectedPreset][key];
+    syncGridRangeCenter(key);
     updateSliderLabel(key);
     if (key === "m") updateEquationBlocks();
     refreshActivePreset();
@@ -2258,13 +3576,14 @@
   function scheduleSolve() {
     window.clearTimeout(debounceTimer);
     debounceTimer = window.setTimeout(solveAndDraw, 80);
+    scheduleGridCompute();
   }
   function solveAndDraw() {
     latestResult = solveModel(state);
     latestRows = latestResult.rows;
     drawAll();
   }
-  function strideDownsample(rows, maxPoints) {
+  function strideDownsample2(rows, maxPoints) {
     if (rows.length <= maxPoints) return rows;
     const stride = Math.ceil(rows.length / maxPoints);
     const sampled = rows.filter((_row, index) => index % stride === 0);
@@ -2275,7 +3594,7 @@
   function downsample(rows, maxPoints = 2200, keys = []) {
     if (rows.length <= maxPoints) return rows;
     const uniqueKeys = [...new Set(keys)];
-    if (!uniqueKeys.length) return strideDownsample(rows, maxPoints);
+    if (!uniqueKeys.length) return strideDownsample2(rows, maxPoints);
     const maxPointsPerBucket = 2 + uniqueKeys.length * 2;
     const bucketCount = Math.max(1, Math.floor(maxPoints / maxPointsPerBucket));
     const bucketSize = Math.ceil(rows.length / bucketCount);
@@ -2371,7 +3690,7 @@
       const x = item.x(row);
       const y = item.y(row);
       if (!Number.isFinite(x) || !Number.isFinite(y) || x < xlim[0] || x > xlim[1]) return;
-      const column = clamp2(Math.floor((x - xlim[0]) / xSpan * columnCount), 0, columnCount - 1);
+      const column = clamp3(Math.floor((x - xlim[0]) / xSpan * columnCount), 0, columnCount - 1);
       const bin = bins[column];
       bin.min = Math.min(bin.min, y);
       bin.max = Math.max(bin.max, y);
@@ -2423,7 +3742,7 @@
     if (start !== null) drawSegment(start, bins.length - 1);
     return true;
   }
-  function drawAxes(ctx, plot, xlim, ylim, xlabel, ylabel, xlabelColor = THEME.axisText, ylabelColor = THEME.axisText) {
+  function drawAxes(ctx, plot, xlim, ylim, xlabel, ylabel, xlabelColor = THEME.axisText, ylabelColor = THEME.axisText, ylabelX = PLOT_LAYOUT.yLabelX) {
     ctx.strokeStyle = THEME.axisGrid;
     ctx.lineWidth = 1;
     ctx.fillStyle = THEME.axisText;
@@ -2456,7 +3775,7 @@
     ctx.fillStyle = xlabelColor;
     ctx.fillText(xlabel, plot.left + plot.width / 2, plot.top + plot.height + 42);
     ctx.save();
-    ctx.translate(PLOT_LAYOUT.yLabelX, plot.top + plot.height / 2);
+    ctx.translate(ylabelX, plot.top + plot.height / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.fillStyle = ylabelColor;
     ctx.fillText(ylabel, 0, 0);
@@ -2464,6 +3783,11 @@
   }
   function drawSeries(canvasId, series, options) {
     const canvas = el(canvasId);
+    const panel = canvas.closest(".plot-panel");
+    if (panel?.hidden) {
+      plotRenderStates.delete(canvasId);
+      return;
+    }
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     canvas.width = Math.max(320, Math.floor(rect.width * dpr));
@@ -2533,7 +3857,25 @@
       ctx.setLineDash([]);
     });
     ctx.restore();
+    if (options.phaseMarker) drawPhaseMarker(ctx, plot, xlim, options.phaseMarker);
+    options.afterDraw?.(ctx, plot, xlim, ylim, canvasId);
     drawSelectionOverlay(ctx, canvasId, plot);
+  }
+  function drawPhaseMarker(ctx, plot, xlim, marker) {
+    if (!Number.isFinite(marker.x) || marker.x < xlim[0] || marker.x > xlim[1]) return;
+    const x = plot.left + (marker.x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(plot.left, plot.top, plot.width, plot.height);
+    ctx.clip();
+    ctx.strokeStyle = marker.color;
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(x, plot.top);
+    ctx.lineTo(x, plot.top + plot.height);
+    ctx.stroke();
+    ctx.restore();
   }
   function drawSelectionOverlay(ctx, canvasId, plot) {
     if (!activeSelection || activeSelection.canvasId !== canvasId) return;
@@ -2553,6 +3895,245 @@
     ctx.setLineDash([4, 3]);
     ctx.fillRect(left, top, width, height);
     ctx.strokeRect(left, top, width, height);
+    ctx.restore();
+  }
+  function gridPhaseSeries(quantity, color, fallbackRows) {
+    const accessor = (row) => row[quantity];
+    if (!gridState.enabled || !gridState.results.length) {
+      return [{ label: quantity, color, rows: fallbackRows, x: (row) => row.tau, y: accessor }];
+    }
+    const path = gridPathResults();
+    const current = currentGridResult();
+    const series = gridState.results.map((result) => ({
+      label: `grid-${result.id}`,
+      color: "rgba(190, 200, 216, 0.18)",
+      rows: result.phaseRows,
+      x: (row) => row.tau,
+      y: accessor,
+      width: 0.8
+    }));
+    path.forEach((result) => {
+      series.push({
+        label: `path-${result.id}`,
+        color: "rgba(190, 200, 216, 0.34)",
+        rows: result.phaseRows,
+        x: (row) => row.tau,
+        y: accessor,
+        width: 1.15
+      });
+    });
+    const highlighted = gridState.heldResult || gridState.hoverResult;
+    if (highlighted && highlighted !== current) {
+      series.push({
+        label: `highlight-${highlighted.id}`,
+        color: gridResultColor(highlighted, 0.98),
+        rows: highlighted.phaseRows,
+        x: (row) => row.tau,
+        y: accessor,
+        width: 3.4
+      });
+    }
+    if (current) {
+      series.push({
+        label: quantity,
+        color: gridResultColor(current, 0.98),
+        rows: current.phaseRows,
+        x: (row) => row.tau,
+        y: accessor,
+        width: 2.8
+      });
+    }
+    return series;
+  }
+  function drawGridColorbar(ctx, plot, _xlim, _ylim, canvasId = "fourierCanvas") {
+    if (!gridState.enabled) {
+      gridColorbarRegions.delete(canvasId);
+      return;
+    }
+    const range2 = currentLoopRange();
+    const current = currentGridResult();
+    if (!range2 || !current) {
+      gridColorbarRegions.delete(canvasId);
+      return;
+    }
+    const value = current.variedValues[range2.key];
+    const sliderValue = current.sliderValues[range2.key];
+    if (value === void 0 || sliderValue === void 0) {
+      gridColorbarRegions.delete(canvasId);
+      return;
+    }
+    const width = Math.min(150, Math.max(112, plot.width * 0.24));
+    const height = 9;
+    const left = plot.left + plot.width - width - 12;
+    const top = plot.top + 12;
+    gridColorbarRegions.set(canvasId, {
+      canvasId,
+      left,
+      top,
+      width,
+      height,
+      hitLeft: left - 12,
+      hitTop: top - 10,
+      hitRight: left + width + 12,
+      hitBottom: top + 50
+    });
+    const canvas = document.getElementById(canvasId);
+    if (canvas) {
+      canvas.dataset.gridColorbar = "ready";
+      canvas.dataset.gridColorbarKey = range2.key;
+    }
+    const lowerValue = parameterValueFromSlider(range2.key, range2.lowerSliderValue);
+    const upperValue = parameterValueFromSlider(range2.key, range2.upperSliderValue);
+    const gradient = ctx.createLinearGradient(left, top, left + width, top);
+    gradient.addColorStop(0, "#6080D0");
+    gradient.addColorStop(1, "#FFD166");
+    ctx.save();
+    ctx.fillStyle = "rgba(5, 8, 20, 0.68)";
+    ctx.fillRect(left - 8, top - 8, width + 16, 58);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(left, top, width, height);
+    ctx.strokeStyle = "rgba(238, 245, 255, 0.62)";
+    ctx.strokeRect(left, top, width, height);
+    const fraction = clamp3((sliderValue - range2.lowerSliderValue) / Math.max(1e-12, range2.upperSliderValue - range2.lowerSliderValue), 0, 1);
+    const markerX = left + fraction * width;
+    ctx.fillStyle = parameterColorAt(value, range2);
+    ctx.strokeStyle = "#050814";
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(markerX, top + height + 2);
+    ctx.lineTo(markerX - 5, top + height + 10);
+    ctx.lineTo(markerX + 5, top + height + 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = THEME.axisText;
+    ctx.font = "11px Inter, sans-serif";
+    ctx.textBaseline = "top";
+    ctx.textAlign = "left";
+    ctx.fillText(controlValueLabel(range2.key, lowerValue), left, top + height + 13);
+    ctx.textAlign = "right";
+    ctx.fillText(controlValueLabel(range2.key, upperValue), left + width, top + height + 13);
+    const symbol = controlCanvasSymbol(range2.key);
+    const valueText = ` = ${controlValueLabel(range2.key, value)}`;
+    ctx.font = "600 11px Inter, sans-serif";
+    const symbolWidth = ctx.measureText(symbol).width;
+    ctx.font = "11px Inter, sans-serif";
+    const valueWidth = ctx.measureText(valueText).width;
+    const labelLeft = left + width / 2 - (symbolWidth + valueWidth) / 2;
+    ctx.textAlign = "left";
+    ctx.font = "600 11px Inter, sans-serif";
+    ctx.fillStyle = controlColor(range2.key);
+    ctx.fillText(symbol, labelLeft, top + height + 28);
+    ctx.font = "11px Inter, sans-serif";
+    ctx.fillStyle = THEME.axisText;
+    ctx.fillText(valueText, labelLeft + symbolWidth, top + height + 28);
+    ctx.restore();
+  }
+  function drawFourierPanel() {
+    const panel = document.getElementById("fourierGridPanel");
+    const canvas = document.getElementById("fourierCanvas");
+    if (!(panel instanceof HTMLElement) || !(canvas instanceof HTMLCanvasElement)) return;
+    panel.hidden = !gridState.enabled;
+    if (panel.hidden) {
+      fourierPointHits = [];
+      gridColorbarRegions.delete("fourierCanvas");
+      return;
+    }
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const columns = rect.width >= 1320 ? 4 : rect.width >= 780 ? 2 : 1;
+    const rows = Math.ceil(4 / columns);
+    const cssHeight = Math.max(260, rows * 214);
+    canvas.width = Math.max(320, Math.floor(rect.width * dpr));
+    canvas.height = Math.floor(cssHeight * dpr);
+    canvas.style.height = `${cssHeight}px`;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, rect.width, cssHeight);
+    fourierPointHits = [];
+    delete canvas.dataset.firstFourierHit;
+    canvas.dataset.fourierHitCount = "0";
+    const gridPoints = gridState.results.filter((result) => result.fourier);
+    const path = gridPathResults().filter((result) => result.fourier);
+    const allPoints = [...gridPoints, ...path];
+    if (!allPoints.length) {
+      gridColorbarRegions.delete("fourierCanvas");
+      ctx.fillStyle = THEME.axisText;
+      ctx.font = "13px Inter, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(gridState.status === "complete" ? "No Fourier diagnostics passed the amplitude filter" : gridState.statusText, rect.width / 2, cssHeight / 2);
+      return;
+    }
+    const current = currentGridResult();
+    const currentFourier = current?.fourier ? current : null;
+    const xlim = range(allPoints.map((point) => point.period), 0.05);
+    const panels = [
+      { label: "r21", value: (result) => result.fourier.r21 },
+      { label: "phi21", value: (result) => result.fourier.phi21 },
+      { label: "r31", value: (result) => result.fourier.r31 },
+      { label: "phi31", value: (result) => result.fourier.phi31 }
+    ];
+    const gap = 16;
+    const pad = { left: 78, right: 18, top: 24, bottom: 58 };
+    const panelWidth = (rect.width - gap * (columns - 1)) / columns;
+    const panelHeight = (cssHeight - gap * (rows - 1)) / rows;
+    panels.forEach((item, index) => {
+      const column = index % columns;
+      const rowIndex = Math.floor(index / columns);
+      const box = {
+        left: column * (panelWidth + gap) + pad.left,
+        top: rowIndex * (panelHeight + gap) + pad.top,
+        width: panelWidth - pad.left - pad.right,
+        height: panelHeight - pad.top - pad.bottom
+      };
+      const values = allPoints.map(item.value);
+      const ylim = range(values, 0.08);
+      drawAxes(ctx, box, xlim, ylim, "period/\u03C4", item.label, THEME.axisText, THEME.axisText, Math.max(8, box.left - 70));
+      collectFourierPointHits(box, xlim, ylim, allPoints, item.value);
+      drawFourierPoints(ctx, box, xlim, ylim, gridPoints, item.value, "rgba(190, 200, 216, 0.28)", 2.4);
+      drawFourierPoints(ctx, box, xlim, ylim, path, item.value, (result) => gridResultColor(result, 0.72), 3.4);
+      const highlighted = gridState.heldResult || gridState.hoverResult;
+      if (highlighted?.fourier && highlighted !== currentFourier) drawFourierPoints(ctx, box, xlim, ylim, [highlighted], item.value, (result) => gridResultColor(result, 0.98), 5.4);
+      if (currentFourier) drawFourierPoints(ctx, box, xlim, ylim, [currentFourier], item.value, (result) => gridResultColor(result, 0.98), 6.2);
+    });
+    canvas.dataset.fourierHitCount = String(fourierPointHits.length);
+    const firstHit = fourierPointHits[0];
+    if (firstHit) canvas.dataset.firstFourierHit = `${firstHit.x.toFixed(1)},${firstHit.y.toFixed(1)}`;
+    drawGridColorbar(ctx, {
+      left: rect.width - 184,
+      top: 4,
+      width: 170,
+      height: 36
+    });
+  }
+  function collectFourierPointHits(plot, xlim, ylim, points, value) {
+    const sx = (x) => plot.left + (x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
+    const sy = (y) => plot.top + plot.height - (y - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
+    points.forEach((result) => {
+      const x = sx(result.period);
+      const y = sy(value(result));
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      fourierPointHits.push({ result, x, y, radius: 5 });
+    });
+  }
+  function drawFourierPoints(ctx, plot, xlim, ylim, points, value, color, radius) {
+    const sx = (x) => plot.left + (x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
+    const sy = (y) => plot.top + plot.height - (y - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(plot.left, plot.top, plot.width, plot.height);
+    ctx.clip();
+    points.forEach((point) => {
+      const x = sx(point.period);
+      const y = sy(value(point));
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      ctx.fillStyle = typeof color === "function" ? color(point) : color;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, 2 * Math.PI);
+      ctx.fill();
+    });
     ctx.restore();
   }
   function drawLegend(id, items, options = {}) {
@@ -2673,6 +4254,304 @@
   function visibleRows(plotId, key, rows) {
     return seriesIsVisible(plotId, key) ? rows : [];
   }
+  function rawRange(values) {
+    let min = Infinity;
+    let max = -Infinity;
+    values.forEach((value) => {
+      if (!Number.isFinite(value)) return;
+      min = Math.min(min, value);
+      max = Math.max(max, value);
+    });
+    return Number.isFinite(min) && Number.isFinite(max) ? [min, max] : [0, 1];
+  }
+  function normalizedInRange(value, valueRange) {
+    const span = valueRange[1] - valueRange[0];
+    if (!Number.isFinite(value) || span <= 1e-12) return clamp3(value, 0, 1);
+    return clamp3((value - valueRange[0]) / span, 0, 1);
+  }
+  function scaledRgb(color, scale) {
+    return {
+      r: clamp3(Math.round(color.r * scale), 0, 255),
+      g: clamp3(Math.round(color.g * scale), 0, 255),
+      b: clamp3(Math.round(color.b * scale), 0, 255)
+    };
+  }
+  function gammaR() {
+    return 1 - state.gammac;
+  }
+  function weightedRadiativeLuminosity(row) {
+    return gammaR() * row.Lr;
+  }
+  function weightedConvectiveLuminosity(row) {
+    return state.gammac * row.Lc;
+  }
+  function phaseMarker() {
+    if (gridState.enabled) return void 0;
+    return latestPhaseRows.length ? { x: currentAnimationPhase, color: PHASE_MARKER_COLOR } : void 0;
+  }
+  function drawPhasePlots() {
+    const marker = phaseMarker();
+    drawSeries("lightCanvas", gridPhaseSeries("L", COLORS.L, latestPhaseSample), {
+      xlabel: latestPhasePeriodLabel,
+      ylabel: "luminosity L",
+      ylabelColor: COLORS.L,
+      xlim: [0, 2],
+      ylim: latestPhaseSample.length || gridState.results.length ? void 0 : [0, 1],
+      message: latestPhaseMessage,
+      phaseMarker: marker,
+      afterDraw: drawGridColorbar
+    });
+    drawSeries("velocityCanvas", gridPhaseSeries("V", COLORS.V, latestPhaseSample), {
+      xlabel: latestPhasePeriodLabel,
+      ylabel: "radial velocity V",
+      ylabelColor: COLORS.V,
+      xlim: [0, 2],
+      ylim: latestPhaseSample.length || gridState.results.length ? void 0 : [0, 1],
+      message: latestPhaseMessage,
+      phaseMarker: marker,
+      afterDraw: drawGridColorbar
+    });
+    if (sonificationSource === "pressure") {
+      drawSeries("pressureCanvas", [
+        { label: "P", color: COLORS.H, rows: latestPhaseSample, x: (row) => row.tau, y: acousticPressureSignal }
+      ], {
+        xlabel: latestPhasePeriodLabel,
+        ylabel: "pressure",
+        ylabelColor: COLORS.H,
+        xlim: [0, 2],
+        ylim: latestPhaseSample.length ? void 0 : [0, 1],
+        message: latestPhaseMessage,
+        phaseMarker: marker
+      });
+    }
+  }
+  function drawCanvasMessage(ctx, width, height, message) {
+    ctx.fillStyle = THEME.axisText;
+    ctx.font = "13px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(message, width / 2, height / 2);
+  }
+  function drawAnnularSegment(ctx, centerX, centerY, outerRadius, innerRadius, startAngle, endAngle, fillStyle) {
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, outerRadius, startAngle, endAngle);
+    if (innerRadius > 0) {
+      ctx.arc(centerX, centerY, innerRadius, endAngle, startAngle, true);
+    } else {
+      ctx.lineTo(centerX, centerY);
+    }
+    ctx.closePath();
+    ctx.fillStyle = fillStyle;
+    ctx.fill();
+  }
+  function maximumPhaseRadius(rows) {
+    return Math.max(1.2, ...rows.map((row) => row.R).filter((value) => Number.isFinite(value) && value > 0));
+  }
+  function drawGuideCircle(ctx, centerX, centerY, radius, strokeStyle, lineDash = []) {
+    if (radius <= 0) return;
+    ctx.save();
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = 1;
+    ctx.setLineDash(lineDash);
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+  function drawModelReferenceGuides(ctx, rows, centerX, centerY, radiusScale) {
+    const equilibriumGeometry = shellGeometryFor(1, mAt(1, state));
+    const [minRadius, maxRadius] = rawRange(rows.map((row) => row.R));
+    const hasRadiusRange = rows.length > 1 && maxRadius - minRadius > 1e-4;
+    if (hasRadiusRange) {
+      drawGuideCircle(ctx, centerX, centerY, minRadius * radiusScale, colorWithAlpha(COLORS.R, 0.18), [3, 5]);
+      drawGuideCircle(ctx, centerX, centerY, maxRadius * radiusScale, colorWithAlpha(COLORS.R, 0.24), [7, 5]);
+    }
+    drawGuideCircle(ctx, centerX, centerY, radiusScale, "rgba(82, 100, 137, 0.42)");
+    const innerReferenceRadius = equilibriumGeometry.innerRadius * radiusScale;
+    if (innerReferenceRadius > 1) {
+      drawGuideCircle(ctx, centerX, centerY, innerReferenceRadius, "rgba(255, 184, 108, 0.34)", [4, 4]);
+    } else {
+      ctx.save();
+      ctx.fillStyle = "rgba(255, 184, 108, 0.36)";
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  function measureLuminosityLabelSymbol(ctx, symbol) {
+    ctx.font = "700 13px Inter, sans-serif";
+    const baseWidth = ctx.measureText(symbol.base).width;
+    if (!symbol.subscript) return baseWidth;
+    ctx.font = "700 9px Inter, sans-serif";
+    return baseWidth + 1 + ctx.measureText(symbol.subscript).width;
+  }
+  function drawLuminosityLabelSymbol(ctx, symbol, x, y) {
+    ctx.textAlign = "left";
+    ctx.font = "700 13px Inter, sans-serif";
+    ctx.strokeText(symbol.base, x, y + 4);
+    ctx.fillText(symbol.base, x, y + 4);
+    const baseWidth = ctx.measureText(symbol.base).width;
+    if (!symbol.subscript) return baseWidth;
+    ctx.font = "700 9px Inter, sans-serif";
+    ctx.strokeText(symbol.subscript, x + baseWidth + 1, y + 8);
+    ctx.fillText(symbol.subscript, x + baseWidth + 1, y + 8);
+    return baseWidth + 1 + ctx.measureText(symbol.subscript).width;
+  }
+  function drawLuminosityArcLabel(ctx, x, y, color, gammaSubscript, luminositySubscript) {
+    const symbols = gammaSubscript ? [
+      { base: "\u03B3", subscript: gammaSubscript },
+      { base: "L", subscript: luminositySubscript }
+    ] : [{ base: "L", subscript: luminositySubscript }];
+    const gap = gammaSubscript ? 3 : 0;
+    ctx.save();
+    ctx.textBaseline = "alphabetic";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(6, 11, 24, 0.92)";
+    ctx.lineWidth = 4;
+    ctx.fillStyle = colorWithAlpha(color, 0.98);
+    const widths = symbols.map((symbol) => measureLuminosityLabelSymbol(ctx, symbol));
+    const totalWidth = widths.reduce((sum, width) => sum + width, 0) + gap * (symbols.length - 1);
+    let cursor = x - totalWidth / 2;
+    symbols.forEach((symbol, index) => {
+      cursor += drawLuminosityLabelSymbol(ctx, symbol, cursor, y);
+      if (index < symbols.length - 1) cursor += gap;
+    });
+    ctx.restore();
+  }
+  function drawConvectionArcs(ctx, row, centerX, centerY, radiusScale) {
+    const equilibriumGeometry = shellGeometryFor(1, mAt(1, state));
+    const equilibriumThickness = Math.max(3, equilibriumGeometry.thickness * radiusScale);
+    const radius = radiusScale;
+    const segment = Math.PI / 2 / 3;
+    const gap = 0.018;
+    const arcs = [
+      { value: weightedConvectiveLuminosity(row), color: COLORS.Lc, gammaSubscript: "c", luminositySubscript: "c" },
+      { value: row.L, color: COLORS.L },
+      { value: weightedRadiativeLuminosity(row), color: COLORS.Lr, gammaSubscript: "r", luminositySubscript: "r" }
+    ];
+    const arcWidths = arcs.map((arc) => clamp3(equilibriumThickness * Math.max(0, arc.value), 2, equilibriumThickness * 3));
+    const fixedLabelOffset = Math.max(18, equilibriumThickness * 0.75 + 10);
+    const labelRadius = Math.min(
+      radius + fixedLabelOffset,
+      Math.max(0, Math.min(centerX, centerY) - 28)
+    );
+    ctx.save();
+    ctx.lineCap = "butt";
+    arcs.forEach((arc, index) => {
+      const startAngle = index * segment + gap;
+      const endAngle = (index + 1) * segment - gap;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+      ctx.strokeStyle = colorWithAlpha(arc.color, 0.96);
+      ctx.lineWidth = arcWidths[index];
+      ctx.stroke();
+    });
+    arcs.forEach((arc, index) => {
+      const angle = (index + 0.5) * segment;
+      drawLuminosityArcLabel(
+        ctx,
+        centerX + Math.cos(angle) * labelRadius,
+        centerY + Math.sin(angle) * labelRadius,
+        arc.color,
+        arc.gammaSubscript,
+        arc.luminositySubscript
+      );
+    });
+    ctx.restore();
+  }
+  function drawModelVisualization() {
+    const canvas = el("modelCanvas");
+    const panel = canvas.closest(".plot-panel");
+    if (panel?.hidden) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(260, rect.width || 320);
+    const height = Math.max(260, rect.height || width);
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+    canvas.dataset.animationSpeed = modelSpeedLabel(modelAnimationSpeed);
+    const row = latestPhaseRows.length ? phaseRowAt(latestPhaseRows, currentAnimationPhase) : null;
+    if (!row) {
+      canvas.dataset.convectionActive = "false";
+      canvas.dataset.luminosityArcLabels = "";
+      canvas.dataset.geometryGuides = "";
+      drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
+      return;
+    }
+    const size = Math.min(width, height);
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const maxRadius = maximumPhaseRadius(latestPhaseRows);
+    const radiusScale = size * 0.36 / maxRadius;
+    const geometry = shellGeometryFromModel(row, state);
+    const luminosityLevel = normalizedInRange(row.L, latestPhaseLuminosityRange);
+    const temperature = inferEffectiveTemperature(row.L, row.R);
+    const blackbody = blackbodyRgbForTemperature(temperature);
+    const shellColor = scaledRgb(blackbody, 0.58 + luminosityLevel * 0.52);
+    const outerRadius = Math.max(2, geometry.outerRadius * radiusScale);
+    const innerRadius = Math.max(0, geometry.innerRadius * radiusScale);
+    const convectionActive = !convectiveResponseDisabled();
+    const shellAlpha = 0.5 + luminosityLevel * 0.4;
+    canvas.dataset.convectionActive = String(convectionActive);
+    canvas.dataset.currentPhase = fmtFixed(row.tau, 3);
+    canvas.dataset.luminosityArcLabels = convectionActive ? "gamma_c L_c,L,gamma_r L_r" : "";
+    canvas.dataset.geometryGuides = "R=1,eta,minR,maxR";
+    ctx.save();
+    drawModelReferenceGuides(ctx, latestPhaseRows, centerX, centerY, radiusScale);
+    ctx.shadowColor = rgbCss(blackbody, 0.65);
+    ctx.shadowBlur = 12 + luminosityLevel * 22;
+    drawAnnularSegment(
+      ctx,
+      centerX,
+      centerY,
+      outerRadius,
+      innerRadius,
+      convectionActive ? Math.PI / 2 : 0,
+      Math.PI * 2,
+      rgbCss(shellColor, shellAlpha)
+    );
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = rgbCss(blackbody, 0.84);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, outerRadius, convectionActive ? Math.PI / 2 : 0, Math.PI * 2);
+    ctx.stroke();
+    if (innerRadius > 1) {
+      ctx.strokeStyle = rgbCss(blackbody, 0.34);
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, innerRadius, convectionActive ? Math.PI / 2 : 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    if (convectionActive) drawConvectionArcs(ctx, row, centerX, centerY, radiusScale);
+    ctx.restore();
+  }
+  function drawAnimatedPhaseViews() {
+    drawModelVisualization();
+    drawPhasePlots();
+  }
+  function startModelAnimationLoop() {
+    if (modelAnimationFrame) return;
+    const tick = (timestamp) => {
+      if (!document.hidden) {
+        if (modelAnimationStartTime === null) {
+          modelAnimationStartTime = timestamp - currentAnimationPhase / 2 * modelAnimationDurationMs();
+        }
+        const duration = modelAnimationDurationMs();
+        const elapsed = (timestamp - modelAnimationStartTime) % duration;
+        currentAnimationPhase = elapsed / duration * 2;
+        drawAnimatedPhaseViews();
+      } else {
+        modelAnimationStartTime = null;
+      }
+      modelAnimationFrame = window.requestAnimationFrame(tick);
+    };
+    modelAnimationFrame = window.requestAnimationFrame(tick);
+  }
   function drawAll() {
     const rows = latestRows;
     updateVariableInitials();
@@ -2683,6 +4562,7 @@
     const okStatus = latestResult.message === "equilibrium" || latestResult.message === "limit_cycle" || !state.runUntilStable && latestResult.status === "complete";
     const final = rows[rows.length - 1];
     const phase = phaseForRows(rows);
+    updateGridLoopSliderMarkers();
     updateSonificationSourceControls();
     updateSonificationCurve(phase);
     const metricsNode = el("metrics");
@@ -2699,41 +4579,15 @@
     const metricsHtml = metricItems.map(({ label, value, className }) => `<span class="metric${className ? ` ${className}` : ""}">${label}<b>${value}</b></span>`).join("");
     stageMathHtml(metricsNode, metricsHtml);
     queueMathTypeset([metricsNode]);
-    const phaseSample = phase.rows.length ? downsample(phase.rows, 1800, ["L", "V", "H"]) : [];
-    const phaseMessage = phaseUnavailableLabel(phase);
-    const phasePeriodLabel = `phase (period = ${phase.period ? fmt(phase.period, 3) : "n/a"} \u03C4)`;
-    drawSeries("lightCanvas", [
-      { label: "L", color: COLORS.L, rows: phaseSample, x: (row) => row.tau, y: (row) => row.L }
-    ], {
-      xlabel: phasePeriodLabel,
-      ylabel: "luminosity L",
-      ylabelColor: COLORS.L,
-      xlim: [0, 2],
-      ylim: phaseSample.length ? void 0 : [0, 1],
-      message: phaseMessage
-    });
-    drawSeries("velocityCanvas", [
-      { label: "V", color: COLORS.V, rows: phaseSample, x: (row) => row.tau, y: (row) => row.V }
-    ], {
-      xlabel: phasePeriodLabel,
-      ylabel: "radial velocity V",
-      ylabelColor: COLORS.V,
-      xlim: [0, 2],
-      ylim: phaseSample.length ? void 0 : [0, 1],
-      message: phaseMessage
-    });
-    if (sonificationSource === "pressure") {
-      drawSeries("pressureCanvas", [
-        { label: "P", color: COLORS.H, rows: phaseSample, x: (row) => row.tau, y: acousticPressureSignal }
-      ], {
-        xlabel: phasePeriodLabel,
-        ylabel: "pressure",
-        ylabelColor: COLORS.H,
-        xlim: [0, 2],
-        ylim: phaseSample.length ? void 0 : [0, 1],
-        message: phaseMessage
-      });
-    }
+    const phaseMessage = gridState.enabled && activeGridRanges().length && !gridState.results.length ? gridState.statusText : phaseUnavailableLabel(phase);
+    const phasePeriod = gridState.enabled ? currentGridResult()?.period ?? phase.period : phase.period;
+    latestPhaseRows = gridState.enabled ? currentGridResult()?.phaseRows ?? phase.rows : phase.rows;
+    latestPhaseSample = latestPhaseRows.length ? downsample(latestPhaseRows, 1800, ["L", "V", "H"]) : [];
+    latestPhaseMessage = phaseMessage;
+    latestPhasePeriodLabel = `phase (period = ${phasePeriod ? fmt(phasePeriod, 3) : "n/a"} \u03C4)`;
+    latestPhaseLuminosityRange = rawRange(latestPhaseRows.map((row) => row.L));
+    drawModelVisualization();
+    drawPhasePlots();
     const timeXlim = integrationTimeRange();
     const convectionOff = convectiveResponseDisabled();
     const timeKeys = convectionOff ? ["R", "V", "H"] : ["R", "V", "H", "Uc"];
@@ -2772,8 +4626,8 @@
     ];
     if (!convectionOff) {
       lumSeries.push(
-        { label: "Lr", color: COLORS.Lr, rows: visibleRows("lum", "Lr", sampledLumRows), x: (row) => row.tau, y: (row) => row.Lr },
-        { label: "Lc", color: COLORS.Lc, rows: visibleRows("lum", "Lc", sampledLumRows), x: (row) => row.tau, y: (row) => row.Lc }
+        { label: "gamma_r Lr", color: COLORS.Lr, rows: visibleRows("lum", "Lr", sampledLumRows), x: (row) => row.tau, y: (row) => weightedRadiativeLuminosity(row) },
+        { label: "gamma_c Lc", color: COLORS.Lc, rows: visibleRows("lum", "Lc", sampledLumRows), x: (row) => row.tau, y: (row) => weightedConvectiveLuminosity(row) }
       );
     }
     drawSeries("lumCanvas", lumSeries, {
@@ -2788,14 +4642,16 @@
     });
     const lumLegendItems = convectionOff ? [{ label: `\\(${TEX.L}\\) total`, color: COLORS.L }] : [
       { key: "L", label: `\\(${TEX.L}\\) total`, color: COLORS.L, toggleLabel: "total luminosity" },
-      { key: "Lr", label: `\\(${TEX.Lr}\\) radiative`, color: COLORS.Lr, toggleLabel: "radiative luminosity" },
-      { key: "Lc", label: `\\(${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
+      { key: "Lr", label: `\\(\\ozNeutral{\\gamma_r}\\,${TEX.Lr}\\) radiative`, color: COLORS.Lr, toggleLabel: "radiative luminosity" },
+      { key: "Lc", label: `\\(${TEX.gammac}\\,${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
     ];
     drawLegend("lumLegend", lumLegendItems, convectionOff ? {} : { plotId: "lum" });
+    drawFourierPanel();
   }
   function startApp() {
     buildControls();
     solveAndDraw();
+    startModelAnimationLoop();
     window.addEventListener("load", () => queueMathTypeset());
   }
   if (document.readyState === "loading") {

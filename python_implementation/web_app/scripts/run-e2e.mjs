@@ -139,13 +139,13 @@ async function runPlaywrightChecks() {
     await pressureSource.click();
     assertOk((await pressureSource.getAttribute("aria-pressed")) === "true", "pressure source did not reactivate");
     assertOk(await page.locator("#pressurePhasePanel").isVisible(), "pressure panel should show when pressure is selected");
-    const hasPressurePaint = await page.locator("#pressureCanvas").evaluate((canvas) => {
-      const node = canvas;
-      const ctx = node.getContext("2d");
+    await page.waitForFunction(() => {
+      const canvas = document.querySelector("#pressureCanvas");
+      if (!(canvas instanceof HTMLCanvasElement)) return false;
+      const ctx = canvas.getContext("2d");
       if (!ctx) return false;
-      return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
-    });
-    assertOk(hasPressurePaint, "pressure canvas was blank");
+      return ctx.getImageData(0, 0, canvas.width, canvas.height).data.some((value) => value !== 0);
+    }, null, { timeout: 5000 });
     await luminositySource.click();
     assertOk((await luminositySource.getAttribute("aria-pressed")) === "true", "luminosity source did not reactivate");
     assertOk(!(await page.locator("#pressurePhasePanel").isVisible()), "pressure panel should hide when returning to luminosity sonification");
@@ -193,9 +193,9 @@ async function runPlaywrightChecks() {
     const sectionActionLayouts = await page.locator(".section-title-with-actions").evaluateAll((nodes) =>
       nodes.map((node) => {
         const label = node.querySelector("span")?.getBoundingClientRect();
-        const actions = node.querySelector(".section-action-row")?.getBoundingClientRect();
-        const buttonHeights = [...node.querySelectorAll(".section-action-row button")]
-          .map((button) => Math.round(button.getBoundingClientRect().height));
+        const actions = node.querySelector(".section-action-row, .grid-mode-control")?.getBoundingClientRect();
+        const buttonHeights = [...node.querySelectorAll(".section-action-row button, .grid-mode-control input")]
+          .map((control) => Math.round(control.getBoundingClientRect().height));
         if (!label || !actions) return null;
         return {
           label: node.querySelector("span")?.textContent?.trim() || "",
@@ -205,7 +205,7 @@ async function runPlaywrightChecks() {
         };
       })
     );
-    assertOk(sectionActionLayouts.map((layout) => layout?.label).join("|") === "Integration|Convective Driver|Phase Window", "expected compact action rows in three section headers");
+    assertOk(sectionActionLayouts.map((layout) => layout?.label).join("|") === "Physical Parameters|Integration|Convective Driver|Phase Window", "expected compact action rows in four section headers");
     sectionActionLayouts.forEach((layout) => {
       assertOk(layout?.actionsCenterY === layout?.labelCenterY, `${layout?.label || "section"} buttons should sit on the header line`);
       assertOk(Math.max(...layout.buttonHeights) <= 30, `${layout?.label || "section"} buttons should be compact`);
@@ -215,6 +215,7 @@ async function runPlaywrightChecks() {
     assertOk(!(await page.locator("#initialControlSection").evaluate((node) => node.open)), "initial conditions should start collapsed");
     assertOk(!(await page.locator("#initialControls").isVisible()), "initial condition sliders should start hidden");
     assertOk(!(await page.locator("#presetButtons").isVisible()), "preset buttons should start hidden");
+    assertOk((await page.locator("input[aria-label='convective response']").inputValue()) === "1", "convective response should default to one");
     await page.locator("#presetPanel summary").click();
     assertOk(await page.locator("#presetButtons").isVisible(), "preset buttons should show inside the presets menu");
     assertOk(await page.locator("#presetPanel #resetPreset").isVisible(), "reset preset should live inside the presets menu");
@@ -290,7 +291,7 @@ async function runPlaywrightChecks() {
     const sourceText = await page.evaluate(async () => (await fetch("/src/main.ts")).text());
     const htmlText = await page.evaluate(async () => (await fetch("/wizard_of_oz.html")).text());
     assertOk(
-      sourceText.includes("\\\\ozChiZero{\\\\chi_0}") && sourceText.includes("\\\\ozChi{\\\\chi}") && sourceText.includes("\\\\ozEta{\\\\eta}") && htmlText.includes("\\ozChi{\\chi}"),
+      sourceText.includes("\\\\ozChiZero{\\\\chi_0}") && sourceText.includes("\\\\ozChi{\\\\chi}") && sourceText.includes("\\\\ozEta{\\\\eta}") && sourceText.includes("\\\\ozNeutral{\\\\gamma_r}") && htmlText.includes("\\ozChi{\\chi}"),
       "web app source should use separate chi, chi0, and eta notation"
     );
     assertOk(!sourceText.includes("User-tunable reference shell form factor"), "chi0 meaning should not start with User-tunable");
@@ -369,6 +370,7 @@ async function runPlaywrightChecks() {
       .locator(".slider-name")
       .evaluate((node) => node.scrollWidth <= node.clientWidth + 1);
     assertOk(convectiveFluxLabelFit, "convective flux fraction label should fit without ellipsis on desktop");
+    assertOk((await page.getByRole("slider", { name: "convective flux fraction" }).inputValue()) === "0.2", "convective flux fraction should default to 0.2");
     const maxTauLabel = await page.locator("input[aria-label='max time']").evaluate((input) => {
       const slider = input;
       slider.value = "3";
@@ -385,7 +387,177 @@ async function runPlaywrightChecks() {
     const parameterOverflow = await page.locator(".parameters-panel").evaluate((node) => getComputedStyle(node).overflowY);
     assertOk(parameterOverflow === "auto", `parameters panel should scroll vertically, saw ${parameterOverflow}`);
 
-    assertOk(await page.locator(".plot-panel canvas:visible").count() === 4, "expected four visible plot canvases");
+    await page.setViewportSize({ width: 1920, height: 1200 });
+    assertOk(await page.getByRole("heading", { name: "Moving Shell" }).isVisible(), "Moving Shell heading was not visible");
+    const modelSpeed = page.getByRole("slider", { name: "moving shell speed" });
+    assertOk(await page.locator("[data-plot-panel='model'] .plot-title .model-speed-control").isVisible(), "Moving Shell speed control should live in the title row");
+    assertOk((await modelSpeed.inputValue()) === "1", "Moving Shell speed should start at 1x");
+    assertOk((await page.locator("#modelSpeedValue").textContent()) === "1x", "Moving Shell speed readout should start at 1x");
+    await modelSpeed.evaluate((input) => {
+      input.value = "2";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    assertOk((await page.locator("#modelSpeedValue").textContent()) === "2x", "Moving Shell speed readout should update");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-animation-speed")) === "2x", "Moving Shell canvas should receive the animation speed");
+    await modelSpeed.evaluate((input) => {
+      input.value = "1";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    assertOk(await page.locator(".plot-panel canvas:visible").count() === 5, "expected five visible plot canvases");
+    const modelBox = await page.locator("#modelCanvas").boundingBox();
+    const modelPanelBox = await page.locator("[data-plot-panel='model']").boundingBox();
+    const lightBox = await page.locator("#lightCanvas").boundingBox();
+    assertOk(Boolean(modelBox), "model canvas bounds were unavailable");
+    assertOk(Boolean(modelPanelBox), "model panel bounds were unavailable");
+    assertOk(Boolean(lightBox), "lightcurve canvas bounds were unavailable");
+    assertOk(Math.abs(modelBox.width - modelBox.height) <= 1, "model canvas should be square");
+    assertOk(Math.abs(modelBox.height - lightBox.height) <= 1, "model canvas should match the Lightcurve canvas height");
+    assertOk(Math.abs(modelPanelBox.width - modelPanelBox.height) <= 2, "model panel should be square");
+    const plotLayout = await page.locator("#plotGrid").evaluate((grid) => {
+      const panels = [...grid.querySelectorAll("[data-plot-panel]")].map((panel) => {
+        const rect = panel.getBoundingClientRect();
+        return {
+          id: panel.dataset.plotPanel || "",
+          top: Math.round(rect.top),
+          width: Math.round(rect.width)
+        };
+      });
+      return {
+        display: getComputedStyle(grid).display,
+        flexWrap: getComputedStyle(grid).flexWrap,
+        panels
+      };
+    });
+    assertOk(plotLayout.display === "flex", "plot grid should use flex layout");
+    assertOk(plotLayout.flexWrap === "wrap", "plot grid should wrap flex rows");
+    const firstRow = plotLayout.panels.filter((panel) => panel.top === plotLayout.panels[0].top);
+    const secondRowTop = plotLayout.panels.find((panel) => panel.id === "time")?.top;
+    const secondRow = plotLayout.panels.filter((panel) => panel.top === secondRowTop);
+    assertOk(firstRow.map((panel) => panel.id).join("|") === "model|light|velocity", `first plot row should be model/light/velocity, saw ${firstRow.map((panel) => panel.id).join("|")}`);
+    assertOk(firstRow.find((panel) => panel.id === "model")?.width < 360, "Moving Shell should stay compact");
+    assertOk(firstRow.find((panel) => panel.id === "light")?.width > 500, "Lightcurve should expand beside Moving Shell");
+    assertOk(firstRow.find((panel) => panel.id === "velocity")?.width > 500, "RV Curve should expand beside Moving Shell");
+    assertOk(secondRow.map((panel) => panel.id).join("|") === "time|lum", `second plot row should be History/Luminosity, saw ${secondRow.map((panel) => panel.id).join("|")}`);
+    assertOk(secondRow.every((panel) => panel.width > 650), "History and Luminosity should fill their row");
+    const hasModelPaint = await page.locator("#modelCanvas").evaluate((canvas) => {
+      const node = canvas;
+      const ctx = node.getContext("2d");
+      if (!ctx) return false;
+      return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
+    });
+    assertOk(hasModelPaint, "model canvas was blank");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "gamma_c L_c,L,gamma_r L_r", "model luminosity arc labels should be active");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-geometry-guides")) === "R=1,eta,minR,maxR", "model geometry guides should be active");
+    assertOk((await page.locator("#plotGrid").getAttribute("data-plot-columns")) === null, "plot grid should not force a column mode");
+    assertOk(!(await page.locator("#hiddenPlotControls").isVisible()), "hidden plot controls should start hidden");
+    assertOk((await page.locator("#plotGrid").evaluate((node) => getComputedStyle(node).display)) === "flex", "plot grid should use flex display");
+    assertOk((await page.locator("#plotGrid").evaluate((node) => getComputedStyle(node).flexWrap)) === "wrap", "plot grid should wrap");
+    assertOk((await page.locator("#plotGrid").evaluate((node) => getComputedStyle(node).getPropertyValue("--plot-panel-min-width").trim())) === "400px", "plot panel minimum width should be 400px");
+    await page.locator("[data-plot-toggle='model']").uncheck();
+    assertOk(!(await page.locator("[data-plot-panel='model']").isVisible()), "Moving Shell panel should hide when unchecked");
+    assertOk(await page.locator("#hiddenPlotControls").isVisible(), "hidden plot controls should appear when a plot is hidden");
+    assertOk((await page.locator("#hiddenPlotControls").textContent())?.includes("Moving Shell"), "hidden plot controls should include Moving Shell");
+    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "4", "four visible plots should be tracked");
+    assertOk((await page.locator("#plotGrid").getAttribute("data-plot-columns")) === null, "plot grid should not force a column mode after hiding a plot");
+    assertOk(await page.locator(".plot-panel canvas:visible").count() === 4, "expected four visible plot canvases after hiding Moving Shell");
+    await page.locator("#hiddenPlotControls [data-plot-toggle='model']").check();
+    assertOk(await page.locator("[data-plot-panel='model']").isVisible(), "Moving Shell panel should return when rechecked");
+    assertOk(!(await page.locator("#hiddenPlotControls").isVisible()), "hidden plot controls should hide again when all plots are visible");
+    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "5", "five visible plots should be tracked after restore");
+    assertOk(!(await page.getByLabel("Enable grid mode").isChecked()), "grid mode should start off");
+    assertOk(!(await page.locator("#fourierGridPanel").isVisible()), "Fourier grid panel should start hidden");
+    await page.getByLabel("Enable grid mode").check();
+    assertOk(((await page.locator("[data-control-key='gammac']").getAttribute("class")) || "").includes("is-grid-range"), "Grid checkbox should default to a gamma_c range");
+    assertOk((await page.getByLabel("convective flux fraction grid lower bound").inputValue()) === "0", "default gamma_c grid should start at 0");
+    assertOk((await page.getByLabel("convective flux fraction grid upper bound").inputValue()) === "0.5", "default gamma_c grid should end at 0.5");
+    await page.getByLabel("Enable grid mode").uncheck();
+    assertOk(!(await page.locator("#fourierGridPanel").isVisible()), "Fourier grid panel should hide after default grid check");
+    const fluxControl = page.getByRole("slider", { name: "convective flux fraction" }).locator("xpath=ancestor::*[contains(@class, 'slider-control')]");
+    const fluxHeightBefore = await fluxControl.evaluate((node) => node.getBoundingClientRect().height);
+    await fluxControl.dispatchEvent("contextmenu");
+    assertOk(await page.getByLabel("Enable grid mode").isChecked(), "right clicking a slider should enable grid mode");
+    assertOk(await page.locator("[data-plot-panel='model']").isHidden(), "Moving Shell should be hidden in grid mode");
+    assertOk(await page.locator("[data-plot-panel='time']").isHidden(), "History should be hidden in grid mode");
+    assertOk(await page.locator("[data-plot-panel='lum']").isHidden(), "Luminosity Evolution should be hidden in grid mode");
+    assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='model']").isDisabled(), "Moving Shell toggle should be disabled in grid mode");
+    assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='time']").isDisabled(), "History toggle should be disabled in grid mode");
+    assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='lum']").isDisabled(), "Luminosity toggle should be disabled in grid mode");
+    assertOk(await page.locator("#fourierGridPanel").isVisible(), "Fourier grid panel should show in grid mode");
+    const loopSpeed = page.getByRole("slider", { name: "parameter loop speed" });
+    assertOk((await loopSpeed.inputValue()) === "1", "parameter loop speed should start at 1x");
+    assertOk((await page.locator("#gridLoopSpeedValue").textContent()) === "1x", "parameter loop speed readout should start at 1x");
+    await loopSpeed.evaluate((input) => {
+      input.value = "2";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    assertOk((await page.locator("#gridLoopSpeedValue").textContent()) === "2x", "parameter loop speed readout should update");
+    assertOk((await fluxControl.getAttribute("class"))?.includes("is-grid-range"), "right click should convert a slider to grid range mode");
+    const fluxHeightAfter = await fluxControl.evaluate((node) => node.getBoundingClientRect().height);
+    assertOk(Math.abs(fluxHeightAfter - fluxHeightBefore) <= 1, "range mode should reuse the existing slider row height");
+    const radiusControl = page.getByRole("slider", { name: "initial radius" }).locator("xpath=ancestor::*[contains(@class, 'slider-control')]");
+    await page.getByRole("slider", { name: "initial radius" }).click();
+    assertOk(!((await radiusControl.getAttribute("class")) || "").includes("is-grid-range"), "left clicking should not convert a slider to grid range mode");
+    await page.getByRole("slider", { name: "initial radius" }).evaluate((input) => {
+      input.value = "1.1";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await fluxControl.dispatchEvent("contextmenu");
+    assertOk(!((await fluxControl.getAttribute("class")) || "").includes("is-grid-range"), "right click should toggle grid range mode off");
+    await fluxControl.dispatchEvent("contextmenu");
+    await radiusControl.dispatchEvent("contextmenu");
+    await page.getByLabel("convective flux fraction grid lower bound").evaluate((input) => {
+      input.value = "0";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.getByLabel("convective flux fraction grid upper bound").evaluate((input) => {
+      input.value = "0.02";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.getByLabel("initial radius grid lower bound").evaluate((input) => {
+      input.value = "1.09";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.getByLabel("initial radius grid upper bound").evaluate((input) => {
+      input.value = "1.11";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    assertOk(await page.locator("#gridLoopControls").isVisible(), "multi-parameter grid should show loop radio buttons");
+    assertOk(await page.locator("#gridLoopControls input[type='radio']").count() === 2, "two varied parameters should produce two loop radios");
+    await page.waitForFunction(() => document.querySelector("#gridStatusText")?.textContent?.includes("Grid complete"), null, { timeout: 15000 });
+    assertOk(await page.locator("[data-control-key='gammac'] [data-grid-loop-marker]").isVisible(), "selected loop slider should show the animated value marker");
+    assertOk(await page.locator("[data-control-key='r0'] [data-grid-loop-marker]").isHidden(), "non-selected range slider should hide the animated value marker");
+    const fourierHasPaint = await page.locator("#fourierCanvas").evaluate((canvas) => {
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return false;
+      return ctx.getImageData(0, 0, canvas.width, canvas.height).data.some((value) => value !== 0);
+    });
+    assertOk(fourierHasPaint, "Fourier canvas should paint in grid mode");
+    await page.locator("#lightCanvas").scrollIntoViewIfNeeded();
+    const lightCanvasBox = await page.locator("#lightCanvas").boundingBox();
+    assertOk(Boolean(lightCanvasBox), "light canvas bounds were unavailable for colorbar scrub");
+    await page.mouse.move(lightCanvasBox.x + lightCanvasBox.width - 48, lightCanvasBox.y + 34);
+    await page.mouse.down();
+    assertOk((await page.locator("#lightCanvas").getAttribute("data-grid-interaction")) === "colorbar", "phase colorbar should enter scrub mode on pointer down");
+    await page.mouse.move(lightCanvasBox.x + lightCanvasBox.width - 150, lightCanvasBox.y + 34);
+    await page.mouse.up();
+    assertOk((await page.locator("#lightCanvas").getAttribute("data-grid-interaction")) !== "colorbar", "phase colorbar should leave scrub mode on release");
+    await page.locator("#fourierCanvas").scrollIntoViewIfNeeded();
+    const fourierHit = await page.locator("#fourierCanvas").getAttribute("data-first-fourier-hit");
+    assertOk(Boolean(fourierHit), "Fourier canvas should expose a hit-test point");
+    const [fourierHitX, fourierHitY] = fourierHit.split(",").map(Number);
+    const fourierBox = await page.locator("#fourierCanvas").boundingBox();
+    assertOk(Boolean(fourierBox), "Fourier canvas bounds were unavailable");
+    await page.mouse.move(fourierBox.x + fourierHitX, fourierBox.y + fourierHitY);
+    assertOk((await page.locator("#fourierCanvas").getAttribute("data-grid-hover")) === "true", "hovering a Fourier point should highlight its model");
+    await page.mouse.down();
+    assertOk((await page.locator("#fourierCanvas").getAttribute("data-grid-interaction")) === "fourier-hold", "pressing a Fourier point should hold that model");
+    await page.mouse.up();
+    assertOk((await page.locator("#fourierCanvas").getAttribute("data-grid-interaction")) !== "fourier-hold", "Fourier hold should release on pointer up");
+    await page.getByLabel("Enable grid mode").uncheck();
+    assertOk(!(await page.locator("#fourierGridPanel").isVisible()), "Fourier panel should hide when grid mode exits");
+    assertOk(await page.locator("[data-plot-panel='model']").isVisible(), "Moving Shell visibility should restore after grid mode exits");
+    assertOk(await page.locator("[data-plot-panel='time']").isVisible(), "History visibility should restore after grid mode exits");
+    assertOk(await page.locator("[data-plot-panel='lum']").isVisible(), "Luminosity Evolution visibility should restore after grid mode exits");
     assertOk(await page.locator("#adsrCanvas").count() === 1, "expected one ADSR canvas");
     assertOk(await page.getByRole("heading", { name: "Lightcurve" }).isVisible(), "Lightcurve heading was not visible");
     assertOk((await page.locator(".phase-anchor-control").textContent())?.includes("phase to"), "phase anchor control was not visible");
@@ -418,32 +590,40 @@ async function runPlaywrightChecks() {
     });
     assertOk(hasVelocityPaint, "radial velocity canvas was blank");
 
+    await page.waitForFunction(() => document.querySelector("input[aria-label='convective response']")?.value === "1");
+    await page.waitForFunction(() => document.querySelector("#timeLegend")?.textContent?.includes("convective velocity"), null, { timeout: 15000 });
     const timeLegend = await page.locator("#timeLegend").textContent();
     assertOk(
       timeLegend?.includes("radius") && timeLegend.includes("pressure factor"),
       "time legend did not render expected entries"
     );
     assertOk(!timeLegend?.includes("nonadiabatic pressure factor"), "history legend should use the shorter pressure factor label");
-    assertOk(!timeLegend?.includes("convective velocity"), "convective velocity should be hidden when convective response is zero");
+    assertOk(timeLegend?.includes("convective velocity"), "convective velocity should be visible by default");
     const lumLegend = await page.locator("#lumLegend").textContent();
     assertOk(lumLegend?.includes("total"), "luminosity legend should show total luminosity");
-    assertOk(!lumLegend?.includes("radiative") && !lumLegend?.includes("convective"), "luminosity legend should show only total luminosity when convective response is zero");
-    assertOk(await page.locator("#lumLegend [data-plot-series]").count() === 0, "total-only luminosity legend should not expose series toggles");
-    await page.locator("input[aria-label='convective response']").evaluate((input) => {
-      const slider = input;
-      slider.value = "1";
-      slider.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await page.locator("#timeLegend [data-plot-series='Uc']").waitFor({ state: "attached", timeout: 15000 });
-    assertOk((await page.locator("#timeLegend").textContent())?.includes("convective velocity"), "convective velocity should return when convective response is nonzero");
-    assertOk((await page.locator("#lumLegend").textContent())?.includes("radiative"), "radiative luminosity should return when convective response is nonzero");
-    assertOk((await page.locator("#lumLegend").textContent())?.includes("convective"), "convective luminosity should return when convective response is nonzero");
+    assertOk(lumLegend?.includes("radiative") && lumLegend.includes("convective"), "luminosity legend should expose radiative and convective entries by default");
+    assertOk((await page.locator("input[aria-label='convective response']").inputValue()) === "1", "convective response should still be one");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-convection-active")) === "true", "model arcs should start in convective mode");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "gamma_c L_c,L,gamma_r L_r", "model arcs should expose luminosity labels");
     await page.locator("input[aria-label='convective response']").evaluate((input) => {
       const slider = input;
       slider.value = "0";
       slider.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await page.waitForFunction(() => !document.querySelector("#timeLegend [data-plot-series='Uc']"));
+    assertOk(!((await page.locator("#timeLegend").textContent())?.includes("convective velocity")), "convective velocity should hide when convective response is zero");
+    const zeroLumLegend = await page.locator("#lumLegend").textContent();
+    assertOk(!zeroLumLegend?.includes("radiative") && !zeroLumLegend?.includes("convective"), "luminosity legend should show only total luminosity when convective response is zero");
+    await page.waitForFunction(() => document.querySelector("#modelCanvas")?.getAttribute("data-convection-active") === "false");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "", "model luminosity arc labels should hide when convection is off");
+    await page.locator("input[aria-label='convective response']").evaluate((input) => {
+      const slider = input;
+      slider.value = "1";
+      slider.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.locator("#timeLegend [data-plot-series='Uc']").waitFor({ state: "attached", timeout: 15000 });
+    await page.waitForFunction(() => document.querySelector("#modelCanvas")?.getAttribute("data-convection-active") === "true");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "gamma_c L_c,L,gamma_r L_r", "model luminosity arc labels should return when convection is on");
     const radiusToggle = page.locator("#timeLegend [data-plot-series='R']");
     assertOk((await radiusToggle.getAttribute("aria-pressed")) === "true", "radius toggle should start visible");
     await radiusToggle.click();
