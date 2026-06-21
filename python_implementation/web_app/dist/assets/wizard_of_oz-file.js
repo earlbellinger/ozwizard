@@ -327,7 +327,7 @@
       ["uc0", `\\(${TEX.Uc}_{0}\\)`, "initial convective velocity", 0, 1.8, 0.01, 1, COLORS.Uc]
     ],
     integration: [
-      ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "max time", 0, 3, 0.01, 100, COLORS.tEnd],
+      ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "max time", 0, 3, 0.01, 300, COLORS.tEnd],
       ["step", `\\(\\Delta ${TEX.tau}_0\\)`, "initial step", 5e-4, 0.02, 5e-4, 1e-3, COLORS.step],
       ["maxStep", `\\(\\Delta ${TEX.tau}_{\\max}\\)`, "max adaptive step", 5e-3, 0.12, 5e-3, 0.03, COLORS.maxStep],
       ["logRtol", "\\(\\ozNeutral{\\log_{10} r_{tol}}\\)", "relative tol", -12, -8, 0.25, -11, COLORS.rtol],
@@ -412,7 +412,7 @@
     "Thick convective shell": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
     "RR Lyrae fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.2 },
     "RR Lyrae low-amplitude fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.1 },
-    "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, zetac: 1, gammac: 0.5, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 100 },
+    "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, zetac: 1, gammac: 0.5, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 300, runUntilStable: true },
     "RR Lyrae first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.05 },
     "RR Lyrae first overtone, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 15, sourceExp: 2, cq: 7, r0: 1.05, tEnd: 80 },
     "RR Lyrae high-amplitude first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.1 },
@@ -1061,6 +1061,144 @@
     return buildReference(rows, options);
   }
 
+  // src/displayWindow.ts
+  function isTimeWindowReason(message) {
+    return message === "equilibrium" || message === "runaway" || message === "runaway_trend";
+  }
+  function buildPhaseDisplayWindow(phase, message) {
+    return {
+      mode: "phase",
+      reason: phase.reason === "ok" ? "phase" : "phase_unavailable",
+      rows: phase.rows,
+      xlim: [0, 2],
+      period: phase.period,
+      message
+    };
+  }
+  function buildTimeDisplayWindow(rows, reason, message) {
+    const windowRows = terminalTimeWindowRows(rows, reason);
+    return {
+      mode: "time",
+      reason,
+      rows: windowRows,
+      xlim: timeDomain(windowRows),
+      period: null,
+      message
+    };
+  }
+  function terminalTimeWindowRows(rows, reason) {
+    const finiteRows = rows.filter((row) => Number.isFinite(row.tau));
+    if (finiteRows.length <= 2) return [...finiteRows];
+    const firstTau = finiteRows[0].tau;
+    const finalTau = finiteRows[finiteRows.length - 1].tau;
+    const span = finalTau - firstTau;
+    if (span <= 0) return [...finiteRows];
+    let startTau = null;
+    if (reason === "runaway" || reason === "runaway_trend") {
+      const extrema = luminosityExtremaIndices(finiteRows);
+      if (extrema.length >= 6) startTau = finiteRows[extrema[extrema.length - 6]].tau;
+      else if (extrema.length >= 3) startTau = finiteRows[extrema[0]].tau;
+    }
+    if (startTau === null) {
+      const fraction = reason === "equilibrium" ? 0.22 : 0.28;
+      const minimumDuration = reason === "equilibrium" ? 4 : 3;
+      const maximumDuration = reason === "equilibrium" ? 18 : 24;
+      const duration = Math.min(maximumDuration, Math.max(minimumDuration, span * fraction));
+      startTau = Math.max(firstTau, finalTau - duration);
+    }
+    const selected = finiteRows.filter((row) => row.tau >= startTau && row.tau <= finalTau);
+    return selected.length >= 2 ? selected : finiteRows.slice(-Math.min(finiteRows.length, 64));
+  }
+  function rowAtDisplayPosition(display, position) {
+    if (display.mode === "time") return rowAtTime(display.rows, displayTimeAtPosition(display, position));
+    return rowAtFoldedPhase(display.rows, position);
+  }
+  function displayMarkerX(display, position) {
+    if (display.mode === "time") return displayTimeAtPosition(display, position);
+    return normalizeFoldedPhase(position);
+  }
+  function displayAnimationEnd(display) {
+    return display.mode === "time" ? 1 : 2;
+  }
+  function rowAtTime(rows, time) {
+    if (!rows.length) return null;
+    const first = rows[0];
+    const last = rows[rows.length - 1];
+    const target = clamp2(time, first.tau, last.tau);
+    if (target <= first.tau) return first;
+    if (target >= last.tau) return last;
+    let lo = 0;
+    let hi = rows.length - 1;
+    while (hi - lo > 1) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (rows[mid].tau <= target) lo = mid;
+      else hi = mid;
+    }
+    return interpolateRows(rows[lo], rows[hi], target);
+  }
+  function rowAtFoldedPhase(rows, phase) {
+    if (!rows.length) return null;
+    const target = normalizeFoldedPhase(phase);
+    if (target <= rows[0].tau) return rows[0];
+    const last = rows[rows.length - 1];
+    if (target >= last.tau) return last;
+    let lo = 0;
+    let hi = rows.length - 1;
+    while (hi - lo > 1) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (rows[mid].tau <= target) lo = mid;
+      else hi = mid;
+    }
+    return interpolateRows(rows[lo], rows[hi], target);
+  }
+  function interpolateRows(a, b, tau) {
+    if (a.tau === b.tau) return a;
+    const fraction = (tau - a.tau) / (b.tau - a.tau);
+    const blend = (key) => a[key] + (b[key] - a[key]) * fraction;
+    return {
+      tau,
+      R: blend("R"),
+      V: blend("V"),
+      H: blend("H"),
+      Uc: blend("Uc"),
+      Lr: blend("Lr"),
+      Lc: blend("Lc"),
+      L: blend("L")
+    };
+  }
+  function displayTimeAtPosition(display, position) {
+    const fraction = clamp2(position, 0, 1);
+    return display.xlim[0] + fraction * (display.xlim[1] - display.xlim[0]);
+  }
+  function timeDomain(rows) {
+    if (!rows.length) return [0, 1];
+    const first = rows[0].tau;
+    const last = rows[rows.length - 1].tau;
+    if (first === last) return [first - 0.5, last + 0.5];
+    return [first, last];
+  }
+  function luminosityExtremaIndices(rows) {
+    const extrema = [];
+    for (let index = 1; index < rows.length - 1; index += 1) {
+      const previous = rows[index - 1].L;
+      const current = rows[index].L;
+      const next = rows[index + 1].L;
+      if (!Number.isFinite(previous + current + next)) continue;
+      if (current >= previous && current > next || current <= previous && current < next) {
+        extrema.push(index);
+      }
+    }
+    return extrema;
+  }
+  function normalizeFoldedPhase(phase) {
+    if (!Number.isFinite(phase)) return 0;
+    if (phase === 2) return 2;
+    return (phase % 2 + 2) % 2;
+  }
+  function clamp2(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
   // src/gridCompute.ts
   async function computeGridWithMessages(request, callbacks) {
     const nativeSamples = buildRangeSamples(request.ranges, request.loopKey, { stride: 1 });
@@ -1117,6 +1255,7 @@
       attempted: 0,
       validPhase: 0,
       validFourier: 0,
+      excludedNonPhase: 0,
       phaseUnavailable: 0,
       failed: 0,
       elapsedMs: 0,
@@ -1167,6 +1306,10 @@
     }
     try {
       const solved = solveModel(parameters);
+      if (isTimeWindowReason(solved.message) || isTimeWindowReason(solved.status)) {
+        stats.excludedNonPhase += 1;
+        return;
+      }
       const phase = buildTwoCyclePhase(solved.rows, request.phase);
       if (phase.reason !== "ok" || !phase.period || phase.rows.length < 8) {
         stats.phaseUnavailable += 1;
@@ -1229,6 +1372,7 @@
       attempted: stats.attempted,
       validPhase: stats.validPhase,
       validFourier: stats.validFourier,
+      excludedNonPhase: stats.excludedNonPhase,
       phaseUnavailable: stats.phaseUnavailable,
       failed: stats.failed,
       elapsedMs: stats.elapsedMs,
@@ -1267,45 +1411,11 @@
     { temperature: 12500, r: 188, g: 210, b: 255 },
     { temperature: 13e3, r: 186, g: 208, b: 255 }
   ];
-  function clamp2(value, min, max) {
+  function clamp3(value, min, max) {
     return Math.min(max, Math.max(min, value));
   }
   function interpolateNumber(a, b, fraction) {
     return a + (b - a) * fraction;
-  }
-  function normalizeFoldedPhase(phase) {
-    if (!Number.isFinite(phase)) return 0;
-    if (phase === 2) return 2;
-    return (phase % 2 + 2) % 2;
-  }
-  function phaseRowAt(rows, phase) {
-    if (!rows.length) return null;
-    const target = normalizeFoldedPhase(phase);
-    if (target <= rows[0].tau) return rows[0];
-    const last = rows[rows.length - 1];
-    if (target >= last.tau) return last;
-    let lo = 0;
-    let hi = rows.length - 1;
-    while (hi - lo > 1) {
-      const mid = Math.floor((lo + hi) / 2);
-      if (rows[mid].tau <= target) lo = mid;
-      else hi = mid;
-    }
-    const a = rows[lo];
-    const b = rows[hi];
-    if (a.tau === b.tau) return a;
-    const fraction = (target - a.tau) / (b.tau - a.tau);
-    const blend = (key) => interpolateNumber(a[key], b[key], fraction);
-    return {
-      tau: target,
-      R: blend("R"),
-      V: blend("V"),
-      H: blend("H"),
-      Uc: blend("Uc"),
-      Lr: blend("Lr"),
-      Lc: blend("Lc"),
-      L: blend("L")
-    };
   }
   function inferEffectiveTemperature(luminosity, radius, referenceTemperature = BLACKBODY_REFERENCE_TEMPERATURE) {
     if (luminosity <= 0 || radius <= 0 || !Number.isFinite(luminosity + radius + referenceTemperature)) {
@@ -1316,7 +1426,7 @@
   function clampBlackbodyTemperature(temperature) {
     const first = BLACKBODY_RGB_10DEG_TABLE[0].temperature;
     const last = BLACKBODY_RGB_10DEG_TABLE[BLACKBODY_RGB_10DEG_TABLE.length - 1].temperature;
-    return clamp2(Number.isFinite(temperature) ? temperature : BLACKBODY_REFERENCE_TEMPERATURE, first, last);
+    return clamp3(Number.isFinite(temperature) ? temperature : BLACKBODY_REFERENCE_TEMPERATURE, first, last);
   }
   function blackbodyRgbForTemperature(temperature) {
     const clamped = clampBlackbodyTemperature(temperature);
@@ -1337,7 +1447,7 @@
     return { r: last.r, g: last.g, b: last.b };
   }
   function rgbCss(color, alpha = 1) {
-    return alpha >= 1 ? `rgb(${color.r}, ${color.g}, ${color.b})` : `rgba(${color.r}, ${color.g}, ${color.b}, ${clamp2(alpha, 0, 1)})`;
+    return alpha >= 1 ? `rgb(${color.r}, ${color.g}, ${color.b})` : `rgba(${color.r}, ${color.g}, ${color.b}, ${clamp3(alpha, 0, 1)})`;
   }
   function shellGeometryFor(radius, formFactor) {
     const outerRadius = Number.isFinite(radius) ? Math.max(0, radius) : 1;
@@ -1601,6 +1711,13 @@
   var gridLoopSpeed = 1;
   var modelAnimationFrame = 0;
   var modelAnimationStartTime = null;
+  var latestDisplayWindow = {
+    mode: "phase",
+    reason: "phase_unavailable",
+    rows: [],
+    xlim: [0, 2],
+    period: null
+  };
   var latestPhaseRows = [];
   var latestPhaseSample = [];
   var latestPhaseMessage;
@@ -2621,7 +2738,7 @@
   }
   function startPianoNote(sourceId, midi) {
     if (!pianoModeActive || activePianoVoices.has(sourceId)) return;
-    const note = clamp3(Math.round(midi), PIANO_MIN_NOTE, PIANO_MAX_NOTE);
+    const note = clamp4(Math.round(midi), PIANO_MIN_NOTE, PIANO_MAX_NOTE);
     const context = ensureAudioContext();
     if (!context) return;
     unlockAudioContext(context);
@@ -2631,7 +2748,7 @@
     const now = context.currentTime;
     const attack = Math.max(1e-3, pianoEnvelope.attack);
     const decay = Math.max(1e-3, pianoEnvelope.decay);
-    const sustain = clamp3(pianoSustainLevel, 0, 1);
+    const sustain = clamp4(pianoSustainLevel, 0, 1);
     oscillator.frequency.setValueAtTime(noteToFrequency(note), now);
     const wave = createSonificationPeriodicWave(context);
     if (wave) oscillator.setPeriodicWave(wave);
@@ -2677,10 +2794,10 @@
   }
   function estimatePianoVoiceAmplitude(voice, now) {
     const elapsed = Math.max(0, now - voice.startedAt);
-    if (elapsed <= voice.attack) return clamp3(elapsed / voice.attack, 0, 1);
+    if (elapsed <= voice.attack) return clamp4(elapsed / voice.attack, 0, 1);
     if (elapsed <= voice.attack + voice.decay) {
       const decayProgress = (elapsed - voice.attack) / voice.decay;
-      return 1 - (1 - voice.sustain) * clamp3(decayProgress, 0, 1);
+      return 1 - (1 - voice.sustain) * clamp4(decayProgress, 0, 1);
     }
     return voice.sustain;
   }
@@ -2824,8 +2941,8 @@
     const maxValue = Math.max(...sourceValues);
     const span = maxValue - minValue;
     const samples = strideDownsample2(inDomain, SONIFICATION_MAX_SAMPLES).map((sample2) => ({
-      phase: clamp3((sample2.row.tau - start) / (end - start), 0, 1),
-      value: span > 1e-12 ? clamp3(2 * ((sample2.value - minValue) / span) - 1, -1, 1) : 0
+      phase: clamp4((sample2.row.tau - start) / (end - start), 0, 1),
+      value: span > 1e-12 ? clamp4(2 * ((sample2.value - minValue) / span) - 1, -1, 1) : 0
     })).sort((a, b) => a.phase - b.phase);
     if (!samples.length) return [];
     const first = samples[0];
@@ -2914,7 +3031,7 @@
     const input = el("modelSpeed");
     const output = el("modelSpeedValue");
     const sync = () => {
-      modelAnimationSpeed = clamp3(Number(input.value), MODEL_ANIMATION_MIN_SPEED, MODEL_ANIMATION_MAX_SPEED);
+      modelAnimationSpeed = clamp4(Number(input.value), MODEL_ANIMATION_MIN_SPEED, MODEL_ANIMATION_MAX_SPEED);
       input.value = String(modelAnimationSpeed);
       output.value = modelSpeedLabel(modelAnimationSpeed);
       output.textContent = output.value;
@@ -2929,7 +3046,7 @@
     const output = document.getElementById("gridLoopSpeedValue");
     if (!(input instanceof HTMLInputElement) || !(output instanceof HTMLOutputElement)) return;
     const sync = () => {
-      gridLoopSpeed = clamp3(Number(input.value), GRID_LOOP_MIN_SPEED, GRID_LOOP_MAX_SPEED);
+      gridLoopSpeed = clamp4(Number(input.value), GRID_LOOP_MIN_SPEED, GRID_LOOP_MAX_SPEED);
       input.value = String(gridLoopSpeed);
       output.value = modelSpeedLabel(gridLoopSpeed);
       output.textContent = output.value;
@@ -3190,7 +3307,7 @@
     if (!active || sliderValue === void 0 || !range2 || !current) return;
     const meta = sliderMeta(key);
     const span = Math.max(1e-12, meta.max - meta.min);
-    const position = clamp3((sliderValue - meta.min) / span * 100, 0, 100);
+    const position = clamp4((sliderValue - meta.min) / span * 100, 0, 100);
     const value = current.variedValues[key] ?? parameterValueFromSlider(key, sliderValue);
     controls.style.setProperty("--grid-loop-position", `${position.toFixed(4)}%`);
     controls.style.setProperty("--grid-loop-color", parameterColorAt(value, range2, 1));
@@ -3329,8 +3446,9 @@
     gridState.results = message.results;
     gridState.pathResults = message.pathResults;
     gridState.status = "complete";
-    const suffix = message.coarsened ? `, stride ${message.stride}` : "";
-    gridState.statusText = `Grid complete: ${message.validPhase}/${message.total} phase models${suffix}`;
+    const coarsenedSuffix = message.coarsened ? `, stride ${message.stride}` : "";
+    const excludedSuffix = message.excludedNonPhase ? `, ${message.excludedNonPhase} non-periodic excluded` : "";
+    gridState.statusText = `Grid complete: ${message.validPhase}/${message.total} phase models${coarsenedSuffix}${excludedSuffix}`;
     gridState.animationIndex = 0;
     gridState.animationDirection = 1;
     updateGridLoopControls();
@@ -3489,13 +3607,13 @@
     if (!range2) return colorWithAlpha("#FFD166", alpha);
     const span = range2.upperSliderValue - range2.lowerSliderValue || 1;
     const sliderValue = range2.key === "tEnd" ? Math.log10(value) : value;
-    const t = clamp3((sliderValue - range2.lowerSliderValue) / span, 0, 1);
+    const t = clamp4((sliderValue - range2.lowerSliderValue) / span, 0, 1);
     const a = { r: 96, g: 128, b: 208 };
     const b = { r: 255, g: 209, b: 102 };
     const r = Math.round(a.r + (b.r - a.r) * t);
     const g = Math.round(a.g + (b.g - a.g) * t);
     const blue = Math.round(a.b + (b.b - a.b) * t);
-    return alpha >= 1 ? `rgb(${r}, ${g}, ${blue})` : `rgba(${r}, ${g}, ${blue}, ${clamp3(alpha, 0, 1)})`;
+    return alpha >= 1 ? `rgb(${r}, ${g}, ${blue})` : `rgba(${r}, ${g}, ${blue}, ${clamp4(alpha, 0, 1)})`;
   }
   function gridResultColor(result, alpha = 1) {
     const loopKey = gridState.selectedLoopKey;
@@ -3568,10 +3686,10 @@
   }
   function phaseFromCanvasPoint(canvasId, point) {
     const render = plotRenderStates.get(canvasId);
-    if (!render || !latestPhaseRows.length || gridState.enabled) return null;
+    if (!render || !latestPhaseRows.length || gridState.enabled || latestDisplayWindow.mode !== "phase") return null;
     if (point.x < render.plot.left || point.x > render.plot.left + render.plot.width) return null;
     const clamped = clampPointToPlot(point, render.plot);
-    return clamp3(xFromPixel(render, clamped.x), 0, 2);
+    return clamp4(xFromPixel(render, clamped.x), 0, 2);
   }
   function scrubPhaseToPointer(canvas, canvasId, event) {
     const phase = phaseFromCanvasPoint(canvasId, canvasPoint(canvas, event));
@@ -3581,7 +3699,7 @@
     drawAnimatedPhaseViews();
   }
   function beginPhaseScrub(event, canvasId) {
-    if (event.button !== 0 || gridState.enabled || !latestPhaseRows.length) return;
+    if (event.button !== 0 || gridState.enabled || !latestPhaseRows.length || latestDisplayWindow.mode !== "phase") return;
     const canvas = event.currentTarget;
     const phase = phaseFromCanvasPoint(canvasId, canvasPoint(canvas, event));
     if (phase === null) return;
@@ -3618,12 +3736,12 @@
   function snapParameterValue(key, value) {
     const meta = sliderMeta(key);
     const rawSliderValue = key === "tEnd" ? Math.log10(value) : value;
-    const clampedSliderValue = clamp3(rawSliderValue, meta.min, meta.max);
+    const clampedSliderValue = clamp4(rawSliderValue, meta.min, meta.max);
     const snappedSliderValue = roundToNativeStep(
       meta.min + Math.round((clampedSliderValue - meta.min) / meta.step) * meta.step,
       meta.step
     );
-    return parameterValueFromSlider(key, clamp3(snappedSliderValue, meta.min, meta.max));
+    return parameterValueFromSlider(key, clamp4(snappedSliderValue, meta.min, meta.max));
   }
   function setReferencePlotParameter(key, value) {
     const snapped = snapParameterValue(key, value);
@@ -3671,8 +3789,8 @@
     if (!render) return false;
     const point = referenceCanvasPoint(canvas, event, render);
     const coordinate = referenceCoordinate(render, point);
-    const stripCoordinate = clamp3(coordinate.x, 0, 1);
-    const gamma = clamp3(coordinate.y, 0, 1);
+    const stripCoordinate = clamp4(coordinate.x, 0, 1);
+    const gamma = clamp4(coordinate.y, 0, 1);
     const zeta = Math.max(1e-6, state.zeta);
     const zetac = zeta * 10 ** (4 * stripCoordinate - 2);
     return commitReferencePlotParameters({
@@ -3794,7 +3912,7 @@
     const range2 = currentLoopRange();
     const path = gridPathResults();
     if (!loopKey || !range2 || !path.length) return;
-    const fraction = clamp3((point.x - region.left) / Math.max(1e-12, region.width), 0, 1);
+    const fraction = clamp4((point.x - region.left) / Math.max(1e-12, region.width), 0, 1);
     const targetSliderValue = range2.lowerSliderValue + fraction * (range2.upperSliderValue - range2.lowerSliderValue);
     let bestIndex = 0;
     let bestDistance = Infinity;
@@ -3838,13 +3956,13 @@
     const rect = canvas.getBoundingClientRect();
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
-  function clamp3(value, min, max) {
+  function clamp4(value, min, max) {
     return Math.min(max, Math.max(min, value));
   }
   function clampPointToPlot(point, plot) {
     return {
-      x: clamp3(point.x, plot.left, plot.left + plot.width),
-      y: clamp3(point.y, plot.top, plot.top + plot.height)
+      x: clamp4(point.x, plot.left, plot.left + plot.width),
+      y: clamp4(point.y, plot.top, plot.top + plot.height)
     };
   }
   function pointInPlot(point, plot) {
@@ -4427,7 +4545,7 @@
       const x = item.x(row);
       const y = item.y(row);
       if (!Number.isFinite(x) || !Number.isFinite(y) || x < xlim[0] || x > xlim[1]) return;
-      const column = clamp3(Math.floor((x - xlim[0]) / xSpan * columnCount), 0, columnCount - 1);
+      const column = clamp4(Math.floor((x - xlim[0]) / xSpan * columnCount), 0, columnCount - 1);
       const bin = bins[column];
       bin.min = Math.min(bin.min, y);
       bin.max = Math.max(bin.max, y);
@@ -4745,7 +4863,7 @@
     ctx.fillRect(left, top, width, height);
     ctx.strokeStyle = "rgba(238, 245, 255, 0.62)";
     ctx.strokeRect(left, top, width, height);
-    const fraction = clamp3((sliderValue - range2.lowerSliderValue) / Math.max(1e-12, range2.upperSliderValue - range2.lowerSliderValue), 0, 1);
+    const fraction = clamp4((sliderValue - range2.lowerSliderValue) / Math.max(1e-12, range2.upperSliderValue - range2.lowerSliderValue), 0, 1);
     const markerX = left + fraction * width;
     ctx.fillStyle = parameterColorAt(value, range2);
     ctx.strokeStyle = "#050814";
@@ -5049,8 +5167,8 @@
     ctx.restore();
   }
   function drawStabilityOverlays(ctx, plot, extent, current, overlays) {
-    const sx = (zetac) => plot.left + clamp3(zetac / extent, 0, 1) * plot.width;
-    const sy = (zeta) => plot.top + plot.height - clamp3(zeta / extent, 0, 1) * plot.height;
+    const sx = (zetac) => plot.left + clamp4(zetac / extent, 0, 1) * plot.width;
+    const sy = (zeta) => plot.top + plot.height - clamp4(zeta / extent, 0, 1) * plot.height;
     const path = gridPathResults();
     ctx.save();
     ctx.beginPath();
@@ -5115,6 +5233,7 @@
     canvas.dataset.stabilityMode = gridState.enabled ? "grid" : "single";
     canvas.dataset.stabilityGamma = fmtFixed(parameters.gammac, 3);
     canvas.dataset.stabilityExtent = fmtFixed(extent, 1);
+    canvas.dataset.stabilityLegend = "linear damping,pulsational growth,dynamic growth";
     canvas.dataset.editableParameters = "zetac,zeta";
     canvas.dataset.stellingwerfLabels = "zeta,zeta_c,gamma_c";
     canvas.dataset.axisLabels = "convective response zeta_c,thermal response zeta";
@@ -5146,9 +5265,9 @@
     );
     drawStabilityLinearizedLabel(ctx, plot.left, 16, parameters.gammac);
     drawReferenceLegend(ctx, plot.left + 150, 15, [
-      { label: "stable", color: stabilityKindColor("stable", 0.75) },
-      { label: "pulsational", color: stabilityKindColor("pulsational", 0.78) },
-      { label: "dynamic", color: stabilityKindColor("dynamic", 0.82) }
+      { label: "linear damping", color: stabilityKindColor("stable", 0.75) },
+      { label: "pulsational growth", color: stabilityKindColor("pulsational", 0.78) },
+      { label: "dynamic growth", color: stabilityKindColor("dynamic", 0.82) }
     ]);
     drawStabilityOverlays(ctx, plot, extent, parameters, overlays);
   }
@@ -5170,7 +5289,7 @@
     const value = (row.L / (row.R * row.R)) ** 0.25;
     return Number.isFinite(value) ? value : null;
   }
-  function stripTeffTrack(rows, phase, centerX) {
+  function stripTeffTrack(rows, phase, centerX, mode = "phase") {
     const values = rows.map(effectiveTemperatureProxy).filter((value) => value !== null);
     if (values.length < 2) return null;
     const logs = values.map((value) => Math.log10(value));
@@ -5178,13 +5297,13 @@
     const maxLog = Math.max(...logs);
     const logRange = maxLog - minLog;
     if (!Number.isFinite(logRange) || logRange < 1e-5) return null;
-    const span = clamp3(logRange * 5, 0.045, 0.22);
-    const left = clamp3(centerX - span / 2, 0.02, 0.98 - span);
+    const span = clamp4(logRange * 5, 0.045, 0.22);
+    const left = clamp4(centerX - span / 2, 0.02, 0.98 - span);
     const right = left + span;
-    const phaseRow = phaseRowAt(rows, phase);
+    const phaseRow = mode === "time" ? rowAtTime(rows, displayMarkerX(displayWindowForRows(rows), phase)) : rowAtDisplayPosition(foldedPhaseWindowForRows(rows), phase);
     const currentTeff = phaseRow ? effectiveTemperatureProxy(phaseRow) : null;
     const currentLog = currentTeff === null ? (minLog + maxLog) / 2 : Math.log10(currentTeff);
-    const current = left + clamp3((currentLog - minLog) / logRange, 0, 1) * span;
+    const current = left + clamp4((currentLog - minLog) / logRange, 0, 1) * span;
     return {
       left,
       right,
@@ -5195,7 +5314,8 @@
   }
   function drawStripTeffTrack(ctx, plot, sx, sy, parameters, rows, options) {
     const centerX = cepheidStripCoordinate(parameters);
-    const track = stripTeffTrack(rows, options.phase ?? currentAnimationPhase, centerX);
+    const mode = options.mode || "phase";
+    const track = stripTeffTrack(rows, options.phase ?? currentAnimationPhase, centerX, mode);
     if (!track) return false;
     const y = sy(parameters.gammac);
     ctx.save();
@@ -5222,12 +5342,12 @@
     }
     ctx.restore();
     if (options.label) {
-      const labelX = clamp3(sx(track.left), plot.left + 8, plot.left + plot.width - 100);
-      const labelY = clamp3(y - 14, plot.top + 14, plot.top + plot.height - 8);
+      const labelX = clamp4(sx(track.left), plot.left + 8, plot.left + plot.width - 100);
+      const labelY = clamp4(y - 14, plot.top + 14, plot.top + plot.height - 8);
       drawCanvasMathFragments(
         ctx,
         [
-          { text: "phase effective temperature ", color: PHASE_MARKER_COLOR, weight: 600 },
+          { text: `${mode === "time" ? "time-window" : "phase"} effective temperature `, color: PHASE_MARKER_COLOR, weight: 600 },
           { text: "T", subscript: "eff", color: PHASE_MARKER_COLOR, weight: 600 }
         ],
         labelX,
@@ -5251,8 +5371,8 @@
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
     const plot = { left: 64, top: 28, width: width - 90, height: height - 88 };
-    const sx = (x) => plot.left + clamp3(x, 0, 1) * plot.width;
-    const sy = (gamma) => plot.top + plot.height - clamp3(gamma, 0, 1) * plot.height;
+    const sx = (x) => plot.left + clamp4(x, 0, 1) * plot.width;
+    const sy = (gamma) => plot.top + plot.height - clamp4(gamma, 0, 1) * plot.height;
     referencePlotRenderStates.set("cepheidGuideCanvas", { plot, xlim: [0, 1], ylim: [0, 1], width, height });
     canvas.dataset.cepheidMode = gridState.enabled ? "grid" : "single";
     canvas.dataset.instabilityMode = gridState.enabled ? "grid" : "single";
@@ -5261,6 +5381,7 @@
     canvas.dataset.editableParameters = "zetac,gammac";
     canvas.dataset.stellingwerfLabels = "gamma_c,log10_zeta_c_over_zeta,Teff_proxy";
     canvas.dataset.axisLabels = "log10(zeta_c/zeta) convective/thermal response,convective flux fraction gamma_c";
+    canvas.dataset.instabilityLabels = "schematic,damped equilibrium,dynamic instability";
     ctx.fillStyle = "rgba(25, 43, 77, 0.5)";
     ctx.fillRect(plot.left, plot.top, plot.width, plot.height);
     ctx.fillStyle = "rgba(69, 137, 118, 0.38)";
@@ -5325,7 +5446,7 @@
     ctx.fillStyle = THEME.axisText;
     ctx.font = "700 13px Inter, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("STABLE", sx(0.48), sy(0.67));
+    ctx.fillText("DAMPED EQUIL.", sx(0.48), sy(0.67));
     ctx.fillText("DYNAMIC INST.", sx(0.17), sy(0.91));
     ctx.font = "12px Inter, sans-serif";
     ctx.fillText("red edge", sx(0.67), sy(0.22));
@@ -5336,7 +5457,7 @@
     ctx.stroke();
     const locus = Array.from({ length: 80 }, (_value, index) => {
       const x = index / 79;
-      const gamma = clamp3(0.02 + 0.92 * x ** 2.25, 0, 1);
+      const gamma = clamp4(0.02 + 0.92 * x ** 2.25, 0, 1);
       return { x: sx(x), y: sy(gamma) };
     });
     drawDashedCurve(ctx, locus);
@@ -5383,15 +5504,25 @@
     const current = currentGridResult();
     const parameters = current?.parameters || state;
     const currentRows = current?.phaseRows ?? latestPhaseRows;
+    const currentMode = current ? "phase" : latestDisplayWindow.mode;
     const hasTeffTrack = drawStripTeffTrack(ctx, plot, sx, sy, parameters, currentRows, {
       color: current ? gridResultColor(current, 0.86) : COLORS.L,
       alpha: current ? 1 : 0.86,
       marker: true,
-      label: true
+      label: true,
+      mode: currentMode
     });
     canvas.dataset.teffPhaseTrack = hasTeffTrack ? "available" : "unavailable";
-    if (hasTeffTrack) canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
-    else delete canvas.dataset.currentPhase;
+    if (hasTeffTrack && currentMode === "phase") {
+      canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
+      delete canvas.dataset.currentTime;
+    } else if (hasTeffTrack) {
+      canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
+      delete canvas.dataset.currentPhase;
+    } else {
+      delete canvas.dataset.currentPhase;
+      delete canvas.dataset.currentTime;
+    }
     drawReferenceMarker(
       ctx,
       sx(cepheidStripCoordinate(parameters)),
@@ -5482,7 +5613,7 @@
     ctx.restore();
   }
   function drawPhasePortraitCurrentMarkers(ctx, plot, xlim, ylim) {
-    const row = phaseRowAt(latestPhaseRows, currentAnimationPhase);
+    const row = rowAtCurrentDisplayPosition(latestPhaseRows);
     if (!row) return null;
     const sx = (x) => plot.left + (x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
     const sy = (y) => plot.top + plot.height - (y - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
@@ -5491,7 +5622,7 @@
     return row;
   }
   function drawPhasePortraitPhaseLabel(ctx, plot) {
-    const label = `phase = ${fmtFixed(currentAnimationPhase, 2)}`;
+    const label = currentDisplayCoordinateLabel();
     ctx.save();
     ctx.font = "12px Inter, sans-serif";
     const width = ctx.measureText(label).width;
@@ -5527,14 +5658,21 @@
     ctx.clearRect(0, 0, width, height);
     canvas.dataset.phasePortraitMode = gridState.enabled ? "grid" : "single";
     canvas.dataset.phasePortraitRows = String(latestPhaseRows.length);
-    canvas.dataset.stellingwerfLabels = "R,H,U_c,current_phase";
+    canvas.dataset.stellingwerfLabels = latestDisplayWindow.mode === "time" ? "R,H,U_c,current_time" : "R,H,U_c,current_phase";
     canvas.dataset.axisLabels = "radius R,thermal-pressure state H and convective velocity U_c";
     if (!latestPhaseRows.length) {
       delete canvas.dataset.currentPhase;
+      delete canvas.dataset.currentTime;
       drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
       return;
     }
-    canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
+    if (latestDisplayWindow.mode === "time") {
+      canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
+      delete canvas.dataset.currentPhase;
+    } else {
+      canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
+      delete canvas.dataset.currentTime;
+    }
     const rows = downsample(latestPhaseRows, 1400, ["R", "H", "Uc"]);
     const xlim = range(rows.map((row) => row.R), 0.08);
     const ylim = range([...rows.map((row) => row.H), ...rows.map((row) => row.Uc)], 0.1);
@@ -5676,7 +5814,68 @@
       anchor: phaseAnchor
     });
   }
-  function timeDomain(rows) {
+  function buildCurrentDisplayWindow(rows, phase, gridResult, phaseMessage) {
+    if (gridResult) {
+      return {
+        ...buildPhaseDisplayWindow({ ...phase, reason: "ok", rows: gridResult.phaseRows, period: gridResult.period }, phaseMessage),
+        reason: "phase"
+      };
+    }
+    if (gridState.enabled) return buildPhaseDisplayWindow(phase, phaseMessage);
+    if (isTimeWindowReason(latestResult.message)) {
+      return buildTimeDisplayWindow(rows, latestResult.message, timeWindowMessage(latestResult.message));
+    }
+    return buildPhaseDisplayWindow(phase, phaseMessage);
+  }
+  function timeWindowMessage(reason) {
+    switch (reason) {
+      case "equilibrium":
+        return "time window: stable equilibrium";
+      case "runaway":
+        return "time window: dynamic runaway";
+      case "runaway_trend":
+        return "time window: runaway trend";
+      default:
+        return "time window";
+    }
+  }
+  function syncAnimationPositionToDisplayWindow() {
+    const end = displayAnimationEnd(latestDisplayWindow);
+    if (end <= 0) {
+      currentAnimationPhase = 0;
+      modelAnimationStartTime = null;
+      return;
+    }
+    const clamped = clamp4(currentAnimationPhase, 0, end);
+    if (clamped !== currentAnimationPhase) modelAnimationStartTime = null;
+    currentAnimationPhase = clamped === end ? 0 : clamped;
+  }
+  function displayWindowForRows(rows) {
+    return { ...latestDisplayWindow, rows };
+  }
+  function foldedPhaseWindowForRows(rows) {
+    return { mode: "phase", reason: "phase", rows, xlim: [0, 2], period: null };
+  }
+  function rowAtCurrentDisplayPosition(rows = latestPhaseRows) {
+    return rowAtDisplayPosition(displayWindowForRows(rows), currentAnimationPhase);
+  }
+  function currentDisplayCoordinateLabel() {
+    if (latestDisplayWindow.mode === "time") {
+      return `time \u03C4 = ${fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 2)}`;
+    }
+    return `phase = ${fmtFixed(currentAnimationPhase, 2)}`;
+  }
+  function updatePhaseAnchorControlAvailability() {
+    const timeMode = latestDisplayWindow.mode === "time";
+    document.querySelectorAll(".phase-anchor-control").forEach((control) => {
+      control.hidden = timeMode;
+      control.style.display = timeMode ? "none" : "";
+      control.querySelectorAll("button").forEach((button) => {
+        button.disabled = timeMode;
+      });
+    });
+  }
+  function timeDomain2(rows) {
     if (!rows.length) return [0, 1];
     const first = rows[0].tau;
     const last = rows[rows.length - 1].tau;
@@ -5687,7 +5886,7 @@
   }
   function clearStalePlotView(plotId, rows) {
     const view = plotViews[plotId];
-    const domain = timeDomain(rows);
+    const domain = timeDomain2(rows);
     if (view.xlim && (view.xlim[1] < domain[0] || view.xlim[0] > domain[1])) view.xlim = void 0;
     if (view.xlim && !validRange(view.xlim)) view.xlim = void 0;
     if (view.ylim && !validRange(view.ylim)) view.ylim = void 0;
@@ -5707,14 +5906,14 @@
   }
   function normalizedInRange(value, valueRange) {
     const span = valueRange[1] - valueRange[0];
-    if (!Number.isFinite(value) || span <= 1e-12) return clamp3(value, 0, 1);
-    return clamp3((value - valueRange[0]) / span, 0, 1);
+    if (!Number.isFinite(value) || span <= 1e-12) return clamp4(value, 0, 1);
+    return clamp4((value - valueRange[0]) / span, 0, 1);
   }
   function scaledRgb(color, scale) {
     return {
-      r: clamp3(Math.round(color.r * scale), 0, 255),
-      g: clamp3(Math.round(color.g * scale), 0, 255),
-      b: clamp3(Math.round(color.b * scale), 0, 255)
+      r: clamp4(Math.round(color.r * scale), 0, 255),
+      g: clamp4(Math.round(color.g * scale), 0, 255),
+      b: clamp4(Math.round(color.b * scale), 0, 255)
     };
   }
   function gammaR() {
@@ -5728,18 +5927,29 @@
   }
   function phaseMarker() {
     if (gridState.enabled) return void 0;
-    return latestPhaseRows.length ? { x: currentAnimationPhase, color: PHASE_MARKER_COLOR } : void 0;
+    return latestPhaseRows.length ? { x: displayMarkerX(latestDisplayWindow, currentAnimationPhase), color: PHASE_MARKER_COLOR } : void 0;
   }
   function syncPhaseCanvasState() {
     PHASE_SCRUB_CANVAS_IDS.forEach((canvasId) => {
       const canvas = document.getElementById(canvasId);
       if (!(canvas instanceof HTMLCanvasElement)) return;
-      canvas.classList.toggle("phase-scrub-enabled", latestPhaseRows.length > 0 && !gridState.enabled);
-      if (latestPhaseRows.length) canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
-      else delete canvas.dataset.currentPhase;
+      const scrubEnabled = latestDisplayWindow.mode === "phase" && latestPhaseRows.length > 0 && !gridState.enabled;
+      canvas.classList.toggle("phase-scrub-enabled", scrubEnabled);
+      canvas.dataset.displayMode = latestDisplayWindow.mode;
+      if (latestPhaseRows.length && latestDisplayWindow.mode === "phase") {
+        canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
+        delete canvas.dataset.currentTime;
+      } else if (latestPhaseRows.length) {
+        canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
+        delete canvas.dataset.currentPhase;
+      } else {
+        delete canvas.dataset.currentPhase;
+        delete canvas.dataset.currentTime;
+      }
       if (activePhaseScrub?.canvasId === canvasId) canvas.dataset.phaseScrubbing = "true";
       else delete canvas.dataset.phaseScrubbing;
     });
+    updatePhaseAnchorControlAvailability();
   }
   function drawPhasePlots() {
     const marker = phaseMarker();
@@ -5747,7 +5957,7 @@
       xlabel: latestPhasePeriodLabel,
       ylabel: "luminosity L",
       ylabelColor: COLORS.L,
-      xlim: [0, 2],
+      xlim: latestDisplayWindow.xlim,
       ylim: latestPhaseSample.length || gridState.results.length ? void 0 : [0, 1],
       message: latestPhaseMessage,
       phaseMarker: marker,
@@ -5757,7 +5967,7 @@
       xlabel: latestPhasePeriodLabel,
       ylabel: "radial velocity V",
       ylabelColor: COLORS.V,
-      xlim: [0, 2],
+      xlim: latestDisplayWindow.xlim,
       ylim: latestPhaseSample.length || gridState.results.length ? void 0 : [0, 1],
       message: latestPhaseMessage,
       phaseMarker: marker,
@@ -5770,7 +5980,7 @@
         xlabel: latestPhasePeriodLabel,
         ylabel: "pressure",
         ylabelColor: COLORS.H,
-        xlim: [0, 2],
+        xlim: latestDisplayWindow.xlim,
         ylim: latestPhaseSample.length ? void 0 : [0, 1],
         message: latestPhaseMessage,
         phaseMarker: marker
@@ -5883,7 +6093,7 @@
       { value: row.L, color: COLORS.L },
       { value: weightedRadiativeLuminosity(row), color: COLORS.Lr, gammaSubscript: "r", luminositySubscript: "r" }
     ];
-    const arcWidths = arcs.map((arc) => clamp3(equilibriumThickness * Math.max(0, arc.value), 2, equilibriumThickness * 3));
+    const arcWidths = arcs.map((arc) => clamp4(equilibriumThickness * Math.max(0, arc.value), 2, equilibriumThickness * 3));
     const fixedLabelOffset = Math.max(18, equilibriumThickness * 0.75 + 10);
     const labelRadius = Math.min(
       radius + fixedLabelOffset,
@@ -5928,11 +6138,13 @@
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
     canvas.dataset.animationSpeed = modelSpeedLabel(modelAnimationSpeed);
-    const row = latestPhaseRows.length ? phaseRowAt(latestPhaseRows, currentAnimationPhase) : null;
+    const row = latestPhaseRows.length ? rowAtCurrentDisplayPosition(latestPhaseRows) : null;
     if (!row) {
       canvas.dataset.convectionActive = "false";
       canvas.dataset.luminosityArcLabels = "";
       canvas.dataset.geometryGuides = "";
+      delete canvas.dataset.currentPhase;
+      delete canvas.dataset.currentTime;
       drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
       return;
     }
@@ -5951,7 +6163,13 @@
     const convectionActive = !convectiveResponseDisabled();
     const shellAlpha = 0.5 + luminosityLevel * 0.4;
     canvas.dataset.convectionActive = String(convectionActive);
-    canvas.dataset.currentPhase = fmtFixed(row.tau, 3);
+    if (latestDisplayWindow.mode === "time") {
+      canvas.dataset.currentTime = fmtFixed(row.tau, 3);
+      delete canvas.dataset.currentPhase;
+    } else {
+      canvas.dataset.currentPhase = fmtFixed(row.tau, 3);
+      delete canvas.dataset.currentTime;
+    }
     canvas.dataset.luminosityArcLabels = convectionActive ? "gamma_c L_c,L,gamma_r L_r" : "";
     canvas.dataset.geometryGuides = "R=1,eta,minR,maxR";
     ctx.save();
@@ -5997,11 +6215,11 @@
           modelAnimationStartTime = null;
         } else {
           if (modelAnimationStartTime === null) {
-            modelAnimationStartTime = timestamp - currentAnimationPhase / 2 * modelAnimationDurationMs();
+            modelAnimationStartTime = timestamp - currentAnimationPhase / displayAnimationEnd(latestDisplayWindow) * modelAnimationDurationMs();
           }
           const duration = modelAnimationDurationMs();
           const elapsed = (timestamp - modelAnimationStartTime) % duration;
-          currentAnimationPhase = elapsed / duration * 2;
+          currentAnimationPhase = elapsed / duration * displayAnimationEnd(latestDisplayWindow);
         }
         drawAnimatedPhaseViews();
       } else {
@@ -6022,6 +6240,8 @@
     const final = rows[rows.length - 1];
     const phase = phaseForRows(rows);
     const gridResult = gridState.enabled ? currentGridResult() : null;
+    const phaseMessage = gridState.enabled && activeGridRanges().length && !gridState.results.length ? gridState.statusText : phaseUnavailableLabel(phase);
+    const displayWindow = buildCurrentDisplayWindow(rows, phase, gridResult, phaseMessage);
     const stabilityParameters = stabilityDisplayParameters();
     const s72Stability = analyticStabilityConditions(stabilityParameters);
     updateGridLoopSliderMarkers();
@@ -6041,8 +6261,8 @@
       { label: "accepted", value: latestResult.stats.acceptedSteps },
       { label: "rejected", value: latestResult.stats.rejectedSteps },
       { label: "max err", value: fmt(latestResult.stats.maxNormalizedError, 3) },
-      { label: "period", value: phase.period ? fmt(phase.period, 3) : "n/a" },
-      { label: "phase", value: phase.reason === "ok" ? "available" : "unavailable" },
+      { label: "period", value: displayWindow.period ? fmt(displayWindow.period, 3) : "n/a" },
+      { label: "phase", value: displayWindow.mode === "time" ? "time window" : phase.reason === "ok" ? "available" : "unavailable" },
       {
         label: "dyn",
         value: s72DynamicMetric(s72Stability),
@@ -6075,15 +6295,17 @@
     }).join("");
     stageMathHtml(metricsNode, metricsHtml);
     queueMathTypeset([metricsNode]);
-    const phaseMessage = gridState.enabled && activeGridRanges().length && !gridState.results.length ? gridState.statusText : phaseUnavailableLabel(phase);
-    const phasePeriod = gridResult?.period ?? phase.period;
-    latestPhaseRows = gridResult?.phaseRows ?? phase.rows;
+    latestDisplayWindow = displayWindow;
+    syncAnimationPositionToDisplayWindow();
+    const phasePeriod = displayWindow.period;
+    latestPhaseRows = [...displayWindow.rows];
     latestPhaseParameters = gridResult?.parameters ?? state;
     latestPhaseSample = latestPhaseRows.length ? downsample(latestPhaseRows, 1800, ["L", "V", "H"]) : [];
-    latestPhaseMessage = phaseMessage;
-    latestPhasePeriodLabel = `phase (period = ${phasePeriod ? fmt(phasePeriod, 3) : "n/a"} \u03C4)`;
+    latestPhaseMessage = displayWindow.message;
+    latestPhasePeriodLabel = displayWindow.mode === "time" ? "time \u03C4" : `phase (period = ${phasePeriod ? fmt(phasePeriod, 3) : "n/a"} \u03C4)`;
     latestPhaseLuminosityRange = rawRange(latestPhaseRows.map((row) => row.L));
-    updateSonificationCurve(latestPhaseRows, gridResult ? latestPhaseRows : rows, latestPhaseParameters);
+    const sonificationFallbackRows = displayWindow.mode === "time" || gridResult ? latestPhaseRows : rows;
+    updateSonificationCurve(displayWindow.mode === "phase" ? latestPhaseRows : [], sonificationFallbackRows, latestPhaseParameters);
     drawModelVisualization();
     drawPhasePlots();
     const timeXlim = integrationTimeRange();

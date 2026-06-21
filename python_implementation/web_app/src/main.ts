@@ -28,11 +28,21 @@ import {
 } from "./grid";
 import { computeGridWithMessages } from "./gridCompute";
 import { buildTwoCyclePhase, type PhaseAnchor, type PhaseResult } from "./phase";
+import {
+  buildPhaseDisplayWindow,
+  buildTimeDisplayWindow,
+  displayAnimationEnd,
+  displayMarkerX,
+  isTimeWindowReason,
+  rowAtDisplayPosition,
+  rowAtTime,
+  type DisplayWindow,
+  type DisplayWindowMode
+} from "./displayWindow";
 import { SOLVER_NAMES, type SolverName } from "./solvers";
 import {
   blackbodyRgbForTemperature,
   inferEffectiveTemperature,
-  phaseRowAt,
   rgbCss,
   shellGeometryFor,
   shellGeometryFromModel,
@@ -134,6 +144,13 @@ let modelAnimationSpeed = 1;
 let gridLoopSpeed = 1;
 let modelAnimationFrame = 0;
 let modelAnimationStartTime: number | null = null;
+let latestDisplayWindow: DisplayWindow = {
+  mode: "phase",
+  reason: "phase_unavailable",
+  rows: [],
+  xlim: [0, 2],
+  period: null
+};
 let latestPhaseRows: Row[] = [];
 let latestPhaseSample: Row[] = [];
 let latestPhaseMessage: string | undefined;
@@ -2251,8 +2268,9 @@ function handleGridWorkerMessage(message: GridWorkerMessage): void {
   gridState.results = message.results;
   gridState.pathResults = message.pathResults;
   gridState.status = "complete";
-  const suffix = message.coarsened ? `, stride ${message.stride}` : "";
-  gridState.statusText = `Grid complete: ${message.validPhase}/${message.total} phase models${suffix}`;
+  const coarsenedSuffix = message.coarsened ? `, stride ${message.stride}` : "";
+  const excludedSuffix = message.excludedNonPhase ? `, ${message.excludedNonPhase} non-periodic excluded` : "";
+  gridState.statusText = `Grid complete: ${message.validPhase}/${message.total} phase models${coarsenedSuffix}${excludedSuffix}`;
   gridState.animationIndex = 0;
   gridState.animationDirection = 1;
   updateGridLoopControls();
@@ -2516,7 +2534,7 @@ function setupReferencePlotInteractions(): void {
 
 function phaseFromCanvasPoint(canvasId: string, point: { x: number; y: number }): number | null {
   const render = plotRenderStates.get(canvasId);
-  if (!render || !latestPhaseRows.length || gridState.enabled) return null;
+  if (!render || !latestPhaseRows.length || gridState.enabled || latestDisplayWindow.mode !== "phase") return null;
   if (point.x < render.plot.left || point.x > render.plot.left + render.plot.width) return null;
   const clamped = clampPointToPlot(point, render.plot);
   return clamp(xFromPixel(render, clamped.x), 0, 2);
@@ -2531,7 +2549,7 @@ function scrubPhaseToPointer(canvas: HTMLCanvasElement, canvasId: string, event:
 }
 
 function beginPhaseScrub(event: PointerEvent, canvasId: string): void {
-  if (event.button !== 0 || gridState.enabled || !latestPhaseRows.length) return;
+  if (event.button !== 0 || gridState.enabled || !latestPhaseRows.length || latestDisplayWindow.mode !== "phase") return;
   const canvas = event.currentTarget as HTMLCanvasElement;
   const phase = phaseFromCanvasPoint(canvasId, canvasPoint(canvas, event));
   if (phase === null) return;
@@ -4328,6 +4346,7 @@ function drawStabilityMap(): void {
   canvas.dataset.stabilityMode = gridState.enabled ? "grid" : "single";
   canvas.dataset.stabilityGamma = fmtFixed(parameters.gammac, 3);
   canvas.dataset.stabilityExtent = fmtFixed(extent, 1);
+  canvas.dataset.stabilityLegend = "linear damping,pulsational growth,dynamic growth";
   canvas.dataset.editableParameters = "zetac,zeta";
   canvas.dataset.stellingwerfLabels = "zeta,zeta_c,gamma_c";
   canvas.dataset.axisLabels = "convective response zeta_c,thermal response zeta";
@@ -4361,9 +4380,9 @@ function drawStabilityMap(): void {
   );
   drawStabilityLinearizedLabel(ctx, plot.left, 16, parameters.gammac);
   drawReferenceLegend(ctx, plot.left + 150, 15, [
-    { label: "stable", color: stabilityKindColor("stable", 0.75) },
-    { label: "pulsational", color: stabilityKindColor("pulsational", 0.78) },
-    { label: "dynamic", color: stabilityKindColor("dynamic", 0.82) }
+    { label: "linear damping", color: stabilityKindColor("stable", 0.75) },
+    { label: "pulsational growth", color: stabilityKindColor("pulsational", 0.78) },
+    { label: "dynamic growth", color: stabilityKindColor("dynamic", 0.82) }
   ]);
   drawStabilityOverlays(ctx, plot, extent, parameters, overlays);
 }
@@ -4394,7 +4413,8 @@ function effectiveTemperatureProxy(row: Row): number | null {
 function stripTeffTrack(
   rows: readonly Row[],
   phase: number,
-  centerX: number
+  centerX: number,
+  mode: DisplayWindowMode = "phase"
 ): { left: number; right: number; current: number; logRange: number; valueRange: NumericRange } | null {
   const values = rows
     .map(effectiveTemperatureProxy)
@@ -4408,7 +4428,9 @@ function stripTeffTrack(
   const span = clamp(logRange * 5, 0.045, 0.22);
   const left = clamp(centerX - span / 2, 0.02, 0.98 - span);
   const right = left + span;
-  const phaseRow = phaseRowAt(rows, phase);
+  const phaseRow = mode === "time"
+    ? rowAtTime(rows, displayMarkerX(displayWindowForRows(rows), phase))
+    : rowAtDisplayPosition(foldedPhaseWindowForRows(rows), phase);
   const currentTeff = phaseRow ? effectiveTemperatureProxy(phaseRow) : null;
   const currentLog = currentTeff === null ? (minLog + maxLog) / 2 : Math.log10(currentTeff);
   const current = left + clamp((currentLog - minLog) / logRange, 0, 1) * span;
@@ -4428,10 +4450,11 @@ function drawStripTeffTrack(
   sy: (gamma: number) => number,
   parameters: Pick<ModelParameters, "zeta" | "zetac" | "gammac">,
   rows: readonly Row[],
-  options: { color: string; alpha: number; marker: boolean; label: boolean; phase?: number }
+  options: { color: string; alpha: number; marker: boolean; label: boolean; phase?: number; mode?: DisplayWindowMode }
 ): boolean {
   const centerX = cepheidStripCoordinate(parameters);
-  const track = stripTeffTrack(rows, options.phase ?? currentAnimationPhase, centerX);
+  const mode = options.mode || "phase";
+  const track = stripTeffTrack(rows, options.phase ?? currentAnimationPhase, centerX, mode);
   if (!track) return false;
   const y = sy(parameters.gammac);
   ctx.save();
@@ -4464,7 +4487,7 @@ function drawStripTeffTrack(
     drawCanvasMathFragments(
       ctx,
       [
-        { text: "phase effective temperature ", color: PHASE_MARKER_COLOR, weight: 600 },
+        { text: `${mode === "time" ? "time-window" : "phase"} effective temperature `, color: PHASE_MARKER_COLOR, weight: 600 },
         { text: "T", subscript: "eff", color: PHASE_MARKER_COLOR, weight: 600 }
       ],
       labelX,
@@ -4500,6 +4523,7 @@ function drawCepheidGuide(): void {
   canvas.dataset.editableParameters = "zetac,gammac";
   canvas.dataset.stellingwerfLabels = "gamma_c,log10_zeta_c_over_zeta,Teff_proxy";
   canvas.dataset.axisLabels = "log10(zeta_c/zeta) convective/thermal response,convective flux fraction gamma_c";
+  canvas.dataset.instabilityLabels = "schematic,damped equilibrium,dynamic instability";
 
   ctx.fillStyle = "rgba(25, 43, 77, 0.5)";
   ctx.fillRect(plot.left, plot.top, plot.width, plot.height);
@@ -4567,7 +4591,7 @@ function drawCepheidGuide(): void {
   ctx.fillStyle = THEME.axisText;
   ctx.font = "700 13px Inter, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("STABLE", sx(0.48), sy(0.67));
+  ctx.fillText("DAMPED EQUIL.", sx(0.48), sy(0.67));
   ctx.fillText("DYNAMIC INST.", sx(0.17), sy(0.91));
   ctx.font = "12px Inter, sans-serif";
   ctx.fillText("red edge", sx(0.67), sy(0.22));
@@ -4627,15 +4651,25 @@ function drawCepheidGuide(): void {
   const current = currentGridResult();
   const parameters = current?.parameters || state;
   const currentRows = current?.phaseRows ?? latestPhaseRows;
+  const currentMode: DisplayWindowMode = current ? "phase" : latestDisplayWindow.mode;
   const hasTeffTrack = drawStripTeffTrack(ctx, plot, sx, sy, parameters, currentRows, {
     color: current ? gridResultColor(current, 0.86) : COLORS.L,
     alpha: current ? 1 : 0.86,
     marker: true,
-    label: true
+    label: true,
+    mode: currentMode
   });
   canvas.dataset.teffPhaseTrack = hasTeffTrack ? "available" : "unavailable";
-  if (hasTeffTrack) canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
-  else delete canvas.dataset.currentPhase;
+  if (hasTeffTrack && currentMode === "phase") {
+    canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
+    delete canvas.dataset.currentTime;
+  } else if (hasTeffTrack) {
+    canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
+    delete canvas.dataset.currentPhase;
+  } else {
+    delete canvas.dataset.currentPhase;
+    delete canvas.dataset.currentTime;
+  }
   drawReferenceMarker(
     ctx,
     sx(cepheidStripCoordinate(parameters)),
@@ -4754,7 +4788,7 @@ function drawPhasePortraitCurrentMarkers(
   xlim: NumericRange,
   ylim: NumericRange
 ): Row | null {
-  const row = phaseRowAt(latestPhaseRows, currentAnimationPhase);
+  const row = rowAtCurrentDisplayPosition(latestPhaseRows);
   if (!row) return null;
   const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
   const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
@@ -4764,7 +4798,7 @@ function drawPhasePortraitCurrentMarkers(
 }
 
 function drawPhasePortraitPhaseLabel(ctx: CanvasRenderingContext2D, plot: PlotBox): void {
-  const label = `phase = ${fmtFixed(currentAnimationPhase, 2)}`;
+  const label = currentDisplayCoordinateLabel();
   ctx.save();
   ctx.font = "12px Inter, sans-serif";
   const width = ctx.measureText(label).width;
@@ -4802,14 +4836,21 @@ function drawPhasePortraitPanel(): void {
 
   canvas.dataset.phasePortraitMode = gridState.enabled ? "grid" : "single";
   canvas.dataset.phasePortraitRows = String(latestPhaseRows.length);
-  canvas.dataset.stellingwerfLabels = "R,H,U_c,current_phase";
+  canvas.dataset.stellingwerfLabels = latestDisplayWindow.mode === "time" ? "R,H,U_c,current_time" : "R,H,U_c,current_phase";
   canvas.dataset.axisLabels = "radius R,thermal-pressure state H and convective velocity U_c";
   if (!latestPhaseRows.length) {
     delete canvas.dataset.currentPhase;
+    delete canvas.dataset.currentTime;
     drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
     return;
   }
-  canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
+  if (latestDisplayWindow.mode === "time") {
+    canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
+    delete canvas.dataset.currentPhase;
+  } else {
+    canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
+    delete canvas.dataset.currentTime;
+  }
 
   const rows = downsample(latestPhaseRows, 1400, ["R", "H", "Uc"]);
   const xlim = range(rows.map((row) => row.R), 0.08);
@@ -4969,6 +5010,75 @@ function phaseForRows(rows: Row[]): PhaseResult {
   });
 }
 
+function buildCurrentDisplayWindow(rows: Row[], phase: PhaseResult, gridResult: GridModelResult | null, phaseMessage?: string): DisplayWindow {
+  if (gridResult) {
+    return {
+      ...buildPhaseDisplayWindow({ ...phase, reason: "ok", rows: gridResult.phaseRows, period: gridResult.period }, phaseMessage),
+      reason: "phase"
+    };
+  }
+  if (gridState.enabled) return buildPhaseDisplayWindow(phase, phaseMessage);
+  if (isTimeWindowReason(latestResult.message)) {
+    return buildTimeDisplayWindow(rows, latestResult.message, timeWindowMessage(latestResult.message));
+  }
+  return buildPhaseDisplayWindow(phase, phaseMessage);
+}
+
+function timeWindowMessage(reason: string): string {
+  switch (reason) {
+    case "equilibrium":
+      return "time window: stable equilibrium";
+    case "runaway":
+      return "time window: dynamic runaway";
+    case "runaway_trend":
+      return "time window: runaway trend";
+    default:
+      return "time window";
+  }
+}
+
+function syncAnimationPositionToDisplayWindow(): void {
+  const end = displayAnimationEnd(latestDisplayWindow);
+  if (end <= 0) {
+    currentAnimationPhase = 0;
+    modelAnimationStartTime = null;
+    return;
+  }
+  const clamped = clamp(currentAnimationPhase, 0, end);
+  if (clamped !== currentAnimationPhase) modelAnimationStartTime = null;
+  currentAnimationPhase = clamped === end ? 0 : clamped;
+}
+
+function displayWindowForRows(rows: readonly Row[]): DisplayWindow {
+  return { ...latestDisplayWindow, rows };
+}
+
+function foldedPhaseWindowForRows(rows: readonly Row[]): DisplayWindow {
+  return { mode: "phase", reason: "phase", rows, xlim: [0, 2], period: null };
+}
+
+function rowAtCurrentDisplayPosition(rows: readonly Row[] = latestPhaseRows): Row | null {
+  return rowAtDisplayPosition(displayWindowForRows(rows), currentAnimationPhase);
+}
+
+function currentDisplayCoordinateLabel(): string {
+  if (latestDisplayWindow.mode === "time") {
+    return `time τ = ${fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 2)}`;
+  }
+  return `phase = ${fmtFixed(currentAnimationPhase, 2)}`;
+}
+
+function updatePhaseAnchorControlAvailability(): void {
+  const timeMode = latestDisplayWindow.mode === "time";
+  document.querySelectorAll<HTMLElement>(".phase-anchor-control").forEach((control) => {
+    control.hidden = timeMode;
+    control.style.display = timeMode ? "none" : "";
+    control.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
+      button.disabled = timeMode;
+    });
+  });
+}
+
 function timeDomain(rows: readonly Row[]): NumericRange {
   if (!rows.length) return [0, 1];
   const first = rows[0].tau;
@@ -5031,19 +5141,30 @@ function weightedConvectiveLuminosity(row: Row): number {
 
 function phaseMarker(): { x: number; color: string } | undefined {
   if (gridState.enabled) return undefined;
-  return latestPhaseRows.length ? { x: currentAnimationPhase, color: PHASE_MARKER_COLOR } : undefined;
+  return latestPhaseRows.length ? { x: displayMarkerX(latestDisplayWindow, currentAnimationPhase), color: PHASE_MARKER_COLOR } : undefined;
 }
 
 function syncPhaseCanvasState(): void {
   PHASE_SCRUB_CANVAS_IDS.forEach((canvasId) => {
     const canvas = document.getElementById(canvasId);
     if (!(canvas instanceof HTMLCanvasElement)) return;
-    canvas.classList.toggle("phase-scrub-enabled", latestPhaseRows.length > 0 && !gridState.enabled);
-    if (latestPhaseRows.length) canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
-    else delete canvas.dataset.currentPhase;
+    const scrubEnabled = latestDisplayWindow.mode === "phase" && latestPhaseRows.length > 0 && !gridState.enabled;
+    canvas.classList.toggle("phase-scrub-enabled", scrubEnabled);
+    canvas.dataset.displayMode = latestDisplayWindow.mode;
+    if (latestPhaseRows.length && latestDisplayWindow.mode === "phase") {
+      canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
+      delete canvas.dataset.currentTime;
+    } else if (latestPhaseRows.length) {
+      canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
+      delete canvas.dataset.currentPhase;
+    } else {
+      delete canvas.dataset.currentPhase;
+      delete canvas.dataset.currentTime;
+    }
     if (activePhaseScrub?.canvasId === canvasId) canvas.dataset.phaseScrubbing = "true";
     else delete canvas.dataset.phaseScrubbing;
   });
+  updatePhaseAnchorControlAvailability();
 }
 
 function drawPhasePlots(): void {
@@ -5052,7 +5173,7 @@ function drawPhasePlots(): void {
     xlabel: latestPhasePeriodLabel,
     ylabel: "luminosity L",
     ylabelColor: COLORS.L,
-    xlim: [0, 2],
+    xlim: latestDisplayWindow.xlim,
     ylim: latestPhaseSample.length || gridState.results.length ? undefined : [0, 1],
     message: latestPhaseMessage,
     phaseMarker: marker,
@@ -5063,7 +5184,7 @@ function drawPhasePlots(): void {
     xlabel: latestPhasePeriodLabel,
     ylabel: "radial velocity V",
     ylabelColor: COLORS.V,
-    xlim: [0, 2],
+    xlim: latestDisplayWindow.xlim,
     ylim: latestPhaseSample.length || gridState.results.length ? undefined : [0, 1],
     message: latestPhaseMessage,
     phaseMarker: marker,
@@ -5077,7 +5198,7 @@ function drawPhasePlots(): void {
       xlabel: latestPhasePeriodLabel,
       ylabel: "pressure",
       ylabelColor: COLORS.H,
-      xlim: [0, 2],
+      xlim: latestDisplayWindow.xlim,
       ylim: latestPhaseSample.length ? undefined : [0, 1],
       message: latestPhaseMessage,
       phaseMarker: marker
@@ -5308,11 +5429,13 @@ function drawModelVisualization(): void {
   ctx.clearRect(0, 0, width, height);
   canvas.dataset.animationSpeed = modelSpeedLabel(modelAnimationSpeed);
 
-  const row = latestPhaseRows.length ? phaseRowAt(latestPhaseRows, currentAnimationPhase) : null;
+  const row = latestPhaseRows.length ? rowAtCurrentDisplayPosition(latestPhaseRows) : null;
   if (!row) {
     canvas.dataset.convectionActive = "false";
     canvas.dataset.luminosityArcLabels = "";
     canvas.dataset.geometryGuides = "";
+    delete canvas.dataset.currentPhase;
+    delete canvas.dataset.currentTime;
     drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
     return;
   }
@@ -5333,7 +5456,13 @@ function drawModelVisualization(): void {
   const shellAlpha = 0.5 + luminosityLevel * 0.4;
 
   canvas.dataset.convectionActive = String(convectionActive);
-  canvas.dataset.currentPhase = fmtFixed(row.tau, 3);
+  if (latestDisplayWindow.mode === "time") {
+    canvas.dataset.currentTime = fmtFixed(row.tau, 3);
+    delete canvas.dataset.currentPhase;
+  } else {
+    canvas.dataset.currentPhase = fmtFixed(row.tau, 3);
+    delete canvas.dataset.currentTime;
+  }
   canvas.dataset.luminosityArcLabels = convectionActive ? "gamma_c L_c,L,gamma_r L_r" : "";
   canvas.dataset.geometryGuides = "R=1,eta,minR,maxR";
 
@@ -5385,11 +5514,11 @@ function startModelAnimationLoop(): void {
         modelAnimationStartTime = null;
       } else {
         if (modelAnimationStartTime === null) {
-          modelAnimationStartTime = timestamp - (currentAnimationPhase / 2) * modelAnimationDurationMs();
+          modelAnimationStartTime = timestamp - (currentAnimationPhase / displayAnimationEnd(latestDisplayWindow)) * modelAnimationDurationMs();
         }
         const duration = modelAnimationDurationMs();
         const elapsed = (timestamp - modelAnimationStartTime) % duration;
-        currentAnimationPhase = (elapsed / duration) * 2;
+        currentAnimationPhase = (elapsed / duration) * displayAnimationEnd(latestDisplayWindow);
       }
       drawAnimatedPhaseViews();
     } else {
@@ -5413,6 +5542,10 @@ function drawAll(): void {
   const final = rows[rows.length - 1];
   const phase = phaseForRows(rows);
   const gridResult = gridState.enabled ? currentGridResult() : null;
+  const phaseMessage = gridState.enabled && activeGridRanges().length && !gridState.results.length
+    ? gridState.statusText
+    : phaseUnavailableLabel(phase);
+  const displayWindow = buildCurrentDisplayWindow(rows, phase, gridResult, phaseMessage);
   const stabilityParameters = stabilityDisplayParameters();
   const s72Stability = analyticStabilityConditions(stabilityParameters);
   updateGridLoopSliderMarkers();
@@ -5432,8 +5565,8 @@ function drawAll(): void {
     { label: "accepted", value: latestResult.stats.acceptedSteps },
     { label: "rejected", value: latestResult.stats.rejectedSteps },
     { label: "max err", value: fmt(latestResult.stats.maxNormalizedError, 3) },
-    { label: "period", value: phase.period ? fmt(phase.period, 3) : "n/a" },
-    { label: "phase", value: phase.reason === "ok" ? "available" : "unavailable" },
+    { label: "period", value: displayWindow.period ? fmt(displayWindow.period, 3) : "n/a" },
+    { label: "phase", value: displayWindow.mode === "time" ? "time window" : phase.reason === "ok" ? "available" : "unavailable" },
     {
       label: "dyn",
       value: s72DynamicMetric(s72Stability),
@@ -5471,17 +5604,17 @@ function drawAll(): void {
   stageMathHtml(metricsNode, metricsHtml);
   queueMathTypeset([metricsNode]);
 
-  const phaseMessage = gridState.enabled && activeGridRanges().length && !gridState.results.length
-    ? gridState.statusText
-    : phaseUnavailableLabel(phase);
-  const phasePeriod = gridResult?.period ?? phase.period;
-  latestPhaseRows = gridResult?.phaseRows ?? phase.rows;
+  latestDisplayWindow = displayWindow;
+  syncAnimationPositionToDisplayWindow();
+  const phasePeriod = displayWindow.period;
+  latestPhaseRows = [...displayWindow.rows];
   latestPhaseParameters = gridResult?.parameters ?? state;
   latestPhaseSample = latestPhaseRows.length ? downsample(latestPhaseRows, 1800, ["L", "V", "H"]) : [];
-  latestPhaseMessage = phaseMessage;
-  latestPhasePeriodLabel = `phase (period = ${phasePeriod ? fmt(phasePeriod, 3) : "n/a"} τ)`;
+  latestPhaseMessage = displayWindow.message;
+  latestPhasePeriodLabel = displayWindow.mode === "time" ? "time τ" : `phase (period = ${phasePeriod ? fmt(phasePeriod, 3) : "n/a"} τ)`;
   latestPhaseLuminosityRange = rawRange(latestPhaseRows.map((row) => row.L));
-  updateSonificationCurve(latestPhaseRows, gridResult ? latestPhaseRows : rows, latestPhaseParameters);
+  const sonificationFallbackRows = displayWindow.mode === "time" || gridResult ? latestPhaseRows : rows;
+  updateSonificationCurve(displayWindow.mode === "phase" ? latestPhaseRows : [], sonificationFallbackRows, latestPhaseParameters);
   drawModelVisualization();
   drawPhasePlots();
 

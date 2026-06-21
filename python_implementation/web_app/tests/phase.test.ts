@@ -155,7 +155,7 @@ describe("phase folding", () => {
   });
 
   it("uses the full cycle when alternating shallow and deep minima appear", () => {
-    const p = { ...PRESETS[DEFAULT_PRESET_NAME], zeta: 0.4 };
+    const p = { ...PRESETS[DEFAULT_PRESET_NAME], zeta: 0.4, tEnd: 100, runUntilStable: false };
     const rows = solveModel(p).rows;
     const phase = buildTwoCyclePhase(rows, {
       warmupTau: p.phaseWarmupTau,

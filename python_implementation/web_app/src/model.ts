@@ -135,7 +135,7 @@ export const CONTROL_GROUPS: Record<"physical" | "initial" | "integration", Cont
     ["uc0", `\\(${TEX.Uc}_{0}\\)`, "initial convective velocity", 0, 1.8, 0.01, 1, COLORS.Uc]
   ],
   integration: [
-    ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "max time", 0, 3, 0.01, 100, COLORS.tEnd],
+    ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "max time", 0, 3, 0.01, 300, COLORS.tEnd],
     ["step", `\\(\\Delta ${TEX.tau}_0\\)`, "initial step", 0.0005, 0.02, 0.0005, 0.001, COLORS.step],
     ["maxStep", `\\(\\Delta ${TEX.tau}_{\\max}\\)`, "max adaptive step", 0.005, 0.12, 0.005, 0.03, COLORS.maxStep],
     ["logRtol", "\\(\\ozNeutral{\\log_{10} r_{tol}}\\)", "relative tol", -12, -8, 0.25, -11, COLORS.rtol],
@@ -227,7 +227,7 @@ export const PRESETS: Record<string, ModelParameters> = {
   "Thick convective shell": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 0.001, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
   "RR Lyrae fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.2 },
   "RR Lyrae low-amplitude fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.1 },
-  "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, zetac: 1, gammac: 0.5, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 100 },
+  "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, zetac: 1, gammac: 0.5, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 300, runUntilStable: true },
   "RR Lyrae first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.05 },
   "RR Lyrae first overtone, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 15, sourceExp: 2, cq: 7, r0: 1.05, tEnd: 80 },
   "RR Lyrae high-amplitude first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.1 },

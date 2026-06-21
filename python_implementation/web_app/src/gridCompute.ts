@@ -12,6 +12,7 @@ import {
 } from "./grid";
 import { type ControlParameterKey, type ModelParameters, type Row, solveModel } from "./model";
 import { buildTwoCyclePhase } from "./phase";
+import { isTimeWindowReason } from "./displayWindow";
 
 interface GridRunStats {
   results: GridModelResult[];
@@ -19,6 +20,7 @@ interface GridRunStats {
   attempted: number;
   validPhase: number;
   validFourier: number;
+  excludedNonPhase: number;
   phaseUnavailable: number;
   failed: number;
   elapsedMs: number;
@@ -96,6 +98,7 @@ async function runGridPass(
     attempted: 0,
     validPhase: 0,
     validFourier: 0,
+    excludedNonPhase: 0,
     phaseUnavailable: 0,
     failed: 0,
     elapsedMs: 0,
@@ -157,6 +160,10 @@ function addGridModel(
 
   try {
     const solved = solveModel(parameters);
+    if (isTimeWindowReason(solved.message) || isTimeWindowReason(solved.status)) {
+      stats.excludedNonPhase += 1;
+      return;
+    }
     const phase = buildTwoCyclePhase(solved.rows, request.phase);
     if (phase.reason !== "ok" || !phase.period || phase.rows.length < 8) {
       stats.phaseUnavailable += 1;
@@ -232,6 +239,7 @@ function postComplete(
     attempted: stats.attempted,
     validPhase: stats.validPhase,
     validFourier: stats.validFourier,
+    excludedNonPhase: stats.excludedNonPhase,
     phaseUnavailable: stats.phaseUnavailable,
     failed: stats.failed,
     elapsedMs: stats.elapsedMs,

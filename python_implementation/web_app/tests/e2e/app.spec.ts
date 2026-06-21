@@ -173,6 +173,14 @@ async function audioEvents(page: Page): Promise<string[]> {
   return page.evaluate(() => (window as typeof window & { __audioEvents: string[] }).__audioEvents || []);
 }
 
+async function setSliderValue(page: Page, name: string, value: string): Promise<void> {
+  await page.getByRole("slider", { name }).evaluate((input, nextValue) => {
+    const slider = input as HTMLInputElement;
+    slider.value = nextValue;
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  }, value);
+}
+
 test("audio voices start from the tap even when mobile WebKit keeps resume pending", async ({ page }) => {
   await installPendingResumeAudioContext(page);
   await page.goto("/wizard_of_oz.html");
@@ -193,6 +201,31 @@ test("audio voices start from the tap even when mobile WebKit keeps resume pendi
   const pianoEvents = await audioEvents(page);
   const startsAfterPiano = pianoEvents.filter((eventName) => eventName === "oscillator:start").length;
   expect(startsAfterPiano).toBeGreaterThan(startsBeforePiano);
+});
+
+test("terminal runaway models use time windows instead of phase windows", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/wizard_of_oz.html");
+  await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
+
+  await page.locator("#presetPanel summary").click();
+  await page.getByRole("button", { name: "Instability-strip convection" }).click();
+  await page.locator("#initialControlSection > summary").click();
+  await setSliderValue(page, "max time", "2");
+  await setSliderValue(page, "initial radius", "1.9");
+  await setSliderValue(page, "initial radial velocity", "1.2");
+
+  await expect(page.locator("#lightCanvas")).toHaveAttribute("data-display-mode", "time", { timeout: 15000 });
+  await expect(page.locator("#velocityCanvas")).toHaveAttribute("data-display-mode", "time");
+  await expect(page.locator("#lightCanvas")).toHaveAttribute("data-current-time", /\d+\.\d+/);
+  await expect(page.locator("#lightCanvas")).not.toHaveAttribute("data-current-phase");
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-current-time", /\d+\.\d+/);
+  await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-current-time", /\d+\.\d+/);
+  await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-stellingwerf-labels", "R,H,U_c,current_time");
+  await expect(page.locator(".phase-anchor-control")).toBeHidden();
+  await expect(page.locator("#metrics")).toContainText("time window");
+  expect(pageErrors).toEqual([]);
 });
 
 test("grid mode falls back when workers are blocked", async ({ page }) => {
@@ -416,21 +449,26 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await page.locator("#initialControlSection > summary").click();
   await expect(page.locator("#initialControlSection")).toHaveAttribute("open", "");
   await expect(page.locator("#initialControls")).toBeVisible();
-  await expect(page.locator("#runUntilStable")).not.toBeChecked();
+  await expect(page.locator("#runUntilStable")).toBeChecked();
   const integrationControl = (name: string) => page.locator(`#integrationControls .slider-control:visible input[aria-label="${name}"]`);
   await expect(integrationControl("relative tol")).toHaveCount(1);
   await expect(integrationControl("absolute tol")).toHaveCount(1);
   await expect(integrationControl("tolerance")).toHaveCount(0);
-  await expect(integrationControl("stability tolerance")).toHaveCount(0);
+  await expect(integrationControl("stability tolerance")).toHaveCount(1);
+  await expect(integrationControl("stable cycles required")).toHaveCount(1);
   await page.getByRole("button", { name: "Mid" }).click();
   await expect(integrationControl("tolerance")).toHaveCount(1);
   await expect(integrationControl("relative tol")).toHaveCount(0);
   await expect(integrationControl("absolute tol")).toHaveCount(0);
-  await page.locator("#runUntilStable").check();
   await expect(integrationControl("stability tolerance")).toHaveCount(1);
   await expect(integrationControl("stable cycles required")).toHaveCount(1);
-  await page.getByRole("button", { name: "RK45" }).click();
   await page.locator("#runUntilStable").uncheck();
+  await expect(integrationControl("stability tolerance")).toHaveCount(0);
+  await page.locator("#runUntilStable").check();
+  await expect(integrationControl("stability tolerance")).toHaveCount(1);
+  await page.getByRole("button", { name: "RK45" }).click();
+  await expect(integrationControl("relative tol")).toHaveCount(1);
+  await expect(integrationControl("tolerance")).toHaveCount(0);
   await expect(page.locator("#integrationControls .slider-scale span").nth(4)).toHaveAttribute("style", /66\.6667%/);
   await expect(page.locator("#integrationControls .slider-scale span").nth(5)).toHaveAttribute("style", /82\.5707%/);
   await expect(page.locator("#integrationControls .slider-scale span")).toHaveText(["1", "3", "10", "30", "100", "300"]);
@@ -441,7 +479,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     slider.value = "3";
     slider.dispatchEvent(new Event("input", { bubbles: true }));
     const label = document.querySelector("[data-value-for='tEnd']")?.textContent || "";
-    slider.value = "2";
+    slider.value = String(Math.log10(300));
     slider.dispatchEvent(new Event("input", { bubbles: true }));
     return label;
   });
@@ -468,7 +506,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(geometryBox!.y).toBeLessThan(driverBox!.y);
   await expect(page.locator("#statusPill")).toHaveCount(0);
   await expect(page.locator("#metrics")).toContainText("stop");
-  await expect(page.locator("#metrics")).toContainText("fixed-time complete");
+  await expect(page.locator("#metrics")).toContainText("stable limit cycle");
   await expect(page.locator("#metrics")).toContainText("models");
   await expect(page.locator("#metrics")).not.toContainText("stop reason");
   await expect(page.locator("#metrics")).not.toContainText("reference");
@@ -670,11 +708,13 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#plotGrid")).not.toContainText("Fig.");
   await expect(page.locator("#plotGrid")).not.toContainText("Cepheid");
   await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-stability-mode", "single");
+  await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-stability-legend", "linear damping,pulsational growth,dynamic growth");
   await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-stellingwerf-labels", "zeta,zeta_c,gamma_c");
   await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-editable-parameters", "zetac,zeta");
   await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-axis-labels", "convective response zeta_c,thermal response zeta");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-cepheid-mode", "single");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-instability-mode", "single");
+  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-instability-labels", "schematic,damped equilibrium,dynamic instability");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-x-axis-label", "log10(zetac/zeta) convective/thermal response");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-x-axis-direction", "redward-right");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-editable-parameters", "zetac,gammac");
@@ -934,7 +974,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   const initialRadiusControl = page.locator("input[aria-label='initial radius']").locator("xpath=ancestor::*[contains(@class, 'slider-control')]");
   await expect(initialRadiusControl).toContainText("initial radius");
   await expect(initialRadiusControl).toContainText("1.1");
-  await expect(page.locator("[data-value-for='tEnd']")).toHaveText("100");
+  await expect(page.locator("[data-value-for='tEnd']")).toHaveText("300");
   await expect(page.locator(".equation-label")).toHaveCount(0);
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "radius-dependent");
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-layout", "stacked");

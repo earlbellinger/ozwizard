@@ -229,22 +229,24 @@ async function runPlaywrightChecks() {
     assertOk(new Set(solverRows).size === 1, "solver buttons should fit on one row");
     assertOk((await page.getByLabel("Compare selected solver to midpoint").count()) === 0, "midpoint comparison checkbox should be removed");
     const integrationControl = (name) => page.locator(`#integrationControls .slider-control:visible input[aria-label="${name}"]`);
+    assertOk(await page.locator("#runUntilStable").isChecked(), "auto-stop should default to enabled");
     assertOk(await integrationControl("relative tol").count() === 1, "RK45 should show relative tol");
     assertOk(await integrationControl("absolute tol").count() === 1, "RK45 should show absolute tol");
     assertOk(await integrationControl("tolerance").count() === 0, "RK45 should hide midpoint tolerance");
-    assertOk(await integrationControl("stability tolerance").count() === 0, "stability tolerance should be hidden unless auto-stop is enabled");
+    assertOk(await integrationControl("stability tolerance").count() === 1, "stability tolerance should show when auto-stop is enabled");
+    assertOk(await integrationControl("stable cycles required").count() === 1, "stable cycles should show when auto-stop is enabled");
     await page.getByRole("button", { name: "Mid" }).click();
     assertOk(await integrationControl("tolerance").count() === 1, "midpoint should show tolerance");
     assertOk(await integrationControl("relative tol").count() === 0, "midpoint should hide relative tol");
     assertOk(await integrationControl("absolute tol").count() === 0, "midpoint should hide absolute tol");
+    assertOk(await integrationControl("stability tolerance").count() === 1, "stability tolerance should stay visible while auto-stop is enabled");
+    await page.locator("#runUntilStable").uncheck();
+    assertOk(await integrationControl("stability tolerance").count() === 0, "stability tolerance should hide when auto-stop is disabled");
     await page.locator("#runUntilStable").check();
-    assertOk(await integrationControl("stability tolerance").count() === 1, "stability tolerance should show when auto-stop is enabled");
-    assertOk(await integrationControl("stable cycles required").count() === 1, "stable cycles should show when auto-stop is enabled");
+    assertOk(await integrationControl("stability tolerance").count() === 1, "stability tolerance should show again after re-enabling auto-stop");
     await page.getByRole("button", { name: "RK45" }).click();
     assertOk(await integrationControl("relative tol").count() === 1, "RK45 should restore relative tol");
     assertOk(await integrationControl("tolerance").count() === 0, "RK45 should hide midpoint tolerance after switching back");
-    await page.locator("#runUntilStable").uncheck();
-    assertOk(await integrationControl("stability tolerance").count() === 0, "stability tolerance should hide when auto-stop is disabled");
     const tauTickPositions = await page.locator("#integrationControls .slider-scale span").evaluateAll((spans) =>
       spans.map((span) => span.style.getPropertyValue("--tick-position"))
     );
@@ -260,12 +262,12 @@ async function runPlaywrightChecks() {
     assertOk(tauTickEdges === "start|||||", `tau scale should only edge-anchor the first visible label, saw ${tauTickEdges}`);
     assertOk((await page.locator("#statusPill").count()) === 0, "status pill should be folded into model output");
     await page.waitForFunction(
-      () => document.querySelector("#metrics")?.textContent?.includes("fixed-time complete"),
+      () => document.querySelector("#metrics")?.textContent?.includes("stable limit cycle"),
       null,
       { timeout: 15000 }
     );
     const initialMetrics = await page.locator("#metrics").textContent();
-    assertOk(initialMetrics?.includes("stop") && initialMetrics.includes("fixed-time complete"), "metrics did not include the stop result");
+    assertOk(initialMetrics?.includes("stop") && initialMetrics.includes("stable limit cycle"), "metrics did not include the stop result");
     assertOk(initialMetrics?.includes("models"), "metrics did not render");
     assertOk(!initialMetrics?.includes("stop reason"), "metrics should not show the old stop reason label");
     assertOk(!initialMetrics?.includes("reference"), "metrics should not duplicate reference metadata");
@@ -419,7 +421,7 @@ async function runPlaywrightChecks() {
         && Boolean(node.querySelector("mjx-container"));
     });
     await page.locator("[data-reset-key='r0']").click();
-    assertOk((await page.locator("[data-value-for='tEnd']").textContent()) === "100", "default tau_max value should render as 100");
+    assertOk((await page.locator("[data-value-for='tEnd']").textContent()) === "300", "default tau_max value should render as 300");
     assertOk(await page.getByRole("slider", { name: "κ-ρ exponent" }).isVisible(), "kappa-rho exponent slider label should use symbols");
     assertOk(await page.getByRole("slider", { name: "κ-T exponent" }).isVisible(), "kappa-temperature exponent slider label should use symbols");
     assertOk(await page.getByRole("slider", { name: "inner L exponent" }).isVisible(), "inner luminosity exponent slider label should be compact");
@@ -437,7 +439,7 @@ async function runPlaywrightChecks() {
       slider.value = "3";
       slider.dispatchEvent(new Event("input", { bubbles: true }));
       const label = document.querySelector("[data-value-for='tEnd']")?.textContent || "";
-      slider.value = "2";
+      slider.value = String(Math.log10(300));
       slider.dispatchEvent(new Event("input", { bubbles: true }));
       return label;
     });

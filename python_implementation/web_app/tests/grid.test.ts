@@ -6,9 +6,11 @@ import {
   estimateGridCoarseness,
   generateSliderSamples,
   parameterValueFromSlider,
-  type GridRange
+  type GridRange,
+  type GridWorkerMessage
 } from "../src/grid";
-import { type Row } from "../src/model";
+import { computeGridWithMessages } from "../src/gridCompute";
+import { PRESETS, type Row } from "../src/model";
 
 function syntheticFourierRows(phi1: number, phi2: number, phi3: number): Row[] {
   const amplitudes = [0.5, 0.15, 0.05];
@@ -93,6 +95,48 @@ describe("grid range helpers", () => {
       stride: 1,
       estimatedTotalMs: null,
       zeroCompletedFallback: true
+    });
+  });
+});
+
+describe("grid computation", () => {
+  it("excludes dynamically runaway models from phase and Fourier diagnostics", async () => {
+    const messages: GridWorkerMessage[] = [];
+    await computeGridWithMessages({
+      requestId: 1,
+      baseParameters: {
+        ...PRESETS["Instability-strip convection"],
+        r0: 2,
+        v0: 20,
+        tEnd: 20,
+        runUntilStable: false
+      },
+      ranges: [{
+        key: "gammac",
+        lowerSliderValue: 0.2,
+        upperSliderValue: 0.2,
+        centerSliderValue: 0.2,
+        nativeStep: 0.01
+      }],
+      loopKey: "gammac",
+      phase: {
+        warmupTau: 1,
+        minAmplitude: 1e-4,
+        selection: "last",
+        anchor: "min"
+      }
+    }, {
+      post: (message) => messages.push(message),
+      isCanceled: () => false
+    });
+
+    const complete = messages.find((message) => message.type === "grid-complete");
+    expect(complete).toMatchObject({
+      validPhase: 0,
+      validFourier: 0,
+      excludedNonPhase: 1,
+      phaseUnavailable: 0,
+      failed: 0
     });
   });
 });

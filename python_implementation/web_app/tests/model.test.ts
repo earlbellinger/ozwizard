@@ -23,10 +23,11 @@ function cycleAmplitudes(rows: readonly Row[], peaks: readonly Row[], key: "R" |
 }
 
 describe("one-zone model", () => {
-  it("uses tau max 100 for the default preset and integration slider", () => {
+  it("uses tau max 300 and auto-stop for the default preset and integration slider", () => {
     const tEndControl = CONTROL_GROUPS.integration.find(([key]) => key === "tEnd");
-    expect(PRESETS[DEFAULT_PRESET_NAME].tEnd).toBe(100);
-    expect(tEndControl?.[6]).toBe(100);
+    expect(PRESETS[DEFAULT_PRESET_NAME].tEnd).toBe(300);
+    expect(PRESETS[DEFAULT_PRESET_NAME].runUntilStable).toBe(true);
+    expect(tEndControl?.[6]).toBe(300);
   });
 
   it("uses final-cycle phasing and tightened adaptive defaults", () => {

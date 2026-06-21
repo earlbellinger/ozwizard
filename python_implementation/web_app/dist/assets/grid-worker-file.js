@@ -407,7 +407,7 @@
       ["uc0", `\\(${TEX.Uc}_{0}\\)`, "initial convective velocity", 0, 1.8, 0.01, 1, COLORS.Uc]
     ],
     integration: [
-      ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "max time", 0, 3, 0.01, 100, COLORS.tEnd],
+      ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "max time", 0, 3, 0.01, 300, COLORS.tEnd],
       ["step", `\\(\\Delta ${TEX.tau}_0\\)`, "initial step", 5e-4, 0.02, 5e-4, 1e-3, COLORS.step],
       ["maxStep", `\\(\\Delta ${TEX.tau}_{\\max}\\)`, "max adaptive step", 5e-3, 0.12, 5e-3, 0.03, COLORS.maxStep],
       ["logRtol", "\\(\\ozNeutral{\\log_{10} r_{tol}}\\)", "relative tol", -12, -8, 0.25, -11, COLORS.rtol],
@@ -491,7 +491,7 @@
     "Thick convective shell": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
     "RR Lyrae fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.2 },
     "RR Lyrae low-amplitude fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.1 },
-    "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, zetac: 1, gammac: 0.5, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 100 },
+    "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, zetac: 1, gammac: 0.5, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 300, runUntilStable: true },
     "RR Lyrae first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.05 },
     "RR Lyrae first overtone, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 15, sourceExp: 2, cq: 7, r0: 1.05, tEnd: 80 },
     "RR Lyrae high-amplitude first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.1 },
@@ -1041,6 +1041,11 @@
     return buildReference(rows, options);
   }
 
+  // src/displayWindow.ts
+  function isTimeWindowReason(message) {
+    return message === "equilibrium" || message === "runaway" || message === "runaway_trend";
+  }
+
   // src/gridCompute.ts
   async function computeGridWithMessages(request, callbacks) {
     const nativeSamples = buildRangeSamples(request.ranges, request.loopKey, { stride: 1 });
@@ -1097,6 +1102,7 @@
       attempted: 0,
       validPhase: 0,
       validFourier: 0,
+      excludedNonPhase: 0,
       phaseUnavailable: 0,
       failed: 0,
       elapsedMs: 0,
@@ -1147,6 +1153,10 @@
     }
     try {
       const solved = solveModel(parameters);
+      if (isTimeWindowReason(solved.message) || isTimeWindowReason(solved.status)) {
+        stats.excludedNonPhase += 1;
+        return;
+      }
       const phase = buildTwoCyclePhase(solved.rows, request.phase);
       if (phase.reason !== "ok" || !phase.period || phase.rows.length < 8) {
         stats.phaseUnavailable += 1;
@@ -1209,6 +1219,7 @@
       attempted: stats.attempted,
       validPhase: stats.validPhase,
       validFourier: stats.validFourier,
+      excludedNonPhase: stats.excludedNonPhase,
       phaseUnavailable: stats.phaseUnavailable,
       failed: stats.failed,
       elapsedMs: stats.elapsedMs,

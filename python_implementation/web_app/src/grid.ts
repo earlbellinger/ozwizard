@@ -66,6 +66,7 @@ export interface GridCompleteMessage {
   attempted: number;
   validPhase: number;
   validFourier: number;
+  excludedNonPhase: number;
   phaseUnavailable: number;
   failed: number;
   elapsedMs: number;
