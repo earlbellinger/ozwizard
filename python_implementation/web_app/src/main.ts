@@ -2539,6 +2539,14 @@ function finishReferencePlotInteraction(event: PointerEvent, canvasId: Reference
   activeReferencePlotInteraction = null;
 }
 
+function setPointerCaptureIfAvailable(element: HTMLElement, pointerId: number): void {
+  try {
+    element.setPointerCapture(pointerId);
+  } catch {
+    // Synthetic pointer events in tests may not create an active browser pointer.
+  }
+}
+
 function beginGridCanvasInteraction(event: PointerEvent, canvasId: string): void {
   if (!gridState.enabled) return;
   const canvas = event.currentTarget as HTMLCanvasElement;
@@ -2546,7 +2554,7 @@ function beginGridCanvasInteraction(event: PointerEvent, canvasId: string): void
   const colorbar = colorbarRegionAt(canvasId, point);
   if (colorbar) {
     event.preventDefault();
-    canvas.setPointerCapture(event.pointerId);
+    setPointerCaptureIfAvailable(canvas, event.pointerId);
     activeGridCanvasInteraction = { type: "colorbar", canvasId, pointerId: event.pointerId };
     canvas.dataset.gridInteraction = "colorbar";
     gridState.heldResult = null;
@@ -2560,7 +2568,7 @@ function beginGridCanvasInteraction(event: PointerEvent, canvasId: string): void
     const result = hit?.result ?? gridState.hoverResult;
     if (!result) return;
     event.preventDefault();
-    canvas.setPointerCapture(event.pointerId);
+    setPointerCaptureIfAvailable(canvas, event.pointerId);
     activeGridCanvasInteraction = { type: "fourier-hold", canvasId, pointerId: event.pointerId };
     canvas.dataset.gridInteraction = "fourier-hold";
     gridState.hoverResult = result;

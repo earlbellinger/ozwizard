@@ -932,8 +932,6 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-path-count", /[2-9]\d*/);
 
   await page.locator("#lightCanvas").scrollIntoViewIfNeeded();
-  const lightCanvasBox = await page.locator("#lightCanvas").boundingBox();
-  expect(lightCanvasBox).not.toBeNull();
   const lightColorbarHitHandle = await page.waitForFunction(
     () => document.querySelector("#lightCanvas")?.getAttribute("data-grid-colorbar-hit") || "",
     null,
@@ -942,17 +940,26 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   const lightColorbarHit = await lightColorbarHitHandle.jsonValue() as string;
   expect(lightColorbarHit).toBeTruthy();
   const [lightColorbarLeft, lightColorbarTop, lightColorbarRight, lightColorbarBottom] = lightColorbarHit!.split(",").map(Number);
-  await page.mouse.move(
-    lightCanvasBox!.x + (lightColorbarLeft + lightColorbarRight) / 2,
-    lightCanvasBox!.y + (lightColorbarTop + lightColorbarBottom) / 2
-  );
-  await page.mouse.down();
+  const dispatchLightPointer = async (type: string, x: number, y: number, buttons: number) => {
+    await page.locator("#lightCanvas").evaluate((canvas, eventInit) => {
+      const node = canvas as HTMLCanvasElement;
+      const rect = node.getBoundingClientRect();
+      node.dispatchEvent(new PointerEvent(eventInit.type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 97,
+        pointerType: "mouse",
+        button: 0,
+        buttons: eventInit.buttons,
+        clientX: rect.left + eventInit.x,
+        clientY: rect.top + eventInit.y
+      }));
+    }, { type, x, y, buttons });
+  };
+  await dispatchLightPointer("pointerdown", (lightColorbarLeft + lightColorbarRight) / 2, (lightColorbarTop + lightColorbarBottom) / 2, 1);
   await expect(page.locator("#lightCanvas")).toHaveAttribute("data-grid-interaction", "colorbar");
-  await page.mouse.move(
-    lightCanvasBox!.x + lightColorbarLeft + 8,
-    lightCanvasBox!.y + (lightColorbarTop + lightColorbarBottom) / 2
-  );
-  await page.mouse.up();
+  await dispatchLightPointer("pointermove", lightColorbarLeft + 8, (lightColorbarTop + lightColorbarBottom) / 2, 1);
+  await dispatchLightPointer("pointerup", lightColorbarLeft + 8, (lightColorbarTop + lightColorbarBottom) / 2, 0);
   await expect(page.locator("#lightCanvas")).not.toHaveAttribute("data-grid-interaction", "colorbar");
 
   await page.locator("#fourierCanvas").scrollIntoViewIfNeeded();
@@ -995,6 +1002,13 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     "↑max T",
     "↓min T"
   ]);
+  const annotationLegendRows = await page.locator("#phaseAnnotationLegendItems .annotation-symbol-item").evaluateAll((items) =>
+    items.map((item) => Math.round(item.getBoundingClientRect().top))
+  );
+  expect(annotationLegendRows[4]).toBeGreaterThan(annotationLegendRows[3]);
+  expect(annotationLegendRows[5]).toBe(annotationLegendRows[4]);
+  expect(annotationLegendRows[6]).toBe(annotationLegendRows[4]);
+  expect(annotationLegendRows[7]).toBe(annotationLegendRows[4]);
   await expect.poll(async () => Number(await page.locator("#lightCanvas").getAttribute("data-annotation-count") || "0"))
     .toBe(16);
   await expect.poll(async () => Number(await page.locator("#velocityCanvas").getAttribute("data-annotation-count") || "0"))

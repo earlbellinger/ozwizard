@@ -3699,6 +3699,12 @@
     delete canvas.dataset.referenceInteraction;
     activeReferencePlotInteraction = null;
   }
+  function setPointerCaptureIfAvailable(element, pointerId) {
+    try {
+      element.setPointerCapture(pointerId);
+    } catch {
+    }
+  }
   function beginGridCanvasInteraction(event, canvasId) {
     if (!gridState.enabled) return;
     const canvas = event.currentTarget;
@@ -3706,7 +3712,7 @@
     const colorbar = colorbarRegionAt(canvasId, point);
     if (colorbar) {
       event.preventDefault();
-      canvas.setPointerCapture(event.pointerId);
+      setPointerCaptureIfAvailable(canvas, event.pointerId);
       activeGridCanvasInteraction = { type: "colorbar", canvasId, pointerId: event.pointerId };
       canvas.dataset.gridInteraction = "colorbar";
       gridState.heldResult = null;
@@ -3719,7 +3725,7 @@
       const result = hit?.result ?? gridState.hoverResult;
       if (!result) return;
       event.preventDefault();
-      canvas.setPointerCapture(event.pointerId);
+      setPointerCaptureIfAvailable(canvas, event.pointerId);
       activeGridCanvasInteraction = { type: "fourier-hold", canvasId, pointerId: event.pointerId };
       canvas.dataset.gridInteraction = "fourier-hold";
       gridState.hoverResult = result;
