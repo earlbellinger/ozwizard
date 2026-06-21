@@ -572,6 +572,32 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#plotGrid")).toHaveCSS("display", "flex");
   await expect(page.locator("#plotGrid")).toHaveCSS("flex-wrap", "wrap");
   await expect(page.locator("#plotGrid")).toHaveCSS("--plot-panel-min-width", "400px");
+  await expect(page.locator("#stellingwerfReferencePanel")).toBeVisible();
+  await expect(page.locator("#stellingwerfReferencePanel")).toContainText("instability strip");
+  await expect(page.locator("#stellingwerfReferencePanel")).not.toContainText("Cepheid");
+  await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-stability-mode", "single");
+  await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-stellingwerf-labels", "zeta,zeta_c,gamma_c");
+  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-cepheid-mode", "single");
+  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-instability-mode", "single");
+  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-stellingwerf-labels", "gamma_c,instability_strip");
+  await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-phase-portrait-mode", "single");
+  await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-phase-portrait-rows", /[1-9]\d*/);
+  await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-current-phase", /\d+\.\d+/);
+  await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-stellingwerf-labels", "R,H,U_c,P,current_phase");
+  const stabilityHasPaint = await page.locator("#stabilityMapCanvas").evaluate((canvas) => {
+    const node = canvas as HTMLCanvasElement;
+    const ctx = node.getContext("2d");
+    if (!ctx) return false;
+    return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
+  });
+  expect(stabilityHasPaint).toBe(true);
+  const phasePortraitHasPaint = await page.locator("#phasePortraitCanvas").evaluate((canvas) => {
+    const node = canvas as HTMLCanvasElement;
+    const ctx = node.getContext("2d");
+    if (!ctx) return false;
+    return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
+  });
+  expect(phasePortraitHasPaint).toBe(true);
   await page.locator("[data-plot-toggle='model']").uncheck();
   await expect(page.locator("[data-plot-panel='model']")).toBeHidden();
   await expect(page.locator("#hiddenPlotControls")).toBeVisible();
@@ -648,6 +674,10 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#gridStatusText")).toContainText("Grid complete", { timeout: 15000 });
   await expect(page.locator("[data-control-key='gammac'] [data-grid-loop-marker]")).toBeVisible();
   await expect(page.locator("[data-control-key='r0'] [data-grid-loop-marker]")).toBeHidden();
+  await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-stability-mode", "grid");
+  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-cepheid-mode", "grid");
+  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-instability-mode", "grid");
+  await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-phase-portrait-mode", "grid");
   const fourierHasPaint = await page.locator("#fourierCanvas").evaluate((canvas) => {
     const node = canvas as HTMLCanvasElement;
     const ctx = node.getContext("2d");

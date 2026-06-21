@@ -37,6 +37,7 @@ import {
   shellGeometryFromModel,
   type RgbColor
 } from "./visualization";
+import { cepheidStripCoordinate, linearStability, type StabilityKind } from "./stability";
 
 declare global {
   interface Window {
@@ -226,6 +227,23 @@ interface FourierAxisLabel {
   subscript: string;
 }
 
+type PhasePortraitKey = "H" | "Uc" | "P";
+
+interface CanvasMathFragment {
+  text: string;
+  subscript?: string;
+  color?: string;
+  weight?: string | number;
+}
+
+interface CanvasMathOptions {
+  align?: CanvasTextAlign;
+  color?: string;
+  fontSize?: number;
+  rotate?: number;
+  subscriptSize?: number;
+}
+
 interface GridCanvasInteraction {
   type: "colorbar" | "fourier-hold";
   canvasId: string;
@@ -367,6 +385,8 @@ const gridColorbarRegions = new Map<string, GridColorbarRegion>();
 let fourierPointHits: FourierPointHit[] = [];
 let activeGridCanvasInteraction: GridCanvasInteraction | null = null;
 const DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
+const STABILITY_MAP_RESOLUTION = 54;
+const stabilityMapCache = new Map<string, StabilityKind[]>();
 const PLOT_LAYOUT = {
   left: 84,
   top: 18,
@@ -3480,6 +3500,60 @@ function collectFourierPointHits(
   });
 }
 
+function canvasMathFont(size: number, weight?: string | number): string {
+  return `${weight ? `${weight} ` : ""}${size}px Inter, sans-serif`;
+}
+
+function canvasMathWidth(
+  ctx: CanvasRenderingContext2D,
+  fragments: readonly CanvasMathFragment[],
+  fontSize = 12,
+  subscriptSize = 8
+): number {
+  return fragments.reduce((total, fragment) => {
+    ctx.font = canvasMathFont(fontSize, fragment.weight);
+    const baseWidth = ctx.measureText(fragment.text).width;
+    if (!fragment.subscript) return total + baseWidth;
+    ctx.font = canvasMathFont(subscriptSize, fragment.weight);
+    return total + baseWidth + ctx.measureText(fragment.subscript).width + 1;
+  }, 0);
+}
+
+function drawCanvasMathFragments(
+  ctx: CanvasRenderingContext2D,
+  fragments: readonly CanvasMathFragment[],
+  x: number,
+  y: number,
+  options: CanvasMathOptions = {}
+): number {
+  const fontSize = options.fontSize ?? 12;
+  const subscriptSize = options.subscriptSize ?? Math.max(8, Math.round(fontSize * 0.68));
+  const align = options.align ?? "center";
+  const totalWidth = canvasMathWidth(ctx, fragments, fontSize, subscriptSize);
+  const start = align === "right" ? -totalWidth : align === "center" ? -totalWidth / 2 : 0;
+  ctx.save();
+  ctx.translate(x, y);
+  if (options.rotate) ctx.rotate(options.rotate);
+  let cursor = start;
+  fragments.forEach((fragment) => {
+    ctx.font = canvasMathFont(fontSize, fragment.weight);
+    ctx.fillStyle = fragment.color || options.color || THEME.axisText;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(fragment.text, cursor, 0);
+    const baseWidth = ctx.measureText(fragment.text).width;
+    cursor += baseWidth;
+    if (fragment.subscript) {
+      ctx.font = canvasMathFont(subscriptSize, fragment.weight);
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText(fragment.subscript, cursor + 1, fontSize * 0.42);
+      cursor += ctx.measureText(fragment.subscript).width + 1;
+    }
+  });
+  ctx.restore();
+  return totalWidth;
+}
+
 function drawFourierAxisLabel(
   ctx: CanvasRenderingContext2D,
   label: FourierAxisLabel,
@@ -3487,23 +3561,34 @@ function drawFourierAxisLabel(
   y: number
 ): void {
   const base = label.base === "phi" ? "φ" : label.base;
+  drawCanvasMathFragments(ctx, [{ text: base, subscript: label.subscript }], x, y, { rotate: -Math.PI / 2 });
+}
+
+function drawStabilityLinearizedLabel(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  gammac: number
+): void {
   ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(-Math.PI / 2);
-  ctx.textAlign = "left";
+  ctx.font = "12px Inter, sans-serif";
   ctx.fillStyle = THEME.axisText;
-  ctx.font = "12px Inter, sans-serif";
-  const baseWidth = ctx.measureText(base).width;
-  ctx.font = "8px Inter, sans-serif";
-  const subscriptWidth = ctx.measureText(label.subscript).width;
-  const start = -(baseWidth + subscriptWidth + 1) / 2;
-  ctx.font = "12px Inter, sans-serif";
+  ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText(base, start, 0);
-  ctx.font = "8px Inter, sans-serif";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillText(label.subscript, start + baseWidth + 1, 5);
+  const prefix = "linearized at ";
+  ctx.fillText(prefix, x, y);
+  const prefixWidth = ctx.measureText(prefix).width;
   ctx.restore();
+  drawCanvasMathFragments(
+    ctx,
+    [
+      { text: "γ", subscript: "c", color: COLORS.gammac, weight: 600 },
+      { text: ` = ${fmt(gammac, 2)}` }
+    ],
+    x + prefixWidth,
+    y,
+    { align: "left" }
+  );
 }
 
 function drawFourierPath(
@@ -3568,6 +3653,538 @@ function drawFourierPoints(
     ctx.fill();
   });
   ctx.restore();
+}
+
+function stabilityDisplayParameters(): ModelParameters {
+  return currentGridResult()?.parameters || state;
+}
+
+function stabilityOverlayResults(): GridModelResult[] {
+  if (!gridState.enabled) return [];
+  return gridState.results.filter((result) =>
+    Number.isFinite(result.parameters.zeta)
+    && Number.isFinite(result.parameters.zetac)
+    && Number.isFinite(result.parameters.gammac)
+  );
+}
+
+function stabilityMapExtent(parameters: ModelParameters, overlays: readonly GridModelResult[]): number {
+  const values = [parameters.zeta, parameters.zetac, 4];
+  overlays.forEach((result) => values.push(result.parameters.zeta, result.parameters.zetac));
+  return Math.min(12, Math.max(4, Math.ceil(Math.max(...values.filter(Number.isFinite)) / 2) * 2));
+}
+
+function stabilityCacheKey(parameters: ModelParameters, extent: number): string {
+  return [
+    extent,
+    parameters.gammac.toFixed(3),
+    parameters.n.toFixed(3),
+    parameters.s.toFixed(3),
+    parameters.m.toFixed(3),
+    parameters.gamma1.toFixed(3),
+    parameters.sourceExp.toFixed(3),
+    parameters.cq.toFixed(3),
+    String(parameters.variableM)
+  ].join("|");
+}
+
+function stabilityKindsForMap(parameters: ModelParameters, extent: number): StabilityKind[] {
+  const key = stabilityCacheKey(parameters, extent);
+  const cached = stabilityMapCache.get(key);
+  if (cached) return cached;
+  const kinds: StabilityKind[] = [];
+  for (let row = 0; row < STABILITY_MAP_RESOLUTION; row += 1) {
+    const zeta = Math.max(1e-4, ((row + 0.5) / STABILITY_MAP_RESOLUTION) * extent);
+    for (let column = 0; column < STABILITY_MAP_RESOLUTION; column += 1) {
+      const zetac = Math.max(1e-4, ((column + 0.5) / STABILITY_MAP_RESOLUTION) * extent);
+      kinds.push(linearStability({ ...parameters, zeta, zetac }).kind);
+    }
+  }
+  if (stabilityMapCache.size > 24) stabilityMapCache.clear();
+  stabilityMapCache.set(key, kinds);
+  return kinds;
+}
+
+function stabilityKindColor(kind: StabilityKind, alpha = 1): string {
+  const colors: Record<StabilityKind, [number, number, number]> = {
+    stable: [69, 137, 118],
+    pulsational: [184, 82, 94],
+    dynamic: [216, 155, 65],
+    neutral: [132, 146, 170]
+  };
+  const [r, g, b] = colors[kind];
+  return alpha >= 1 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function drawReferenceMarker(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  color: string,
+  radius = 4
+): void {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = "#050814";
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawStabilityOverlays(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  extent: number,
+  current: ModelParameters,
+  overlays: readonly GridModelResult[]
+): void {
+  const sx = (zetac: number) => plot.left + clamp(zetac / extent, 0, 1) * plot.width;
+  const sy = (zeta: number) => plot.top + plot.height - clamp(zeta / extent, 0, 1) * plot.height;
+  const path = gridPathResults();
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.width, plot.height);
+  ctx.clip();
+  overlays.forEach((result) => {
+    drawReferenceMarker(ctx, sx(result.parameters.zetac), sy(result.parameters.zeta), "rgba(220, 228, 244, 0.32)", 2.3);
+  });
+  if (path.length > 1) {
+    ctx.lineWidth = 1.8;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (let i = 1; i < path.length; i += 1) {
+      ctx.strokeStyle = gridResultColor(path[i], 0.74);
+      ctx.beginPath();
+      ctx.moveTo(sx(path[i - 1].parameters.zetac), sy(path[i - 1].parameters.zeta));
+      ctx.lineTo(sx(path[i].parameters.zetac), sy(path[i].parameters.zeta));
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+  const highlighted = gridState.heldResult || gridState.hoverResult || currentGridResult();
+  if (highlighted) drawReferenceMarker(ctx, sx(highlighted.parameters.zetac), sy(highlighted.parameters.zeta), gridResultColor(highlighted, 1), 6);
+  else drawReferenceMarker(ctx, sx(current.zetac), sy(current.zeta), COLORS.gammac, 6);
+}
+
+function drawReferenceLegend(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  items: Array<{ label: string; color: string }>
+): void {
+  ctx.save();
+  ctx.font = "11px Inter, sans-serif";
+  ctx.textBaseline = "middle";
+  let cursor = x;
+  items.forEach((item) => {
+    ctx.fillStyle = item.color;
+    ctx.fillRect(cursor, y - 5, 10, 10);
+    ctx.fillStyle = THEME.axisText;
+    ctx.textAlign = "left";
+    ctx.fillText(item.label, cursor + 14, y);
+    cursor += 18 + ctx.measureText(item.label).width + 18;
+  });
+  ctx.restore();
+}
+
+function drawStabilityMap(): void {
+  const canvas = document.getElementById("stabilityMapCanvas");
+  if (!(canvas instanceof HTMLCanvasElement)) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(360, rect.width || 540);
+  const height = Math.max(290, rect.height || 310);
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+
+  const parameters = stabilityDisplayParameters();
+  const overlays = stabilityOverlayResults();
+  const extent = stabilityMapExtent(parameters, overlays);
+  const kinds = stabilityKindsForMap(parameters, extent);
+  const plot = { left: 58, top: 34, width: width - 78, height: height - 88 };
+  const cellWidth = plot.width / STABILITY_MAP_RESOLUTION;
+  const cellHeight = plot.height / STABILITY_MAP_RESOLUTION;
+
+  canvas.dataset.stabilityMode = gridState.enabled ? "grid" : "single";
+  canvas.dataset.stabilityGamma = fmtFixed(parameters.gammac, 3);
+  canvas.dataset.stabilityExtent = fmtFixed(extent, 1);
+  canvas.dataset.stellingwerfLabels = "zeta,zeta_c,gamma_c";
+
+  kinds.forEach((kind, index) => {
+    const row = Math.floor(index / STABILITY_MAP_RESOLUTION);
+    const column = index % STABILITY_MAP_RESOLUTION;
+    ctx.fillStyle = stabilityKindColor(kind, kind === "stable" ? 0.5 : kind === "neutral" ? 0.22 : 0.58);
+    ctx.fillRect(plot.left + column * cellWidth, plot.top + plot.height - (row + 1) * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
+  });
+
+  drawAxes(ctx, plot, [0, extent], [0, extent], "", "", THEME.axisText, THEME.axisText, 20);
+  drawCanvasMathFragments(
+    ctx,
+    [{ text: "ζ", subscript: "c", color: COLORS.zetac, weight: 600 }],
+    plot.left + plot.width / 2,
+    plot.top + plot.height + 42
+  );
+  drawCanvasMathFragments(
+    ctx,
+    [{ text: "ζ", color: COLORS.zeta, weight: 600 }],
+    20,
+    plot.top + plot.height / 2,
+    { rotate: -Math.PI / 2 }
+  );
+  drawStabilityLinearizedLabel(ctx, plot.left, 16, parameters.gammac);
+  drawReferenceLegend(ctx, plot.left + 150, 15, [
+    { label: "stable", color: stabilityKindColor("stable", 0.75) },
+    { label: "pulsational", color: stabilityKindColor("pulsational", 0.78) },
+    { label: "dynamic", color: stabilityKindColor("dynamic", 0.82) }
+  ]);
+  drawStabilityOverlays(ctx, plot, extent, parameters, overlays);
+}
+
+function drawDashedCurve(
+  ctx: CanvasRenderingContext2D,
+  points: Array<{ x: number; y: number }>
+): void {
+  ctx.save();
+  ctx.setLineDash([8, 5]);
+  ctx.lineWidth = 1.8;
+  ctx.strokeStyle = "rgba(238, 245, 255, 0.82)";
+  ctx.beginPath();
+  points.forEach((point, index) => {
+    if (index === 0) ctx.moveTo(point.x, point.y);
+    else ctx.lineTo(point.x, point.y);
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawCepheidGuide(): void {
+  const canvas = document.getElementById("cepheidGuideCanvas");
+  if (!(canvas instanceof HTMLCanvasElement)) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(360, rect.width || 540);
+  const height = Math.max(290, rect.height || 310);
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+  const plot = { left: 64, top: 28, width: width - 90, height: height - 88 };
+  const sx = (x: number) => plot.left + clamp(x, 0, 1) * plot.width;
+  const sy = (gamma: number) => plot.top + plot.height - clamp(gamma, 0, 1) * plot.height;
+
+  canvas.dataset.cepheidMode = gridState.enabled ? "grid" : "single";
+  canvas.dataset.instabilityMode = gridState.enabled ? "grid" : "single";
+  canvas.dataset.stellingwerfLabels = "gamma_c,instability_strip";
+
+  ctx.fillStyle = "rgba(25, 43, 77, 0.5)";
+  ctx.fillRect(plot.left, plot.top, plot.width, plot.height);
+  ctx.fillStyle = "rgba(69, 137, 118, 0.38)";
+  ctx.beginPath();
+  ctx.moveTo(sx(0), sy(0.38));
+  for (let i = 0; i <= 80; i += 1) {
+    const x = i / 80;
+    const lower = 0.38 + 0.05 * Math.sin(Math.PI * x) - 0.04 * x;
+    ctx.lineTo(sx(x), sy(lower));
+  }
+  ctx.lineTo(sx(1), sy(1));
+  ctx.lineTo(sx(0), sy(1));
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.width * 0.37, plot.height * 0.2);
+  ctx.clip();
+  ctx.strokeStyle = "rgba(255, 209, 102, 0.7)";
+  ctx.lineWidth = 1;
+  for (let x = plot.left - plot.height; x < plot.left + plot.width; x += 8) {
+    ctx.beginPath();
+    ctx.moveTo(x, plot.top);
+    ctx.lineTo(x + plot.height, plot.top + plot.height);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  drawAxes(ctx, plot, [0, 1], [0, 1], "blue   instability strip   red", "", THEME.axisText, THEME.axisText, 22);
+  drawCanvasMathFragments(
+    ctx,
+    [{ text: "γ", subscript: "c", color: COLORS.gammac, weight: 600 }],
+    22,
+    plot.top + plot.height / 2,
+    { rotate: -Math.PI / 2 }
+  );
+  ctx.fillStyle = THEME.axisText;
+  ctx.font = "700 13px Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("STABLE", sx(0.48), sy(0.67));
+  ctx.fillText("DYNAMIC INST.", sx(0.17), sy(0.91));
+  ctx.font = "12px Inter, sans-serif";
+  ctx.fillText("red edge", sx(0.67), sy(0.22));
+  ctx.beginPath();
+  ctx.moveTo(sx(0.68), sy(0.31));
+  ctx.lineTo(sx(0.68), sy(0.43));
+  ctx.strokeStyle = THEME.axisText;
+  ctx.stroke();
+
+  const locus = Array.from({ length: 80 }, (_value, index) => {
+    const x = index / 79;
+    const gamma = clamp(0.02 + 0.92 * x ** 2.25, 0, 1);
+    return { x: sx(x), y: sy(gamma) };
+  });
+  drawDashedCurve(ctx, locus);
+
+  const overlays = stabilityOverlayResults();
+  overlays.forEach((result) => {
+    drawReferenceMarker(
+      ctx,
+      sx(cepheidStripCoordinate(result.parameters)),
+      sy(result.parameters.gammac),
+      "rgba(220, 228, 244, 0.32)",
+      2.3
+    );
+  });
+  const path = gridPathResults();
+  if (path.length > 1) {
+    ctx.lineWidth = 1.8;
+    for (let i = 1; i < path.length; i += 1) {
+      ctx.strokeStyle = gridResultColor(path[i], 0.74);
+      ctx.beginPath();
+      ctx.moveTo(sx(cepheidStripCoordinate(path[i - 1].parameters)), sy(path[i - 1].parameters.gammac));
+      ctx.lineTo(sx(cepheidStripCoordinate(path[i].parameters)), sy(path[i].parameters.gammac));
+      ctx.stroke();
+    }
+  }
+  const current = currentGridResult();
+  const parameters = current?.parameters || state;
+  drawReferenceMarker(
+    ctx,
+    sx(cepheidStripCoordinate(parameters)),
+    sy(parameters.gammac),
+    current ? gridResultColor(current, 1) : COLORS.gammac,
+    6
+  );
+}
+
+function drawPhasePortraitCurve(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  rows: readonly Row[],
+  key: PhasePortraitKey,
+  color: string,
+  dash: number[] = []
+): void {
+  const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.width, plot.height);
+  ctx.clip();
+  ctx.strokeStyle = colorWithAlpha(color, 0.94);
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.setLineDash(dash);
+  ctx.beginPath();
+  let started = false;
+  rows.forEach((row) => {
+    const x = sx(row.R);
+    const y = sy(phasePortraitValue(row, key));
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (!started) {
+      ctx.moveTo(x, y);
+      started = true;
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function drawPhasePortraitArrow(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  rows: readonly Row[],
+  key: PhasePortraitKey,
+  color: string,
+  fraction: number
+): void {
+  if (rows.length < 3) return;
+  const index = Math.min(rows.length - 2, Math.max(1, Math.floor(fraction * (rows.length - 1))));
+  const a = rows[index - 1];
+  const b = rows[index + 1];
+  const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  const x0 = sx(a.R);
+  const y0 = sy(phasePortraitValue(a, key));
+  const x1 = sx(b.R);
+  const y1 = sy(phasePortraitValue(b, key));
+  const angle = Math.atan2(y1 - y0, x1 - x0);
+  const x = sx(rows[index].R);
+  const y = sy(phasePortraitValue(rows[index], key));
+  if (![x, y, angle].every(Number.isFinite)) return;
+  ctx.save();
+  ctx.fillStyle = colorWithAlpha(color, 0.96);
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.beginPath();
+  ctx.moveTo(7, 0);
+  ctx.lineTo(-5, -4);
+  ctx.lineTo(-2, 0);
+  ctx.lineTo(-5, 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function phasePortraitValue(row: Row, key: PhasePortraitKey): number {
+  return key === "P" ? acousticPressureSignal(row) : row[key];
+}
+
+function drawPhasePortraitLegend(ctx: CanvasRenderingContext2D, plot: PlotBox): void {
+  ctx.save();
+  const y = plot.top + 14;
+  let x = plot.left + 12;
+  [
+    { fragments: [{ text: "H", color: COLORS.H, weight: 600 }], color: COLORS.H, dash: [] },
+    { fragments: [{ text: "U", subscript: "c", color: COLORS.Uc, weight: 600 }], color: COLORS.Uc, dash: [8, 5] },
+    { fragments: [{ text: "P", color: COLORS.H, weight: 600 }], color: COLORS.H, dash: [2, 4] }
+  ].forEach((item) => {
+    ctx.strokeStyle = item.color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash(item.dash);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 26, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const labelWidth = drawCanvasMathFragments(ctx, item.fragments, x + 34, y, { align: "left" });
+    x += 52 + labelWidth;
+  });
+  ctx.restore();
+}
+
+function drawPhasePortraitCurrentMarkers(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange
+): Row | null {
+  const row = phaseRowAt(latestPhaseRows, currentAnimationPhase);
+  if (!row) return null;
+  const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  drawReferenceMarker(ctx, sx(row.R), sy(row.H), COLORS.H, 5.6);
+  drawReferenceMarker(ctx, sx(row.R), sy(row.Uc), COLORS.Uc, 5.6);
+  drawReferenceMarker(ctx, sx(row.R), sy(acousticPressureSignal(row)), COLORS.H, 4.4);
+  return row;
+}
+
+function drawPhasePortraitPhaseLabel(ctx: CanvasRenderingContext2D, plot: PlotBox): void {
+  const label = `phase = ${fmtFixed(currentAnimationPhase, 2)}`;
+  ctx.save();
+  ctx.font = "12px Inter, sans-serif";
+  const width = ctx.measureText(label).width;
+  const x = plot.left + plot.width - width - 30;
+  const y = plot.top + 14;
+  ctx.fillStyle = "rgba(5, 8, 20, 0.58)";
+  ctx.fillRect(x - 21, y - 11, width + 30, 22);
+  ctx.fillStyle = PHASE_MARKER_COLOR;
+  ctx.strokeStyle = "#050814";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(x - 10, y, 4.8, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = THEME.axisText;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, x, y);
+  ctx.restore();
+}
+
+function drawPhasePortraitPanel(): void {
+  const canvas = document.getElementById("phasePortraitCanvas");
+  if (!(canvas instanceof HTMLCanvasElement)) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(360, rect.width || 900);
+  const height = Math.max(300, rect.height || 340);
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+
+  canvas.dataset.phasePortraitMode = gridState.enabled ? "grid" : "single";
+  canvas.dataset.phasePortraitRows = String(latestPhaseRows.length);
+  canvas.dataset.stellingwerfLabels = "R,H,U_c,P,current_phase";
+  if (!latestPhaseRows.length) {
+    delete canvas.dataset.currentPhase;
+    drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
+    return;
+  }
+  canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
+
+  const rows = downsample(latestPhaseRows, 1400, ["R", "H", "Uc"]);
+  const xlim = range(rows.map((row) => row.R), 0.08);
+  const ylim = range([...rows.map((row) => row.H), ...rows.map((row) => row.Uc), ...rows.map(acousticPressureSignal)], 0.1);
+  const plot = { left: 78, top: 28, width: width - 102, height: height - 88 };
+  drawAxes(ctx, plot, xlim, ylim, "", "", THEME.axisText, THEME.axisText, 22);
+  drawCanvasMathFragments(
+    ctx,
+    [
+      { text: "radius " },
+      { text: "R", color: COLORS.R, weight: 600 }
+    ],
+    plot.left + plot.width / 2,
+    plot.top + plot.height + 42
+  );
+  drawCanvasMathFragments(
+    ctx,
+    [
+      { text: "H", color: COLORS.H, weight: 600 },
+      { text: ", " },
+      { text: "U", subscript: "c", color: COLORS.Uc, weight: 600 },
+      { text: ", " },
+      { text: "P", color: COLORS.H, weight: 600 }
+    ],
+    22,
+    plot.top + plot.height / 2,
+    { rotate: -Math.PI / 2 }
+  );
+  drawPhasePortraitCurve(ctx, plot, xlim, ylim, rows, "H", COLORS.H);
+  drawPhasePortraitCurve(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, [8, 5]);
+  drawPhasePortraitCurve(ctx, plot, xlim, ylim, rows, "P", COLORS.H, [2, 4]);
+  drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "H", COLORS.H, 0.18);
+  drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "H", COLORS.H, 0.62);
+  drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, 0.3);
+  drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, 0.74);
+  drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "P", COLORS.H, 0.46);
+  drawPhasePortraitCurrentMarkers(ctx, plot, xlim, ylim);
+  drawPhasePortraitLegend(ctx, plot);
+  drawPhasePortraitPhaseLabel(ctx, plot);
+}
+
+function drawStellingwerfReferencePanel(): void {
+  drawStabilityMap();
+  drawCepheidGuide();
+  drawPhasePortraitPanel();
 }
 
 interface LegendItem {
@@ -4219,6 +4836,7 @@ function drawAll(): void {
       ];
   drawLegend("lumLegend", lumLegendItems, convectionOff ? {} : { plotId: "lum" });
   drawFourierPanel();
+  drawStellingwerfReferencePanel();
 }
 
 function startApp(): void {
