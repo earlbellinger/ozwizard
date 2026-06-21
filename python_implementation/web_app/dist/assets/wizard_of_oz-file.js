@@ -5347,7 +5347,7 @@
       drawCanvasMathFragments(
         ctx,
         [
-          { text: `${mode === "time" ? "time-window" : "phase"} effective temperature `, color: PHASE_MARKER_COLOR, weight: 600 },
+          { text: `${mode === "time" ? "time " : "phase "}`, color: PHASE_MARKER_COLOR, weight: 600 },
           { text: "T", subscript: "eff", color: PHASE_MARKER_COLOR, weight: 600 }
         ],
         labelX,
