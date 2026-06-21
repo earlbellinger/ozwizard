@@ -1072,6 +1072,23 @@
       color: currentColor;
     }
 
+    .metric[data-stability-expanded] {
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .metric[data-stability-expanded] b,
+    .metric[data-stability-expanded] mjx-container {
+      pointer-events: none;
+    }
+
+    .metric[data-stability-expanded]:focus-visible,
+    .metric[data-stability-expanded][aria-expanded="true"] {
+      border-color: rgba(255, 209, 102, 0.7);
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.18), inset 0 1px 0 rgba(238, 245, 255, 0.03);
+    }
+
     .hidden-plot-controls {
       display: flex;
       align-items: center;
@@ -1446,6 +1463,11 @@
 
     .reference-plot-panel canvas {
       height: 310px;
+    }
+
+    canvas.reference-control-canvas {
+      cursor: crosshair;
+      touch-action: none;
     }
 
     .reference-plot-panel[data-reference-panel="phase"] canvas {
@@ -1887,7 +1909,7 @@
                   <span class="sonification-reading" id="sonificationHz">262 Hz</span>
                 </div>
               </div>
-              <p class="subtitle">Interactive one-zone convection and pulsation explorer by <a href="https://earlbellinger.com" target="_blank" rel="noopener">Earl Bellinger</a>.</p>
+              <p class="subtitle">Interactive one-zone pulsation-convection model by <a href="https://earlbellinger.com" target="_blank" rel="noopener">Earl Bellinger</a></p>
             </div>
           </div>
         </div>
@@ -2015,7 +2037,7 @@
         </div>
       </section>
 
-      <section class="plot-grid" id="plotGrid" data-pressure-visible="false" data-visible-plots="5">
+      <section class="plot-grid" id="plotGrid" data-pressure-visible="false" data-visible-plots="8">
         <div class="plot-panel" data-plot-panel="model">
           <div class="plot-title">
             <div class="plot-title-left" data-plot-control-home="model">
@@ -2108,6 +2130,45 @@
           <div class="legend" id="lumLegend"></div>
         </div>
 
+        <div class="plot-panel reference-plot-panel" data-plot-panel="stability" data-reference-panel="stability">
+          <div class="plot-title">
+            <div class="plot-title-left" data-plot-control-home="stability">
+              <label class="plot-enable-control" data-plot-control="stability">
+                <input type="checkbox" data-plot-toggle="stability" checked aria-label="Hide Stability Map plot">
+                <span>Stability Map</span>
+              </label>
+              <h3>Stability Map</h3>
+            </div>
+          </div>
+          <canvas id="stabilityMapCanvas" aria-label="zeta zeta_c stability map"></canvas>
+        </div>
+
+        <div class="plot-panel reference-plot-panel" data-plot-panel="strip" data-reference-panel="strip">
+          <div class="plot-title">
+            <div class="plot-title-left" data-plot-control-home="strip">
+              <label class="plot-enable-control" data-plot-control="strip">
+                <input type="checkbox" data-plot-toggle="strip" checked aria-label="Hide Instability Strip plot">
+                <span>Instability Strip</span>
+              </label>
+              <h3>Instability Strip</h3>
+            </div>
+          </div>
+          <canvas id="cepheidGuideCanvas" aria-label="instability strip"></canvas>
+        </div>
+
+        <div class="plot-panel reference-plot-panel" data-plot-panel="phasePortrait" data-reference-panel="phase">
+          <div class="plot-title">
+            <div class="plot-title-left" data-plot-control-home="phasePortrait">
+              <label class="plot-enable-control" data-plot-control="phasePortrait">
+                <input type="checkbox" data-plot-toggle="phasePortrait" checked aria-label="Hide Thermal-Convection Loop plot">
+                <span>Thermal-Convection Loop</span>
+              </label>
+              <h3>Thermal-Convection Loop</h3>
+            </div>
+          </div>
+          <canvas id="phasePortraitCanvas" aria-label="H of R and U_c of R phase portrait"></canvas>
+        </div>
+
       </section>
 
       <section class="plot-panel fourier-grid-panel" id="fourierGridPanel" hidden>
@@ -2117,35 +2178,6 @@
           </div>
         </div>
         <canvas id="fourierCanvas"></canvas>
-      </section>
-
-      <section class="plot-grid reference-plot-grid" id="referencePlotGrid">
-        <div class="plot-panel reference-plot-panel" data-reference-panel="stability">
-          <div class="plot-title">
-            <div class="plot-title-left">
-              <h3>Stability Map</h3>
-            </div>
-          </div>
-          <canvas id="stabilityMapCanvas" aria-label="zeta zeta_c stability map"></canvas>
-        </div>
-
-        <div class="plot-panel reference-plot-panel" data-reference-panel="strip">
-          <div class="plot-title">
-            <div class="plot-title-left">
-              <h3>Instability Strip Guide</h3>
-            </div>
-          </div>
-          <canvas id="cepheidGuideCanvas" aria-label="instability strip guide"></canvas>
-        </div>
-
-        <div class="plot-panel reference-plot-panel" data-reference-panel="phase">
-          <div class="plot-title">
-            <div class="plot-title-left">
-              <h3>Pressure-Convection Portrait</h3>
-            </div>
-          </div>
-          <canvas id="phasePortraitCanvas" aria-label="H of R, U_c of R, and pressure of R phase portrait"></canvas>
-        </div>
       </section>
 
       <section class="notes-grid">

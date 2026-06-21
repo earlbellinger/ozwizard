@@ -121,7 +121,7 @@ export const CONTROL_GROUPS: Record<"physical" | "initial" | "integration", Cont
     ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", 0.05, 12, 0.05, 1, COLORS.zeta],
     ["zetac", `\\(${TEX.zetac}\\)`, "convective response", 0, 12, 0.05, 1, COLORS.zetac],
     ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.5, COLORS.gammac],
-    ["m", `\\(${TEX.m}\\)`, "Thin shell form factor", 3, 20, 0.1, 10, COLORS.m],
+    ["m", `\\(${TEX.m}\\)`, "shell thinness", 3, 20, 0.1, 10, COLORS.m],
     ["gamma1", `\\(${TEX.gamma1}\\)`, "adiabatic exponent", 1.01, 1.67, 0.01, 1.1, COLORS.gamma1],
     ["n", `\\(${TEX.n}\\)`, "κ-ρ exponent", 0, 3, 0.05, 1, COLORS.n],
     ["s", `\\(${TEX.s}\\)`, "κ-T exponent", 0, 8, 0.1, 3, COLORS.s],

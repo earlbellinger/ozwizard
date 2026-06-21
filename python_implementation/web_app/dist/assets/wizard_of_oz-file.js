@@ -313,7 +313,7 @@
       ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", 0.05, 12, 0.05, 1, COLORS.zeta],
       ["zetac", `\\(${TEX.zetac}\\)`, "convective response", 0, 12, 0.05, 1, COLORS.zetac],
       ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.5, COLORS.gammac],
-      ["m", `\\(${TEX.m}\\)`, "Thin shell form factor", 3, 20, 0.1, 10, COLORS.m],
+      ["m", `\\(${TEX.m}\\)`, "shell thinness", 3, 20, 0.1, 10, COLORS.m],
       ["gamma1", `\\(${TEX.gamma1}\\)`, "adiabatic exponent", 1.01, 1.67, 0.01, 1.1, COLORS.gamma1],
       ["n", `\\(${TEX.n}\\)`, "\u03BA-\u03C1 exponent", 0, 3, 0.05, 1, COLORS.n],
       ["s", `\\(${TEX.s}\\)`, "\u03BA-T exponent", 0, 8, 0.1, 3, COLORS.s],
@@ -792,6 +792,7 @@
   }
 
   // src/phase.ts
+  var SAME_EXTREMUM_LUMINOSITY_TOLERANCE = 0.025;
   function defaultWarmupTau(rows) {
     const finalTau = rows.at(-1)?.tau ?? 0;
     return Math.max(1, Math.min(4, 0.05 * finalTau));
@@ -915,21 +916,107 @@
     };
     return foldRowsToReference(rows, reference);
   }
-  function buildReferenceFromMinima(rows, minimumRows, warmupTau, minAmplitude) {
-    return buildReferenceFromAnchors(rows, minimumRows, "min", warmupTau, minAmplitude);
+  function anchorLuminosityScore(anchorRows) {
+    const values = anchorRows.map((row) => row.L);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const scale = Math.max(1, ...values.map((value) => Math.abs(value)));
+    return (max - min) / scale;
   }
-  function buildMaxLightReference(rows, maxima, warmupTau, minAmplitude, selection) {
-    if (maxima.length < 3) {
-      return { rows: [], reference: null, period: null, reason: "not_enough_maxima" };
+  function selectAnchorCandidate(candidates) {
+    if (!candidates.length) return null;
+    const direct = candidates.find(
+      (candidate) => candidate.stride === 1 && candidate.score <= SAME_EXTREMUM_LUMINOSITY_TOLERANCE
+    );
+    if (direct) return direct;
+    return [...candidates].sort((a, b) => a.score - b.score || a.stride - b.stride)[0];
+  }
+  function selectAlternatingExtremumCandidate(candidates, anchor, selection) {
+    if (!candidates.length) return null;
+    return [...candidates].sort((a, b) => {
+      const luminosityDelta = anchor === "min" ? a.meanLuminosity - b.meanLuminosity : b.meanLuminosity - a.meanLuminosity;
+      if (Math.abs(luminosityDelta) > 1e-12) return luminosityDelta;
+      const aReference = a.result.reference;
+      const bReference = b.result.reference;
+      const tauDelta = selection === "last" ? bReference.endTau - aReference.endTau : aReference.startTau - bReference.startTau;
+      return tauDelta || a.score - b.score;
+    })[0];
+  }
+  function buildAnchorCandidate(rows, anchorRows, anchor, warmupTau, minAmplitude, stride) {
+    const result = buildReferenceFromAnchors(rows, anchorRows, anchor, warmupTau, minAmplitude);
+    if (!result) return null;
+    return {
+      result,
+      score: anchorLuminosityScore(anchorRows),
+      stride,
+      meanLuminosity: anchorRows.reduce((sum, row) => sum + row.L, 0) / anchorRows.length
+    };
+  }
+  function buildReferenceFromExtrema(rows, extrema, anchor, warmupTau, minAmplitude, selection) {
+    if (extrema.length < 3) {
+      return { rows: [], reference: null, period: null, reason: anchor === "max" ? "not_enough_maxima" : "not_enough_minima" };
     }
-    const start = selection === "last" ? maxima.length - 3 : 0;
-    const end = selection === "last" ? -1 : maxima.length - 3;
-    const direction = selection === "last" ? -1 : 1;
-    for (let i = start; selection === "last" ? i > end : i <= end; i += direction) {
-      const result = buildReferenceFromAnchors(rows, [maxima[i], maxima[i + 1], maxima[i + 2]], "max", warmupTau, minAmplitude);
-      if (result) return result;
+    if (selection === "last") {
+      const alternatingCandidates = [];
+      for (let endIndex = extrema.length - 1; endIndex >= 2; endIndex -= 1) {
+        const candidates = [];
+        [1, 2].forEach((stride) => {
+          const firstIndex = endIndex - 2 * stride;
+          const midIndex = endIndex - stride;
+          if (firstIndex < 0) return;
+          const candidate = buildAnchorCandidate(
+            rows,
+            [extrema[firstIndex], extrema[midIndex], extrema[endIndex]],
+            anchor,
+            warmupTau,
+            minAmplitude,
+            stride
+          );
+          if (candidate) candidates.push(candidate);
+        });
+        const selected2 = selectAnchorCandidate(candidates);
+        if (!selected2) continue;
+        if (selected2.stride === 1) return selected2.result;
+        alternatingCandidates.push(selected2);
+        if (alternatingCandidates.length >= 2) {
+          return selectAlternatingExtremumCandidate(alternatingCandidates, anchor, selection).result;
+        }
+      }
+      const selected = selectAlternatingExtremumCandidate(alternatingCandidates, anchor, selection);
+      if (selected) return selected.result;
+    } else {
+      const alternatingCandidates = [];
+      for (let firstIndex = 0; firstIndex <= extrema.length - 3; firstIndex += 1) {
+        const candidates = [];
+        [1, 2].forEach((stride) => {
+          const midIndex = firstIndex + stride;
+          const endIndex = firstIndex + 2 * stride;
+          if (endIndex >= extrema.length) return;
+          const candidate = buildAnchorCandidate(
+            rows,
+            [extrema[firstIndex], extrema[midIndex], extrema[endIndex]],
+            anchor,
+            warmupTau,
+            minAmplitude,
+            stride
+          );
+          if (candidate) candidates.push(candidate);
+        });
+        const selected2 = selectAnchorCandidate(candidates);
+        if (!selected2) continue;
+        if (selected2.stride === 1) return selected2.result;
+        alternatingCandidates.push(selected2);
+        if (alternatingCandidates.length >= 2) {
+          return selectAlternatingExtremumCandidate(alternatingCandidates, anchor, selection).result;
+        }
+      }
+      const selected = selectAlternatingExtremumCandidate(alternatingCandidates, anchor, selection);
+      if (selected) return selected.result;
     }
     return { rows: [], reference: null, period: null, reason: "amplitude_below_threshold" };
+  }
+  function buildMaxLightReference(rows, maxima, warmupTau, minAmplitude, selection) {
+    return buildReferenceFromExtrema(rows, maxima, "max", warmupTau, minAmplitude, selection);
   }
   function buildReference(rows, options) {
     if (rows.length < 3) {
@@ -941,31 +1028,19 @@
     if (options.anchor === "max") {
       return buildMaxLightReference(rows, maxima, warmupTau, minAmplitude, options.selection);
     }
-    if (maxima.length >= 4) {
-      const start2 = options.selection === "last" ? maxima.length - 4 : 0;
-      const end2 = options.selection === "last" ? -1 : maxima.length - 4;
-      const direction2 = options.selection === "last" ? -1 : 1;
-      for (let i = start2; options.selection === "last" ? i > end2 : i <= end2; i += direction2) {
-        const firstMinimum = minimumBetween(rows, maxima[i].tau, maxima[i + 1].tau);
-        const secondMinimum = minimumBetween(rows, maxima[i + 1].tau, maxima[i + 2].tau);
-        const thirdMinimum = minimumBetween(rows, maxima[i + 2].tau, maxima[i + 3].tau);
-        if (!firstMinimum || !secondMinimum || !thirdMinimum) continue;
-        const result = buildReferenceFromMinima(rows, [firstMinimum, secondMinimum, thirdMinimum], warmupTau, minAmplitude);
-        if (result) return result;
-      }
-    }
     const minima = findLuminosityMinima(rows, warmupTau, minimumSeparationFromMaxima(maxima, options.minSeparation));
-    if (minima.length < 3) {
-      return { rows: [], reference: null, period: null, reason: "not_enough_minima" };
+    const directMinimumResult = buildReferenceFromExtrema(rows, minima, "min", warmupTau, minAmplitude, options.selection);
+    if (directMinimumResult.reason === "ok") return directMinimumResult;
+    if (maxima.length >= 4) {
+      const cycleMinima = [];
+      for (let i = 0; i < maxima.length - 1; i += 1) {
+        const minimum = minimumBetween(rows, maxima[i].tau, maxima[i + 1].tau);
+        if (minimum) cycleMinima.push(minimum);
+      }
+      const result = buildReferenceFromExtrema(rows, cycleMinima, "min", warmupTau, minAmplitude, options.selection);
+      if (result.reason === "ok") return result;
     }
-    const start = options.selection === "last" ? minima.length - 3 : 0;
-    const end = options.selection === "last" ? -1 : minima.length - 3;
-    const direction = options.selection === "last" ? -1 : 1;
-    for (let i = start; options.selection === "last" ? i > end : i <= end; i += direction) {
-      const result = buildReferenceFromMinima(rows, [minima[i], minima[i + 1], minima[i + 2]], warmupTau, minAmplitude);
-      if (result) return result;
-    }
-    return { rows: [], reference: null, period: null, reason: "amplitude_below_threshold" };
+    return directMinimumResult;
   }
   function foldRowsToReference(rows, reference) {
     const folded = [];
@@ -1543,6 +1618,7 @@
   var sonificationVoices = /* @__PURE__ */ new Set();
   var sonificationActive = false;
   var activePhaseScrub = null;
+  var activeReferencePlotInteraction = null;
   var pianoModeActive = false;
   var pianoStartOctave = PIANO_DEFAULT_START_OCTAVE;
   var pianoMasterGain = null;
@@ -1550,6 +1626,7 @@
   var pianoSustainLevel = PIANO_DEFAULT_SUSTAIN_LEVEL;
   var activePianoVoices = /* @__PURE__ */ new Map();
   var activePianoMidiCounts = /* @__PURE__ */ new Map();
+  var referencePlotRenderStates = /* @__PURE__ */ new Map();
   var TAU_SCALE_MAX = 1e3;
   var TAU_TICKS = [1, 3, 10, 30, 100, 300];
   var THEME = {
@@ -1604,14 +1681,20 @@
     light: "Lightcurve",
     velocity: "RV Curve",
     time: "History",
-    lum: "Luminosity Evolution"
+    lum: "Luminosity Evolution",
+    stability: "Stability Map",
+    strip: "Instability Strip",
+    phasePortrait: "Thermal-Convection Loop"
   };
   var plotPanelVisibility = {
     model: true,
     light: true,
     velocity: true,
     time: true,
-    lum: true
+    lum: true,
+    stability: true,
+    strip: true,
+    phasePortrait: true
   };
   var plotRenderStates = /* @__PURE__ */ new Map();
   var legendSignatures = /* @__PURE__ */ new Map();
@@ -1623,6 +1706,14 @@
   var SLIDER_RANGE_DOUBLE_TAP_DISTANCE = 22;
   var activeSliderTapStart = null;
   var lastSliderTap = null;
+  var STABILITY_CHIP_LONG_PRESS_MS = 520;
+  var STABILITY_CHIP_MOVE_TOLERANCE = 14;
+  var activeStabilityChipTarget = null;
+  var stabilityChipPinned = false;
+  var stabilityLongPressTimer = 0;
+  var stabilityLongPressStart = null;
+  var suppressNextStabilityClick = false;
+  var lastTouchStabilityToggleAt = 0;
   var DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
   var STABILITY_MAP_RESOLUTION = 54;
   var stabilityMapCache = /* @__PURE__ */ new Map();
@@ -1641,20 +1732,236 @@
     const scientific = value.toExponential(2).replace(/\.?0+e/, "e");
     return scientific.length < decimal.length ? scientific : decimal;
   }
+  function escapeAttribute(value) {
+    return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
   function s72State(stable) {
     return stable ? "stable" : "unstable";
+  }
+  function s72Verdict(kind, stable) {
+    const stateText = stable ? "stable" : "unstable";
+    if (kind === "dynamic") return `dynamically ${stateText}`;
+    if (kind === "secular") return `secularly ${stateText}`;
+    return `pulsationally ${stateText}`;
   }
   function s72MetricClass(stable) {
     return stable ? "status-ok" : "status-bad";
   }
+  function s72LatexInequality(satisfied, symbol) {
+    return satisfied ? symbol : `\\not${symbol}`;
+  }
+  function s72TextInequality(satisfied, symbol) {
+    if (satisfied) return symbol;
+    return symbol === ">" ? "\u226F" : "\u226E";
+  }
+  function s72ColoredValue(macro, value, digits = 2) {
+    return `\\${macro}{${fmt(value, digits)}}`;
+  }
   function s72DynamicMetric(stability) {
-    return `\\(${TEX.gamma1}=${fmt(stability.dynamic.value, 2)} > 4/${TEX.m}=${fmt(stability.dynamic.threshold, 2)}\\)`;
+    const symbol = s72LatexInequality(stability.dynamic.stable, ">");
+    return `\\(${TEX.gamma1}=${fmt(stability.dynamic.value, 2)} ${symbol} 4/${TEX.m}=${fmt(stability.dynamic.threshold, 2)}\\)`;
+  }
+  function s72DynamicExpandedMetric(stability) {
+    const symbol = s72LatexInequality(stability.dynamic.stable, ">");
+    return `\\(${s72ColoredValue("ozGamma", stability.dynamic.value)} ${symbol} 4/${s72ColoredValue("ozChiZero", stability.m)}=${fmt(stability.dynamic.threshold, 2)}\\)`;
   }
   function s72SecularMetric(stability) {
-    return `\\(4+${TEX.m}${TEX.n}+(${TEX.m}-4)(${TEX.s}+4)=${fmt(stability.secular.value, 2)} > 0\\)`;
+    const symbol = s72LatexInequality(stability.secular.stable, ">");
+    return `\\(4+${TEX.m}${TEX.n}+(${TEX.m}-4)(${TEX.s}+4)=${fmt(stability.secular.value, 2)} ${symbol} 0\\)`;
+  }
+  function s72SecularExpandedMetric(stability, parameters) {
+    const symbol = s72LatexInequality(stability.secular.stable, ">");
+    const m = s72ColoredValue("ozChiZero", stability.m);
+    const n = s72ColoredValue("ozBlue", parameters.n);
+    const s = s72ColoredValue("ozPink", parameters.s);
+    return `\\(4+${m}${n}+(${m}-4)(${s}+4)=${fmt(stability.secular.value, 2)} ${symbol} 0\\)`;
   }
   function s72PulsationalMetric(stability) {
-    return `\\(b=4+${TEX.m}[${TEX.n}-(${TEX.s}+4)(${TEX.gamma1}-1)]=${fmt(stability.b, 2)} < 0\\)`;
+    const symbol = s72LatexInequality(stability.pulsational.stable, "<");
+    return `\\(b=4+${TEX.m}[${TEX.n}-(${TEX.s}+4)(${TEX.gamma1}-1)]=${fmt(stability.b, 2)} ${symbol} 0\\)`;
+  }
+  function s72PulsationalExpandedMetric(stability, parameters) {
+    const symbol = s72LatexInequality(stability.pulsational.stable, "<");
+    const m = s72ColoredValue("ozChiZero", stability.m);
+    const n = s72ColoredValue("ozBlue", parameters.n);
+    const s = s72ColoredValue("ozPink", parameters.s);
+    const gamma1 = s72ColoredValue("ozGamma", parameters.gamma1);
+    return `\\(b=4+${m}[${n}-(${s}+4)(${gamma1}-1)]=${fmt(stability.b, 2)} ${symbol} 0\\)`;
+  }
+  function s72DynamicTitle(stability) {
+    const symbol = s72TextInequality(stability.dynamic.stable, ">");
+    return `Dynamic stability: Gamma1=${fmt(stability.dynamic.value, 3)}, chi0=${fmt(stability.m, 3)}; ${fmt(stability.dynamic.value, 3)} ${symbol} 4/${fmt(stability.m, 3)} = ${fmt(stability.dynamic.threshold, 3)} -> ${s72Verdict("dynamic", stability.dynamic.stable)}`;
+  }
+  function s72SecularTitle(stability, parameters) {
+    const symbol = s72TextInequality(stability.secular.stable, ">");
+    return `Secular stability: chi0=${fmt(stability.m, 3)}, n=${fmt(parameters.n, 3)}, s=${fmt(parameters.s, 3)}; 4 + ${fmt(stability.m, 3)}*${fmt(parameters.n, 3)} + (${fmt(stability.m, 3)} - 4)*(${fmt(parameters.s, 3)} + 4) = ${fmt(stability.secular.value, 3)} ${symbol} 0 -> ${s72Verdict("secular", stability.secular.stable)}`;
+  }
+  function s72PulsationalTitle(stability, parameters) {
+    const symbol = s72TextInequality(stability.pulsational.stable, "<");
+    return `Pulsational stability: chi0=${fmt(stability.m, 3)}, n=${fmt(parameters.n, 3)}, s=${fmt(parameters.s, 3)}, Gamma1=${fmt(parameters.gamma1, 3)}; b = 4 + ${fmt(stability.m, 3)}*(${fmt(parameters.n, 3)} - (${fmt(parameters.s, 3)} + 4)*(${fmt(parameters.gamma1, 3)} - 1)) = ${fmt(stability.b, 3)} ${symbol} 0 -> ${s72Verdict("pulsational", stability.pulsational.stable)}`;
+  }
+  function stabilityChipFromTarget(target) {
+    if (!(target instanceof Element)) return null;
+    return target.closest("[data-stability-expanded]");
+  }
+  function setStabilityChipFormula(target, expanded) {
+    const formula = expanded ? target.dataset.stabilityExpanded : target.dataset.stabilityDefault;
+    const formulaNode = target.querySelector("b");
+    if (!formula || !formulaNode || target.dataset.stabilityView === (expanded ? "expanded" : "default")) return;
+    formulaNode.innerHTML = formula;
+    target.dataset.stabilityView = expanded ? "expanded" : "default";
+    queueMathTypeset([formulaNode]);
+  }
+  function setStabilityChipExpanded(target, expanded) {
+    if (!target) return;
+    target.setAttribute("aria-expanded", String(expanded));
+    setStabilityChipFormula(target, expanded);
+  }
+  function showStabilityChipValues(target, pinned) {
+    if (activeStabilityChipTarget && activeStabilityChipTarget !== target) {
+      setStabilityChipExpanded(activeStabilityChipTarget, false);
+      delete activeStabilityChipTarget.dataset.stabilityPinned;
+    }
+    activeStabilityChipTarget = target;
+    stabilityChipPinned = pinned;
+    target.dataset.stabilityPinned = String(pinned);
+    setStabilityChipExpanded(target, true);
+  }
+  function hideStabilityChipValues(force = false) {
+    if (stabilityChipPinned && !force) return;
+    if (activeStabilityChipTarget) delete activeStabilityChipTarget.dataset.stabilityPinned;
+    setStabilityChipExpanded(activeStabilityChipTarget, false);
+    activeStabilityChipTarget = null;
+    stabilityChipPinned = false;
+  }
+  function toggleStabilityChipValues(target) {
+    if (target.dataset.stabilityPinned === "true" || stabilityChipPinned && isSameStabilityChip(target)) {
+      hideStabilityChipValues(true);
+    } else {
+      showStabilityChipValues(target, true);
+    }
+  }
+  function clearStabilityLongPress() {
+    if (stabilityLongPressTimer) window.clearTimeout(stabilityLongPressTimer);
+    stabilityLongPressTimer = 0;
+    stabilityLongPressStart = null;
+  }
+  function isSameStabilityChip(target) {
+    return activeStabilityChipTarget === target || !!activeStabilityChipTarget?.dataset.stabilityKind && activeStabilityChipTarget.dataset.stabilityKind === target.dataset.stabilityKind;
+  }
+  function setupStatusMetricExpansion() {
+    const metrics = el("metrics");
+    metrics.addEventListener("pointerover", (event) => {
+      const chip = stabilityChipFromTarget(event.target);
+      if (chip && !stabilityChipPinned) showStabilityChipValues(chip, false);
+    });
+    metrics.addEventListener("pointerout", (event) => {
+      const chip = stabilityChipFromTarget(event.target);
+      if (!chip || stabilityChipPinned) return;
+      if (event.relatedTarget instanceof Node && chip.contains(event.relatedTarget)) return;
+      hideStabilityChipValues();
+    });
+    metrics.addEventListener("focusin", (event) => {
+      const chip = stabilityChipFromTarget(event.target);
+      if (chip && !stabilityChipPinned) showStabilityChipValues(chip, false);
+    });
+    metrics.addEventListener("focusout", (event) => {
+      const chip = stabilityChipFromTarget(event.target);
+      if (!chip || stabilityChipPinned) return;
+      if (event.relatedTarget instanceof Node && chip.contains(event.relatedTarget)) return;
+      hideStabilityChipValues();
+    });
+    document.addEventListener("click", (event) => {
+      const chip = stabilityChipFromTarget(event.target);
+      if (!chip) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (suppressNextStabilityClick && Date.now() - lastTouchStabilityToggleAt < 700) {
+        suppressNextStabilityClick = false;
+        return;
+      }
+      suppressNextStabilityClick = false;
+      if (chip.dataset.stabilityPinned === "true" || stabilityChipPinned && isSameStabilityChip(chip)) {
+        hideStabilityChipValues(true);
+        chip.blur();
+        return;
+      }
+      showStabilityChipValues(chip, true);
+    }, true);
+    metrics.addEventListener("keydown", (event) => {
+      const chip = stabilityChipFromTarget(event.target);
+      if (!chip) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggleStabilityChipValues(chip);
+      } else if (event.key === "Escape") {
+        hideStabilityChipValues(true);
+      }
+    });
+    document.addEventListener("pointerdown", (event) => {
+      const chip = stabilityChipFromTarget(event.target);
+      if (!chip) return;
+      if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+      clearStabilityLongPress();
+      stabilityLongPressStart = {
+        target: chip,
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        pinnedAtStart: chip.dataset.stabilityPinned === "true" || stabilityChipPinned && isSameStabilityChip(chip),
+        longPressFired: false
+      };
+      stabilityLongPressTimer = window.setTimeout(() => {
+        if (!stabilityLongPressStart) return;
+        stabilityLongPressStart.longPressFired = true;
+        suppressNextStabilityClick = true;
+        lastTouchStabilityToggleAt = Date.now();
+        toggleStabilityChipValues(stabilityLongPressStart.target);
+        window.setTimeout(() => {
+          suppressNextStabilityClick = false;
+        }, 700);
+        clearStabilityLongPress();
+      }, STABILITY_CHIP_LONG_PRESS_MS);
+    }, true);
+    metrics.addEventListener("pointermove", (event) => {
+      if (!stabilityLongPressStart || stabilityLongPressStart.pointerId !== event.pointerId) return;
+      const moved = Math.hypot(event.clientX - stabilityLongPressStart.x, event.clientY - stabilityLongPressStart.y);
+      if (moved > STABILITY_CHIP_MOVE_TOLERANCE) clearStabilityLongPress();
+    });
+    document.addEventListener("pointerup", (event) => {
+      if (!stabilityLongPressStart || stabilityLongPressStart.pointerId !== event.pointerId) return;
+      if (event.pointerType !== "touch" && event.pointerType !== "pen") {
+        clearStabilityLongPress();
+        return;
+      }
+      const chip = stabilityChipFromTarget(event.target);
+      const sameChip = !!chip && (chip === stabilityLongPressStart.target || chip.dataset.stabilityKind === stabilityLongPressStart.target.dataset.stabilityKind);
+      if (sameChip && !stabilityLongPressStart.longPressFired) {
+        event.preventDefault();
+        suppressNextStabilityClick = true;
+        lastTouchStabilityToggleAt = Date.now();
+        if (stabilityLongPressStart.pinnedAtStart) {
+          hideStabilityChipValues(true);
+          stabilityLongPressStart.target.blur();
+        } else {
+          showStabilityChipValues(stabilityLongPressStart.target, true);
+        }
+        window.setTimeout(() => {
+          suppressNextStabilityClick = false;
+        }, 500);
+      }
+      clearStabilityLongPress();
+    }, true);
+    document.addEventListener("pointercancel", clearStabilityLongPress, true);
+    document.addEventListener("pointerdown", (event) => {
+      if (!activeStabilityChipTarget) return;
+      const target = event.target;
+      if (stabilityChipFromTarget(target)) return;
+      hideStabilityChipValues(true);
+    }, true);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") hideStabilityChipValues(true);
+    });
   }
   function fmtFixed(value, digits) {
     if (!Number.isFinite(value)) return "n/a";
@@ -2582,6 +2889,7 @@
     setupInteractivePlots();
     setupPhaseScrubbing();
     setupGridCanvasInteractions();
+    setupReferencePlotInteractions();
     window.addEventListener("resize", drawAll);
     window.addEventListener("resize", drawAdsrVisualization);
     updateDriverButtons();
@@ -2627,7 +2935,7 @@
     sync();
   }
   function isUserPlotId(value) {
-    return value === "model" || value === "light" || value === "velocity" || value === "time" || value === "lum";
+    return Boolean(value && value in PLOT_PANEL_LABELS);
   }
   function setupPlotPanelToggles() {
     document.querySelectorAll("[data-plot-toggle]").forEach((input) => {
@@ -3243,6 +3551,17 @@
       canvas.addEventListener("pointercancel", (event) => finishPhaseScrub(event, canvasId));
     });
   }
+  function setupReferencePlotInteractions() {
+    ["stabilityMapCanvas", "cepheidGuideCanvas"].forEach((canvasId) => {
+      const canvas = el(canvasId);
+      canvas.classList.add("reference-control-canvas");
+      canvas.addEventListener("pointerdown", (event) => beginReferencePlotInteraction(event, canvasId));
+      canvas.addEventListener("pointermove", (event) => updateReferencePlotInteraction(event, canvasId));
+      canvas.addEventListener("pointerup", (event) => finishReferencePlotInteraction(event, canvasId));
+      canvas.addEventListener("pointercancel", (event) => finishReferencePlotInteraction(event, canvasId));
+      canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+    });
+  }
   function phaseFromCanvasPoint(canvasId, point) {
     const render = plotRenderStates.get(canvasId);
     if (!render || !latestPhaseRows.length || gridState.enabled) return null;
@@ -3282,6 +3601,109 @@
     activePhaseScrub = null;
     modelAnimationStartTime = null;
     drawAnimatedPhaseViews();
+  }
+  function referenceCanvasPoint(canvas, event, render) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = render.width / Math.max(1, rect.width);
+    const scaleY = render.height / Math.max(1, rect.height);
+    return {
+      x: (event.clientX - rect.left) * scaleX,
+      y: (event.clientY - rect.top) * scaleY
+    };
+  }
+  function snapParameterValue(key, value) {
+    const meta = sliderMeta(key);
+    const rawSliderValue = key === "tEnd" ? Math.log10(value) : value;
+    const clampedSliderValue = clamp3(rawSliderValue, meta.min, meta.max);
+    const snappedSliderValue = roundToNativeStep(
+      meta.min + Math.round((clampedSliderValue - meta.min) / meta.step) * meta.step,
+      meta.step
+    );
+    return parameterValueFromSlider(key, clamp3(snappedSliderValue, meta.min, meta.max));
+  }
+  function setReferencePlotParameter(key, value) {
+    const snapped = snapParameterValue(key, value);
+    if (!Number.isFinite(snapped) || valuesMatch(state[key], snapped)) return false;
+    state[key] = snapped;
+    syncGridRangeCenter(key);
+    updateSliderLabel(key);
+    return true;
+  }
+  function commitReferencePlotParameters(updates) {
+    let changed = false;
+    Object.entries(updates).forEach(([key, value]) => {
+      if (typeof value !== "number") return;
+      changed = setReferencePlotParameter(key, value) || changed;
+    });
+    if (!changed) return false;
+    gridState.hoverResult = null;
+    gridState.heldResult = null;
+    updateAllSliderLabels();
+    refreshActivePreset();
+    scheduleSolve();
+    return true;
+  }
+  function referenceCoordinate(render, point) {
+    const clamped = clampPointToPlot(point, render.plot);
+    const xFraction = (clamped.x - render.plot.left) / render.plot.width;
+    const yFraction = 1 - (clamped.y - render.plot.top) / render.plot.height;
+    return {
+      x: render.xlim[0] + xFraction * (render.xlim[1] - render.xlim[0]),
+      y: render.ylim[0] + yFraction * (render.ylim[1] - render.ylim[0])
+    };
+  }
+  function updateStabilityMapParameters(canvas, event) {
+    const render = referencePlotRenderStates.get("stabilityMapCanvas");
+    if (!render) return false;
+    const point = referenceCanvasPoint(canvas, event, render);
+    const coordinate = referenceCoordinate(render, point);
+    return commitReferencePlotParameters({
+      zetac: coordinate.x,
+      zeta: coordinate.y
+    });
+  }
+  function updateInstabilityStripParameters(canvas, event) {
+    const render = referencePlotRenderStates.get("cepheidGuideCanvas");
+    if (!render) return false;
+    const point = referenceCanvasPoint(canvas, event, render);
+    const coordinate = referenceCoordinate(render, point);
+    const stripCoordinate = clamp3(coordinate.x, 0, 1);
+    const gamma = clamp3(coordinate.y, 0, 1);
+    const zeta = Math.max(1e-6, state.zeta);
+    const zetac = zeta * 10 ** (4 * stripCoordinate - 2);
+    return commitReferencePlotParameters({
+      zetac,
+      gammac: gamma
+    });
+  }
+  function applyReferencePlotPointer(canvas, canvasId, event) {
+    return canvasId === "stabilityMapCanvas" ? updateStabilityMapParameters(canvas, event) : updateInstabilityStripParameters(canvas, event);
+  }
+  function beginReferencePlotInteraction(event, canvasId) {
+    if (event.button !== 0) return;
+    const canvas = event.currentTarget;
+    const render = referencePlotRenderStates.get(canvasId);
+    if (!render) return;
+    const point = referenceCanvasPoint(canvas, event, render);
+    if (!pointInPlot(point, render.plot)) return;
+    event.preventDefault();
+    canvas.setPointerCapture(event.pointerId);
+    activeReferencePlotInteraction = { canvasId, pointerId: event.pointerId };
+    canvas.dataset.referenceInteraction = canvasId === "stabilityMapCanvas" ? "stability-map" : "instability-strip";
+    applyReferencePlotPointer(canvas, canvasId, event);
+  }
+  function updateReferencePlotInteraction(event, canvasId) {
+    if (!activeReferencePlotInteraction || activeReferencePlotInteraction.canvasId !== canvasId || activeReferencePlotInteraction.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    applyReferencePlotPointer(event.currentTarget, canvasId, event);
+  }
+  function finishReferencePlotInteraction(event, canvasId) {
+    if (!activeReferencePlotInteraction || activeReferencePlotInteraction.canvasId !== canvasId || activeReferencePlotInteraction.pointerId !== event.pointerId) return;
+    const canvas = event.currentTarget;
+    event.preventDefault();
+    if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+    delete canvas.dataset.referenceInteraction;
+    activeReferencePlotInteraction = null;
   }
   function beginGridCanvasInteraction(event, canvasId) {
     if (!gridState.enabled) return;
@@ -4671,9 +5093,11 @@
     const plot = { left: 58, top: 34, width: width - 78, height: height - 88 };
     const cellWidth = plot.width / STABILITY_MAP_RESOLUTION;
     const cellHeight = plot.height / STABILITY_MAP_RESOLUTION;
+    referencePlotRenderStates.set("stabilityMapCanvas", { plot, xlim: [0, extent], ylim: [0, extent], width, height });
     canvas.dataset.stabilityMode = gridState.enabled ? "grid" : "single";
     canvas.dataset.stabilityGamma = fmtFixed(parameters.gammac, 3);
     canvas.dataset.stabilityExtent = fmtFixed(extent, 1);
+    canvas.dataset.editableParameters = "zetac,zeta";
     canvas.dataset.stellingwerfLabels = "zeta,zeta_c,gamma_c";
     kinds.forEach((kind, index) => {
       const row = Math.floor(index / STABILITY_MAP_RESOLUTION);
@@ -4732,9 +5156,13 @@
     const plot = { left: 64, top: 28, width: width - 90, height: height - 88 };
     const sx = (x) => plot.left + clamp3(x, 0, 1) * plot.width;
     const sy = (gamma) => plot.top + plot.height - clamp3(gamma, 0, 1) * plot.height;
+    referencePlotRenderStates.set("cepheidGuideCanvas", { plot, xlim: [0, 1], ylim: [0, 1], width, height });
     canvas.dataset.cepheidMode = gridState.enabled ? "grid" : "single";
     canvas.dataset.instabilityMode = gridState.enabled ? "grid" : "single";
-    canvas.dataset.stellingwerfLabels = "gamma_c,instability_strip";
+    canvas.dataset.xAxisLabel = "T_eff";
+    canvas.dataset.xAxisDirection = "decreasing-right";
+    canvas.dataset.editableParameters = "zetac,gammac";
+    canvas.dataset.stellingwerfLabels = "gamma_c,T_eff";
     ctx.fillStyle = "rgba(25, 43, 77, 0.5)";
     ctx.fillRect(plot.left, plot.top, plot.width, plot.height);
     ctx.fillStyle = "rgba(69, 137, 118, 0.38)";
@@ -4762,7 +5190,19 @@
       ctx.stroke();
     }
     ctx.restore();
-    drawAxes(ctx, plot, [0, 1], [0, 1], "blue   instability strip   red", "", THEME.axisText, THEME.axisText, 22);
+    drawAxes(ctx, plot, [1, 0], [0, 1], "", "", THEME.axisText, THEME.axisText, 22);
+    drawCanvasMathFragments(
+      ctx,
+      [{ text: "T", subscript: "eff", color: THEME.axisText, weight: 600 }],
+      plot.left + plot.width / 2,
+      plot.top + plot.height + 42
+    );
+    ctx.fillStyle = THEME.axisText;
+    ctx.font = "12px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText("blue", sx(0.08), plot.top + plot.height + 42);
+    ctx.fillText("red", sx(0.92), plot.top + plot.height + 42);
     drawCanvasMathFragments(
       ctx,
       [{ text: "\u03B3", subscript: "c", color: COLORS.gammac, weight: 600 }],
@@ -4877,7 +5317,7 @@
     ctx.restore();
   }
   function phasePortraitValue(row, key) {
-    return key === "P" ? acousticPressureSignal(row) : row[key];
+    return row[key];
   }
   function drawPhasePortraitLegend(ctx, plot) {
     ctx.save();
@@ -4885,8 +5325,7 @@
     let x = plot.left + 12;
     [
       { fragments: [{ text: "H", color: COLORS.H, weight: 600 }], color: COLORS.H, dash: [] },
-      { fragments: [{ text: "U", subscript: "c", color: COLORS.Uc, weight: 600 }], color: COLORS.Uc, dash: [8, 5] },
-      { fragments: [{ text: "P", color: COLORS.H, weight: 600 }], color: COLORS.H, dash: [2, 4] }
+      { fragments: [{ text: "U", subscript: "c", color: COLORS.Uc, weight: 600 }], color: COLORS.Uc, dash: [8, 5] }
     ].forEach((item) => {
       ctx.strokeStyle = item.color;
       ctx.lineWidth = 2;
@@ -4908,7 +5347,6 @@
     const sy = (y) => plot.top + plot.height - (y - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
     drawReferenceMarker(ctx, sx(row.R), sy(row.H), COLORS.H, 5.6);
     drawReferenceMarker(ctx, sx(row.R), sy(row.Uc), COLORS.Uc, 5.6);
-    drawReferenceMarker(ctx, sx(row.R), sy(acousticPressureSignal(row)), COLORS.H, 4.4);
     return row;
   }
   function drawPhasePortraitPhaseLabel(ctx, plot) {
@@ -4948,7 +5386,7 @@
     ctx.clearRect(0, 0, width, height);
     canvas.dataset.phasePortraitMode = gridState.enabled ? "grid" : "single";
     canvas.dataset.phasePortraitRows = String(latestPhaseRows.length);
-    canvas.dataset.stellingwerfLabels = "R,H,U_c,P,current_phase";
+    canvas.dataset.stellingwerfLabels = "R,H,U_c,current_phase";
     if (!latestPhaseRows.length) {
       delete canvas.dataset.currentPhase;
       drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
@@ -4957,7 +5395,7 @@
     canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
     const rows = downsample(latestPhaseRows, 1400, ["R", "H", "Uc"]);
     const xlim = range(rows.map((row) => row.R), 0.08);
-    const ylim = range([...rows.map((row) => row.H), ...rows.map((row) => row.Uc), ...rows.map(acousticPressureSignal)], 0.1);
+    const ylim = range([...rows.map((row) => row.H), ...rows.map((row) => row.Uc)], 0.1);
     const plot = { left: 78, top: 28, width: width - 102, height: height - 88 };
     drawAxes(ctx, plot, xlim, ylim, "", "", THEME.axisText, THEME.axisText, 22);
     drawCanvasMathFragments(
@@ -4974,9 +5412,7 @@
       [
         { text: "H", color: COLORS.H, weight: 600 },
         { text: ", " },
-        { text: "U", subscript: "c", color: COLORS.Uc, weight: 600 },
-        { text: ", " },
-        { text: "P", color: COLORS.H, weight: 600 }
+        { text: "U", subscript: "c", color: COLORS.Uc, weight: 600 }
       ],
       22,
       plot.top + plot.height / 2,
@@ -4984,12 +5420,10 @@
     );
     drawPhasePortraitCurve(ctx, plot, xlim, ylim, rows, "H", COLORS.H);
     drawPhasePortraitCurve(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, [8, 5]);
-    drawPhasePortraitCurve(ctx, plot, xlim, ylim, rows, "P", COLORS.H, [2, 4]);
     drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "H", COLORS.H, 0.18);
     drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "H", COLORS.H, 0.62);
     drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, 0.3);
     drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, 0.74);
-    drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "P", COLORS.H, 0.46);
     drawPhasePortraitCurrentMarkers(ctx, plot, xlim, ylim);
     drawPhasePortraitLegend(ctx, plot);
     drawPhasePortraitPhaseLabel(ctx, plot);
@@ -5408,6 +5842,7 @@
   function drawAnimatedPhaseViews() {
     drawModelVisualization();
     drawPhasePlots();
+    drawPhasePortraitPanel();
   }
   function startModelAnimationLoop() {
     if (modelAnimationFrame) return;
@@ -5441,11 +5876,13 @@
     const okStatus = latestResult.message === "equilibrium" || latestResult.message === "limit_cycle" || !state.runUntilStable && latestResult.status === "complete";
     const final = rows[rows.length - 1];
     const phase = phaseForRows(rows);
-    const s72Stability = analyticStabilityConditions(stabilityDisplayParameters());
+    const stabilityParameters = stabilityDisplayParameters();
+    const s72Stability = analyticStabilityConditions(stabilityParameters);
     updateGridLoopSliderMarkers();
     updateSonificationSourceControls();
     updateSonificationCurve(phase);
     const metricsNode = el("metrics");
+    hideStabilityChipValues(true);
     metricsNode.dataset.s72Dynamic = s72State(s72Stability.dynamic.stable);
     metricsNode.dataset.s72Secular = s72State(s72Stability.secular.stable);
     metricsNode.dataset.s72Pulsational = s72State(s72Stability.pulsational.stable);
@@ -5464,25 +5901,32 @@
       {
         label: "dyn",
         value: s72DynamicMetric(s72Stability),
+        expandedValue: s72DynamicExpandedMetric(s72Stability),
+        detail: s72DynamicTitle(s72Stability),
         className: s72MetricClass(s72Stability.dynamic.stable),
         stabilityKind: "dynamic"
       },
       {
         label: "sec",
         value: s72SecularMetric(s72Stability),
+        expandedValue: s72SecularExpandedMetric(s72Stability, stabilityParameters),
+        detail: s72SecularTitle(s72Stability, stabilityParameters),
         className: s72MetricClass(s72Stability.secular.stable),
         stabilityKind: "secular"
       },
       {
         label: "puls",
         value: s72PulsationalMetric(s72Stability),
+        expandedValue: s72PulsationalExpandedMetric(s72Stability, stabilityParameters),
+        detail: s72PulsationalTitle(s72Stability, stabilityParameters),
         className: s72MetricClass(s72Stability.pulsational.stable),
         stabilityKind: "pulsational"
       }
     ];
-    const metricsHtml = metricItems.map(({ label, value, className, stabilityKind }) => {
+    const metricsHtml = metricItems.map(({ label, value, className, stabilityKind, expandedValue, detail }) => {
       const stabilityAttribute = stabilityKind ? ` data-stability-kind="${stabilityKind}"` : "";
-      return `<span class="metric${className ? ` ${className}` : ""}"${stabilityAttribute}>${label}<b>${value}</b></span>`;
+      const detailAttribute = expandedValue && detail ? ` data-stability-detail="${escapeAttribute(detail)}" data-stability-default="${escapeAttribute(String(value))}" data-stability-expanded="${escapeAttribute(expandedValue)}" data-stability-view="default" role="button" tabindex="0" aria-expanded="false" aria-label="${escapeAttribute(`${label}: ${detail}`)}"` : "";
+      return `<span class="metric${className ? ` ${className}` : ""}"${stabilityAttribute}${detailAttribute}>${label}<b>${value}</b></span>`;
     }).join("");
     stageMathHtml(metricsNode, metricsHtml);
     queueMathTypeset([metricsNode]);
@@ -5558,6 +6002,7 @@
   }
   function startApp() {
     buildControls();
+    setupStatusMetricExpansion();
     solveAndDraw();
     startModelAnimationLoop();
     window.addEventListener("load", () => queueMathTypeset());

@@ -31,6 +31,15 @@ export interface PhaseResult {
   reason: "ok" | "not_enough_rows" | "not_enough_minima" | "not_enough_maxima" | "amplitude_below_threshold" | "reference_out_of_range";
 }
 
+interface AnchorCandidate {
+  result: PhaseResult;
+  score: number;
+  stride: 1 | 2;
+  meanLuminosity: number;
+}
+
+const SAME_EXTREMUM_LUMINOSITY_TOLERANCE = 0.025;
+
 function defaultWarmupTau(rows: readonly Row[]): number {
   const finalTau = rows.at(-1)?.tau ?? 0;
   return Math.max(1, Math.min(4, 0.05 * finalTau));
@@ -173,29 +182,136 @@ function buildReferenceFromAnchors(
   return foldRowsToReference(rows, reference);
 }
 
-function buildReferenceFromMinima(
-  rows: readonly Row[],
-  minimumRows: [Row, Row, Row],
-  warmupTau: number,
-  minAmplitude: number
-): PhaseResult | null {
-  return buildReferenceFromAnchors(rows, minimumRows, "min", warmupTau, minAmplitude);
+function anchorLuminosityScore(anchorRows: [Row, Row, Row]): number {
+  const values = anchorRows.map((row) => row.L);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const scale = Math.max(1, ...values.map((value) => Math.abs(value)));
+  return (max - min) / scale;
 }
 
-function buildMaxLightReference(rows: readonly Row[], maxima: readonly Row[], warmupTau: number, minAmplitude: number, selection?: "first" | "last"): PhaseResult {
-  if (maxima.length < 3) {
-    return { rows: [], reference: null, period: null, reason: "not_enough_maxima" };
+function selectAnchorCandidate(candidates: AnchorCandidate[]): AnchorCandidate | null {
+  if (!candidates.length) return null;
+  const direct = candidates.find((candidate) =>
+    candidate.stride === 1 && candidate.score <= SAME_EXTREMUM_LUMINOSITY_TOLERANCE
+  );
+  if (direct) return direct;
+  return [...candidates].sort((a, b) => a.score - b.score || a.stride - b.stride)[0];
+}
+
+function selectAlternatingExtremumCandidate(
+  candidates: AnchorCandidate[],
+  anchor: PhaseAnchor,
+  selection?: "first" | "last"
+): AnchorCandidate | null {
+  if (!candidates.length) return null;
+  return [...candidates].sort((a, b) => {
+    const luminosityDelta = anchor === "min"
+      ? a.meanLuminosity - b.meanLuminosity
+      : b.meanLuminosity - a.meanLuminosity;
+    if (Math.abs(luminosityDelta) > 1e-12) return luminosityDelta;
+    const aReference = a.result.reference!;
+    const bReference = b.result.reference!;
+    const tauDelta = selection === "last"
+      ? bReference.endTau - aReference.endTau
+      : aReference.startTau - bReference.startTau;
+    return tauDelta || a.score - b.score;
+  })[0];
+}
+
+function buildAnchorCandidate(
+  rows: readonly Row[],
+  anchorRows: [Row, Row, Row],
+  anchor: PhaseAnchor,
+  warmupTau: number,
+  minAmplitude: number,
+  stride: 1 | 2
+): AnchorCandidate | null {
+  const result = buildReferenceFromAnchors(rows, anchorRows, anchor, warmupTau, minAmplitude);
+  if (!result) return null;
+  return {
+    result,
+    score: anchorLuminosityScore(anchorRows),
+    stride,
+    meanLuminosity: anchorRows.reduce((sum, row) => sum + row.L, 0) / anchorRows.length
+  };
+}
+
+function buildReferenceFromExtrema(
+  rows: readonly Row[],
+  extrema: readonly Row[],
+  anchor: PhaseAnchor,
+  warmupTau: number,
+  minAmplitude: number,
+  selection?: "first" | "last"
+): PhaseResult {
+  if (extrema.length < 3) {
+    return { rows: [], reference: null, period: null, reason: anchor === "max" ? "not_enough_maxima" : "not_enough_minima" };
   }
 
-  const start = selection === "last" ? maxima.length - 3 : 0;
-  const end = selection === "last" ? -1 : maxima.length - 3;
-  const direction = selection === "last" ? -1 : 1;
-  for (let i = start; selection === "last" ? i > end : i <= end; i += direction) {
-    const result = buildReferenceFromAnchors(rows, [maxima[i], maxima[i + 1], maxima[i + 2]], "max", warmupTau, minAmplitude);
-    if (result) return result;
+  if (selection === "last") {
+    const alternatingCandidates: AnchorCandidate[] = [];
+    for (let endIndex = extrema.length - 1; endIndex >= 2; endIndex -= 1) {
+      const candidates: AnchorCandidate[] = [];
+      ([1, 2] as const).forEach((stride) => {
+        const firstIndex = endIndex - 2 * stride;
+        const midIndex = endIndex - stride;
+        if (firstIndex < 0) return;
+        const candidate = buildAnchorCandidate(
+          rows,
+          [extrema[firstIndex], extrema[midIndex], extrema[endIndex]],
+          anchor,
+          warmupTau,
+          minAmplitude,
+          stride
+        );
+        if (candidate) candidates.push(candidate);
+      });
+      const selected = selectAnchorCandidate(candidates);
+      if (!selected) continue;
+      if (selected.stride === 1) return selected.result;
+      alternatingCandidates.push(selected);
+      if (alternatingCandidates.length >= 2) {
+        return selectAlternatingExtremumCandidate(alternatingCandidates, anchor, selection)!.result;
+      }
+    }
+    const selected = selectAlternatingExtremumCandidate(alternatingCandidates, anchor, selection);
+    if (selected) return selected.result;
+  } else {
+    const alternatingCandidates: AnchorCandidate[] = [];
+    for (let firstIndex = 0; firstIndex <= extrema.length - 3; firstIndex += 1) {
+      const candidates: AnchorCandidate[] = [];
+      ([1, 2] as const).forEach((stride) => {
+        const midIndex = firstIndex + stride;
+        const endIndex = firstIndex + 2 * stride;
+        if (endIndex >= extrema.length) return;
+        const candidate = buildAnchorCandidate(
+          rows,
+          [extrema[firstIndex], extrema[midIndex], extrema[endIndex]],
+          anchor,
+          warmupTau,
+          minAmplitude,
+          stride
+        );
+        if (candidate) candidates.push(candidate);
+      });
+      const selected = selectAnchorCandidate(candidates);
+      if (!selected) continue;
+      if (selected.stride === 1) return selected.result;
+      alternatingCandidates.push(selected);
+      if (alternatingCandidates.length >= 2) {
+        return selectAlternatingExtremumCandidate(alternatingCandidates, anchor, selection)!.result;
+      }
+    }
+    const selected = selectAlternatingExtremumCandidate(alternatingCandidates, anchor, selection);
+    if (selected) return selected.result;
   }
 
   return { rows: [], reference: null, period: null, reason: "amplitude_below_threshold" };
+}
+
+function buildMaxLightReference(rows: readonly Row[], maxima: readonly Row[], warmupTau: number, minAmplitude: number, selection?: "first" | "last"): PhaseResult {
+  return buildReferenceFromExtrema(rows, maxima, "max", warmupTau, minAmplitude, selection);
 }
 
 function buildReference(rows: readonly Row[], options: PhaseOptions): PhaseResult {
@@ -210,34 +326,21 @@ function buildReference(rows: readonly Row[], options: PhaseOptions): PhaseResul
     return buildMaxLightReference(rows, maxima, warmupTau, minAmplitude, options.selection);
   }
 
-  if (maxima.length >= 4) {
-    const start = options.selection === "last" ? maxima.length - 4 : 0;
-    const end = options.selection === "last" ? -1 : maxima.length - 4;
-    const direction = options.selection === "last" ? -1 : 1;
-    for (let i = start; options.selection === "last" ? i > end : i <= end; i += direction) {
-      const firstMinimum = minimumBetween(rows, maxima[i].tau, maxima[i + 1].tau);
-      const secondMinimum = minimumBetween(rows, maxima[i + 1].tau, maxima[i + 2].tau);
-      const thirdMinimum = minimumBetween(rows, maxima[i + 2].tau, maxima[i + 3].tau);
-      if (!firstMinimum || !secondMinimum || !thirdMinimum) continue;
-      const result = buildReferenceFromMinima(rows, [firstMinimum, secondMinimum, thirdMinimum], warmupTau, minAmplitude);
-      if (result) return result;
-    }
-  }
-
   const minima = findLuminosityMinima(rows, warmupTau, minimumSeparationFromMaxima(maxima, options.minSeparation));
-  if (minima.length < 3) {
-    return { rows: [], reference: null, period: null, reason: "not_enough_minima" };
+  const directMinimumResult = buildReferenceFromExtrema(rows, minima, "min", warmupTau, minAmplitude, options.selection);
+  if (directMinimumResult.reason === "ok") return directMinimumResult;
+
+  if (maxima.length >= 4) {
+    const cycleMinima: Row[] = [];
+    for (let i = 0; i < maxima.length - 1; i += 1) {
+      const minimum = minimumBetween(rows, maxima[i].tau, maxima[i + 1].tau);
+      if (minimum) cycleMinima.push(minimum);
+    }
+    const result = buildReferenceFromExtrema(rows, cycleMinima, "min", warmupTau, minAmplitude, options.selection);
+    if (result.reason === "ok") return result;
   }
 
-  const start = options.selection === "last" ? minima.length - 3 : 0;
-  const end = options.selection === "last" ? -1 : minima.length - 3;
-  const direction = options.selection === "last" ? -1 : 1;
-  for (let i = start; options.selection === "last" ? i > end : i <= end; i += direction) {
-    const result = buildReferenceFromMinima(rows, [minima[i], minima[i + 1], minima[i + 2]], warmupTau, minAmplitude);
-    if (result) return result;
-  }
-
-  return { rows: [], reference: null, period: null, reason: "amplitude_below_threshold" };
+  return directMinimumResult;
 }
 
 export function foldRowsToReference(rows: readonly Row[], reference: PhaseReference): PhaseResult {

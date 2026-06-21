@@ -272,6 +272,65 @@ async function runPlaywrightChecks() {
     assertOk(!initialMetrics?.includes("driver"), "metrics should not duplicate driver controls");
     assertOk(!initialMetrics?.includes("solver"), "metrics should not duplicate solver controls");
     await page.waitForFunction(() => !document.body.innerText.includes("\\("), null, { timeout: 15000 });
+    const dynamicChip = page.locator("#metrics [data-stability-kind='dynamic']");
+    const secularChip = page.locator("#metrics [data-stability-kind='secular']");
+    const pulsationalChip = page.locator("#metrics [data-stability-kind='pulsational']");
+    const dynamicDetail = await dynamicChip.getAttribute("data-stability-detail");
+    const secularDetail = await secularChip.getAttribute("data-stability-detail");
+    const pulsationalDetail = await pulsationalChip.getAttribute("data-stability-detail");
+    assertOk(dynamicDetail?.includes("Gamma1=1.1") && dynamicDetail.includes("4/10 = 0.4") && dynamicDetail.includes("dynamically stable"), "dynamic stability chip should plug in current values");
+    assertOk(secularDetail?.includes("10*1") && secularDetail.includes("(10 - 4)*(3 + 4) = 56") && secularDetail.includes("secularly stable"), "secular stability chip should plug in current values");
+    assertOk(pulsationalDetail?.includes("Gamma1=1.1") && pulsationalDetail.includes("= 7 \u226E 0 -> pulsationally unstable"), "pulsational stability chip should plug in current values with a slashed failed inequality");
+    assertOk((await dynamicChip.getAttribute("title")) === null, "stability chips should not use a separate hover tooltip");
+    assertOk((await dynamicChip.getAttribute("data-stability-expanded"))?.includes("\\ozChiZero{10}"), "dynamic chip should keep expanded values colored by variable macros");
+    const dynamicBox = await dynamicChip.boundingBox();
+    assertOk(Boolean(dynamicBox), "dynamic stability chip bounds should be available");
+    const dynamicInitialText = await dynamicChip.textContent();
+    assertOk(dynamicInitialText?.includes("χ0") && !dynamicInitialText.includes("4/10"), "dynamic stability chip should start with variable names");
+    await dynamicChip.hover();
+    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.getAttribute("data-stability-view") === "expanded");
+    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.textContent?.includes("4/10=0.4"));
+    assertOk((await dynamicChip.textContent())?.includes("4/10=0.4"), "hovering a stability chip should replace variables inline with substituted values");
+    await page.mouse.move(5, 5);
+    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.getAttribute("data-stability-view") === "default");
+    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.textContent?.includes("χ0"));
+    await dynamicChip.click();
+    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.getAttribute("data-stability-view") === "expanded");
+    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.textContent?.includes("4/10=0.4"));
+    assertOk((await dynamicChip.textContent())?.includes("4/10=0.4"), "clicking a stability chip should replace variables inline with substituted values");
+    assertOk((await page.locator("#stabilityChipTooltip").count()) === 0, "stability chips should not create a separate tooltip box");
+    await page.locator("#plotGrid").click({ position: { x: 12, y: 12 } });
+    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.getAttribute("data-stability-view") === "default");
+    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.textContent?.includes("χ0"));
+    assertOk((await dynamicChip.textContent())?.includes("χ0"), "outside click should restore the variable-name formula");
+    await page.mouse.move(5, 5);
+    await dynamicChip.evaluate((node) => {
+      node.dispatchEvent(new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 91,
+        pointerType: "touch",
+        clientX: 20,
+        clientY: 20
+      }));
+    });
+    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.getAttribute("data-stability-view") === "expanded", null, { timeout: 1500 });
+    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.textContent?.includes("4/10=0.4"), null, { timeout: 1500 });
+    assertOk((await dynamicChip.textContent())?.includes("4/10=0.4"), "long-pressing a stability chip should replace variables inline");
+    await dynamicChip.evaluate((node) => {
+      node.dispatchEvent(new PointerEvent("pointerup", {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 91,
+        pointerType: "touch",
+        clientX: 20,
+        clientY: 20
+      }));
+    });
+    await page.locator("#plotGrid").click({ position: { x: 12, y: 12 } });
+    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.getAttribute("data-stability-view") === "default");
+    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.textContent?.includes("χ0"));
+    assertOk((await dynamicChip.textContent())?.includes("χ0"), "outside click should restore the stability chip formula");
 
     assertOk(await page.locator("[data-symbol='tau']").first().isVisible(), "tau symbol was not visible");
     const tauRowText = await page.locator("[data-symbol='tau']").first().locator("xpath=ancestor::tr").textContent();
@@ -416,7 +475,7 @@ async function runPlaywrightChecks() {
       input.value = "1";
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    assertOk(await page.locator("#plotGrid .plot-panel canvas:visible").count() === 5, "expected five visible plot canvases");
+    assertOk(await page.locator("#plotGrid .plot-panel canvas:visible").count() === 8, "expected eight visible plot canvases");
     const modelBox = await page.locator("#modelCanvas").boundingBox();
     const modelPanelBox = await page.locator("[data-plot-panel='model']").boundingBox();
     const lightBox = await page.locator("#lightCanvas").boundingBox();
@@ -444,14 +503,15 @@ async function runPlaywrightChecks() {
     assertOk(plotLayout.display === "flex", "plot grid should use flex layout");
     assertOk(plotLayout.flexWrap === "wrap", "plot grid should wrap flex rows");
     const firstRow = plotLayout.panels.filter((panel) => panel.top === plotLayout.panels[0].top);
-    const secondRowTop = plotLayout.panels.find((panel) => panel.id === "time")?.top;
-    const secondRow = plotLayout.panels.filter((panel) => panel.top === secondRowTop);
-    assertOk(firstRow.map((panel) => panel.id).join("|") === "model|light|velocity", `first plot row should be model/light/velocity, saw ${firstRow.map((panel) => panel.id).join("|")}`);
+    const referencePanels = plotLayout.panels.filter((panel) => ["stability", "strip", "phasePortrait"].includes(panel.id));
+    assertOk(plotLayout.panels.map((panel) => panel.id).join("|") === "model|light|velocity|time|lum|stability|strip|phasePortrait", `plot grid should include all removable panels, saw ${plotLayout.panels.map((panel) => panel.id).join("|")}`);
+    const firstRowIds = firstRow.map((panel) => panel.id).join("|");
+    assertOk(firstRowIds === "model|light|velocity" || firstRowIds === "model|light|velocity|time", `first plot row should start with model/light/velocity, saw ${firstRowIds}`);
     assertOk(firstRow.find((panel) => panel.id === "model")?.width < 360, "Shell should stay compact");
-    assertOk(firstRow.find((panel) => panel.id === "light")?.width > 500, "Lightcurve should expand beside Shell");
-    assertOk(firstRow.find((panel) => panel.id === "velocity")?.width > 500, "RV Curve should expand beside Shell");
-    assertOk(secondRow.map((panel) => panel.id).join("|") === "time|lum", `second plot row should be History/Luminosity, saw ${secondRow.map((panel) => panel.id).join("|")}`);
-    assertOk(secondRow.every((panel) => panel.width > 650), "History and Luminosity should fill their row");
+    assertOk(firstRow.find((panel) => panel.id === "light")?.width > 360, "Lightcurve should expand beside Shell");
+    assertOk(firstRow.find((panel) => panel.id === "velocity")?.width > 360, "RV Curve should expand beside Shell");
+    assertOk(plotLayout.panels.find((panel) => panel.id === "time")?.width > 360, "History should expand to fill its flex row");
+    assertOk(referencePanels.every((panel) => panel.width >= 400), "reference panels should use the shared plot grid sizing");
     const hasModelPaint = await page.locator("#modelCanvas").evaluate((canvas) => {
       const node = canvas;
       const ctx = node.getContext("2d");
@@ -492,13 +552,13 @@ async function runPlaywrightChecks() {
     assertOk(!(await page.locator("[data-plot-panel='model']").isVisible()), "Shell panel should hide when unchecked");
     assertOk(await page.locator("#hiddenPlotControls").isVisible(), "hidden plot controls should appear when a plot is hidden");
     assertOk((await page.locator("#hiddenPlotControls").textContent())?.includes("Shell"), "hidden plot controls should include Shell");
-    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "4", "four visible plots should be tracked");
+    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "7", "seven visible plots should be tracked");
     assertOk((await page.locator("#plotGrid").getAttribute("data-plot-columns")) === null, "plot grid should not force a column mode after hiding a plot");
-    assertOk(await page.locator("#plotGrid .plot-panel canvas:visible").count() === 4, "expected four visible plot canvases after hiding Shell");
+    assertOk(await page.locator("#plotGrid .plot-panel canvas:visible").count() === 7, "expected seven visible plot canvases after hiding Shell");
     await page.locator("#hiddenPlotControls [data-plot-toggle='model']").check();
     assertOk(await page.locator("[data-plot-panel='model']").isVisible(), "Shell panel should return when rechecked");
     assertOk(!(await page.locator("#hiddenPlotControls").isVisible()), "hidden plot controls should hide again when all plots are visible");
-    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "5", "five visible plots should be tracked after restore");
+    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "8", "eight visible plots should be tracked after restore");
     assertOk(!(await page.getByLabel("Enable grid mode").isChecked()), "grid mode should start off");
     assertOk(!(await page.locator("#fourierGridPanel").isVisible()), "Fourier grid panel should start hidden");
     await page.getByLabel("Enable grid mode").check();
@@ -514,6 +574,9 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("[data-plot-panel='model']").isHidden(), "Shell should be hidden in grid mode");
     assertOk(await page.locator("[data-plot-panel='time']").isHidden(), "History should be hidden in grid mode");
     assertOk(await page.locator("[data-plot-panel='lum']").isHidden(), "Luminosity Evolution should be hidden in grid mode");
+    assertOk(await page.locator("[data-plot-panel='stability']").isVisible(), "Stability Map should remain visible in grid mode");
+    assertOk(await page.locator("[data-plot-panel='strip']").isVisible(), "Instability Strip should remain visible in grid mode");
+    assertOk(await page.locator("[data-plot-panel='phasePortrait']").isVisible(), "Thermal-Convection Loop should remain visible in grid mode");
     assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='model']").isDisabled(), "Shell toggle should be disabled in grid mode");
     assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='time']").isDisabled(), "History toggle should be disabled in grid mode");
     assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='lum']").isDisabled(), "Luminosity toggle should be disabled in grid mode");
@@ -670,7 +733,7 @@ async function runPlaywrightChecks() {
     await page.locator("#variableM").check();
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "radius-dependent", "luminosity equations did not switch to radius-dependent geometry");
     const timeLegendHtmlBeforeMSlider = await page.locator("#timeLegend").innerHTML();
-    await page.locator("input[aria-label='Thin shell form factor']").evaluate((input) => {
+    await page.locator("input[aria-label='shell thinness']").evaluate((input) => {
       const slider = input;
       slider.value = "15";
       slider.dispatchEvent(new Event("input", { bubbles: true }));
@@ -679,7 +742,7 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("#metrics mjx-container").count() > 0, "rendered output metrics should remain visible while chi changes");
     assertOk((await page.locator("#timeLegend").innerHTML()) === timeLegendHtmlBeforeMSlider, "plot legend should not be rebuilt while chi changes");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.93", "eta did not update when chi changed");
-    await page.locator("input[aria-label='Thin shell form factor']").evaluate((input) => {
+    await page.locator("input[aria-label='shell thinness']").evaluate((input) => {
       const slider = input;
       slider.value = "3";
       slider.dispatchEvent(new Event("input", { bubbles: true }));

@@ -18,6 +18,7 @@ import {
   defaultGridRange,
   normalizeGridRange,
   parameterValueFromSlider,
+  roundToNativeStep,
   sliderMeta,
   sliderValueFromParameter,
   type GridCompleteMessage,
@@ -150,6 +151,7 @@ let sonificationStopTimer = 0;
 const sonificationVoices = new Set<SonificationVoice>();
 let sonificationActive = false;
 let activePhaseScrub: PhaseScrubInteraction | null = null;
+let activeReferencePlotInteraction: ReferencePlotInteraction | null = null;
 let pianoModeActive = false;
 let pianoStartOctave = PIANO_DEFAULT_START_OCTAVE;
 let pianoMasterGain: GainNode | null = null;
@@ -157,6 +159,7 @@ let pianoEnvelope: PianoEnvelope = { ...PIANO_DEFAULT_ENVELOPE };
 let pianoSustainLevel = PIANO_DEFAULT_SUSTAIN_LEVEL;
 const activePianoVoices = new Map<string, PianoVoice>();
 const activePianoMidiCounts = new Map<number, number>();
+const referencePlotRenderStates = new Map<string, ReferencePlotRenderState>();
 const TAU_SCALE_MAX = 1000;
 const TAU_TICKS = [1, 3, 10, 30, 100, 300];
 const THEME = {
@@ -172,7 +175,7 @@ type PlotBox = { left: number; top: number; width: number; height: number };
 type NumericRange = [number, number];
 type InteractivePlotId = "time" | "lum";
 type PlotSeriesKey = "R" | "V" | "H" | "Uc" | "L" | "Lr" | "Lc";
-type UserPlotId = "model" | "light" | "velocity" | "time" | "lum";
+type UserPlotId = "model" | "light" | "velocity" | "time" | "lum" | "stability" | "strip" | "phasePortrait";
 type SonificationSource = "luminosity" | "velocity" | "pressure";
 
 interface PlotView {
@@ -205,6 +208,19 @@ interface PhaseScrubInteraction {
   pointerId: number;
 }
 
+interface ReferencePlotRenderState {
+  plot: PlotBox;
+  xlim: NumericRange;
+  ylim: NumericRange;
+  width: number;
+  height: number;
+}
+
+interface ReferencePlotInteraction {
+  canvasId: "stabilityMapCanvas" | "cepheidGuideCanvas";
+  pointerId: number;
+}
+
 interface StagedMathUpdate {
   html: string;
   version: number;
@@ -234,7 +250,7 @@ interface FourierAxisLabel {
   subscript: string;
 }
 
-type PhasePortraitKey = "H" | "Uc" | "P";
+type PhasePortraitKey = "H" | "Uc";
 
 interface CanvasMathFragment {
   text: string;
@@ -374,7 +390,10 @@ const PLOT_PANEL_LABELS: Record<UserPlotId, string> = {
   light: "Lightcurve",
   velocity: "RV Curve",
   time: "History",
-  lum: "Luminosity Evolution"
+  lum: "Luminosity Evolution",
+  stability: "Stability Map",
+  strip: "Instability Strip",
+  phasePortrait: "Thermal-Convection Loop"
 };
 
 const plotPanelVisibility: Record<UserPlotId, boolean> = {
@@ -382,7 +401,10 @@ const plotPanelVisibility: Record<UserPlotId, boolean> = {
   light: true,
   velocity: true,
   time: true,
-  lum: true
+  lum: true,
+  stability: true,
+  strip: true,
+  phasePortrait: true
 };
 
 const plotRenderStates = new Map<string, PlotRenderState>();
@@ -395,6 +417,21 @@ const SLIDER_RANGE_DOUBLE_TAP_MS = 360;
 const SLIDER_RANGE_DOUBLE_TAP_DISTANCE = 22;
 let activeSliderTapStart: { key: ControlParameterKey; pointerId: number; x: number; y: number } | null = null;
 let lastSliderTap: { key: ControlParameterKey; time: number; x: number; y: number } | null = null;
+const STABILITY_CHIP_LONG_PRESS_MS = 520;
+const STABILITY_CHIP_MOVE_TOLERANCE = 14;
+let activeStabilityChipTarget: HTMLElement | null = null;
+let stabilityChipPinned = false;
+let stabilityLongPressTimer = 0;
+let stabilityLongPressStart: {
+  target: HTMLElement;
+  pointerId: number;
+  x: number;
+  y: number;
+  pinnedAtStart: boolean;
+  longPressFired: boolean;
+} | null = null;
+let suppressNextStabilityClick = false;
+let lastTouchStabilityToggleAt = 0;
 const DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
 const STABILITY_MAP_RESOLUTION = 54;
 const stabilityMapCache = new Map<string, StabilityKind[]>();
@@ -420,26 +457,271 @@ interface StatusMetricItem {
   value: string | number;
   className?: string;
   stabilityKind?: AnalyticStabilityKind;
+  expandedValue?: string;
+  detail?: string;
+}
+
+function escapeAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function s72State(stable: boolean): "stable" | "unstable" {
   return stable ? "stable" : "unstable";
 }
 
+function s72Verdict(kind: AnalyticStabilityKind, stable: boolean): string {
+  const stateText = stable ? "stable" : "unstable";
+  if (kind === "dynamic") return `dynamically ${stateText}`;
+  if (kind === "secular") return `secularly ${stateText}`;
+  return `pulsationally ${stateText}`;
+}
+
 function s72MetricClass(stable: boolean): "status-ok" | "status-bad" {
   return stable ? "status-ok" : "status-bad";
 }
 
+function s72LatexInequality(satisfied: boolean, symbol: ">" | "<"): string {
+  return satisfied ? symbol : `\\not${symbol}`;
+}
+
+function s72TextInequality(satisfied: boolean, symbol: ">" | "<"): string {
+  if (satisfied) return symbol;
+  return symbol === ">" ? "\u226F" : "\u226E";
+}
+
+function s72ColoredValue(macro: "ozChiZero" | "ozGamma" | "ozBlue" | "ozPink", value: number, digits = 2): string {
+  return `\\${macro}{${fmt(value, digits)}}`;
+}
+
 function s72DynamicMetric(stability: AnalyticStabilityResult): string {
-  return `\\(${TEX.gamma1}=${fmt(stability.dynamic.value, 2)} > 4/${TEX.m}=${fmt(stability.dynamic.threshold, 2)}\\)`;
+  const symbol = s72LatexInequality(stability.dynamic.stable, ">");
+  return `\\(${TEX.gamma1}=${fmt(stability.dynamic.value, 2)} ${symbol} 4/${TEX.m}=${fmt(stability.dynamic.threshold, 2)}\\)`;
+}
+
+function s72DynamicExpandedMetric(stability: AnalyticStabilityResult): string {
+  const symbol = s72LatexInequality(stability.dynamic.stable, ">");
+  return `\\(${s72ColoredValue("ozGamma", stability.dynamic.value)} ${symbol} 4/${s72ColoredValue("ozChiZero", stability.m)}=${fmt(stability.dynamic.threshold, 2)}\\)`;
 }
 
 function s72SecularMetric(stability: AnalyticStabilityResult): string {
-  return `\\(4+${TEX.m}${TEX.n}+(${TEX.m}-4)(${TEX.s}+4)=${fmt(stability.secular.value, 2)} > 0\\)`;
+  const symbol = s72LatexInequality(stability.secular.stable, ">");
+  return `\\(4+${TEX.m}${TEX.n}+(${TEX.m}-4)(${TEX.s}+4)=${fmt(stability.secular.value, 2)} ${symbol} 0\\)`;
+}
+
+function s72SecularExpandedMetric(stability: AnalyticStabilityResult, parameters: ModelParameters): string {
+  const symbol = s72LatexInequality(stability.secular.stable, ">");
+  const m = s72ColoredValue("ozChiZero", stability.m);
+  const n = s72ColoredValue("ozBlue", parameters.n);
+  const s = s72ColoredValue("ozPink", parameters.s);
+  return `\\(4+${m}${n}+(${m}-4)(${s}+4)=${fmt(stability.secular.value, 2)} ${symbol} 0\\)`;
 }
 
 function s72PulsationalMetric(stability: AnalyticStabilityResult): string {
-  return `\\(b=4+${TEX.m}[${TEX.n}-(${TEX.s}+4)(${TEX.gamma1}-1)]=${fmt(stability.b, 2)} < 0\\)`;
+  const symbol = s72LatexInequality(stability.pulsational.stable, "<");
+  return `\\(b=4+${TEX.m}[${TEX.n}-(${TEX.s}+4)(${TEX.gamma1}-1)]=${fmt(stability.b, 2)} ${symbol} 0\\)`;
+}
+
+function s72PulsationalExpandedMetric(stability: AnalyticStabilityResult, parameters: ModelParameters): string {
+  const symbol = s72LatexInequality(stability.pulsational.stable, "<");
+  const m = s72ColoredValue("ozChiZero", stability.m);
+  const n = s72ColoredValue("ozBlue", parameters.n);
+  const s = s72ColoredValue("ozPink", parameters.s);
+  const gamma1 = s72ColoredValue("ozGamma", parameters.gamma1);
+  return `\\(b=4+${m}[${n}-(${s}+4)(${gamma1}-1)]=${fmt(stability.b, 2)} ${symbol} 0\\)`;
+}
+
+function s72DynamicTitle(stability: AnalyticStabilityResult): string {
+  const symbol = s72TextInequality(stability.dynamic.stable, ">");
+  return `Dynamic stability: Gamma1=${fmt(stability.dynamic.value, 3)}, chi0=${fmt(stability.m, 3)}; ${fmt(stability.dynamic.value, 3)} ${symbol} 4/${fmt(stability.m, 3)} = ${fmt(stability.dynamic.threshold, 3)} -> ${s72Verdict("dynamic", stability.dynamic.stable)}`;
+}
+
+function s72SecularTitle(stability: AnalyticStabilityResult, parameters: ModelParameters): string {
+  const symbol = s72TextInequality(stability.secular.stable, ">");
+  return `Secular stability: chi0=${fmt(stability.m, 3)}, n=${fmt(parameters.n, 3)}, s=${fmt(parameters.s, 3)}; 4 + ${fmt(stability.m, 3)}*${fmt(parameters.n, 3)} + (${fmt(stability.m, 3)} - 4)*(${fmt(parameters.s, 3)} + 4) = ${fmt(stability.secular.value, 3)} ${symbol} 0 -> ${s72Verdict("secular", stability.secular.stable)}`;
+}
+
+function s72PulsationalTitle(stability: AnalyticStabilityResult, parameters: ModelParameters): string {
+  const symbol = s72TextInequality(stability.pulsational.stable, "<");
+  return `Pulsational stability: chi0=${fmt(stability.m, 3)}, n=${fmt(parameters.n, 3)}, s=${fmt(parameters.s, 3)}, Gamma1=${fmt(parameters.gamma1, 3)}; b = 4 + ${fmt(stability.m, 3)}*(${fmt(parameters.n, 3)} - (${fmt(parameters.s, 3)} + 4)*(${fmt(parameters.gamma1, 3)} - 1)) = ${fmt(stability.b, 3)} ${symbol} 0 -> ${s72Verdict("pulsational", stability.pulsational.stable)}`;
+}
+
+function stabilityChipFromTarget(target: EventTarget | null): HTMLElement | null {
+  if (!(target instanceof Element)) return null;
+  return target.closest<HTMLElement>("[data-stability-expanded]");
+}
+
+function setStabilityChipFormula(target: HTMLElement, expanded: boolean): void {
+  const formula = expanded ? target.dataset.stabilityExpanded : target.dataset.stabilityDefault;
+  const formulaNode = target.querySelector<HTMLElement>("b");
+  if (!formula || !formulaNode || target.dataset.stabilityView === (expanded ? "expanded" : "default")) return;
+  formulaNode.innerHTML = formula;
+  target.dataset.stabilityView = expanded ? "expanded" : "default";
+  queueMathTypeset([formulaNode]);
+}
+
+function setStabilityChipExpanded(target: HTMLElement | null, expanded: boolean): void {
+  if (!target) return;
+  target.setAttribute("aria-expanded", String(expanded));
+  setStabilityChipFormula(target, expanded);
+}
+
+function showStabilityChipValues(target: HTMLElement, pinned: boolean): void {
+  if (activeStabilityChipTarget && activeStabilityChipTarget !== target) {
+    setStabilityChipExpanded(activeStabilityChipTarget, false);
+    delete activeStabilityChipTarget.dataset.stabilityPinned;
+  }
+  activeStabilityChipTarget = target;
+  stabilityChipPinned = pinned;
+  target.dataset.stabilityPinned = String(pinned);
+  setStabilityChipExpanded(target, true);
+}
+
+function hideStabilityChipValues(force = false): void {
+  if (stabilityChipPinned && !force) return;
+  if (activeStabilityChipTarget) delete activeStabilityChipTarget.dataset.stabilityPinned;
+  setStabilityChipExpanded(activeStabilityChipTarget, false);
+  activeStabilityChipTarget = null;
+  stabilityChipPinned = false;
+}
+
+function toggleStabilityChipValues(target: HTMLElement): void {
+  if (target.dataset.stabilityPinned === "true" || (stabilityChipPinned && isSameStabilityChip(target))) {
+    hideStabilityChipValues(true);
+  } else {
+    showStabilityChipValues(target, true);
+  }
+}
+
+function clearStabilityLongPress(): void {
+  if (stabilityLongPressTimer) window.clearTimeout(stabilityLongPressTimer);
+  stabilityLongPressTimer = 0;
+  stabilityLongPressStart = null;
+}
+
+function isSameStabilityChip(target: HTMLElement): boolean {
+  return activeStabilityChipTarget === target
+    || (!!activeStabilityChipTarget?.dataset.stabilityKind
+      && activeStabilityChipTarget.dataset.stabilityKind === target.dataset.stabilityKind);
+}
+
+function setupStatusMetricExpansion(): void {
+  const metrics = el<HTMLDivElement>("metrics");
+  metrics.addEventListener("pointerover", (event) => {
+    const chip = stabilityChipFromTarget(event.target);
+    if (chip && !stabilityChipPinned) showStabilityChipValues(chip, false);
+  });
+  metrics.addEventListener("pointerout", (event) => {
+    const chip = stabilityChipFromTarget(event.target);
+    if (!chip || stabilityChipPinned) return;
+    if (event.relatedTarget instanceof Node && chip.contains(event.relatedTarget)) return;
+    hideStabilityChipValues();
+  });
+  metrics.addEventListener("focusin", (event) => {
+    const chip = stabilityChipFromTarget(event.target);
+    if (chip && !stabilityChipPinned) showStabilityChipValues(chip, false);
+  });
+  metrics.addEventListener("focusout", (event) => {
+    const chip = stabilityChipFromTarget(event.target);
+    if (!chip || stabilityChipPinned) return;
+    if (event.relatedTarget instanceof Node && chip.contains(event.relatedTarget)) return;
+    hideStabilityChipValues();
+  });
+  document.addEventListener("click", (event) => {
+    const chip = stabilityChipFromTarget(event.target);
+    if (!chip) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (suppressNextStabilityClick && Date.now() - lastTouchStabilityToggleAt < 700) {
+      suppressNextStabilityClick = false;
+      return;
+    }
+    suppressNextStabilityClick = false;
+    if (chip.dataset.stabilityPinned === "true" || (stabilityChipPinned && isSameStabilityChip(chip))) {
+      hideStabilityChipValues(true);
+      chip.blur();
+      return;
+    }
+    showStabilityChipValues(chip, true);
+  }, true);
+  metrics.addEventListener("keydown", (event) => {
+    const chip = stabilityChipFromTarget(event.target);
+    if (!chip) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      toggleStabilityChipValues(chip);
+    } else if (event.key === "Escape") {
+      hideStabilityChipValues(true);
+    }
+  });
+  document.addEventListener("pointerdown", (event) => {
+    const chip = stabilityChipFromTarget(event.target);
+    if (!chip) return;
+    if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+    clearStabilityLongPress();
+    stabilityLongPressStart = {
+      target: chip,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      pinnedAtStart: chip.dataset.stabilityPinned === "true" || (stabilityChipPinned && isSameStabilityChip(chip)),
+      longPressFired: false
+    };
+    stabilityLongPressTimer = window.setTimeout(() => {
+      if (!stabilityLongPressStart) return;
+      stabilityLongPressStart.longPressFired = true;
+      suppressNextStabilityClick = true;
+      lastTouchStabilityToggleAt = Date.now();
+      toggleStabilityChipValues(stabilityLongPressStart.target);
+      window.setTimeout(() => {
+        suppressNextStabilityClick = false;
+      }, 700);
+      clearStabilityLongPress();
+    }, STABILITY_CHIP_LONG_PRESS_MS);
+  }, true);
+  metrics.addEventListener("pointermove", (event) => {
+    if (!stabilityLongPressStart || stabilityLongPressStart.pointerId !== event.pointerId) return;
+    const moved = Math.hypot(event.clientX - stabilityLongPressStart.x, event.clientY - stabilityLongPressStart.y);
+    if (moved > STABILITY_CHIP_MOVE_TOLERANCE) clearStabilityLongPress();
+  });
+  document.addEventListener("pointerup", (event) => {
+    if (!stabilityLongPressStart || stabilityLongPressStart.pointerId !== event.pointerId) return;
+    if (event.pointerType !== "touch" && event.pointerType !== "pen") {
+      clearStabilityLongPress();
+      return;
+    }
+    const chip = stabilityChipFromTarget(event.target);
+    const sameChip = !!chip && (chip === stabilityLongPressStart.target
+      || chip.dataset.stabilityKind === stabilityLongPressStart.target.dataset.stabilityKind);
+    if (sameChip && !stabilityLongPressStart.longPressFired) {
+      event.preventDefault();
+      suppressNextStabilityClick = true;
+      lastTouchStabilityToggleAt = Date.now();
+      if (stabilityLongPressStart.pinnedAtStart) {
+        hideStabilityChipValues(true);
+        stabilityLongPressStart.target.blur();
+      } else {
+        showStabilityChipValues(stabilityLongPressStart.target, true);
+      }
+      window.setTimeout(() => {
+        suppressNextStabilityClick = false;
+      }, 500);
+    }
+    clearStabilityLongPress();
+  }, true);
+  document.addEventListener("pointercancel", clearStabilityLongPress, true);
+  document.addEventListener("pointerdown", (event) => {
+    if (!activeStabilityChipTarget) return;
+    const target = event.target;
+    if (stabilityChipFromTarget(target)) return;
+    hideStabilityChipValues(true);
+  }, true);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") hideStabilityChipValues(true);
+  });
 }
 
 function fmtFixed(value: number, digits: number): string {
@@ -1465,6 +1747,7 @@ function buildControls(): void {
   setupInteractivePlots();
   setupPhaseScrubbing();
   setupGridCanvasInteractions();
+  setupReferencePlotInteractions();
   window.addEventListener("resize", drawAll);
   window.addEventListener("resize", drawAdsrVisualization);
   updateDriverButtons();
@@ -1515,7 +1798,7 @@ function setupGridLoopSpeedControl(): void {
 }
 
 function isUserPlotId(value: string | undefined): value is UserPlotId {
-  return value === "model" || value === "light" || value === "velocity" || value === "time" || value === "lum";
+  return Boolean(value && value in PLOT_PANEL_LABELS);
 }
 
 function setupPlotPanelToggles(): void {
@@ -2215,6 +2498,18 @@ function setupPhaseScrubbing(): void {
   });
 }
 
+function setupReferencePlotInteractions(): void {
+  (["stabilityMapCanvas", "cepheidGuideCanvas"] as const).forEach((canvasId) => {
+    const canvas = el<HTMLCanvasElement>(canvasId);
+    canvas.classList.add("reference-control-canvas");
+    canvas.addEventListener("pointerdown", (event) => beginReferencePlotInteraction(event, canvasId));
+    canvas.addEventListener("pointermove", (event) => updateReferencePlotInteraction(event, canvasId));
+    canvas.addEventListener("pointerup", (event) => finishReferencePlotInteraction(event, canvasId));
+    canvas.addEventListener("pointercancel", (event) => finishReferencePlotInteraction(event, canvasId));
+    canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+  });
+}
+
 function phaseFromCanvasPoint(canvasId: string, point: { x: number; y: number }): number | null {
   const render = plotRenderStates.get(canvasId);
   if (!render || !latestPhaseRows.length || gridState.enabled) return null;
@@ -2258,6 +2553,122 @@ function finishPhaseScrub(event: PointerEvent, canvasId: string): void {
   activePhaseScrub = null;
   modelAnimationStartTime = null;
   drawAnimatedPhaseViews();
+}
+
+function referenceCanvasPoint(canvas: HTMLCanvasElement, event: PointerEvent, render: ReferencePlotRenderState): { x: number; y: number } {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = render.width / Math.max(1, rect.width);
+  const scaleY = render.height / Math.max(1, rect.height);
+  return {
+    x: (event.clientX - rect.left) * scaleX,
+    y: (event.clientY - rect.top) * scaleY
+  };
+}
+
+function snapParameterValue(key: ControlParameterKey, value: number): number {
+  const meta = sliderMeta(key);
+  const rawSliderValue = key === "tEnd" ? Math.log10(value) : value;
+  const clampedSliderValue = clamp(rawSliderValue, meta.min, meta.max);
+  const snappedSliderValue = roundToNativeStep(
+    meta.min + Math.round((clampedSliderValue - meta.min) / meta.step) * meta.step,
+    meta.step
+  );
+  return parameterValueFromSlider(key, clamp(snappedSliderValue, meta.min, meta.max));
+}
+
+function setReferencePlotParameter(key: ControlParameterKey, value: number): boolean {
+  const snapped = snapParameterValue(key, value);
+  if (!Number.isFinite(snapped) || valuesMatch(state[key], snapped)) return false;
+  state[key] = snapped;
+  syncGridRangeCenter(key);
+  updateSliderLabel(key);
+  return true;
+}
+
+function commitReferencePlotParameters(updates: Partial<Record<ControlParameterKey, number>>): boolean {
+  let changed = false;
+  Object.entries(updates).forEach(([key, value]) => {
+    if (typeof value !== "number") return;
+    changed = setReferencePlotParameter(key as ControlParameterKey, value) || changed;
+  });
+  if (!changed) return false;
+  gridState.hoverResult = null;
+  gridState.heldResult = null;
+  updateAllSliderLabels();
+  refreshActivePreset();
+  scheduleSolve();
+  return true;
+}
+
+function referenceCoordinate(render: ReferencePlotRenderState, point: { x: number; y: number }): { x: number; y: number } {
+  const clamped = clampPointToPlot(point, render.plot);
+  const xFraction = (clamped.x - render.plot.left) / render.plot.width;
+  const yFraction = 1 - (clamped.y - render.plot.top) / render.plot.height;
+  return {
+    x: render.xlim[0] + xFraction * (render.xlim[1] - render.xlim[0]),
+    y: render.ylim[0] + yFraction * (render.ylim[1] - render.ylim[0])
+  };
+}
+
+function updateStabilityMapParameters(canvas: HTMLCanvasElement, event: PointerEvent): boolean {
+  const render = referencePlotRenderStates.get("stabilityMapCanvas");
+  if (!render) return false;
+  const point = referenceCanvasPoint(canvas, event, render);
+  const coordinate = referenceCoordinate(render, point);
+  return commitReferencePlotParameters({
+    zetac: coordinate.x,
+    zeta: coordinate.y
+  });
+}
+
+function updateInstabilityStripParameters(canvas: HTMLCanvasElement, event: PointerEvent): boolean {
+  const render = referencePlotRenderStates.get("cepheidGuideCanvas");
+  if (!render) return false;
+  const point = referenceCanvasPoint(canvas, event, render);
+  const coordinate = referenceCoordinate(render, point);
+  const stripCoordinate = clamp(coordinate.x, 0, 1);
+  const gamma = clamp(coordinate.y, 0, 1);
+  const zeta = Math.max(1e-6, state.zeta);
+  const zetac = zeta * 10 ** (4 * stripCoordinate - 2);
+  return commitReferencePlotParameters({
+    zetac,
+    gammac: gamma
+  });
+}
+
+function applyReferencePlotPointer(canvas: HTMLCanvasElement, canvasId: ReferencePlotInteraction["canvasId"], event: PointerEvent): boolean {
+  return canvasId === "stabilityMapCanvas"
+    ? updateStabilityMapParameters(canvas, event)
+    : updateInstabilityStripParameters(canvas, event);
+}
+
+function beginReferencePlotInteraction(event: PointerEvent, canvasId: ReferencePlotInteraction["canvasId"]): void {
+  if (event.button !== 0) return;
+  const canvas = event.currentTarget as HTMLCanvasElement;
+  const render = referencePlotRenderStates.get(canvasId);
+  if (!render) return;
+  const point = referenceCanvasPoint(canvas, event, render);
+  if (!pointInPlot(point, render.plot)) return;
+  event.preventDefault();
+  canvas.setPointerCapture(event.pointerId);
+  activeReferencePlotInteraction = { canvasId, pointerId: event.pointerId };
+  canvas.dataset.referenceInteraction = canvasId === "stabilityMapCanvas" ? "stability-map" : "instability-strip";
+  applyReferencePlotPointer(canvas, canvasId, event);
+}
+
+function updateReferencePlotInteraction(event: PointerEvent, canvasId: ReferencePlotInteraction["canvasId"]): void {
+  if (!activeReferencePlotInteraction || activeReferencePlotInteraction.canvasId !== canvasId || activeReferencePlotInteraction.pointerId !== event.pointerId) return;
+  event.preventDefault();
+  applyReferencePlotPointer(event.currentTarget as HTMLCanvasElement, canvasId, event);
+}
+
+function finishReferencePlotInteraction(event: PointerEvent, canvasId: ReferencePlotInteraction["canvasId"]): void {
+  if (!activeReferencePlotInteraction || activeReferencePlotInteraction.canvasId !== canvasId || activeReferencePlotInteraction.pointerId !== event.pointerId) return;
+  const canvas = event.currentTarget as HTMLCanvasElement;
+  event.preventDefault();
+  if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+  delete canvas.dataset.referenceInteraction;
+  activeReferencePlotInteraction = null;
 }
 
 function beginGridCanvasInteraction(event: PointerEvent, canvasId: string): void {
@@ -3894,10 +4305,12 @@ function drawStabilityMap(): void {
   const plot = { left: 58, top: 34, width: width - 78, height: height - 88 };
   const cellWidth = plot.width / STABILITY_MAP_RESOLUTION;
   const cellHeight = plot.height / STABILITY_MAP_RESOLUTION;
+  referencePlotRenderStates.set("stabilityMapCanvas", { plot, xlim: [0, extent], ylim: [0, extent], width, height });
 
   canvas.dataset.stabilityMode = gridState.enabled ? "grid" : "single";
   canvas.dataset.stabilityGamma = fmtFixed(parameters.gammac, 3);
   canvas.dataset.stabilityExtent = fmtFixed(extent, 1);
+  canvas.dataset.editableParameters = "zetac,zeta";
   canvas.dataset.stellingwerfLabels = "zeta,zeta_c,gamma_c";
 
   kinds.forEach((kind, index) => {
@@ -3963,10 +4376,14 @@ function drawCepheidGuide(): void {
   const plot = { left: 64, top: 28, width: width - 90, height: height - 88 };
   const sx = (x: number) => plot.left + clamp(x, 0, 1) * plot.width;
   const sy = (gamma: number) => plot.top + plot.height - clamp(gamma, 0, 1) * plot.height;
+  referencePlotRenderStates.set("cepheidGuideCanvas", { plot, xlim: [0, 1], ylim: [0, 1], width, height });
 
   canvas.dataset.cepheidMode = gridState.enabled ? "grid" : "single";
   canvas.dataset.instabilityMode = gridState.enabled ? "grid" : "single";
-  canvas.dataset.stellingwerfLabels = "gamma_c,instability_strip";
+  canvas.dataset.xAxisLabel = "T_eff";
+  canvas.dataset.xAxisDirection = "decreasing-right";
+  canvas.dataset.editableParameters = "zetac,gammac";
+  canvas.dataset.stellingwerfLabels = "gamma_c,T_eff";
 
   ctx.fillStyle = "rgba(25, 43, 77, 0.5)";
   ctx.fillRect(plot.left, plot.top, plot.width, plot.height);
@@ -3997,7 +4414,19 @@ function drawCepheidGuide(): void {
   }
   ctx.restore();
 
-  drawAxes(ctx, plot, [0, 1], [0, 1], "blue   instability strip   red", "", THEME.axisText, THEME.axisText, 22);
+  drawAxes(ctx, plot, [1, 0], [0, 1], "", "", THEME.axisText, THEME.axisText, 22);
+  drawCanvasMathFragments(
+    ctx,
+    [{ text: "T", subscript: "eff", color: THEME.axisText, weight: 600 }],
+    plot.left + plot.width / 2,
+    plot.top + plot.height + 42
+  );
+  ctx.fillStyle = THEME.axisText;
+  ctx.font = "12px Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("blue", sx(0.08), plot.top + plot.height + 42);
+  ctx.fillText("red", sx(0.92), plot.top + plot.height + 42);
   drawCanvasMathFragments(
     ctx,
     [{ text: "γ", subscript: "c", color: COLORS.gammac, weight: 600 }],
@@ -4135,7 +4564,7 @@ function drawPhasePortraitArrow(
 }
 
 function phasePortraitValue(row: Row, key: PhasePortraitKey): number {
-  return key === "P" ? acousticPressureSignal(row) : row[key];
+  return row[key];
 }
 
 function drawPhasePortraitLegend(ctx: CanvasRenderingContext2D, plot: PlotBox): void {
@@ -4144,8 +4573,7 @@ function drawPhasePortraitLegend(ctx: CanvasRenderingContext2D, plot: PlotBox): 
   let x = plot.left + 12;
   [
     { fragments: [{ text: "H", color: COLORS.H, weight: 600 }], color: COLORS.H, dash: [] },
-    { fragments: [{ text: "U", subscript: "c", color: COLORS.Uc, weight: 600 }], color: COLORS.Uc, dash: [8, 5] },
-    { fragments: [{ text: "P", color: COLORS.H, weight: 600 }], color: COLORS.H, dash: [2, 4] }
+    { fragments: [{ text: "U", subscript: "c", color: COLORS.Uc, weight: 600 }], color: COLORS.Uc, dash: [8, 5] }
   ].forEach((item) => {
     ctx.strokeStyle = item.color;
     ctx.lineWidth = 2;
@@ -4173,7 +4601,6 @@ function drawPhasePortraitCurrentMarkers(
   const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
   drawReferenceMarker(ctx, sx(row.R), sy(row.H), COLORS.H, 5.6);
   drawReferenceMarker(ctx, sx(row.R), sy(row.Uc), COLORS.Uc, 5.6);
-  drawReferenceMarker(ctx, sx(row.R), sy(acousticPressureSignal(row)), COLORS.H, 4.4);
   return row;
 }
 
@@ -4216,7 +4643,7 @@ function drawPhasePortraitPanel(): void {
 
   canvas.dataset.phasePortraitMode = gridState.enabled ? "grid" : "single";
   canvas.dataset.phasePortraitRows = String(latestPhaseRows.length);
-  canvas.dataset.stellingwerfLabels = "R,H,U_c,P,current_phase";
+  canvas.dataset.stellingwerfLabels = "R,H,U_c,current_phase";
   if (!latestPhaseRows.length) {
     delete canvas.dataset.currentPhase;
     drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
@@ -4226,7 +4653,7 @@ function drawPhasePortraitPanel(): void {
 
   const rows = downsample(latestPhaseRows, 1400, ["R", "H", "Uc"]);
   const xlim = range(rows.map((row) => row.R), 0.08);
-  const ylim = range([...rows.map((row) => row.H), ...rows.map((row) => row.Uc), ...rows.map(acousticPressureSignal)], 0.1);
+  const ylim = range([...rows.map((row) => row.H), ...rows.map((row) => row.Uc)], 0.1);
   const plot = { left: 78, top: 28, width: width - 102, height: height - 88 };
   drawAxes(ctx, plot, xlim, ylim, "", "", THEME.axisText, THEME.axisText, 22);
   drawCanvasMathFragments(
@@ -4243,9 +4670,7 @@ function drawPhasePortraitPanel(): void {
     [
       { text: "H", color: COLORS.H, weight: 600 },
       { text: ", " },
-      { text: "U", subscript: "c", color: COLORS.Uc, weight: 600 },
-      { text: ", " },
-      { text: "P", color: COLORS.H, weight: 600 }
+      { text: "U", subscript: "c", color: COLORS.Uc, weight: 600 }
     ],
     22,
     plot.top + plot.height / 2,
@@ -4253,12 +4678,10 @@ function drawPhasePortraitPanel(): void {
   );
   drawPhasePortraitCurve(ctx, plot, xlim, ylim, rows, "H", COLORS.H);
   drawPhasePortraitCurve(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, [8, 5]);
-  drawPhasePortraitCurve(ctx, plot, xlim, ylim, rows, "P", COLORS.H, [2, 4]);
   drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "H", COLORS.H, 0.18);
   drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "H", COLORS.H, 0.62);
   drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, 0.3);
   drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, 0.74);
-  drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "P", COLORS.H, 0.46);
   drawPhasePortraitCurrentMarkers(ctx, plot, xlim, ylim);
   drawPhasePortraitLegend(ctx, plot);
   drawPhasePortraitPhaseLabel(ctx, plot);
@@ -4788,6 +5211,7 @@ function drawModelVisualization(): void {
 function drawAnimatedPhaseViews(): void {
   drawModelVisualization();
   drawPhasePlots();
+  drawPhasePortraitPanel();
 }
 
 function startModelAnimationLoop(): void {
@@ -4825,11 +5249,13 @@ function drawAll(): void {
     || (!state.runUntilStable && latestResult.status === "complete");
   const final = rows[rows.length - 1];
   const phase = phaseForRows(rows);
-  const s72Stability = analyticStabilityConditions(stabilityDisplayParameters());
+  const stabilityParameters = stabilityDisplayParameters();
+  const s72Stability = analyticStabilityConditions(stabilityParameters);
   updateGridLoopSliderMarkers();
   updateSonificationSourceControls();
   updateSonificationCurve(phase);
   const metricsNode = el<HTMLDivElement>("metrics");
+  hideStabilityChipValues(true);
   metricsNode.dataset.s72Dynamic = s72State(s72Stability.dynamic.stable);
   metricsNode.dataset.s72Secular = s72State(s72Stability.secular.stable);
   metricsNode.dataset.s72Pulsational = s72State(s72Stability.pulsational.stable);
@@ -4848,26 +5274,35 @@ function drawAll(): void {
     {
       label: "dyn",
       value: s72DynamicMetric(s72Stability),
+      expandedValue: s72DynamicExpandedMetric(s72Stability),
+      detail: s72DynamicTitle(s72Stability),
       className: s72MetricClass(s72Stability.dynamic.stable),
       stabilityKind: "dynamic"
     },
     {
       label: "sec",
       value: s72SecularMetric(s72Stability),
+      expandedValue: s72SecularExpandedMetric(s72Stability, stabilityParameters),
+      detail: s72SecularTitle(s72Stability, stabilityParameters),
       className: s72MetricClass(s72Stability.secular.stable),
       stabilityKind: "secular"
     },
     {
       label: "puls",
       value: s72PulsationalMetric(s72Stability),
+      expandedValue: s72PulsationalExpandedMetric(s72Stability, stabilityParameters),
+      detail: s72PulsationalTitle(s72Stability, stabilityParameters),
       className: s72MetricClass(s72Stability.pulsational.stable),
       stabilityKind: "pulsational"
     }
   ];
   const metricsHtml = metricItems
-    .map(({ label, value, className, stabilityKind }) => {
+    .map(({ label, value, className, stabilityKind, expandedValue, detail }) => {
       const stabilityAttribute = stabilityKind ? ` data-stability-kind="${stabilityKind}"` : "";
-      return `<span class="metric${className ? ` ${className}` : ""}"${stabilityAttribute}>${label}<b>${value}</b></span>`;
+      const detailAttribute = expandedValue && detail
+        ? ` data-stability-detail="${escapeAttribute(detail)}" data-stability-default="${escapeAttribute(String(value))}" data-stability-expanded="${escapeAttribute(expandedValue)}" data-stability-view="default" role="button" tabindex="0" aria-expanded="false" aria-label="${escapeAttribute(`${label}: ${detail}`)}"`
+        : "";
+      return `<span class="metric${className ? ` ${className}` : ""}"${stabilityAttribute}${detailAttribute}>${label}<b>${value}</b></span>`;
     })
     .join("");
   stageMathHtml(metricsNode, metricsHtml);
@@ -4952,6 +5387,7 @@ function drawAll(): void {
 
 function startApp(): void {
   buildControls();
+  setupStatusMetricExpansion();
   solveAndDraw();
   startModelAnimationLoop();
   window.addEventListener("load", () => queueMathTypeset());
