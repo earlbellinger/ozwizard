@@ -457,6 +457,28 @@ async function runPlaywrightChecks() {
       return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
     });
     assertOk(hasModelPaint, "model canvas was blank");
+    const phaseDelta = (a, b) => {
+      const direct = Math.abs(a - b);
+      return Math.min(direct, 2 - direct);
+    };
+    const lightPhaseBox = await page.locator("#lightCanvas").boundingBox();
+    assertOk(Boolean(lightPhaseBox), "lightcurve bounds were unavailable for phase scrubbing");
+    await page.mouse.move(lightPhaseBox.x + lightPhaseBox.width * 0.72, lightPhaseBox.y + lightPhaseBox.height * 0.44);
+    await page.mouse.down();
+    assertOk((await page.locator("#lightCanvas").getAttribute("data-phase-scrubbing")) === "true", "lightcurve should pause animation while phase scrubbing");
+    const heldPhaseBefore = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
+    await page.waitForTimeout(240);
+    const heldPhaseAfter = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
+    assertOk(phaseDelta(heldPhaseAfter, heldPhaseBefore) < 0.01, "phase should hold while the mouse is down");
+    await page.mouse.move(lightPhaseBox.x + lightPhaseBox.width * 0.52, lightPhaseBox.y + lightPhaseBox.height * 0.44);
+    const draggedPhase = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
+    assertOk(phaseDelta(draggedPhase, heldPhaseAfter) > 0.1, "dragging the lightcurve should scrub to a new phase");
+    await page.mouse.up();
+    assertOk((await page.locator("#lightCanvas").getAttribute("data-phase-scrubbing")) !== "true", "lightcurve should stop scrubbing on mouse release");
+    const releasePhase = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
+    await page.waitForTimeout(260);
+    const resumedPhase = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
+    assertOk(phaseDelta(resumedPhase, releasePhase) > 0.04, "phase animation should resume from the released position");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "gamma_c L_c,L,gamma_r L_r", "model luminosity arc labels should be active");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-geometry-guides")) === "R=1,eta,minR,maxR", "model geometry guides should be active");
     assertOk((await page.locator("#plotGrid").getAttribute("data-plot-columns")) === null, "plot grid should not force a column mode");

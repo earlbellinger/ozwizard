@@ -1323,6 +1323,7 @@
   var GRID_LOOP_MIN_SPEED = 0.25;
   var GRID_LOOP_MAX_SPEED = 4;
   var PHASE_MARKER_COLOR = "#FFD166";
+  var PHASE_SCRUB_CANVAS_IDS = ["lightCanvas", "velocityCanvas", "pressureCanvas"];
   var SONIFICATION_SOURCE_LABELS = {
     luminosity: "luminosity",
     velocity: "radial velocity",
@@ -1373,6 +1374,7 @@
   var sonificationStopTimer = 0;
   var sonificationVoices = /* @__PURE__ */ new Set();
   var sonificationActive = false;
+  var activePhaseScrub = null;
   var pianoModeActive = false;
   var pianoStartOctave = PIANO_DEFAULT_START_OCTAVE;
   var pianoMasterGain = null;
@@ -2389,6 +2391,7 @@
     el("resetPreset").addEventListener("click", () => applyPreset(selectedPreset));
     setupPlotPanelToggles();
     setupInteractivePlots();
+    setupPhaseScrubbing();
     setupGridCanvasInteractions();
     window.addEventListener("resize", drawAll);
     window.addEventListener("resize", drawAdsrVisualization);
@@ -3001,6 +3004,57 @@
       canvas.addEventListener("pointerleave", () => clearFourierHover(canvasId));
       canvas.addEventListener("contextmenu", (event) => event.preventDefault());
     });
+  }
+  function setupPhaseScrubbing() {
+    PHASE_SCRUB_CANVAS_IDS.forEach((canvasId) => {
+      const canvas = document.getElementById(canvasId);
+      if (!(canvas instanceof HTMLCanvasElement)) return;
+      canvas.classList.add("phase-scrub-canvas");
+      canvas.addEventListener("pointerdown", (event) => beginPhaseScrub(event, canvasId));
+      canvas.addEventListener("pointermove", (event) => updatePhaseScrub(event, canvasId));
+      canvas.addEventListener("pointerup", (event) => finishPhaseScrub(event, canvasId));
+      canvas.addEventListener("pointercancel", (event) => finishPhaseScrub(event, canvasId));
+    });
+  }
+  function phaseFromCanvasPoint(canvasId, point) {
+    const render = plotRenderStates.get(canvasId);
+    if (!render || !latestPhaseRows.length || gridState.enabled) return null;
+    if (point.x < render.plot.left || point.x > render.plot.left + render.plot.width) return null;
+    const clamped = clampPointToPlot(point, render.plot);
+    return clamp3(xFromPixel(render, clamped.x), 0, 2);
+  }
+  function scrubPhaseToPointer(canvas, canvasId, event) {
+    const phase = phaseFromCanvasPoint(canvasId, canvasPoint(canvas, event));
+    if (phase === null) return;
+    currentAnimationPhase = phase;
+    modelAnimationStartTime = null;
+    drawAnimatedPhaseViews();
+  }
+  function beginPhaseScrub(event, canvasId) {
+    if (event.button !== 0 || gridState.enabled || !latestPhaseRows.length) return;
+    const canvas = event.currentTarget;
+    const phase = phaseFromCanvasPoint(canvasId, canvasPoint(canvas, event));
+    if (phase === null) return;
+    event.preventDefault();
+    canvas.setPointerCapture(event.pointerId);
+    activePhaseScrub = { canvasId, pointerId: event.pointerId };
+    currentAnimationPhase = phase;
+    modelAnimationStartTime = null;
+    drawAnimatedPhaseViews();
+  }
+  function updatePhaseScrub(event, canvasId) {
+    if (!activePhaseScrub || activePhaseScrub.canvasId !== canvasId || activePhaseScrub.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    scrubPhaseToPointer(event.currentTarget, canvasId, event);
+  }
+  function finishPhaseScrub(event, canvasId) {
+    if (!activePhaseScrub || activePhaseScrub.canvasId !== canvasId || activePhaseScrub.pointerId !== event.pointerId) return;
+    const canvas = event.currentTarget;
+    event.preventDefault();
+    if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+    activePhaseScrub = null;
+    modelAnimationStartTime = null;
+    drawAnimatedPhaseViews();
   }
   function beginGridCanvasInteraction(event, canvasId) {
     if (!gridState.enabled) return;
@@ -4371,6 +4425,17 @@
     if (gridState.enabled) return void 0;
     return latestPhaseRows.length ? { x: currentAnimationPhase, color: PHASE_MARKER_COLOR } : void 0;
   }
+  function syncPhaseCanvasState() {
+    PHASE_SCRUB_CANVAS_IDS.forEach((canvasId) => {
+      const canvas = document.getElementById(canvasId);
+      if (!(canvas instanceof HTMLCanvasElement)) return;
+      canvas.classList.toggle("phase-scrub-enabled", latestPhaseRows.length > 0 && !gridState.enabled);
+      if (latestPhaseRows.length) canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
+      else delete canvas.dataset.currentPhase;
+      if (activePhaseScrub?.canvasId === canvasId) canvas.dataset.phaseScrubbing = "true";
+      else delete canvas.dataset.phaseScrubbing;
+    });
+  }
   function drawPhasePlots() {
     const marker = phaseMarker();
     drawSeries("lightCanvas", gridPhaseSeries("L", COLORS.L, latestPhaseSample), {
@@ -4406,6 +4471,7 @@
         phaseMarker: marker
       });
     }
+    syncPhaseCanvasState();
   }
   function drawCanvasMessage(ctx, width, height, message) {
     ctx.fillStyle = THEME.axisText;
@@ -4620,12 +4686,16 @@
     if (modelAnimationFrame) return;
     const tick = (timestamp) => {
       if (!document.hidden) {
-        if (modelAnimationStartTime === null) {
-          modelAnimationStartTime = timestamp - currentAnimationPhase / 2 * modelAnimationDurationMs();
+        if (activePhaseScrub) {
+          modelAnimationStartTime = null;
+        } else {
+          if (modelAnimationStartTime === null) {
+            modelAnimationStartTime = timestamp - currentAnimationPhase / 2 * modelAnimationDurationMs();
+          }
+          const duration = modelAnimationDurationMs();
+          const elapsed = (timestamp - modelAnimationStartTime) % duration;
+          currentAnimationPhase = elapsed / duration * 2;
         }
-        const duration = modelAnimationDurationMs();
-        const elapsed = (timestamp - modelAnimationStartTime) % duration;
-        currentAnimationPhase = elapsed / duration * 2;
         drawAnimatedPhaseViews();
       } else {
         modelAnimationStartTime = null;

@@ -90,6 +90,7 @@ const GRID_LOOP_BASE_INTERVAL_MS = 90;
 const GRID_LOOP_MIN_SPEED = 0.25;
 const GRID_LOOP_MAX_SPEED = 4;
 const PHASE_MARKER_COLOR = "#FFD166";
+const PHASE_SCRUB_CANVAS_IDS = ["lightCanvas", "velocityCanvas", "pressureCanvas"] as const;
 const SONIFICATION_SOURCE_LABELS: Record<SonificationSource, string> = {
   luminosity: "luminosity",
   velocity: "radial velocity",
@@ -140,6 +141,7 @@ let sonificationMasterGain: GainNode | null = null;
 let sonificationStopTimer = 0;
 const sonificationVoices = new Set<SonificationVoice>();
 let sonificationActive = false;
+let activePhaseScrub: PhaseScrubInteraction | null = null;
 let pianoModeActive = false;
 let pianoStartOctave = PIANO_DEFAULT_START_OCTAVE;
 let pianoMasterGain: GainNode | null = null;
@@ -188,6 +190,11 @@ interface PlotSelection {
   currentY: number;
   startXlim: NumericRange;
   startYlim: NumericRange;
+}
+
+interface PhaseScrubInteraction {
+  canvasId: string;
+  pointerId: number;
 }
 
 interface StagedMathUpdate {
@@ -1398,6 +1405,7 @@ function buildControls(): void {
   el<HTMLButtonElement>("resetPreset").addEventListener("click", () => applyPreset(selectedPreset));
   setupPlotPanelToggles();
   setupInteractivePlots();
+  setupPhaseScrubbing();
   setupGridCanvasInteractions();
   window.addEventListener("resize", drawAll);
   window.addEventListener("resize", drawAdsrVisualization);
@@ -2090,6 +2098,63 @@ function setupGridCanvasInteractions(): void {
     canvas.addEventListener("pointerleave", () => clearFourierHover(canvasId));
     canvas.addEventListener("contextmenu", (event) => event.preventDefault());
   });
+}
+
+function setupPhaseScrubbing(): void {
+  PHASE_SCRUB_CANVAS_IDS.forEach((canvasId) => {
+    const canvas = document.getElementById(canvasId);
+    if (!(canvas instanceof HTMLCanvasElement)) return;
+    canvas.classList.add("phase-scrub-canvas");
+    canvas.addEventListener("pointerdown", (event) => beginPhaseScrub(event, canvasId));
+    canvas.addEventListener("pointermove", (event) => updatePhaseScrub(event, canvasId));
+    canvas.addEventListener("pointerup", (event) => finishPhaseScrub(event, canvasId));
+    canvas.addEventListener("pointercancel", (event) => finishPhaseScrub(event, canvasId));
+  });
+}
+
+function phaseFromCanvasPoint(canvasId: string, point: { x: number; y: number }): number | null {
+  const render = plotRenderStates.get(canvasId);
+  if (!render || !latestPhaseRows.length || gridState.enabled) return null;
+  if (point.x < render.plot.left || point.x > render.plot.left + render.plot.width) return null;
+  const clamped = clampPointToPlot(point, render.plot);
+  return clamp(xFromPixel(render, clamped.x), 0, 2);
+}
+
+function scrubPhaseToPointer(canvas: HTMLCanvasElement, canvasId: string, event: PointerEvent): void {
+  const phase = phaseFromCanvasPoint(canvasId, canvasPoint(canvas, event));
+  if (phase === null) return;
+  currentAnimationPhase = phase;
+  modelAnimationStartTime = null;
+  drawAnimatedPhaseViews();
+}
+
+function beginPhaseScrub(event: PointerEvent, canvasId: string): void {
+  if (event.button !== 0 || gridState.enabled || !latestPhaseRows.length) return;
+  const canvas = event.currentTarget as HTMLCanvasElement;
+  const phase = phaseFromCanvasPoint(canvasId, canvasPoint(canvas, event));
+  if (phase === null) return;
+  event.preventDefault();
+  canvas.setPointerCapture(event.pointerId);
+  activePhaseScrub = { canvasId, pointerId: event.pointerId };
+  currentAnimationPhase = phase;
+  modelAnimationStartTime = null;
+  drawAnimatedPhaseViews();
+}
+
+function updatePhaseScrub(event: PointerEvent, canvasId: string): void {
+  if (!activePhaseScrub || activePhaseScrub.canvasId !== canvasId || activePhaseScrub.pointerId !== event.pointerId) return;
+  event.preventDefault();
+  scrubPhaseToPointer(event.currentTarget as HTMLCanvasElement, canvasId, event);
+}
+
+function finishPhaseScrub(event: PointerEvent, canvasId: string): void {
+  if (!activePhaseScrub || activePhaseScrub.canvasId !== canvasId || activePhaseScrub.pointerId !== event.pointerId) return;
+  const canvas = event.currentTarget as HTMLCanvasElement;
+  event.preventDefault();
+  if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+  activePhaseScrub = null;
+  modelAnimationStartTime = null;
+  drawAnimatedPhaseViews();
 }
 
 function beginGridCanvasInteraction(event: PointerEvent, canvasId: string): void {
@@ -3684,6 +3749,18 @@ function phaseMarker(): { x: number; color: string } | undefined {
   return latestPhaseRows.length ? { x: currentAnimationPhase, color: PHASE_MARKER_COLOR } : undefined;
 }
 
+function syncPhaseCanvasState(): void {
+  PHASE_SCRUB_CANVAS_IDS.forEach((canvasId) => {
+    const canvas = document.getElementById(canvasId);
+    if (!(canvas instanceof HTMLCanvasElement)) return;
+    canvas.classList.toggle("phase-scrub-enabled", latestPhaseRows.length > 0 && !gridState.enabled);
+    if (latestPhaseRows.length) canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
+    else delete canvas.dataset.currentPhase;
+    if (activePhaseScrub?.canvasId === canvasId) canvas.dataset.phaseScrubbing = "true";
+    else delete canvas.dataset.phaseScrubbing;
+  });
+}
+
 function drawPhasePlots(): void {
   const marker = phaseMarker();
   drawSeries("lightCanvas", gridPhaseSeries("L", COLORS.L, latestPhaseSample), {
@@ -3721,6 +3798,7 @@ function drawPhasePlots(): void {
       phaseMarker: marker
     });
   }
+  syncPhaseCanvasState();
 }
 
 function drawCanvasMessage(ctx: CanvasRenderingContext2D, width: number, height: number, message: string): void {
@@ -4016,12 +4094,16 @@ function startModelAnimationLoop(): void {
   if (modelAnimationFrame) return;
   const tick = (timestamp: number) => {
     if (!document.hidden) {
-      if (modelAnimationStartTime === null) {
-        modelAnimationStartTime = timestamp - (currentAnimationPhase / 2) * modelAnimationDurationMs();
+      if (activePhaseScrub) {
+        modelAnimationStartTime = null;
+      } else {
+        if (modelAnimationStartTime === null) {
+          modelAnimationStartTime = timestamp - (currentAnimationPhase / 2) * modelAnimationDurationMs();
+        }
+        const duration = modelAnimationDurationMs();
+        const elapsed = (timestamp - modelAnimationStartTime) % duration;
+        currentAnimationPhase = (elapsed / duration) * 2;
       }
-      const duration = modelAnimationDurationMs();
-      const elapsed = (timestamp - modelAnimationStartTime) % duration;
-      currentAnimationPhase = (elapsed / duration) * 2;
       drawAnimatedPhaseViews();
     } else {
       modelAnimationStartTime = null;

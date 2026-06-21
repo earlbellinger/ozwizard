@@ -543,6 +543,28 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
   });
   expect(hasModelPaint).toBe(true);
+  const phaseDelta = (a: number, b: number) => {
+    const direct = Math.abs(a - b);
+    return Math.min(direct, 2 - direct);
+  };
+  const lightPhaseBox = await page.locator("#lightCanvas").boundingBox();
+  expect(lightPhaseBox).not.toBeNull();
+  await page.mouse.move(lightPhaseBox!.x + lightPhaseBox!.width * 0.72, lightPhaseBox!.y + lightPhaseBox!.height * 0.44);
+  await page.mouse.down();
+  await expect(page.locator("#lightCanvas")).toHaveAttribute("data-phase-scrubbing", "true");
+  const heldPhaseBefore = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
+  await page.waitForTimeout(240);
+  const heldPhaseAfter = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
+  expect(phaseDelta(heldPhaseAfter, heldPhaseBefore)).toBeLessThan(0.01);
+  await page.mouse.move(lightPhaseBox!.x + lightPhaseBox!.width * 0.52, lightPhaseBox!.y + lightPhaseBox!.height * 0.44);
+  const draggedPhase = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
+  expect(phaseDelta(draggedPhase, heldPhaseAfter)).toBeGreaterThan(0.1);
+  await page.mouse.up();
+  await expect(page.locator("#lightCanvas")).not.toHaveAttribute("data-phase-scrubbing", "true");
+  const releasePhase = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
+  await page.waitForTimeout(260);
+  const resumedPhase = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
+  expect(phaseDelta(resumedPhase, releasePhase)).toBeGreaterThan(0.04);
   await expect(page.locator("#modelCanvas")).toHaveAttribute("data-luminosity-arc-labels", "gamma_c L_c,L,gamma_r L_r");
   await expect(page.locator("#modelCanvas")).toHaveAttribute("data-geometry-guides", "R=1,eta,minR,maxR");
   await expect(page.locator("#plotGrid")).not.toHaveAttribute("data-plot-columns", /.+/);
