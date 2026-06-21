@@ -112,6 +112,7 @@ const PHASE_MARKER_COLOR = "#FFD166";
 const POSITIVE_VELOCITY_COLOR = "#4DA3FF";
 const NEGATIVE_VELOCITY_COLOR = "#FF5F6D";
 const PHASE_SCRUB_CANVAS_IDS = ["lightCanvas", "velocityCanvas", "pressureCanvas"] as const;
+const PHASE_HOVER_CANVAS_IDS = ["lightCanvas", "velocityCanvas"] as const;
 const SONIFICATION_SOURCE_LABELS: Record<SonificationSource, string> = {
   luminosity: "luminosity",
   velocity: "radial velocity",
@@ -159,7 +160,7 @@ let latestPhaseMessage: string | undefined;
 let latestPhasePeriodLabel = "phase (period = n/a τ)";
 let latestPhaseLuminosityRange: NumericRange = [0, 1];
 let latestPhaseParameters: ModelParameters = state;
-let phaseAnnotationsVisible = false;
+let phaseAnnotationsVisible = true;
 let sonificationReferenceNote = MIDDLE_C_NOTE;
 let sonificationReferenceHz = noteToFrequency(MIDDLE_C_NOTE);
 let sonificationSamples: SonificationSample[] = [];
@@ -172,6 +173,7 @@ let sonificationStopTimer = 0;
 const sonificationVoices = new Set<SonificationVoice>();
 let sonificationActive = false;
 let activePhaseScrub: PhaseScrubInteraction | null = null;
+let activePhaseHoverCanvasId: string | null = null;
 let activeReferencePlotInteraction: ReferencePlotInteraction | null = null;
 let pianoModeActive = false;
 let pianoStartOctave = PIANO_DEFAULT_START_OCTAVE;
@@ -438,21 +440,6 @@ const SLIDER_RANGE_DOUBLE_TAP_MS = 360;
 const SLIDER_RANGE_DOUBLE_TAP_DISTANCE = 22;
 let activeSliderTapStart: { key: ControlParameterKey; pointerId: number; x: number; y: number } | null = null;
 let lastSliderTap: { key: ControlParameterKey; time: number; x: number; y: number } | null = null;
-const STABILITY_CHIP_LONG_PRESS_MS = 520;
-const STABILITY_CHIP_MOVE_TOLERANCE = 14;
-let activeStabilityChipTarget: HTMLElement | null = null;
-let stabilityChipPinned = false;
-let stabilityLongPressTimer = 0;
-let stabilityLongPressStart: {
-  target: HTMLElement;
-  pointerId: number;
-  x: number;
-  y: number;
-  pinnedAtStart: boolean;
-  longPressFired: boolean;
-} | null = null;
-let suppressNextStabilityClick = false;
-let lastTouchStabilityToggleAt = 0;
 const DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
 const STABILITY_MAP_RESOLUTION = 54;
 const STRIP_LOG_RATIO_MIN = -2;
@@ -480,7 +467,6 @@ interface StatusMetricItem {
   value: string | number;
   className?: string;
   stabilityKind?: AnalyticStabilityKind;
-  expandedValue?: string;
   detail?: string;
 }
 
@@ -516,18 +502,9 @@ function s72TextInequality(satisfied: boolean, symbol: ">" | "<"): string {
   return symbol === ">" ? "\u226F" : "\u226E";
 }
 
-function s72ColoredValue(macro: "ozChiZero" | "ozGamma" | "ozBlue" | "ozPink", value: number, digits = 2): string {
-  return `\\${macro}{${fmt(value, digits)}}`;
-}
-
 function s72DynamicMetric(stability: AnalyticStabilityResult): string {
   const symbol = s72LatexInequality(stability.dynamic.stable, ">");
   return `\\(${TEX.gamma1}=${fmt(stability.dynamic.value, 2)} ${symbol} 4/${TEX.m}=${fmt(stability.dynamic.threshold, 2)}\\)`;
-}
-
-function s72DynamicExpandedMetric(stability: AnalyticStabilityResult): string {
-  const symbol = s72LatexInequality(stability.dynamic.stable, ">");
-  return `\\(${s72ColoredValue("ozGamma", stability.dynamic.value)} ${symbol} 4/${s72ColoredValue("ozChiZero", stability.m)}=${fmt(stability.dynamic.threshold, 2)}\\)`;
 }
 
 function s72SecularMetric(stability: AnalyticStabilityResult): string {
@@ -535,26 +512,9 @@ function s72SecularMetric(stability: AnalyticStabilityResult): string {
   return `\\(4+${TEX.m}${TEX.n}+(${TEX.m}-4)(${TEX.s}+4)=${fmt(stability.secular.value, 2)} ${symbol} 0\\)`;
 }
 
-function s72SecularExpandedMetric(stability: AnalyticStabilityResult, parameters: ModelParameters): string {
-  const symbol = s72LatexInequality(stability.secular.stable, ">");
-  const m = s72ColoredValue("ozChiZero", stability.m);
-  const n = s72ColoredValue("ozBlue", parameters.n);
-  const s = s72ColoredValue("ozPink", parameters.s);
-  return `\\(4+${m}${n}+(${m}-4)(${s}+4)=${fmt(stability.secular.value, 2)} ${symbol} 0\\)`;
-}
-
 function s72PulsationalMetric(stability: AnalyticStabilityResult): string {
   const symbol = s72LatexInequality(stability.pulsational.stable, "<");
   return `\\(b=4+${TEX.m}[${TEX.n}-(${TEX.s}+4)(${TEX.gamma1}-1)]=${fmt(stability.b, 2)} ${symbol} 0\\)`;
-}
-
-function s72PulsationalExpandedMetric(stability: AnalyticStabilityResult, parameters: ModelParameters): string {
-  const symbol = s72LatexInequality(stability.pulsational.stable, "<");
-  const m = s72ColoredValue("ozChiZero", stability.m);
-  const n = s72ColoredValue("ozBlue", parameters.n);
-  const s = s72ColoredValue("ozPink", parameters.s);
-  const gamma1 = s72ColoredValue("ozGamma", parameters.gamma1);
-  return `\\(b=4+${m}[${n}-(${s}+4)(${gamma1}-1)]=${fmt(stability.b, 2)} ${symbol} 0\\)`;
 }
 
 function s72DynamicTitle(stability: AnalyticStabilityResult): string {
@@ -570,181 +530,6 @@ function s72SecularTitle(stability: AnalyticStabilityResult, parameters: ModelPa
 function s72PulsationalTitle(stability: AnalyticStabilityResult, parameters: ModelParameters): string {
   const symbol = s72TextInequality(stability.pulsational.stable, "<");
   return `Pulsational stability: chi0=${fmt(stability.m, 3)}, n=${fmt(parameters.n, 3)}, s=${fmt(parameters.s, 3)}, Gamma1=${fmt(parameters.gamma1, 3)}; b = 4 + ${fmt(stability.m, 3)}*(${fmt(parameters.n, 3)} - (${fmt(parameters.s, 3)} + 4)*(${fmt(parameters.gamma1, 3)} - 1)) = ${fmt(stability.b, 3)} ${symbol} 0 -> ${s72Verdict("pulsational", stability.pulsational.stable)}`;
-}
-
-function stabilityChipFromTarget(target: EventTarget | null): HTMLElement | null {
-  if (!(target instanceof Element)) return null;
-  return target.closest<HTMLElement>("[data-stability-expanded]");
-}
-
-function setStabilityChipFormula(target: HTMLElement, expanded: boolean): void {
-  const formula = expanded ? target.dataset.stabilityExpanded : target.dataset.stabilityDefault;
-  const formulaNode = target.querySelector<HTMLElement>("b");
-  if (!formula || !formulaNode || target.dataset.stabilityView === (expanded ? "expanded" : "default")) return;
-  formulaNode.innerHTML = formula;
-  target.dataset.stabilityView = expanded ? "expanded" : "default";
-  queueMathTypeset([formulaNode]);
-}
-
-function setStabilityChipExpanded(target: HTMLElement | null, expanded: boolean): void {
-  if (!target) return;
-  target.setAttribute("aria-expanded", String(expanded));
-  setStabilityChipFormula(target, expanded);
-}
-
-function showStabilityChipValues(target: HTMLElement, pinned: boolean): void {
-  if (activeStabilityChipTarget && activeStabilityChipTarget !== target) {
-    setStabilityChipExpanded(activeStabilityChipTarget, false);
-    delete activeStabilityChipTarget.dataset.stabilityPinned;
-  }
-  activeStabilityChipTarget = target;
-  stabilityChipPinned = pinned;
-  target.dataset.stabilityPinned = String(pinned);
-  setStabilityChipExpanded(target, true);
-}
-
-function hideStabilityChipValues(force = false): void {
-  if (stabilityChipPinned && !force) return;
-  if (activeStabilityChipTarget) delete activeStabilityChipTarget.dataset.stabilityPinned;
-  setStabilityChipExpanded(activeStabilityChipTarget, false);
-  activeStabilityChipTarget = null;
-  stabilityChipPinned = false;
-}
-
-function toggleStabilityChipValues(target: HTMLElement): void {
-  if (target.dataset.stabilityPinned === "true" || (stabilityChipPinned && isSameStabilityChip(target))) {
-    hideStabilityChipValues(true);
-  } else {
-    showStabilityChipValues(target, true);
-  }
-}
-
-function clearStabilityLongPress(): void {
-  if (stabilityLongPressTimer) window.clearTimeout(stabilityLongPressTimer);
-  stabilityLongPressTimer = 0;
-  stabilityLongPressStart = null;
-}
-
-function isSameStabilityChip(target: HTMLElement): boolean {
-  return activeStabilityChipTarget === target
-    || (!!activeStabilityChipTarget?.dataset.stabilityKind
-      && activeStabilityChipTarget.dataset.stabilityKind === target.dataset.stabilityKind);
-}
-
-function setupStatusMetricExpansion(): void {
-  const metrics = el<HTMLDivElement>("metrics");
-  metrics.addEventListener("pointerover", (event) => {
-    const chip = stabilityChipFromTarget(event.target);
-    if (chip && !stabilityChipPinned) showStabilityChipValues(chip, false);
-  });
-  metrics.addEventListener("pointerout", (event) => {
-    const chip = stabilityChipFromTarget(event.target);
-    if (!chip || stabilityChipPinned) return;
-    if (event.relatedTarget instanceof Node && chip.contains(event.relatedTarget)) return;
-    hideStabilityChipValues();
-  });
-  metrics.addEventListener("focusin", (event) => {
-    const chip = stabilityChipFromTarget(event.target);
-    if (chip && !stabilityChipPinned) showStabilityChipValues(chip, false);
-  });
-  metrics.addEventListener("focusout", (event) => {
-    const chip = stabilityChipFromTarget(event.target);
-    if (!chip || stabilityChipPinned) return;
-    if (event.relatedTarget instanceof Node && chip.contains(event.relatedTarget)) return;
-    hideStabilityChipValues();
-  });
-  document.addEventListener("click", (event) => {
-    const chip = stabilityChipFromTarget(event.target);
-    if (!chip) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (suppressNextStabilityClick && Date.now() - lastTouchStabilityToggleAt < 700) {
-      suppressNextStabilityClick = false;
-      return;
-    }
-    suppressNextStabilityClick = false;
-    if (chip.dataset.stabilityPinned === "true" || (stabilityChipPinned && isSameStabilityChip(chip))) {
-      hideStabilityChipValues(true);
-      chip.blur();
-      return;
-    }
-    showStabilityChipValues(chip, true);
-  }, true);
-  metrics.addEventListener("keydown", (event) => {
-    const chip = stabilityChipFromTarget(event.target);
-    if (!chip) return;
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      toggleStabilityChipValues(chip);
-    } else if (event.key === "Escape") {
-      hideStabilityChipValues(true);
-    }
-  });
-  document.addEventListener("pointerdown", (event) => {
-    const chip = stabilityChipFromTarget(event.target);
-    if (!chip) return;
-    if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
-    clearStabilityLongPress();
-    stabilityLongPressStart = {
-      target: chip,
-      pointerId: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-      pinnedAtStart: chip.dataset.stabilityPinned === "true" || (stabilityChipPinned && isSameStabilityChip(chip)),
-      longPressFired: false
-    };
-    stabilityLongPressTimer = window.setTimeout(() => {
-      if (!stabilityLongPressStart) return;
-      stabilityLongPressStart.longPressFired = true;
-      suppressNextStabilityClick = true;
-      lastTouchStabilityToggleAt = Date.now();
-      toggleStabilityChipValues(stabilityLongPressStart.target);
-      window.setTimeout(() => {
-        suppressNextStabilityClick = false;
-      }, 700);
-      clearStabilityLongPress();
-    }, STABILITY_CHIP_LONG_PRESS_MS);
-  }, true);
-  metrics.addEventListener("pointermove", (event) => {
-    if (!stabilityLongPressStart || stabilityLongPressStart.pointerId !== event.pointerId) return;
-    const moved = Math.hypot(event.clientX - stabilityLongPressStart.x, event.clientY - stabilityLongPressStart.y);
-    if (moved > STABILITY_CHIP_MOVE_TOLERANCE) clearStabilityLongPress();
-  });
-  document.addEventListener("pointerup", (event) => {
-    if (!stabilityLongPressStart || stabilityLongPressStart.pointerId !== event.pointerId) return;
-    if (event.pointerType !== "touch" && event.pointerType !== "pen") {
-      clearStabilityLongPress();
-      return;
-    }
-    const chip = stabilityChipFromTarget(event.target);
-    const sameChip = !!chip && (chip === stabilityLongPressStart.target
-      || chip.dataset.stabilityKind === stabilityLongPressStart.target.dataset.stabilityKind);
-    if (sameChip && !stabilityLongPressStart.longPressFired) {
-      event.preventDefault();
-      suppressNextStabilityClick = true;
-      lastTouchStabilityToggleAt = Date.now();
-      if (stabilityLongPressStart.pinnedAtStart) {
-        hideStabilityChipValues(true);
-        stabilityLongPressStart.target.blur();
-      } else {
-        showStabilityChipValues(stabilityLongPressStart.target, true);
-      }
-      window.setTimeout(() => {
-        suppressNextStabilityClick = false;
-      }, 500);
-    }
-    clearStabilityLongPress();
-  }, true);
-  document.addEventListener("pointercancel", clearStabilityLongPress, true);
-  document.addEventListener("pointerdown", (event) => {
-    if (!activeStabilityChipTarget) return;
-    const target = event.target;
-    if (stabilityChipFromTarget(target)) return;
-    hideStabilityChipValues(true);
-  }, true);
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") hideStabilityChipValues(true);
-  });
 }
 
 function fmtFixed(value: number, digits: number): string {
@@ -1918,6 +1703,8 @@ function setupGridControls(): void {
 function setGridModeEnabled(enabled: boolean, options: { defaultGammaRange?: boolean } = {}): void {
   if (gridState.enabled === enabled) return;
   gridState.enabled = enabled;
+  activePhaseHoverCanvasId = null;
+  activePhaseScrub = null;
   const toggle = document.getElementById("gridModeToggle");
   if (toggle instanceof HTMLInputElement) toggle.checked = enabled;
 
@@ -2548,6 +2335,7 @@ function setupPhaseScrubbing(): void {
     canvas.addEventListener("pointermove", (event) => updatePhaseScrub(event, canvasId));
     canvas.addEventListener("pointerup", (event) => finishPhaseScrub(event, canvasId));
     canvas.addEventListener("pointercancel", (event) => finishPhaseScrub(event, canvasId));
+    canvas.addEventListener("pointerleave", () => clearPhaseHover(canvasId));
   });
 }
 
@@ -2579,6 +2367,10 @@ function scrubPhaseToPointer(canvas: HTMLCanvasElement, canvasId: string, event:
   drawAnimatedPhaseViews();
 }
 
+function canvasSupportsPhaseHover(canvasId: string): boolean {
+  return (PHASE_HOVER_CANVAS_IDS as readonly string[]).includes(canvasId);
+}
+
 function beginPhaseScrub(event: PointerEvent, canvasId: string): void {
   if (event.button !== 0 || gridState.enabled || !latestPhaseRows.length || latestDisplayWindow.mode !== "phase") return;
   const canvas = event.currentTarget as HTMLCanvasElement;
@@ -2587,15 +2379,31 @@ function beginPhaseScrub(event: PointerEvent, canvasId: string): void {
   event.preventDefault();
   canvas.setPointerCapture(event.pointerId);
   activePhaseScrub = { canvasId, pointerId: event.pointerId };
+  activePhaseHoverCanvasId = null;
   currentAnimationPhase = phase;
   modelAnimationStartTime = null;
   drawAnimatedPhaseViews();
 }
 
 function updatePhaseScrub(event: PointerEvent, canvasId: string): void {
-  if (!activePhaseScrub || activePhaseScrub.canvasId !== canvasId || activePhaseScrub.pointerId !== event.pointerId) return;
-  event.preventDefault();
-  scrubPhaseToPointer(event.currentTarget as HTMLCanvasElement, canvasId, event);
+  if (activePhaseScrub) {
+    if (activePhaseScrub.canvasId !== canvasId || activePhaseScrub.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    scrubPhaseToPointer(event.currentTarget as HTMLCanvasElement, canvasId, event);
+    return;
+  }
+  if (gridState.enabled) return;
+  if (event.pointerType !== "mouse" || event.buttons !== 0 || !canvasSupportsPhaseHover(canvasId)) return;
+  const canvas = event.currentTarget as HTMLCanvasElement;
+  const phase = phaseFromCanvasPoint(canvasId, canvasPoint(canvas, event));
+  if (phase === null) {
+    clearPhaseHover(canvasId);
+    return;
+  }
+  activePhaseHoverCanvasId = canvasId;
+  currentAnimationPhase = phase;
+  modelAnimationStartTime = null;
+  drawAnimatedPhaseViews();
 }
 
 function finishPhaseScrub(event: PointerEvent, canvasId: string): void {
@@ -2604,6 +2412,13 @@ function finishPhaseScrub(event: PointerEvent, canvasId: string): void {
   event.preventDefault();
   if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   activePhaseScrub = null;
+  modelAnimationStartTime = null;
+  drawAnimatedPhaseViews();
+}
+
+function clearPhaseHover(canvasId: string): void {
+  if (activePhaseHoverCanvasId !== canvasId) return;
+  activePhaseHoverCanvasId = null;
   modelAnimationStartTime = null;
   drawAnimatedPhaseViews();
 }
@@ -3498,6 +3313,14 @@ function range(values: number[], padFraction = 0.08): [number, number] {
   return [min - pad, max + pad];
 }
 
+function expandRangeToInclude(base: NumericRange, included?: NumericRange): NumericRange {
+  if (!included) return base;
+  return [
+    Math.min(base[0], included[0]),
+    Math.max(base[1], included[1])
+  ];
+}
+
 interface Series {
   label: string;
   color: string;
@@ -3664,6 +3487,7 @@ function drawSeries(
     ylabel: string;
     xlim?: [number, number];
     ylim?: [number, number];
+    minimumYlim?: [number, number];
     fallbackXlim?: [number, number];
     view?: PlotView;
     interactivePlotId?: InteractivePlotId;
@@ -3710,8 +3534,10 @@ function drawSeries(
       if (Number.isFinite(x) && x >= xlim[0] && x <= xlim[1]) yValues.push(y);
     });
   });
-  const ylim = options.view?.ylim || options.ylim || range(yValues, 0.08);
+  const automaticYlim = options.ylim || range(yValues, 0.08);
+  const ylim = options.view?.ylim || (options.ylim ? options.ylim : expandRangeToInclude(automaticYlim, options.minimumYlim));
   canvas.dataset.xlim = `${fmtFixed(xlim[0], 3)},${fmtFixed(xlim[1], 3)}`;
+  canvas.dataset.ylim = `${fmtFixed(ylim[0], 4)},${fmtFixed(ylim[1], 4)}`;
   plotRenderStates.set(canvasId, { plotId: options.interactivePlotId, plot, xlim, ylim });
   const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
   const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
@@ -5259,11 +5085,13 @@ function syncPhaseCanvasState(): void {
     }
     if (activePhaseScrub?.canvasId === canvasId) canvas.dataset.phaseScrubbing = "true";
     else delete canvas.dataset.phaseScrubbing;
+    if (!gridState.enabled && activePhaseHoverCanvasId === canvasId) canvas.dataset.phaseHovering = "true";
+    else delete canvas.dataset.phaseHovering;
   });
   updatePhaseAnchorControlAvailability();
 }
 
-type PhaseAnnotationKind = "maxTeff" | "minTeff" | "maxR" | "minR" | "maxV" | "maxL" | "minL";
+type PhaseAnnotationKind = "maxL" | "minL" | "maxR" | "minR" | "maxV" | "minV" | "maxTeff" | "minTeff";
 
 interface PhasePlotAnnotation {
   kind: PhaseAnnotationKind;
@@ -5285,18 +5113,31 @@ function extremaRow(rows: readonly Row[], value: (row: Row) => number | null, pi
   return selected;
 }
 
+function phaseWindowRows(rows: readonly Row[], lower: number, upper: number, includeUpper: boolean): Row[] {
+  return rows.filter((row) =>
+    row.tau >= lower
+    && (includeUpper ? row.tau <= upper : row.tau < upper)
+  );
+}
+
 function phasePlotAnnotations(rows: readonly Row[]): PhasePlotAnnotation[] {
   const annotations: PhasePlotAnnotation[] = [];
   const add = (kind: PhaseAnnotationKind, row: Row | null, color: string) => {
     if (row) annotations.push({ kind, row, color });
   };
-  add("maxTeff", extremaRow(rows, effectiveTemperatureProxy, "max"), PHASE_MARKER_COLOR);
-  add("minTeff", extremaRow(rows, effectiveTemperatureProxy, "min"), PHASE_MARKER_COLOR);
-  add("maxR", extremaRow(rows, (row) => row.R, "max"), COLORS.R);
-  add("minR", extremaRow(rows, (row) => row.R, "min"), COLORS.R);
-  add("maxV", extremaRow(rows, (row) => row.V, "max"), COLORS.V);
-  add("maxL", extremaRow(rows, (row) => row.L, "max"), COLORS.L);
-  add("minL", extremaRow(rows, (row) => row.L, "min"), COLORS.L);
+  [
+    phaseWindowRows(rows, 0, 1, false),
+    phaseWindowRows(rows, 1, 2, true)
+  ].forEach((windowRows) => {
+    add("maxL", extremaRow(windowRows, (row) => row.L, "max"), COLORS.L);
+    add("minL", extremaRow(windowRows, (row) => row.L, "min"), COLORS.L);
+    add("maxR", extremaRow(windowRows, (row) => row.R, "max"), COLORS.R);
+    add("minR", extremaRow(windowRows, (row) => row.R, "min"), COLORS.R);
+    add("maxV", extremaRow(windowRows, (row) => row.V, "max"), POSITIVE_VELOCITY_COLOR);
+    add("minV", extremaRow(windowRows, (row) => row.V, "min"), NEGATIVE_VELOCITY_COLOR);
+    add("maxTeff", extremaRow(windowRows, effectiveTemperatureProxy, "max"), PHASE_MARKER_COLOR);
+    add("minTeff", extremaRow(windowRows, effectiveTemperatureProxy, "min"), PHASE_MARKER_COLOR);
+  });
   return annotations;
 }
 
@@ -5361,8 +5202,8 @@ function drawPhaseAnnotationSymbol(
     ctx.strokeStyle = annotation.color;
     ctx.lineWidth = 2;
     ctx.stroke();
-  } else if (annotation.kind === "maxV") {
-    const size = 5.8;
+  } else if (annotation.kind === "maxV" || annotation.kind === "minV") {
+    const size = annotation.kind === "maxV" ? 5.8 : 3.8;
     ctx.lineWidth = 3.6;
     ctx.beginPath();
     ctx.moveTo(x - size, y - size);
@@ -5404,6 +5245,7 @@ function drawPhasePlots(): void {
     ylabelColor: COLORS.L,
     xlim: latestDisplayWindow.xlim,
     ylim: latestPhaseSample.length || gridState.results.length ? undefined : [0, 1],
+    minimumYlim: [0.99, 1.01],
     message: latestPhaseMessage,
     phaseMarker: marker,
     afterDraw: drawPhasePlotOverlays
@@ -5415,6 +5257,7 @@ function drawPhasePlots(): void {
     ylabelColor: COLORS.V,
     xlim: latestDisplayWindow.xlim,
     ylim: latestPhaseSample.length || gridState.results.length ? undefined : [0, 1],
+    minimumYlim: [-0.01, 0.01],
     message: latestPhaseMessage,
     phaseMarker: marker,
     afterDraw: drawPhasePlotOverlays
@@ -5739,7 +5582,7 @@ function startModelAnimationLoop(): void {
   if (modelAnimationFrame) return;
   const tick = (timestamp: number) => {
     if (!document.hidden) {
-      if (activePhaseScrub) {
+      if (activePhaseScrub || activePhaseHoverCanvasId) {
         modelAnimationStartTime = null;
       } else {
         if (modelAnimationStartTime === null) {
@@ -5780,7 +5623,6 @@ function drawAll(): void {
   updateGridLoopSliderMarkers();
   updateSonificationSourceControls();
   const metricsNode = el<HTMLDivElement>("metrics");
-  hideStabilityChipValues(true);
   metricsNode.dataset.s72Dynamic = s72State(s72Stability.dynamic.stable);
   metricsNode.dataset.s72Secular = s72State(s72Stability.secular.stable);
   metricsNode.dataset.s72Pulsational = s72State(s72Stability.pulsational.stable);
@@ -5799,7 +5641,6 @@ function drawAll(): void {
     {
       label: "dyn",
       value: s72DynamicMetric(s72Stability),
-      expandedValue: s72DynamicExpandedMetric(s72Stability),
       detail: s72DynamicTitle(s72Stability),
       className: s72MetricClass(s72Stability.dynamic.stable),
       stabilityKind: "dynamic"
@@ -5807,7 +5648,6 @@ function drawAll(): void {
     {
       label: "sec",
       value: s72SecularMetric(s72Stability),
-      expandedValue: s72SecularExpandedMetric(s72Stability, stabilityParameters),
       detail: s72SecularTitle(s72Stability, stabilityParameters),
       className: s72MetricClass(s72Stability.secular.stable),
       stabilityKind: "secular"
@@ -5815,17 +5655,16 @@ function drawAll(): void {
     {
       label: "puls",
       value: s72PulsationalMetric(s72Stability),
-      expandedValue: s72PulsationalExpandedMetric(s72Stability, stabilityParameters),
       detail: s72PulsationalTitle(s72Stability, stabilityParameters),
       className: s72MetricClass(s72Stability.pulsational.stable),
       stabilityKind: "pulsational"
     }
   ];
   const metricsHtml = metricItems
-    .map(({ label, value, className, stabilityKind, expandedValue, detail }) => {
+    .map(({ label, value, className, stabilityKind, detail }) => {
       const stabilityAttribute = stabilityKind ? ` data-stability-kind="${stabilityKind}"` : "";
-      const detailAttribute = expandedValue && detail
-        ? ` data-stability-detail="${escapeAttribute(detail)}" data-stability-default="${escapeAttribute(String(value))}" data-stability-expanded="${escapeAttribute(expandedValue)}" data-stability-view="default" role="button" tabindex="0" aria-expanded="false" aria-label="${escapeAttribute(`${label}: ${detail}`)}"`
+      const detailAttribute = detail
+        ? ` data-stability-detail="${escapeAttribute(detail)}" aria-label="${escapeAttribute(`${label}: ${detail}`)}"`
         : "";
       return `<span class="metric${className ? ` ${className}` : ""}"${stabilityAttribute}${detailAttribute}>${label}<b>${value}</b></span>`;
     })
@@ -5914,7 +5753,6 @@ function drawAll(): void {
 
 function startApp(): void {
   buildControls();
-  setupStatusMetricExpansion();
   solveAndDraw();
   startModelAnimationLoop();
   window.addEventListener("load", () => queueMathTypeset());

@@ -1685,6 +1685,7 @@
   var POSITIVE_VELOCITY_COLOR = "#4DA3FF";
   var NEGATIVE_VELOCITY_COLOR = "#FF5F6D";
   var PHASE_SCRUB_CANVAS_IDS = ["lightCanvas", "velocityCanvas", "pressureCanvas"];
+  var PHASE_HOVER_CANVAS_IDS = ["lightCanvas", "velocityCanvas"];
   var SONIFICATION_SOURCE_LABELS = {
     luminosity: "luminosity",
     velocity: "radial velocity",
@@ -1732,7 +1733,7 @@
   var latestPhasePeriodLabel = "phase (period = n/a \u03C4)";
   var latestPhaseLuminosityRange = [0, 1];
   var latestPhaseParameters = state;
-  var phaseAnnotationsVisible = false;
+  var phaseAnnotationsVisible = true;
   var sonificationReferenceNote = MIDDLE_C_NOTE;
   var sonificationReferenceHz = noteToFrequency(MIDDLE_C_NOTE);
   var sonificationSamples = [];
@@ -1745,6 +1746,7 @@
   var sonificationVoices = /* @__PURE__ */ new Set();
   var sonificationActive = false;
   var activePhaseScrub = null;
+  var activePhaseHoverCanvasId = null;
   var activeReferencePlotInteraction = null;
   var pianoModeActive = false;
   var pianoStartOctave = PIANO_DEFAULT_START_OCTAVE;
@@ -1833,14 +1835,6 @@
   var SLIDER_RANGE_DOUBLE_TAP_DISTANCE = 22;
   var activeSliderTapStart = null;
   var lastSliderTap = null;
-  var STABILITY_CHIP_LONG_PRESS_MS = 520;
-  var STABILITY_CHIP_MOVE_TOLERANCE = 14;
-  var activeStabilityChipTarget = null;
-  var stabilityChipPinned = false;
-  var stabilityLongPressTimer = 0;
-  var stabilityLongPressStart = null;
-  var suppressNextStabilityClick = false;
-  var lastTouchStabilityToggleAt = 0;
   var DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
   var STABILITY_MAP_RESOLUTION = 54;
   var STRIP_LOG_RATIO_MIN = -2;
@@ -1883,39 +1877,17 @@
     if (satisfied) return symbol;
     return symbol === ">" ? "\u226F" : "\u226E";
   }
-  function s72ColoredValue(macro, value, digits = 2) {
-    return `\\${macro}{${fmt(value, digits)}}`;
-  }
   function s72DynamicMetric(stability) {
     const symbol = s72LatexInequality(stability.dynamic.stable, ">");
     return `\\(${TEX.gamma1}=${fmt(stability.dynamic.value, 2)} ${symbol} 4/${TEX.m}=${fmt(stability.dynamic.threshold, 2)}\\)`;
-  }
-  function s72DynamicExpandedMetric(stability) {
-    const symbol = s72LatexInequality(stability.dynamic.stable, ">");
-    return `\\(${s72ColoredValue("ozGamma", stability.dynamic.value)} ${symbol} 4/${s72ColoredValue("ozChiZero", stability.m)}=${fmt(stability.dynamic.threshold, 2)}\\)`;
   }
   function s72SecularMetric(stability) {
     const symbol = s72LatexInequality(stability.secular.stable, ">");
     return `\\(4+${TEX.m}${TEX.n}+(${TEX.m}-4)(${TEX.s}+4)=${fmt(stability.secular.value, 2)} ${symbol} 0\\)`;
   }
-  function s72SecularExpandedMetric(stability, parameters) {
-    const symbol = s72LatexInequality(stability.secular.stable, ">");
-    const m = s72ColoredValue("ozChiZero", stability.m);
-    const n = s72ColoredValue("ozBlue", parameters.n);
-    const s = s72ColoredValue("ozPink", parameters.s);
-    return `\\(4+${m}${n}+(${m}-4)(${s}+4)=${fmt(stability.secular.value, 2)} ${symbol} 0\\)`;
-  }
   function s72PulsationalMetric(stability) {
     const symbol = s72LatexInequality(stability.pulsational.stable, "<");
     return `\\(b=4+${TEX.m}[${TEX.n}-(${TEX.s}+4)(${TEX.gamma1}-1)]=${fmt(stability.b, 2)} ${symbol} 0\\)`;
-  }
-  function s72PulsationalExpandedMetric(stability, parameters) {
-    const symbol = s72LatexInequality(stability.pulsational.stable, "<");
-    const m = s72ColoredValue("ozChiZero", stability.m);
-    const n = s72ColoredValue("ozBlue", parameters.n);
-    const s = s72ColoredValue("ozPink", parameters.s);
-    const gamma1 = s72ColoredValue("ozGamma", parameters.gamma1);
-    return `\\(b=4+${m}[${n}-(${s}+4)(${gamma1}-1)]=${fmt(stability.b, 2)} ${symbol} 0\\)`;
   }
   function s72DynamicTitle(stability) {
     const symbol = s72TextInequality(stability.dynamic.stable, ">");
@@ -1928,169 +1900,6 @@
   function s72PulsationalTitle(stability, parameters) {
     const symbol = s72TextInequality(stability.pulsational.stable, "<");
     return `Pulsational stability: chi0=${fmt(stability.m, 3)}, n=${fmt(parameters.n, 3)}, s=${fmt(parameters.s, 3)}, Gamma1=${fmt(parameters.gamma1, 3)}; b = 4 + ${fmt(stability.m, 3)}*(${fmt(parameters.n, 3)} - (${fmt(parameters.s, 3)} + 4)*(${fmt(parameters.gamma1, 3)} - 1)) = ${fmt(stability.b, 3)} ${symbol} 0 -> ${s72Verdict("pulsational", stability.pulsational.stable)}`;
-  }
-  function stabilityChipFromTarget(target) {
-    if (!(target instanceof Element)) return null;
-    return target.closest("[data-stability-expanded]");
-  }
-  function setStabilityChipFormula(target, expanded) {
-    const formula = expanded ? target.dataset.stabilityExpanded : target.dataset.stabilityDefault;
-    const formulaNode = target.querySelector("b");
-    if (!formula || !formulaNode || target.dataset.stabilityView === (expanded ? "expanded" : "default")) return;
-    formulaNode.innerHTML = formula;
-    target.dataset.stabilityView = expanded ? "expanded" : "default";
-    queueMathTypeset([formulaNode]);
-  }
-  function setStabilityChipExpanded(target, expanded) {
-    if (!target) return;
-    target.setAttribute("aria-expanded", String(expanded));
-    setStabilityChipFormula(target, expanded);
-  }
-  function showStabilityChipValues(target, pinned) {
-    if (activeStabilityChipTarget && activeStabilityChipTarget !== target) {
-      setStabilityChipExpanded(activeStabilityChipTarget, false);
-      delete activeStabilityChipTarget.dataset.stabilityPinned;
-    }
-    activeStabilityChipTarget = target;
-    stabilityChipPinned = pinned;
-    target.dataset.stabilityPinned = String(pinned);
-    setStabilityChipExpanded(target, true);
-  }
-  function hideStabilityChipValues(force = false) {
-    if (stabilityChipPinned && !force) return;
-    if (activeStabilityChipTarget) delete activeStabilityChipTarget.dataset.stabilityPinned;
-    setStabilityChipExpanded(activeStabilityChipTarget, false);
-    activeStabilityChipTarget = null;
-    stabilityChipPinned = false;
-  }
-  function toggleStabilityChipValues(target) {
-    if (target.dataset.stabilityPinned === "true" || stabilityChipPinned && isSameStabilityChip(target)) {
-      hideStabilityChipValues(true);
-    } else {
-      showStabilityChipValues(target, true);
-    }
-  }
-  function clearStabilityLongPress() {
-    if (stabilityLongPressTimer) window.clearTimeout(stabilityLongPressTimer);
-    stabilityLongPressTimer = 0;
-    stabilityLongPressStart = null;
-  }
-  function isSameStabilityChip(target) {
-    return activeStabilityChipTarget === target || !!activeStabilityChipTarget?.dataset.stabilityKind && activeStabilityChipTarget.dataset.stabilityKind === target.dataset.stabilityKind;
-  }
-  function setupStatusMetricExpansion() {
-    const metrics = el("metrics");
-    metrics.addEventListener("pointerover", (event) => {
-      const chip = stabilityChipFromTarget(event.target);
-      if (chip && !stabilityChipPinned) showStabilityChipValues(chip, false);
-    });
-    metrics.addEventListener("pointerout", (event) => {
-      const chip = stabilityChipFromTarget(event.target);
-      if (!chip || stabilityChipPinned) return;
-      if (event.relatedTarget instanceof Node && chip.contains(event.relatedTarget)) return;
-      hideStabilityChipValues();
-    });
-    metrics.addEventListener("focusin", (event) => {
-      const chip = stabilityChipFromTarget(event.target);
-      if (chip && !stabilityChipPinned) showStabilityChipValues(chip, false);
-    });
-    metrics.addEventListener("focusout", (event) => {
-      const chip = stabilityChipFromTarget(event.target);
-      if (!chip || stabilityChipPinned) return;
-      if (event.relatedTarget instanceof Node && chip.contains(event.relatedTarget)) return;
-      hideStabilityChipValues();
-    });
-    document.addEventListener("click", (event) => {
-      const chip = stabilityChipFromTarget(event.target);
-      if (!chip) return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (suppressNextStabilityClick && Date.now() - lastTouchStabilityToggleAt < 700) {
-        suppressNextStabilityClick = false;
-        return;
-      }
-      suppressNextStabilityClick = false;
-      if (chip.dataset.stabilityPinned === "true" || stabilityChipPinned && isSameStabilityChip(chip)) {
-        hideStabilityChipValues(true);
-        chip.blur();
-        return;
-      }
-      showStabilityChipValues(chip, true);
-    }, true);
-    metrics.addEventListener("keydown", (event) => {
-      const chip = stabilityChipFromTarget(event.target);
-      if (!chip) return;
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        toggleStabilityChipValues(chip);
-      } else if (event.key === "Escape") {
-        hideStabilityChipValues(true);
-      }
-    });
-    document.addEventListener("pointerdown", (event) => {
-      const chip = stabilityChipFromTarget(event.target);
-      if (!chip) return;
-      if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
-      clearStabilityLongPress();
-      stabilityLongPressStart = {
-        target: chip,
-        pointerId: event.pointerId,
-        x: event.clientX,
-        y: event.clientY,
-        pinnedAtStart: chip.dataset.stabilityPinned === "true" || stabilityChipPinned && isSameStabilityChip(chip),
-        longPressFired: false
-      };
-      stabilityLongPressTimer = window.setTimeout(() => {
-        if (!stabilityLongPressStart) return;
-        stabilityLongPressStart.longPressFired = true;
-        suppressNextStabilityClick = true;
-        lastTouchStabilityToggleAt = Date.now();
-        toggleStabilityChipValues(stabilityLongPressStart.target);
-        window.setTimeout(() => {
-          suppressNextStabilityClick = false;
-        }, 700);
-        clearStabilityLongPress();
-      }, STABILITY_CHIP_LONG_PRESS_MS);
-    }, true);
-    metrics.addEventListener("pointermove", (event) => {
-      if (!stabilityLongPressStart || stabilityLongPressStart.pointerId !== event.pointerId) return;
-      const moved = Math.hypot(event.clientX - stabilityLongPressStart.x, event.clientY - stabilityLongPressStart.y);
-      if (moved > STABILITY_CHIP_MOVE_TOLERANCE) clearStabilityLongPress();
-    });
-    document.addEventListener("pointerup", (event) => {
-      if (!stabilityLongPressStart || stabilityLongPressStart.pointerId !== event.pointerId) return;
-      if (event.pointerType !== "touch" && event.pointerType !== "pen") {
-        clearStabilityLongPress();
-        return;
-      }
-      const chip = stabilityChipFromTarget(event.target);
-      const sameChip = !!chip && (chip === stabilityLongPressStart.target || chip.dataset.stabilityKind === stabilityLongPressStart.target.dataset.stabilityKind);
-      if (sameChip && !stabilityLongPressStart.longPressFired) {
-        event.preventDefault();
-        suppressNextStabilityClick = true;
-        lastTouchStabilityToggleAt = Date.now();
-        if (stabilityLongPressStart.pinnedAtStart) {
-          hideStabilityChipValues(true);
-          stabilityLongPressStart.target.blur();
-        } else {
-          showStabilityChipValues(stabilityLongPressStart.target, true);
-        }
-        window.setTimeout(() => {
-          suppressNextStabilityClick = false;
-        }, 500);
-      }
-      clearStabilityLongPress();
-    }, true);
-    document.addEventListener("pointercancel", clearStabilityLongPress, true);
-    document.addEventListener("pointerdown", (event) => {
-      if (!activeStabilityChipTarget) return;
-      const target = event.target;
-      if (stabilityChipFromTarget(target)) return;
-      hideStabilityChipValues(true);
-    }, true);
-    document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") hideStabilityChipValues(true);
-    });
   }
   function fmtFixed(value, digits) {
     if (!Number.isFinite(value)) return "n/a";
@@ -3151,6 +2960,8 @@
   function setGridModeEnabled(enabled, options = {}) {
     if (gridState.enabled === enabled) return;
     gridState.enabled = enabled;
+    activePhaseHoverCanvasId = null;
+    activePhaseScrub = null;
     const toggle = document.getElementById("gridModeToggle");
     if (toggle instanceof HTMLInputElement) toggle.checked = enabled;
     if (enabled) {
@@ -3706,6 +3517,7 @@
       canvas.addEventListener("pointermove", (event) => updatePhaseScrub(event, canvasId));
       canvas.addEventListener("pointerup", (event) => finishPhaseScrub(event, canvasId));
       canvas.addEventListener("pointercancel", (event) => finishPhaseScrub(event, canvasId));
+      canvas.addEventListener("pointerleave", () => clearPhaseHover(canvasId));
     });
   }
   function setupReferencePlotInteractions() {
@@ -3733,6 +3545,9 @@
     modelAnimationStartTime = null;
     drawAnimatedPhaseViews();
   }
+  function canvasSupportsPhaseHover(canvasId) {
+    return PHASE_HOVER_CANVAS_IDS.includes(canvasId);
+  }
   function beginPhaseScrub(event, canvasId) {
     if (event.button !== 0 || gridState.enabled || !latestPhaseRows.length || latestDisplayWindow.mode !== "phase") return;
     const canvas = event.currentTarget;
@@ -3741,14 +3556,30 @@
     event.preventDefault();
     canvas.setPointerCapture(event.pointerId);
     activePhaseScrub = { canvasId, pointerId: event.pointerId };
+    activePhaseHoverCanvasId = null;
     currentAnimationPhase = phase;
     modelAnimationStartTime = null;
     drawAnimatedPhaseViews();
   }
   function updatePhaseScrub(event, canvasId) {
-    if (!activePhaseScrub || activePhaseScrub.canvasId !== canvasId || activePhaseScrub.pointerId !== event.pointerId) return;
-    event.preventDefault();
-    scrubPhaseToPointer(event.currentTarget, canvasId, event);
+    if (activePhaseScrub) {
+      if (activePhaseScrub.canvasId !== canvasId || activePhaseScrub.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      scrubPhaseToPointer(event.currentTarget, canvasId, event);
+      return;
+    }
+    if (gridState.enabled) return;
+    if (event.pointerType !== "mouse" || event.buttons !== 0 || !canvasSupportsPhaseHover(canvasId)) return;
+    const canvas = event.currentTarget;
+    const phase = phaseFromCanvasPoint(canvasId, canvasPoint(canvas, event));
+    if (phase === null) {
+      clearPhaseHover(canvasId);
+      return;
+    }
+    activePhaseHoverCanvasId = canvasId;
+    currentAnimationPhase = phase;
+    modelAnimationStartTime = null;
+    drawAnimatedPhaseViews();
   }
   function finishPhaseScrub(event, canvasId) {
     if (!activePhaseScrub || activePhaseScrub.canvasId !== canvasId || activePhaseScrub.pointerId !== event.pointerId) return;
@@ -3756,6 +3587,12 @@
     event.preventDefault();
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
     activePhaseScrub = null;
+    modelAnimationStartTime = null;
+    drawAnimatedPhaseViews();
+  }
+  function clearPhaseHover(canvasId) {
+    if (activePhaseHoverCanvasId !== canvasId) return;
+    activePhaseHoverCanvasId = null;
     modelAnimationStartTime = null;
     drawAnimatedPhaseViews();
   }
@@ -4559,6 +4396,13 @@
     const pad = (max - min) * padFraction;
     return [min - pad, max + pad];
   }
+  function expandRangeToInclude(base, included) {
+    if (!included) return base;
+    return [
+      Math.min(base[0], included[0]),
+      Math.max(base[1], included[1])
+    ];
+  }
   function colorWithAlpha(color, alpha) {
     const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
     if (!match) return color;
@@ -4708,8 +4552,10 @@
         if (Number.isFinite(x) && x >= xlim[0] && x <= xlim[1]) yValues.push(y);
       });
     });
-    const ylim = options.view?.ylim || options.ylim || range(yValues, 0.08);
+    const automaticYlim = options.ylim || range(yValues, 0.08);
+    const ylim = options.view?.ylim || (options.ylim ? options.ylim : expandRangeToInclude(automaticYlim, options.minimumYlim));
     canvas.dataset.xlim = `${fmtFixed(xlim[0], 3)},${fmtFixed(xlim[1], 3)}`;
+    canvas.dataset.ylim = `${fmtFixed(ylim[0], 4)},${fmtFixed(ylim[1], 4)}`;
     plotRenderStates.set(canvasId, { plotId: options.interactivePlotId, plot, xlim, ylim });
     const sx = (x) => plot.left + (x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
     const sy = (y) => plot.top + plot.height - (y - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
@@ -6040,6 +5886,8 @@
       }
       if (activePhaseScrub?.canvasId === canvasId) canvas.dataset.phaseScrubbing = "true";
       else delete canvas.dataset.phaseScrubbing;
+      if (!gridState.enabled && activePhaseHoverCanvasId === canvasId) canvas.dataset.phaseHovering = "true";
+      else delete canvas.dataset.phaseHovering;
     });
     updatePhaseAnchorControlAvailability();
   }
@@ -6056,18 +5904,29 @@
     });
     return selected;
   }
+  function phaseWindowRows(rows, lower, upper, includeUpper) {
+    return rows.filter(
+      (row) => row.tau >= lower && (includeUpper ? row.tau <= upper : row.tau < upper)
+    );
+  }
   function phasePlotAnnotations(rows) {
     const annotations = [];
     const add = (kind, row, color) => {
       if (row) annotations.push({ kind, row, color });
     };
-    add("maxTeff", extremaRow(rows, effectiveTemperatureProxy, "max"), PHASE_MARKER_COLOR);
-    add("minTeff", extremaRow(rows, effectiveTemperatureProxy, "min"), PHASE_MARKER_COLOR);
-    add("maxR", extremaRow(rows, (row) => row.R, "max"), COLORS.R);
-    add("minR", extremaRow(rows, (row) => row.R, "min"), COLORS.R);
-    add("maxV", extremaRow(rows, (row) => row.V, "max"), COLORS.V);
-    add("maxL", extremaRow(rows, (row) => row.L, "max"), COLORS.L);
-    add("minL", extremaRow(rows, (row) => row.L, "min"), COLORS.L);
+    [
+      phaseWindowRows(rows, 0, 1, false),
+      phaseWindowRows(rows, 1, 2, true)
+    ].forEach((windowRows) => {
+      add("maxL", extremaRow(windowRows, (row) => row.L, "max"), COLORS.L);
+      add("minL", extremaRow(windowRows, (row) => row.L, "min"), COLORS.L);
+      add("maxR", extremaRow(windowRows, (row) => row.R, "max"), COLORS.R);
+      add("minR", extremaRow(windowRows, (row) => row.R, "min"), COLORS.R);
+      add("maxV", extremaRow(windowRows, (row) => row.V, "max"), POSITIVE_VELOCITY_COLOR);
+      add("minV", extremaRow(windowRows, (row) => row.V, "min"), NEGATIVE_VELOCITY_COLOR);
+      add("maxTeff", extremaRow(windowRows, effectiveTemperatureProxy, "max"), PHASE_MARKER_COLOR);
+      add("minTeff", extremaRow(windowRows, effectiveTemperatureProxy, "min"), PHASE_MARKER_COLOR);
+    });
     return annotations;
   }
   function drawPhaseAnnotations(ctx, plot, xlim, ylim, canvasId, quantity) {
@@ -6117,8 +5976,8 @@
       ctx.strokeStyle = annotation.color;
       ctx.lineWidth = 2;
       ctx.stroke();
-    } else if (annotation.kind === "maxV") {
-      const size = 5.8;
+    } else if (annotation.kind === "maxV" || annotation.kind === "minV") {
+      const size = annotation.kind === "maxV" ? 5.8 : 3.8;
       ctx.lineWidth = 3.6;
       ctx.beginPath();
       ctx.moveTo(x - size, y - size);
@@ -6152,6 +6011,7 @@
       ylabelColor: COLORS.L,
       xlim: latestDisplayWindow.xlim,
       ylim: latestPhaseSample.length || gridState.results.length ? void 0 : [0, 1],
+      minimumYlim: [0.99, 1.01],
       message: latestPhaseMessage,
       phaseMarker: marker,
       afterDraw: drawPhasePlotOverlays
@@ -6162,6 +6022,7 @@
       ylabelColor: COLORS.V,
       xlim: latestDisplayWindow.xlim,
       ylim: latestPhaseSample.length || gridState.results.length ? void 0 : [0, 1],
+      minimumYlim: [-0.01, 0.01],
       message: latestPhaseMessage,
       phaseMarker: marker,
       afterDraw: drawPhasePlotOverlays
@@ -6404,7 +6265,7 @@
     if (modelAnimationFrame) return;
     const tick = (timestamp) => {
       if (!document.hidden) {
-        if (activePhaseScrub) {
+        if (activePhaseScrub || activePhaseHoverCanvasId) {
           modelAnimationStartTime = null;
         } else {
           if (modelAnimationStartTime === null) {
@@ -6440,7 +6301,6 @@
     updateGridLoopSliderMarkers();
     updateSonificationSourceControls();
     const metricsNode = el("metrics");
-    hideStabilityChipValues(true);
     metricsNode.dataset.s72Dynamic = s72State(s72Stability.dynamic.stable);
     metricsNode.dataset.s72Secular = s72State(s72Stability.secular.stable);
     metricsNode.dataset.s72Pulsational = s72State(s72Stability.pulsational.stable);
@@ -6459,7 +6319,6 @@
       {
         label: "dyn",
         value: s72DynamicMetric(s72Stability),
-        expandedValue: s72DynamicExpandedMetric(s72Stability),
         detail: s72DynamicTitle(s72Stability),
         className: s72MetricClass(s72Stability.dynamic.stable),
         stabilityKind: "dynamic"
@@ -6467,7 +6326,6 @@
       {
         label: "sec",
         value: s72SecularMetric(s72Stability),
-        expandedValue: s72SecularExpandedMetric(s72Stability, stabilityParameters),
         detail: s72SecularTitle(s72Stability, stabilityParameters),
         className: s72MetricClass(s72Stability.secular.stable),
         stabilityKind: "secular"
@@ -6475,15 +6333,14 @@
       {
         label: "puls",
         value: s72PulsationalMetric(s72Stability),
-        expandedValue: s72PulsationalExpandedMetric(s72Stability, stabilityParameters),
         detail: s72PulsationalTitle(s72Stability, stabilityParameters),
         className: s72MetricClass(s72Stability.pulsational.stable),
         stabilityKind: "pulsational"
       }
     ];
-    const metricsHtml = metricItems.map(({ label, value, className, stabilityKind, expandedValue, detail }) => {
+    const metricsHtml = metricItems.map(({ label, value, className, stabilityKind, detail }) => {
       const stabilityAttribute = stabilityKind ? ` data-stability-kind="${stabilityKind}"` : "";
-      const detailAttribute = expandedValue && detail ? ` data-stability-detail="${escapeAttribute(detail)}" data-stability-default="${escapeAttribute(String(value))}" data-stability-expanded="${escapeAttribute(expandedValue)}" data-stability-view="default" role="button" tabindex="0" aria-expanded="false" aria-label="${escapeAttribute(`${label}: ${detail}`)}"` : "";
+      const detailAttribute = detail ? ` data-stability-detail="${escapeAttribute(detail)}" aria-label="${escapeAttribute(`${label}: ${detail}`)}"` : "";
       return `<span class="metric${className ? ` ${className}` : ""}"${stabilityAttribute}${detailAttribute}>${label}<b>${value}</b></span>`;
     }).join("");
     stageMathHtml(metricsNode, metricsHtml);
@@ -6564,7 +6421,6 @@
   }
   function startApp() {
     buildControls();
-    setupStatusMetricExpansion();
     solveAndDraw();
     startModelAnimationLoop();
     window.addEventListener("load", () => queueMathTypeset());

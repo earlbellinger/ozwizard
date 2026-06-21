@@ -534,22 +534,19 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(secularChip).toHaveAttribute("data-stability-detail", /10\*1.*\(10 - 4\)\*\(3 \+ 4\) = 56.*secularly stable/);
   await expect(pulsationalChip).toHaveAttribute("data-stability-detail", /Gamma1=1\.1.*= 7 \u226E 0 -> pulsationally unstable/);
   await expect(dynamicChip).not.toHaveAttribute("title");
-  await expect(dynamicChip).toHaveAttribute("data-stability-expanded", /\\ozChiZero\{10\}/);
+  await expect(dynamicChip).not.toHaveAttribute("data-stability-expanded");
+  await expect(dynamicChip).not.toHaveAttribute("data-stability-view");
+  await expect(dynamicChip).not.toHaveAttribute("role");
   await expect(dynamicChip).toContainText("χ0");
   await dynamicChip.hover();
-  await expect(dynamicChip).toHaveAttribute("data-stability-view", "expanded");
-  await expect(dynamicChip).toContainText("4/10=0.4");
-  await page.mouse.move(5, 5);
-  await expect(dynamicChip).toHaveAttribute("data-stability-view", "default");
   await expect(dynamicChip).toContainText("χ0");
+  await expect(dynamicChip).not.toContainText("4/10=0.4");
+  await expect(dynamicChip).not.toHaveAttribute("data-stability-view");
   await dynamicChip.click();
-  await expect(dynamicChip).toHaveAttribute("data-stability-view", "expanded");
-  await expect(dynamicChip).toContainText("4/10=0.4");
-  await expect(page.locator("#stabilityChipTooltip")).toHaveCount(0);
-  await page.locator("#plotGrid").click({ position: { x: 12, y: 12 } });
-  await expect(dynamicChip).toHaveAttribute("data-stability-view", "default");
   await expect(dynamicChip).toContainText("χ0");
-  await page.mouse.move(5, 5);
+  await expect(dynamicChip).not.toContainText("4/10=0.4");
+  await expect(dynamicChip).not.toHaveAttribute("data-stability-view");
+  await expect(page.locator("#stabilityChipTooltip")).toHaveCount(0);
   await dynamicChip.evaluate((node) => {
     node.dispatchEvent(new PointerEvent("pointerdown", {
       bubbles: true,
@@ -560,8 +557,6 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
       clientY: 20
     }));
   });
-  await expect(dynamicChip).toHaveAttribute("data-stability-view", "expanded", { timeout: 1500 });
-  await expect(dynamicChip).toContainText("4/10=0.4");
   await dynamicChip.evaluate((node) => {
     node.dispatchEvent(new PointerEvent("pointerup", {
       bubbles: true,
@@ -572,10 +567,12 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
       clientY: 20
     }));
   });
-  await page.locator("#plotGrid").click({ position: { x: 12, y: 12 } });
-  await expect(dynamicChip).toHaveAttribute("data-stability-view", "default");
+  await expect(dynamicChip).toContainText("χ0");
+  await expect(dynamicChip).not.toContainText("4/10=0.4");
+  await expect(dynamicChip).not.toHaveAttribute("data-stability-view");
   await expect(page.getByRole("heading", { name: "Lightcurve" })).toBeVisible();
-  await expect(page.locator(".phase-anchor-control")).toContainText("phase to");
+  await expect(page.locator("[data-plot-panel='light'] .plot-title #phaseAnnotationToggleLabel")).toContainText("Annotations");
+  await expect(page.locator("[data-plot-panel='velocity'] .phase-anchor-control")).toContainText("phase to");
   await expect(page.getByRole("button", { name: "min light" })).toHaveClass(/active/);
   await expect(page.getByRole("button", { name: "min light" })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "max light" }).click();
@@ -634,6 +631,44 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(Math.abs(modelBox!.height - lightBox!.height)).toBeLessThanOrEqual(1);
   expect(Math.abs(modelPanelBox!.height - lightPanelBox!.height)).toBeLessThanOrEqual(2);
   expect(modelPanelBox!.width).toBeLessThan(lightPanelBox!.width);
+  const lightYlim = ((await page.locator("#lightCanvas").getAttribute("data-ylim")) || "").split(",").map(Number);
+  const velocityYlim = ((await page.locator("#velocityCanvas").getAttribute("data-ylim")) || "").split(",").map(Number);
+  expect(lightYlim[0]).toBeLessThanOrEqual(0.99);
+  expect(lightYlim[1]).toBeGreaterThanOrEqual(1.01);
+  expect(velocityYlim[0]).toBeLessThanOrEqual(-0.01);
+  expect(velocityYlim[1]).toBeGreaterThanOrEqual(0.01);
+  const lightHoverTarget = await page.locator("#lightCanvas").evaluate((canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const plotLeft = 84;
+    const plotRight = 20;
+    const plotTop = 18;
+    const plotBottom = 72;
+    return {
+      x: rect.left + plotLeft + (rect.width - plotLeft - plotRight) * 0.35,
+      y: rect.top + plotTop + (rect.height - plotTop - plotBottom) * 0.5
+    };
+  });
+  await page.mouse.move(lightHoverTarget.x, lightHoverTarget.y);
+  await expect(page.locator("#lightCanvas")).toHaveAttribute("data-phase-hovering", "true");
+  const lightHoverPhase = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
+  expect(lightHoverPhase).toBeGreaterThan(0.64);
+  expect(lightHoverPhase).toBeLessThan(0.76);
+  const velocityHoverTarget = await page.locator("#velocityCanvas").evaluate((canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const plotLeft = 84;
+    const plotRight = 20;
+    const plotTop = 18;
+    const plotBottom = 72;
+    return {
+      x: rect.left + plotLeft + (rect.width - plotLeft - plotRight) * 0.75,
+      y: rect.top + plotTop + (rect.height - plotTop - plotBottom) * 0.5
+    };
+  });
+  await page.mouse.move(velocityHoverTarget.x, velocityHoverTarget.y);
+  await expect(page.locator("#velocityCanvas")).toHaveAttribute("data-phase-hovering", "true");
+  const velocityHoverPhase = Number(await page.locator("#velocityCanvas").getAttribute("data-current-phase"));
+  expect(velocityHoverPhase).toBeGreaterThan(1.44);
+  expect(velocityHoverPhase).toBeLessThan(1.56);
   const plotLayout = await page.locator("#plotGrid").evaluate((grid) => {
     const panels = [...grid.querySelectorAll<HTMLElement>("[data-plot-panel]")].map((panel) => {
       const rect = panel.getBoundingClientRect();
@@ -907,21 +942,16 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   const lightColorbarHit = await lightColorbarHitHandle.jsonValue() as string;
   expect(lightColorbarHit).toBeTruthy();
   const [lightColorbarLeft, lightColorbarTop, lightColorbarRight, lightColorbarBottom] = lightColorbarHit!.split(",").map(Number);
-  const lightCanvas = page.locator("#lightCanvas");
-  await lightCanvas.hover({
-    position: {
-      x: (lightColorbarLeft + lightColorbarRight) / 2,
-      y: (lightColorbarTop + lightColorbarBottom) / 2
-    }
-  });
+  await page.mouse.move(
+    lightCanvasBox!.x + (lightColorbarLeft + lightColorbarRight) / 2,
+    lightCanvasBox!.y + (lightColorbarTop + lightColorbarBottom) / 2
+  );
   await page.mouse.down();
   await expect(page.locator("#lightCanvas")).toHaveAttribute("data-grid-interaction", "colorbar");
-  await lightCanvas.hover({
-    position: {
-      x: lightColorbarLeft + 8,
-      y: (lightColorbarTop + lightColorbarBottom) / 2
-    }
-  });
+  await page.mouse.move(
+    lightCanvasBox!.x + lightColorbarLeft + 8,
+    lightCanvasBox!.y + (lightColorbarTop + lightColorbarBottom) / 2
+  );
   await page.mouse.up();
   await expect(page.locator("#lightCanvas")).not.toHaveAttribute("data-grid-interaction", "colorbar");
 
@@ -952,17 +982,26 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#lightLegend")).toHaveCount(0);
   await expect(page.locator("#velocityLegend")).toHaveCount(0);
   await expect(page.locator("#phaseLegend")).toHaveCount(0);
-  await expect(page.getByLabel("Annotations")).not.toBeChecked();
-  await expect(page.locator("#phaseAnnotationLegendItems")).toBeHidden();
-  await expect(page.locator("#lightCanvas")).toHaveAttribute("data-annotations", "off");
-  await page.getByLabel("Annotations").check();
+  await expect(page.getByLabel("Annotations")).toBeChecked();
   await expect(page.locator("#phaseAnnotationLegendItems")).toBeVisible();
+  await expect(page.locator("#lightCanvas")).toHaveAttribute("data-annotations", "on");
+  await expect(page.locator("#phaseAnnotationLegendItems .annotation-symbol-item")).toHaveText([
+    "max L",
+    "min L",
+    "max R",
+    "min R",
+    "×max V",
+    "×min V",
+    "↑max T",
+    "↓min T"
+  ]);
   await expect.poll(async () => Number(await page.locator("#lightCanvas").getAttribute("data-annotation-count") || "0"))
-    .toBeGreaterThan(0);
+    .toBe(16);
   await expect.poll(async () => Number(await page.locator("#velocityCanvas").getAttribute("data-annotation-count") || "0"))
-    .toBeGreaterThan(0);
+    .toBe(16);
   await page.getByLabel("Annotations").uncheck();
   await expect(page.locator("#phaseAnnotationLegendItems")).toBeHidden();
+  await expect(page.locator("#lightCanvas")).toHaveAttribute("data-annotations", "off");
   const tauCell = page.locator("[data-symbol='tau']").first();
   const tauRow = tauCell.locator("xpath=ancestor::tr");
   await expect(tauCell).toBeVisible();

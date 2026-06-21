@@ -1582,6 +1582,12 @@
       height: 7px;
     }
 
+    .annotation-symbol.small:not(.dot):not(.open) {
+      width: 10px;
+      height: 10px;
+      font-size: 10px;
+    }
+
     .notes-grid {
       display: grid;
       gap: 14px;
@@ -2130,26 +2136,22 @@
               </label>
               <h3>Lightcurve</h3>
             </div>
-            <div class="phase-anchor-control" aria-label="Phase alignment">
-              <span>phase to</span>
-              <button type="button" data-phase-anchor="min" class="active" aria-pressed="true">min light</button>
-              <button type="button" data-phase-anchor="max" aria-pressed="false">max light</button>
-            </div>
+            <label class="legend-item legend-toggle annotation-toggle" id="phaseAnnotationToggleLabel" style="--accent:#FFD166">
+              <input id="phaseAnnotationsToggle" type="checkbox" aria-label="Annotations" checked>
+              <span>Annotations</span>
+            </label>
           </div>
           <canvas id="lightCanvas"></canvas>
           <div class="legend phase-annotation-controls" id="phaseAnnotationControls">
-            <label class="legend-item legend-toggle annotation-toggle is-hidden" id="phaseAnnotationToggleLabel" style="--accent:#FFD166">
-              <input id="phaseAnnotationsToggle" type="checkbox" aria-label="Annotations">
-              <span>Annotations</span>
-            </label>
             <div class="annotation-symbol-legend" id="phaseAnnotationLegendItems" hidden aria-label="Annotation legend">
-              <span class="annotation-symbol-item"><span class="annotation-symbol" style="--color:#FFD166">↑</span>max T<sub>eff</sub></span>
-              <span class="annotation-symbol-item"><span class="annotation-symbol" style="--color:#FFD166">↓</span>min T<sub>eff</sub></span>
-              <span class="annotation-symbol-item"><span class="annotation-symbol open" style="--color:#8FAEFF"></span>max R</span>
-              <span class="annotation-symbol-item"><span class="annotation-symbol open small" style="--color:#8FAEFF"></span>min R</span>
-              <span class="annotation-symbol-item"><span class="annotation-symbol" style="--color:#FF5F86">×</span>max V</span>
               <span class="annotation-symbol-item"><span class="annotation-symbol dot" style="--color:#B884FF"></span>max L</span>
               <span class="annotation-symbol-item"><span class="annotation-symbol dot small" style="--color:#B884FF"></span>min L</span>
+              <span class="annotation-symbol-item"><span class="annotation-symbol open" style="--color:#8FAEFF"></span>max R</span>
+              <span class="annotation-symbol-item"><span class="annotation-symbol open small" style="--color:#8FAEFF"></span>min R</span>
+              <span class="annotation-symbol-item"><span class="annotation-symbol" style="--color:#4DA3FF">×</span>max V</span>
+              <span class="annotation-symbol-item"><span class="annotation-symbol small" style="--color:#FF5F6D">×</span>min V</span>
+              <span class="annotation-symbol-item"><span class="annotation-symbol" style="--color:#FFD166">↑</span>max T</span>
+              <span class="annotation-symbol-item"><span class="annotation-symbol" style="--color:#FFD166">↓</span>min T</span>
             </div>
           </div>
         </div>
@@ -2162,6 +2164,11 @@
                 <span>RV Curve</span>
               </label>
               <h3>RV Curve</h3>
+            </div>
+            <div class="phase-anchor-control" aria-label="Phase alignment">
+              <span>phase to</span>
+              <button type="button" data-phase-anchor="min" class="active" aria-pressed="true">min light</button>
+              <button type="button" data-phase-anchor="max" aria-pressed="false">max light</button>
             </div>
           </div>
           <canvas id="velocityCanvas"></canvas>

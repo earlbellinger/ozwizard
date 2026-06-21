@@ -290,28 +290,22 @@ async function runPlaywrightChecks() {
     assertOk(secularDetail?.includes("10*1") && secularDetail.includes("(10 - 4)*(3 + 4) = 56") && secularDetail.includes("secularly stable"), "secular stability chip should plug in current values");
     assertOk(pulsationalDetail?.includes("Gamma1=1.1") && pulsationalDetail.includes("= 7 \u226E 0 -> pulsationally unstable"), "pulsational stability chip should plug in current values with a slashed failed inequality");
     assertOk((await dynamicChip.getAttribute("title")) === null, "stability chips should not use a separate hover tooltip");
-    assertOk((await dynamicChip.getAttribute("data-stability-expanded"))?.includes("\\ozChiZero{10}"), "dynamic chip should keep expanded values colored by variable macros");
+    assertOk((await dynamicChip.getAttribute("data-stability-expanded")) === null, "stability chips should not carry inline expanded formulas");
+    assertOk((await dynamicChip.getAttribute("data-stability-view")) === null, "stability chips should not keep hover/toggle state");
+    assertOk((await dynamicChip.getAttribute("role")) === null, "stability chips should not be clickable controls");
     const dynamicBox = await dynamicChip.boundingBox();
     assertOk(Boolean(dynamicBox), "dynamic stability chip bounds should be available");
     const dynamicInitialText = await dynamicChip.textContent();
-    assertOk(dynamicInitialText?.includes("χ0") && !dynamicInitialText.includes("4/10"), "dynamic stability chip should start with variable names");
+    assertOk(dynamicInitialText?.includes("χ0") && !dynamicInitialText.includes("4/10"), "dynamic stability chip should show the variable-name formula");
     await dynamicChip.hover();
-    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.getAttribute("data-stability-view") === "expanded");
-    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.textContent?.includes("4/10=0.4"));
-    assertOk((await dynamicChip.textContent())?.includes("4/10=0.4"), "hovering a stability chip should replace variables inline with substituted values");
-    await page.mouse.move(5, 5);
-    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.getAttribute("data-stability-view") === "default");
-    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.textContent?.includes("χ0"));
+    const dynamicHoverText = await dynamicChip.textContent();
+    assertOk(dynamicHoverText?.includes("χ0") && !dynamicHoverText.includes("4/10"), "hovering a stability chip should leave the formula unchanged");
+    assertOk((await dynamicChip.getAttribute("data-stability-view")) === null, "hovering a stability chip should not create hover state");
     await dynamicChip.click();
-    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.getAttribute("data-stability-view") === "expanded");
-    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.textContent?.includes("4/10=0.4"));
-    assertOk((await dynamicChip.textContent())?.includes("4/10=0.4"), "clicking a stability chip should replace variables inline with substituted values");
+    const dynamicClickText = await dynamicChip.textContent();
+    assertOk(dynamicClickText?.includes("χ0") && !dynamicClickText.includes("4/10"), "clicking a stability chip should leave the formula unchanged");
+    assertOk((await dynamicChip.getAttribute("data-stability-view")) === null, "clicking a stability chip should not create toggle state");
     assertOk((await page.locator("#stabilityChipTooltip").count()) === 0, "stability chips should not create a separate tooltip box");
-    await page.locator("#plotGrid").click({ position: { x: 12, y: 12 } });
-    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.getAttribute("data-stability-view") === "default");
-    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.textContent?.includes("χ0"));
-    assertOk((await dynamicChip.textContent())?.includes("χ0"), "outside click should restore the variable-name formula");
-    await page.mouse.move(5, 5);
     await dynamicChip.evaluate((node) => {
       node.dispatchEvent(new PointerEvent("pointerdown", {
         bubbles: true,
@@ -322,9 +316,6 @@ async function runPlaywrightChecks() {
         clientY: 20
       }));
     });
-    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.getAttribute("data-stability-view") === "expanded", null, { timeout: 1500 });
-    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.textContent?.includes("4/10=0.4"), null, { timeout: 1500 });
-    assertOk((await dynamicChip.textContent())?.includes("4/10=0.4"), "long-pressing a stability chip should replace variables inline");
     await dynamicChip.evaluate((node) => {
       node.dispatchEvent(new PointerEvent("pointerup", {
         bubbles: true,
@@ -335,10 +326,9 @@ async function runPlaywrightChecks() {
         clientY: 20
       }));
     });
-    await page.locator("#plotGrid").click({ position: { x: 12, y: 12 } });
-    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.getAttribute("data-stability-view") === "default");
-    await page.waitForFunction(() => document.querySelector("#metrics [data-stability-kind='dynamic']")?.textContent?.includes("χ0"));
-    assertOk((await dynamicChip.textContent())?.includes("χ0"), "outside click should restore the stability chip formula");
+    const dynamicTouchText = await dynamicChip.textContent();
+    assertOk(dynamicTouchText?.includes("χ0") && !dynamicTouchText.includes("4/10"), "touching a stability chip should leave the formula unchanged");
+    assertOk((await dynamicChip.getAttribute("data-stability-view")) === null, "touching a stability chip should not create toggle state");
 
     assertOk(await page.locator("[data-symbol='tau']").first().isVisible(), "tau symbol was not visible");
     const tauRowText = await page.locator("[data-symbol='tau']").first().locator("xpath=ancestor::tr").textContent();
@@ -498,6 +488,40 @@ async function runPlaywrightChecks() {
     assertOk(Math.abs(modelBox.height - lightBox.height) <= 1, "model canvas should match the Lightcurve canvas height");
     assertOk(Math.abs(modelPanelBox.height - lightPanelBox.height) <= 2, "model panel should match the Lightcurve panel height");
     assertOk(modelPanelBox.width < lightPanelBox.width, "model panel should not expand like the phase plots");
+    const lightYlim = ((await page.locator("#lightCanvas").getAttribute("data-ylim")) || "").split(",").map(Number);
+    const velocityYlim = ((await page.locator("#velocityCanvas").getAttribute("data-ylim")) || "").split(",").map(Number);
+    assertOk(lightYlim[0] <= 0.99 && lightYlim[1] >= 1.01, `Lightcurve y-limits should include 0.99..1.01, saw ${lightYlim.join(",")}`);
+    assertOk(velocityYlim[0] <= -0.01 && velocityYlim[1] >= 0.01, `RV y-limits should include -0.01..0.01, saw ${velocityYlim.join(",")}`);
+    const lightHoverTarget = await page.locator("#lightCanvas").evaluate((canvas) => {
+      const rect = canvas.getBoundingClientRect();
+      const plotLeft = 84;
+      const plotRight = 20;
+      const plotTop = 18;
+      const plotBottom = 72;
+      return {
+        x: rect.left + plotLeft + (rect.width - plotLeft - plotRight) * 0.35,
+        y: rect.top + plotTop + (rect.height - plotTop - plotBottom) * 0.5
+      };
+    });
+    await page.mouse.move(lightHoverTarget.x, lightHoverTarget.y);
+    await page.waitForFunction(() => document.querySelector("#lightCanvas")?.getAttribute("data-phase-hovering") === "true");
+    const lightHoverPhase = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
+    assertOk(lightHoverPhase > 0.64 && lightHoverPhase < 0.76, `hovering Lightcurve should set phase near 0.70, saw ${lightHoverPhase}`);
+    const velocityHoverTarget = await page.locator("#velocityCanvas").evaluate((canvas) => {
+      const rect = canvas.getBoundingClientRect();
+      const plotLeft = 84;
+      const plotRight = 20;
+      const plotTop = 18;
+      const plotBottom = 72;
+      return {
+        x: rect.left + plotLeft + (rect.width - plotLeft - plotRight) * 0.75,
+        y: rect.top + plotTop + (rect.height - plotTop - plotBottom) * 0.5
+      };
+    });
+    await page.mouse.move(velocityHoverTarget.x, velocityHoverTarget.y);
+    await page.waitForFunction(() => document.querySelector("#velocityCanvas")?.getAttribute("data-phase-hovering") === "true");
+    const velocityHoverPhase = Number(await page.locator("#velocityCanvas").getAttribute("data-current-phase"));
+    assertOk(velocityHoverPhase > 1.44 && velocityHoverPhase < 1.56, `hovering RV Curve should set phase near 1.50, saw ${velocityHoverPhase}`);
     const plotLayout = await page.locator("#plotGrid").evaluate((grid) => {
       const panels = [...grid.querySelectorAll("[data-plot-panel]")].map((panel) => {
         const rect = panel.getBoundingClientRect();
@@ -687,7 +711,8 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("[data-plot-panel='lum']").isVisible(), "Luminosity Evolution visibility should restore after grid mode exits");
     assertOk(await page.locator("#adsrCanvas").count() === 1, "expected one ADSR canvas");
     assertOk(await page.getByRole("heading", { name: "Lightcurve" }).isVisible(), "Lightcurve heading was not visible");
-    assertOk((await page.locator(".phase-anchor-control").textContent())?.includes("phase to"), "phase anchor control was not visible");
+    assertOk((await page.locator("[data-plot-panel='light'] .plot-title #phaseAnnotationToggleLabel").textContent())?.includes("Annotations"), "annotation toggle should sit in the Lightcurve header");
+    assertOk((await page.locator("[data-plot-panel='velocity'] .phase-anchor-control").textContent())?.includes("phase to"), "phase anchor control should sit in the RV Curve header");
     assertOk((await page.getByRole("button", { name: "min light" }).getAttribute("aria-pressed")) === "true", "min-light phase anchor should start active");
     await page.getByRole("button", { name: "max light" }).click();
     assertOk((await page.getByRole("button", { name: "max light" }).getAttribute("aria-pressed")) === "true", "max-light phase anchor did not activate");
@@ -702,15 +727,18 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("#lightLegend").count() === 0, "phase luminosity legend should be removed");
     assertOk(await page.locator("#velocityLegend").count() === 0, "phase velocity legend should be removed");
     assertOk(await page.locator("#phaseLegend").count() === 0, "combined phase legend should be removed");
-    assertOk(!(await page.getByLabel("Annotations").isChecked()), "annotations should start disabled");
-    assertOk(!(await page.locator("#phaseAnnotationLegendItems").isVisible()), "annotation legend should start hidden");
-    assertOk((await page.locator("#lightCanvas").getAttribute("data-annotations")) === "off", "lightcurve annotations should start off");
-    await page.getByLabel("Annotations").check();
+    assertOk(await page.getByLabel("Annotations").isChecked(), "annotations should start on");
     assertOk(await page.locator("#phaseAnnotationLegendItems").isVisible(), "annotation legend should show when annotations are enabled");
-    await page.waitForFunction(() => Number(document.querySelector("#lightCanvas")?.getAttribute("data-annotation-count") || "0") > 0);
-    await page.waitForFunction(() => Number(document.querySelector("#velocityCanvas")?.getAttribute("data-annotation-count") || "0") > 0);
+    assertOk((await page.locator("#lightCanvas").getAttribute("data-annotations")) === "on", "lightcurve annotations should start on");
+    const annotationLabels = await page.locator("#phaseAnnotationLegendItems .annotation-symbol-item").evaluateAll((items) =>
+      items.map((item) => item.textContent?.replace(/\s+/g, " ").trim()).join("|")
+    );
+    assertOk(annotationLabels === "max L|min L|max R|min R|×max V|×min V|↑max T|↓min T", `annotation legend order changed: ${annotationLabels}`);
+    await page.waitForFunction(() => Number(document.querySelector("#lightCanvas")?.getAttribute("data-annotation-count") || "0") === 16);
+    await page.waitForFunction(() => Number(document.querySelector("#velocityCanvas")?.getAttribute("data-annotation-count") || "0") === 16);
     await page.getByLabel("Annotations").uncheck();
     assertOk(!(await page.locator("#phaseAnnotationLegendItems").isVisible()), "annotation legend should hide again when annotations are disabled");
+    assertOk((await page.locator("#lightCanvas").getAttribute("data-annotations")) === "off", "lightcurve annotations should turn off after unchecking");
     const hasPaint = await page.locator("#lightCanvas").evaluate((canvas) => {
       const node = canvas;
       const ctx = node.getContext("2d");
