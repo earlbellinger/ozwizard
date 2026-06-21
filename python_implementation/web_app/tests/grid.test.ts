@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeFourierParameters, hasUsableFourierAmplitudes, wrapTwoPi } from "../src/fourier";
+import { computeFourierParameters, hasUsableFourierAmplitudes, luminosityAmplitude, wrapTwoPi } from "../src/fourier";
 import {
   buildLoopPathSamples,
   defaultGridRange,
@@ -147,7 +147,9 @@ describe("Fourier helper", () => {
     const phi2 = 1.1;
     const phi3 = 2.2;
     const fourier = computeFourierParameters(syntheticFourierRows(phi1, phi2, phi3));
+    const expectedLuminosityAmplitude = luminosityAmplitude(syntheticFourierRows(phi1, phi2, phi3));
     expect(hasUsableFourierAmplitudes(fourier)).toBe(true);
+    expect(fourier!.luminosityAmplitude).toBeCloseTo(expectedLuminosityAmplitude, 12);
     expect(fourier!.r21).toBeCloseTo(0.3, 8);
     expect(fourier!.r31).toBeCloseTo(0.1, 8);
     expect(fourier!.phi21).toBeCloseTo(wrapTwoPi(phi2 - 2 * phi1), 8);

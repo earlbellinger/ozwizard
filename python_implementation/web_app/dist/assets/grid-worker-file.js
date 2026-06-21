@@ -37,6 +37,11 @@
     }
     return basis;
   }
+  function luminosityAmplitude(rows) {
+    const values = rows.map((row) => row.L).filter(Number.isFinite);
+    if (!values.length) return 0;
+    return Math.max(...values) - Math.min(...values);
+  }
   function wrapTwoPi(angle) {
     return (angle % TWO_PI + TWO_PI) % TWO_PI;
   }
@@ -68,6 +73,7 @@
     const [h1, h2, h3] = harmonics;
     if (!h1 || !h2 || !h3 || h1.amplitude <= 0) return null;
     return {
+      luminosityAmplitude: luminosityAmplitude(finiteRows),
       phi1: wrapTwoPi(h1.phase),
       phi2: wrapTwoPi(h2.phase),
       phi3: wrapTwoPi(h3.phase),

@@ -625,12 +625,15 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   const modelBox = await page.locator("#modelCanvas").boundingBox();
   const modelPanelBox = await page.locator("[data-plot-panel='model']").boundingBox();
   const lightBox = await page.locator("#lightCanvas").boundingBox();
+  const lightPanelBox = await page.locator("[data-plot-panel='light']").boundingBox();
   expect(modelBox).not.toBeNull();
   expect(modelPanelBox).not.toBeNull();
   expect(lightBox).not.toBeNull();
+  expect(lightPanelBox).not.toBeNull();
   expect(Math.abs(modelBox!.width - modelBox!.height)).toBeLessThanOrEqual(1);
   expect(Math.abs(modelBox!.height - lightBox!.height)).toBeLessThanOrEqual(1);
-  expect(Math.abs(modelPanelBox!.width - modelPanelBox!.height)).toBeLessThanOrEqual(2);
+  expect(Math.abs(modelPanelBox!.height - lightPanelBox!.height)).toBeLessThanOrEqual(2);
+  expect(modelPanelBox!.width).toBeLessThan(lightPanelBox!.width);
   const plotLayout = await page.locator("#plotGrid").evaluate((grid) => {
     const panels = [...grid.querySelectorAll<HTMLElement>("[data-plot-panel]")].map((panel) => {
       const rect = panel.getBoundingClientRect();
@@ -890,22 +893,35 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
   });
   expect(fourierHasPaint).toBe(true);
-  await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-axis-labels", String.raw`r_{21},\phi_{21},r_{31},\phi_{31}`);
+  await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-axis-labels", String.raw`A_L,r_{21},\phi_{21},r_{31},\phi_{31}`);
   await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-path-count", /[2-9]\d*/);
 
   await page.locator("#lightCanvas").scrollIntoViewIfNeeded();
   const lightCanvasBox = await page.locator("#lightCanvas").boundingBox();
   expect(lightCanvasBox).not.toBeNull();
-  const lightColorbarHit = await page.locator("#lightCanvas").getAttribute("data-grid-colorbar-hit");
+  const lightColorbarHitHandle = await page.waitForFunction(
+    () => document.querySelector("#lightCanvas")?.getAttribute("data-grid-colorbar-hit") || "",
+    null,
+    { timeout: 5000 }
+  );
+  const lightColorbarHit = await lightColorbarHitHandle.jsonValue() as string;
   expect(lightColorbarHit).toBeTruthy();
   const [lightColorbarLeft, lightColorbarTop, lightColorbarRight, lightColorbarBottom] = lightColorbarHit!.split(",").map(Number);
-  await page.mouse.move(
-    lightCanvasBox!.x + (lightColorbarLeft + lightColorbarRight) / 2,
-    lightCanvasBox!.y + (lightColorbarTop + lightColorbarBottom) / 2
-  );
+  const lightCanvas = page.locator("#lightCanvas");
+  await lightCanvas.hover({
+    position: {
+      x: (lightColorbarLeft + lightColorbarRight) / 2,
+      y: (lightColorbarTop + lightColorbarBottom) / 2
+    }
+  });
   await page.mouse.down();
   await expect(page.locator("#lightCanvas")).toHaveAttribute("data-grid-interaction", "colorbar");
-  await page.mouse.move(lightCanvasBox!.x + lightColorbarLeft + 8, lightCanvasBox!.y + (lightColorbarTop + lightColorbarBottom) / 2);
+  await lightCanvas.hover({
+    position: {
+      x: lightColorbarLeft + 8,
+      y: (lightColorbarTop + lightColorbarBottom) / 2
+    }
+  });
   await page.mouse.up();
   await expect(page.locator("#lightCanvas")).not.toHaveAttribute("data-grid-interaction", "colorbar");
 
@@ -936,6 +952,17 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#lightLegend")).toHaveCount(0);
   await expect(page.locator("#velocityLegend")).toHaveCount(0);
   await expect(page.locator("#phaseLegend")).toHaveCount(0);
+  await expect(page.getByLabel("Annotations")).not.toBeChecked();
+  await expect(page.locator("#phaseAnnotationLegendItems")).toBeHidden();
+  await expect(page.locator("#lightCanvas")).toHaveAttribute("data-annotations", "off");
+  await page.getByLabel("Annotations").check();
+  await expect(page.locator("#phaseAnnotationLegendItems")).toBeVisible();
+  await expect.poll(async () => Number(await page.locator("#lightCanvas").getAttribute("data-annotation-count") || "0"))
+    .toBeGreaterThan(0);
+  await expect.poll(async () => Number(await page.locator("#velocityCanvas").getAttribute("data-annotation-count") || "0"))
+    .toBeGreaterThan(0);
+  await page.getByLabel("Annotations").uncheck();
+  await expect(page.locator("#phaseAnnotationLegendItems")).toBeHidden();
   const tauCell = page.locator("[data-symbol='tau']").first();
   const tauRow = tauCell.locator("xpath=ancestor::tr");
   await expect(tauCell).toBeVisible();

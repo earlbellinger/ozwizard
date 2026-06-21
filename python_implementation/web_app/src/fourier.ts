@@ -6,6 +6,7 @@ const HARMONICS = 3;
 export const MIN_FOURIER_AMPLITUDE = 1e-4;
 
 export interface FourierParameters {
+  luminosityAmplitude: number;
   phi1: number;
   phi2: number;
   phi3: number;
@@ -53,6 +54,14 @@ function fourierBasis(phase: number): number[] {
   return basis;
 }
 
+export function luminosityAmplitude(rows: readonly Row[]): number {
+  const values = rows
+    .map((row) => row.L)
+    .filter(Number.isFinite);
+  if (!values.length) return 0;
+  return Math.max(...values) - Math.min(...values);
+}
+
 export function wrapTwoPi(angle: number): number {
   return ((angle % TWO_PI) + TWO_PI) % TWO_PI;
 }
@@ -89,6 +98,7 @@ export function computeFourierParameters(phaseRows: readonly Row[]): FourierPara
   if (!h1 || !h2 || !h3 || h1.amplitude <= 0) return null;
 
   return {
+    luminosityAmplitude: luminosityAmplitude(finiteRows),
     phi1: wrapTwoPi(h1.phase),
     phi2: wrapTwoPi(h2.phase),
     phi3: wrapTwoPi(h3.phase),

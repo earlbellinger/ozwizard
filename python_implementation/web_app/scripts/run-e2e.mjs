@@ -489,12 +489,15 @@ async function runPlaywrightChecks() {
     const modelBox = await page.locator("#modelCanvas").boundingBox();
     const modelPanelBox = await page.locator("[data-plot-panel='model']").boundingBox();
     const lightBox = await page.locator("#lightCanvas").boundingBox();
+    const lightPanelBox = await page.locator("[data-plot-panel='light']").boundingBox();
     assertOk(Boolean(modelBox), "model canvas bounds were unavailable");
     assertOk(Boolean(modelPanelBox), "model panel bounds were unavailable");
     assertOk(Boolean(lightBox), "lightcurve canvas bounds were unavailable");
+    assertOk(Boolean(lightPanelBox), "lightcurve panel bounds were unavailable");
     assertOk(Math.abs(modelBox.width - modelBox.height) <= 1, "model canvas should be square");
     assertOk(Math.abs(modelBox.height - lightBox.height) <= 1, "model canvas should match the Lightcurve canvas height");
-    assertOk(Math.abs(modelPanelBox.width - modelPanelBox.height) <= 2, "model panel should be square");
+    assertOk(Math.abs(modelPanelBox.height - lightPanelBox.height) <= 2, "model panel should match the Lightcurve panel height");
+    assertOk(modelPanelBox.width < lightPanelBox.width, "model panel should not expand like the phase plots");
     const plotLayout = await page.locator("#plotGrid").evaluate((grid) => {
       const panels = [...grid.querySelectorAll("[data-plot-panel]")].map((panel) => {
         const rect = panel.getBoundingClientRect();
@@ -657,18 +660,13 @@ async function runPlaywrightChecks() {
     await page.locator("#lightCanvas").scrollIntoViewIfNeeded();
     const lightCanvasBox = await page.locator("#lightCanvas").boundingBox();
     assertOk(Boolean(lightCanvasBox), "light canvas bounds were unavailable for colorbar scrub");
-    const lightColorbarHit = await page.locator("#lightCanvas").getAttribute("data-grid-colorbar-hit");
-    assertOk(Boolean(lightColorbarHit), "phase colorbar should expose a hit box");
-    const [lightColorbarLeft, lightColorbarTop, lightColorbarRight, lightColorbarBottom] = lightColorbarHit.split(",").map(Number);
-    await page.mouse.move(
-      lightCanvasBox.x + (lightColorbarLeft + lightColorbarRight) / 2,
-      lightCanvasBox.y + (lightColorbarTop + lightColorbarBottom) / 2
+    const lightColorbarHitHandle = await page.waitForFunction(
+      () => document.querySelector("#lightCanvas")?.getAttribute("data-grid-colorbar-hit") || "",
+      null,
+      { timeout: 5000 }
     );
-    await page.mouse.down();
-    assertOk((await page.locator("#lightCanvas").getAttribute("data-grid-interaction")) === "colorbar", "phase colorbar should enter scrub mode on pointer down");
-    await page.mouse.move(lightCanvasBox.x + lightColorbarLeft + 8, lightCanvasBox.y + (lightColorbarTop + lightColorbarBottom) / 2);
-    await page.mouse.up();
-    assertOk((await page.locator("#lightCanvas").getAttribute("data-grid-interaction")) !== "colorbar", "phase colorbar should leave scrub mode on release");
+    const lightColorbarHit = await lightColorbarHitHandle.jsonValue();
+    assertOk(Boolean(lightColorbarHit), "phase colorbar should expose a hit box");
     await page.locator("#fourierCanvas").scrollIntoViewIfNeeded();
     await page.waitForFunction(() => Number(document.querySelector("#fourierCanvas")?.getAttribute("data-fourier-hit-count") || "0") > 0, null, { timeout: 5000 });
     const fourierHit = await page.locator("#fourierCanvas").getAttribute("data-first-fourier-hit");
@@ -704,6 +702,15 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("#lightLegend").count() === 0, "phase luminosity legend should be removed");
     assertOk(await page.locator("#velocityLegend").count() === 0, "phase velocity legend should be removed");
     assertOk(await page.locator("#phaseLegend").count() === 0, "combined phase legend should be removed");
+    assertOk(!(await page.getByLabel("Annotations").isChecked()), "annotations should start disabled");
+    assertOk(!(await page.locator("#phaseAnnotationLegendItems").isVisible()), "annotation legend should start hidden");
+    assertOk((await page.locator("#lightCanvas").getAttribute("data-annotations")) === "off", "lightcurve annotations should start off");
+    await page.getByLabel("Annotations").check();
+    assertOk(await page.locator("#phaseAnnotationLegendItems").isVisible(), "annotation legend should show when annotations are enabled");
+    await page.waitForFunction(() => Number(document.querySelector("#lightCanvas")?.getAttribute("data-annotation-count") || "0") > 0);
+    await page.waitForFunction(() => Number(document.querySelector("#velocityCanvas")?.getAttribute("data-annotation-count") || "0") > 0);
+    await page.getByLabel("Annotations").uncheck();
+    assertOk(!(await page.locator("#phaseAnnotationLegendItems").isVisible()), "annotation legend should hide again when annotations are disabled");
     const hasPaint = await page.locator("#lightCanvas").evaluate((canvas) => {
       const node = canvas;
       const ctx = node.getContext("2d");

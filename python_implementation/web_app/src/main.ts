@@ -109,6 +109,8 @@ const GRID_LOOP_BASE_INTERVAL_MS = 90;
 const GRID_LOOP_MIN_SPEED = 0.25;
 const GRID_LOOP_MAX_SPEED = 4;
 const PHASE_MARKER_COLOR = "#FFD166";
+const POSITIVE_VELOCITY_COLOR = "#4DA3FF";
+const NEGATIVE_VELOCITY_COLOR = "#FF5F6D";
 const PHASE_SCRUB_CANVAS_IDS = ["lightCanvas", "velocityCanvas", "pressureCanvas"] as const;
 const SONIFICATION_SOURCE_LABELS: Record<SonificationSource, string> = {
   luminosity: "luminosity",
@@ -157,6 +159,7 @@ let latestPhaseMessage: string | undefined;
 let latestPhasePeriodLabel = "phase (period = n/a τ)";
 let latestPhaseLuminosityRange: NumericRange = [0, 1];
 let latestPhaseParameters: ModelParameters = state;
+let phaseAnnotationsVisible = false;
 let sonificationReferenceNote = MIDDLE_C_NOTE;
 let sonificationReferenceHz = noteToFrequency(MIDDLE_C_NOTE);
 let sonificationSamples: SonificationSample[] = [];
@@ -264,7 +267,7 @@ interface FourierPointHit {
 }
 
 interface FourierAxisLabel {
-  base: "r" | "phi";
+  base: "A" | "r" | "phi";
   subscript: string;
 }
 
@@ -1708,6 +1711,7 @@ function buildControls(): void {
   setupResponsiveSidebarControls();
   setupSonificationControls();
   setupModelSpeedControl();
+  setupPhaseAnnotationControls();
   buildPresetButtons();
   buildSolverButtons();
   buildSliderGroup("physicalControls", CONTROL_GROUPS.physical);
@@ -1801,6 +1805,33 @@ function setupModelSpeedControl(): void {
   };
   input.addEventListener("input", sync);
   sync();
+}
+
+function setupPhaseAnnotationControls(): void {
+  const toggle = document.getElementById("phaseAnnotationsToggle");
+  if (!(toggle instanceof HTMLInputElement)) return;
+  toggle.checked = phaseAnnotationsVisible;
+  toggle.addEventListener("change", () => {
+    phaseAnnotationsVisible = toggle.checked;
+    updatePhaseAnnotationControls();
+    drawPhasePlots();
+  });
+  updatePhaseAnnotationControls();
+}
+
+function updatePhaseAnnotationControls(): void {
+  const toggle = document.getElementById("phaseAnnotationsToggle");
+  const label = document.getElementById("phaseAnnotationToggleLabel");
+  const legend = document.getElementById("phaseAnnotationLegendItems");
+  if (toggle instanceof HTMLInputElement) toggle.checked = phaseAnnotationsVisible;
+  if (label instanceof HTMLElement) {
+    label.classList.toggle("is-hidden", !phaseAnnotationsVisible);
+    label.setAttribute("aria-pressed", String(phaseAnnotationsVisible));
+  }
+  if (legend instanceof HTMLElement) {
+    legend.hidden = !phaseAnnotationsVisible;
+    legend.style.display = phaseAnnotationsVisible ? "" : "none";
+  }
 }
 
 function setupGridLoopSpeedControl(): void {
@@ -2711,13 +2742,14 @@ function beginGridCanvasInteraction(event: PointerEvent, canvasId: string): void
 
   if (canvasId === "fourierCanvas") {
     const hit = fourierPointHitAt(point);
-    if (!hit) return;
+    const result = hit?.result ?? gridState.hoverResult;
+    if (!result) return;
     event.preventDefault();
     canvas.setPointerCapture(event.pointerId);
     activeGridCanvasInteraction = { type: "fourier-hold", canvasId, pointerId: event.pointerId };
     canvas.dataset.gridInteraction = "fourier-hold";
-    gridState.hoverResult = hit.result;
-    gridState.heldResult = hit.result;
+    gridState.hoverResult = result;
+    gridState.heldResult = result;
     stopGridAnimation();
     drawAll();
   }
@@ -3473,6 +3505,8 @@ interface Series {
   x: (row: Row) => number;
   y: (row: Row) => number;
   width?: number;
+  colorAt?: (row: Row) => string;
+  widthAt?: (row: Row) => number;
   dash?: number[];
 }
 
@@ -3695,25 +3729,49 @@ function drawSeries(
   ctx.clip();
   series.forEach((item) => {
     if (options.denseEnvelope && drawDenseEnvelope(ctx, item, plot, xlim, ylim)) return;
-    ctx.beginPath();
-    let started = false;
-    item.rows.forEach((row) => {
-      const x = item.x(row);
-      const y = item.y(row);
-      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-      const px = sx(x);
-      const py = sy(y);
-      if (!started) {
-        ctx.moveTo(px, py);
-        started = true;
-      } else {
-        ctx.lineTo(px, py);
-      }
-    });
-    ctx.strokeStyle = item.color;
-    ctx.lineWidth = item.width || 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
     ctx.setLineDash(item.dash || []);
-    ctx.stroke();
+    if (item.colorAt || item.widthAt) {
+      let previous: { row: Row; x: number; y: number } | null = null;
+      item.rows.forEach((row) => {
+        const x = item.x(row);
+        const y = item.y(row);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+          previous = null;
+          return;
+        }
+        const current = { row, x: sx(x), y: sy(y) };
+        if (previous) {
+          ctx.beginPath();
+          ctx.moveTo(previous.x, previous.y);
+          ctx.lineTo(current.x, current.y);
+          ctx.strokeStyle = item.colorAt ? item.colorAt(row) : item.color;
+          ctx.lineWidth = item.widthAt ? item.widthAt(row) : item.width || 2;
+          ctx.stroke();
+        }
+        previous = current;
+      });
+    } else {
+      ctx.beginPath();
+      let started = false;
+      item.rows.forEach((row) => {
+        const x = item.x(row);
+        const y = item.y(row);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        const px = sx(x);
+        const py = sy(y);
+        if (!started) {
+          ctx.moveTo(px, py);
+          started = true;
+        } else {
+          ctx.lineTo(px, py);
+        }
+      });
+      ctx.strokeStyle = item.color;
+      ctx.lineWidth = item.width || 2;
+      ctx.stroke();
+    }
     ctx.setLineDash([]);
   });
   ctx.restore();
@@ -3765,6 +3823,31 @@ function drawSelectionOverlay(ctx: CanvasRenderingContext2D, canvasId: string, p
   ctx.restore();
 }
 
+function parseHexColor(color: string): [number, number, number] {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
+  if (!match) return [255, 255, 255];
+  return [parseInt(match[1], 16), parseInt(match[2], 16), parseInt(match[3], 16)];
+}
+
+function mixHexColors(a: string, b: string, fraction: number): string {
+  const [ar, ag, ab] = parseHexColor(a);
+  const [br, bg, bb] = parseHexColor(b);
+  const f = clamp(fraction, 0, 1);
+  const channel = (start: number, end: number) => Math.round(start + (end - start) * f);
+  return `rgb(${channel(ar, br)}, ${channel(ag, bg)}, ${channel(ab, bb)})`;
+}
+
+function radialVelocityCurveColor(value: number, maxAbs: number): string {
+  if (!Number.isFinite(value) || !Number.isFinite(maxAbs) || maxAbs <= 0) return "#FFFFFF";
+  const color = value >= 0 ? POSITIVE_VELOCITY_COLOR : NEGATIVE_VELOCITY_COLOR;
+  return mixHexColors("#FFFFFF", color, Math.min(1, Math.abs(value) / maxAbs));
+}
+
+function luminosityCurveWidth(value: number): number {
+  const level = normalizedInRange(value, latestPhaseLuminosityRange);
+  return 1.15 + 3.35 * level;
+}
+
 function gridPhaseSeries(
   quantity: "L" | "V",
   color: string,
@@ -3772,7 +3855,14 @@ function gridPhaseSeries(
 ): Series[] {
   const accessor = (row: Row) => row[quantity];
   if (!gridState.enabled || !gridState.results.length) {
-    return [{ label: quantity, color, rows: fallbackRows, x: (row) => row.tau, y: accessor }];
+    const singleSeries: Series = { label: quantity, color, rows: fallbackRows, x: (row) => row.tau, y: accessor };
+    if (!gridState.enabled && quantity === "L") singleSeries.widthAt = (row) => luminosityCurveWidth(row.L);
+    if (!gridState.enabled && quantity === "V") {
+      const maxAbs = Math.max(1e-12, ...fallbackRows.map((row) => Math.abs(row.V)).filter(Number.isFinite));
+      singleSeries.colorAt = (row) => radialVelocityCurveColor(row.V, maxAbs);
+      singleSeries.width = 2.3;
+    }
+    return [singleSeries];
   }
   const path = gridPathResults();
   const current = currentGridResult();
@@ -3936,8 +4026,18 @@ function drawFourierPanel(): void {
 
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
-  const columns = rect.width >= 1320 ? 4 : rect.width >= 780 ? 2 : 1;
-  const rows = Math.ceil(4 / columns);
+  const gridPoints = gridState.results.filter((result) => result.fourier);
+  const path = gridPathResults().filter((result) => result.fourier);
+  const allPoints = [...gridPoints, ...path];
+  const panels: Array<{ latex: string; label: FourierAxisLabel; value: (result: GridModelResult) => number }> = [
+    { latex: "A_L", label: { base: "A", subscript: "L" }, value: (result: GridModelResult) => result.fourier!.luminosityAmplitude },
+    { latex: "r_{21}", label: { base: "r", subscript: "21" }, value: (result: GridModelResult) => result.fourier!.r21 },
+    { latex: "\\phi_{21}", label: { base: "phi", subscript: "21" }, value: (result: GridModelResult) => result.fourier!.phi21 },
+    { latex: "r_{31}", label: { base: "r", subscript: "31" }, value: (result: GridModelResult) => result.fourier!.r31 },
+    { latex: "\\phi_{31}", label: { base: "phi", subscript: "31" }, value: (result: GridModelResult) => result.fourier!.phi31 }
+  ];
+  const columns = rect.width >= 1600 ? 5 : rect.width >= 1320 ? 4 : rect.width >= 780 ? 2 : 1;
+  const rows = Math.ceil(panels.length / columns);
   const cssHeight = Math.max(260, rows * 214);
   canvas.width = Math.max(320, Math.floor(rect.width * dpr));
   canvas.height = Math.floor(cssHeight * dpr);
@@ -3950,9 +4050,6 @@ function drawFourierPanel(): void {
   delete canvas.dataset.firstFourierHit;
   canvas.dataset.fourierHitCount = "0";
 
-  const gridPoints = gridState.results.filter((result) => result.fourier);
-  const path = gridPathResults().filter((result) => result.fourier);
-  const allPoints = [...gridPoints, ...path];
   if (!allPoints.length) {
     gridColorbarRegions.delete("fourierCanvas");
     ctx.fillStyle = THEME.axisText;
@@ -3966,12 +4063,6 @@ function drawFourierPanel(): void {
   const current = currentGridResult();
   const currentFourier = current?.fourier ? current : null;
   const xlim = range(allPoints.map((point) => point.period), 0.05);
-  const panels: Array<{ latex: string; label: FourierAxisLabel; value: (result: GridModelResult) => number }> = [
-    { latex: "r_{21}", label: { base: "r", subscript: "21" }, value: (result: GridModelResult) => result.fourier!.r21 },
-    { latex: "\\phi_{21}", label: { base: "phi", subscript: "21" }, value: (result: GridModelResult) => result.fourier!.phi21 },
-    { latex: "r_{31}", label: { base: "r", subscript: "31" }, value: (result: GridModelResult) => result.fourier!.r31 },
-    { latex: "\\phi_{31}", label: { base: "phi", subscript: "31" }, value: (result: GridModelResult) => result.fourier!.phi31 }
-  ];
   canvas.dataset.fourierAxisLabels = panels.map((item) => item.latex).join(",");
   canvas.dataset.fourierPathCount = String(path.length);
   const gap = 16;
@@ -4003,15 +4094,15 @@ function drawFourierPanel(): void {
   });
 
   canvas.dataset.fourierHitCount = String(fourierPointHits.length);
-  const firstHit = fourierPointHits[0];
-  if (firstHit) canvas.dataset.firstFourierHit = `${firstHit.x.toFixed(1)},${firstHit.y.toFixed(1)}`;
-
   drawGridColorbar(ctx, {
     left: rect.width - 184,
     top: 4,
     width: 170,
     height: 36
   });
+
+  const firstHit = fourierPointHits.find((hit) => !colorbarRegionAt("fourierCanvas", hit)) ?? fourierPointHits[0];
+  if (firstHit) canvas.dataset.firstFourierHit = `${firstHit.x.toFixed(1)},${firstHit.y.toFixed(1)}`;
 }
 
 function collectFourierPointHits(
@@ -5172,7 +5263,140 @@ function syncPhaseCanvasState(): void {
   updatePhaseAnchorControlAvailability();
 }
 
+type PhaseAnnotationKind = "maxTeff" | "minTeff" | "maxR" | "minR" | "maxV" | "maxL" | "minL";
+
+interface PhasePlotAnnotation {
+  kind: PhaseAnnotationKind;
+  row: Row;
+  color: string;
+}
+
+function extremaRow(rows: readonly Row[], value: (row: Row) => number | null, pick: "min" | "max"): Row | null {
+  let selected: Row | null = null;
+  let selectedValue = pick === "min" ? Infinity : -Infinity;
+  rows.forEach((row) => {
+    const current = value(row);
+    if (current === null || !Number.isFinite(current)) return;
+    if ((pick === "min" && current < selectedValue) || (pick === "max" && current > selectedValue)) {
+      selected = row;
+      selectedValue = current;
+    }
+  });
+  return selected;
+}
+
+function phasePlotAnnotations(rows: readonly Row[]): PhasePlotAnnotation[] {
+  const annotations: PhasePlotAnnotation[] = [];
+  const add = (kind: PhaseAnnotationKind, row: Row | null, color: string) => {
+    if (row) annotations.push({ kind, row, color });
+  };
+  add("maxTeff", extremaRow(rows, effectiveTemperatureProxy, "max"), PHASE_MARKER_COLOR);
+  add("minTeff", extremaRow(rows, effectiveTemperatureProxy, "min"), PHASE_MARKER_COLOR);
+  add("maxR", extremaRow(rows, (row) => row.R, "max"), COLORS.R);
+  add("minR", extremaRow(rows, (row) => row.R, "min"), COLORS.R);
+  add("maxV", extremaRow(rows, (row) => row.V, "max"), COLORS.V);
+  add("maxL", extremaRow(rows, (row) => row.L, "max"), COLORS.L);
+  add("minL", extremaRow(rows, (row) => row.L, "min"), COLORS.L);
+  return annotations;
+}
+
+function drawPhaseAnnotations(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  canvasId: string,
+  quantity: "L" | "V"
+): void {
+  const canvas = document.getElementById(canvasId);
+  if (canvas instanceof HTMLCanvasElement) {
+    canvas.dataset.annotations = phaseAnnotationsVisible ? "on" : "off";
+    canvas.dataset.annotationCount = "0";
+  }
+  if (!phaseAnnotationsVisible || !latestPhaseRows.length) return;
+  const annotations = phasePlotAnnotations(latestPhaseRows);
+  const radiusRange = rawRange(latestPhaseRows.map((row) => row.R));
+  const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  let drawn = 0;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.width, plot.height);
+  ctx.clip();
+  annotations.forEach((annotation) => {
+    const x = annotation.row.tau;
+    const y = annotation.row[quantity];
+    if (!Number.isFinite(x + y) || x < xlim[0] || x > xlim[1] || y < ylim[0] || y > ylim[1]) return;
+    drawPhaseAnnotationSymbol(ctx, sx(x), sy(y), annotation, radiusRange);
+    drawn += 1;
+  });
+  ctx.restore();
+  if (canvas instanceof HTMLCanvasElement) canvas.dataset.annotationCount = String(drawn);
+}
+
+function drawPhaseAnnotationSymbol(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  annotation: PhasePlotAnnotation,
+  radiusRange: NumericRange
+): void {
+  ctx.save();
+  ctx.lineWidth = 1.7;
+  ctx.strokeStyle = "#050814";
+  ctx.fillStyle = annotation.color;
+  if (annotation.kind === "maxTeff" || annotation.kind === "minTeff") {
+    ctx.font = "700 18px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const symbol = annotation.kind === "maxTeff" ? "↑" : "↓";
+    ctx.lineWidth = 2.8;
+    ctx.strokeText(symbol, x, y);
+    ctx.fillText(symbol, x, y);
+  } else if (annotation.kind === "maxR" || annotation.kind === "minR") {
+    const size = 4.2 + 5.6 * normalizedInRange(annotation.row.R, radiusRange);
+    ctx.beginPath();
+    ctx.arc(x, y, size, 0, 2 * Math.PI);
+    ctx.stroke();
+    ctx.strokeStyle = annotation.color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  } else if (annotation.kind === "maxV") {
+    const size = 5.8;
+    ctx.lineWidth = 3.6;
+    ctx.beginPath();
+    ctx.moveTo(x - size, y - size);
+    ctx.lineTo(x + size, y + size);
+    ctx.moveTo(x + size, y - size);
+    ctx.lineTo(x - size, y + size);
+    ctx.stroke();
+    ctx.strokeStyle = annotation.color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  } else {
+    const size = annotation.kind === "maxL" ? 5.8 : 3.4;
+    ctx.beginPath();
+    ctx.arc(x, y, size, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawPhasePlotOverlays(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  canvasId: string
+): void {
+  if (canvasId === "lightCanvas") drawPhaseAnnotations(ctx, plot, xlim, ylim, canvasId, "L");
+  if (canvasId === "velocityCanvas") drawPhaseAnnotations(ctx, plot, xlim, ylim, canvasId, "V");
+  drawGridColorbar(ctx, plot, xlim, ylim, canvasId);
+}
+
 function drawPhasePlots(): void {
+  updatePhaseAnnotationControls();
   const marker = phaseMarker();
   drawSeries("lightCanvas", gridPhaseSeries("L", COLORS.L, latestPhaseSample), {
     xlabel: latestPhasePeriodLabel,
@@ -5182,7 +5406,7 @@ function drawPhasePlots(): void {
     ylim: latestPhaseSample.length || gridState.results.length ? undefined : [0, 1],
     message: latestPhaseMessage,
     phaseMarker: marker,
-    afterDraw: drawGridColorbar
+    afterDraw: drawPhasePlotOverlays
   });
 
   drawSeries("velocityCanvas", gridPhaseSeries("V", COLORS.V, latestPhaseSample), {
@@ -5193,7 +5417,7 @@ function drawPhasePlots(): void {
     ylim: latestPhaseSample.length || gridState.results.length ? undefined : [0, 1],
     message: latestPhaseMessage,
     phaseMarker: marker,
-    afterDraw: drawGridColorbar
+    afterDraw: drawPhasePlotOverlays
   });
 
   if (sonificationSource === "pressure") {
