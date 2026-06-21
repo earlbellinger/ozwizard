@@ -388,28 +388,28 @@ async function runPlaywrightChecks() {
     assertOk(parameterOverflow === "auto", `parameters panel should scroll vertically, saw ${parameterOverflow}`);
 
     await page.setViewportSize({ width: 1920, height: 1200 });
-    assertOk(await page.getByRole("heading", { name: "One-Zone Shell" }).isVisible(), "One-Zone Shell heading was not visible");
-    const modelSpeed = page.getByRole("slider", { name: "one-zone shell speed" });
-    assertOk(await page.locator("[data-plot-panel='model'] .plot-title .model-speed-control").isVisible(), "One-Zone Shell speed control should live in the title row");
-    assertOk((await modelSpeed.inputValue()) === "1", "One-Zone Shell speed should start at 1x");
-    assertOk((await page.locator("#modelSpeedValue").textContent()) === "1x", "One-Zone Shell speed readout should start at 1x");
+    assertOk(await page.getByRole("heading", { name: "Shell" }).isVisible(), "Shell heading was not visible");
+    const modelSpeed = page.getByRole("slider", { name: "shell speed" });
+    assertOk(await page.locator("[data-plot-panel='model'] .plot-title .model-speed-control").isVisible(), "Shell speed control should live in the title row");
+    assertOk((await modelSpeed.inputValue()) === "1", "Shell speed should start at 1x");
+    assertOk((await page.locator("#modelSpeedValue").textContent()) === "1x", "Shell speed readout should start at 1x");
     await modelSpeed.evaluate((input) => {
       input.value = "2";
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    assertOk((await page.locator("#modelSpeedValue").textContent()) === "2x", "One-Zone Shell speed readout should update");
-    assertOk((await page.locator("#modelCanvas").getAttribute("data-animation-speed")) === "2x", "One-Zone Shell canvas should receive the animation speed");
+    assertOk((await page.locator("#modelSpeedValue").textContent()) === "2x", "Shell speed readout should update");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-animation-speed")) === "2x", "Shell canvas should receive the animation speed");
     await modelSpeed.evaluate((input) => {
       input.value = "0.25";
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    assertOk((await page.locator("#modelSpeedValue").textContent()) === "0.25x", "One-Zone Shell speed readout should fit its longest value");
+    assertOk((await page.locator("#modelSpeedValue").textContent()) === "0.25x", "Shell speed readout should fit its longest value");
     const modelHeadingLines = await page.locator("[data-plot-panel='model'] h3").evaluate((heading) => {
       const range = document.createRange();
       range.selectNodeContents(heading);
       return Array.from(range.getClientRects()).filter((rect) => rect.width > 0).length;
     });
-    assertOk(modelHeadingLines === 1, `One-Zone Shell heading should stay on one line, saw ${modelHeadingLines}`);
+    assertOk(modelHeadingLines === 1, `Shell heading should stay on one line, saw ${modelHeadingLines}`);
     await modelSpeed.evaluate((input) => {
       input.value = "1";
       input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -445,9 +445,9 @@ async function runPlaywrightChecks() {
     const secondRowTop = plotLayout.panels.find((panel) => panel.id === "time")?.top;
     const secondRow = plotLayout.panels.filter((panel) => panel.top === secondRowTop);
     assertOk(firstRow.map((panel) => panel.id).join("|") === "model|light|velocity", `first plot row should be model/light/velocity, saw ${firstRow.map((panel) => panel.id).join("|")}`);
-    assertOk(firstRow.find((panel) => panel.id === "model")?.width < 360, "One-Zone Shell should stay compact");
-    assertOk(firstRow.find((panel) => panel.id === "light")?.width > 500, "Lightcurve should expand beside One-Zone Shell");
-    assertOk(firstRow.find((panel) => panel.id === "velocity")?.width > 500, "RV Curve should expand beside One-Zone Shell");
+    assertOk(firstRow.find((panel) => panel.id === "model")?.width < 360, "Shell should stay compact");
+    assertOk(firstRow.find((panel) => panel.id === "light")?.width > 500, "Lightcurve should expand beside Shell");
+    assertOk(firstRow.find((panel) => panel.id === "velocity")?.width > 500, "RV Curve should expand beside Shell");
     assertOk(secondRow.map((panel) => panel.id).join("|") === "time|lum", `second plot row should be History/Luminosity, saw ${secondRow.map((panel) => panel.id).join("|")}`);
     assertOk(secondRow.every((panel) => panel.width > 650), "History and Luminosity should fill their row");
     const hasModelPaint = await page.locator("#modelCanvas").evaluate((canvas) => {
@@ -487,14 +487,14 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#plotGrid").evaluate((node) => getComputedStyle(node).flexWrap)) === "wrap", "plot grid should wrap");
     assertOk((await page.locator("#plotGrid").evaluate((node) => getComputedStyle(node).getPropertyValue("--plot-panel-min-width").trim())) === "400px", "plot panel minimum width should be 400px");
     await page.locator("[data-plot-toggle='model']").uncheck();
-    assertOk(!(await page.locator("[data-plot-panel='model']").isVisible()), "One-Zone Shell panel should hide when unchecked");
+    assertOk(!(await page.locator("[data-plot-panel='model']").isVisible()), "Shell panel should hide when unchecked");
     assertOk(await page.locator("#hiddenPlotControls").isVisible(), "hidden plot controls should appear when a plot is hidden");
-    assertOk((await page.locator("#hiddenPlotControls").textContent())?.includes("One-Zone Shell"), "hidden plot controls should include One-Zone Shell");
+    assertOk((await page.locator("#hiddenPlotControls").textContent())?.includes("Shell"), "hidden plot controls should include Shell");
     assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "4", "four visible plots should be tracked");
     assertOk((await page.locator("#plotGrid").getAttribute("data-plot-columns")) === null, "plot grid should not force a column mode after hiding a plot");
-    assertOk(await page.locator(".plot-panel canvas:visible").count() === 4, "expected four visible plot canvases after hiding One-Zone Shell");
+    assertOk(await page.locator(".plot-panel canvas:visible").count() === 4, "expected four visible plot canvases after hiding Shell");
     await page.locator("#hiddenPlotControls [data-plot-toggle='model']").check();
-    assertOk(await page.locator("[data-plot-panel='model']").isVisible(), "One-Zone Shell panel should return when rechecked");
+    assertOk(await page.locator("[data-plot-panel='model']").isVisible(), "Shell panel should return when rechecked");
     assertOk(!(await page.locator("#hiddenPlotControls").isVisible()), "hidden plot controls should hide again when all plots are visible");
     assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "5", "five visible plots should be tracked after restore");
     assertOk(!(await page.getByLabel("Enable grid mode").isChecked()), "grid mode should start off");
@@ -509,10 +509,10 @@ async function runPlaywrightChecks() {
     const fluxHeightBefore = await fluxControl.evaluate((node) => node.getBoundingClientRect().height);
     await fluxControl.dispatchEvent("contextmenu");
     assertOk(await page.getByLabel("Enable grid mode").isChecked(), "right clicking a slider should enable grid mode");
-    assertOk(await page.locator("[data-plot-panel='model']").isHidden(), "One-Zone Shell should be hidden in grid mode");
+    assertOk(await page.locator("[data-plot-panel='model']").isHidden(), "Shell should be hidden in grid mode");
     assertOk(await page.locator("[data-plot-panel='time']").isHidden(), "History should be hidden in grid mode");
     assertOk(await page.locator("[data-plot-panel='lum']").isHidden(), "Luminosity Evolution should be hidden in grid mode");
-    assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='model']").isDisabled(), "One-Zone Shell toggle should be disabled in grid mode");
+    assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='model']").isDisabled(), "Shell toggle should be disabled in grid mode");
     assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='time']").isDisabled(), "History toggle should be disabled in grid mode");
     assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='lum']").isDisabled(), "Luminosity toggle should be disabled in grid mode");
     assertOk(await page.locator("#fourierGridPanel").isVisible(), "Fourier grid panel should show in grid mode");
@@ -588,7 +588,7 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#fourierCanvas").getAttribute("data-grid-interaction")) !== "fourier-hold", "Fourier hold should release on pointer up");
     await page.getByLabel("Enable grid mode").uncheck();
     assertOk(!(await page.locator("#fourierGridPanel").isVisible()), "Fourier panel should hide when grid mode exits");
-    assertOk(await page.locator("[data-plot-panel='model']").isVisible(), "One-Zone Shell visibility should restore after grid mode exits");
+    assertOk(await page.locator("[data-plot-panel='model']").isVisible(), "Shell visibility should restore after grid mode exits");
     assertOk(await page.locator("[data-plot-panel='time']").isVisible(), "History visibility should restore after grid mode exits");
     assertOk(await page.locator("[data-plot-panel='lum']").isVisible(), "Luminosity Evolution visibility should restore after grid mode exits");
     assertOk(await page.locator("#adsrCanvas").count() === 1, "expected one ADSR canvas");

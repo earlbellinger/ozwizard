@@ -2003,19 +2003,19 @@
           <div class="plot-title">
             <div class="plot-title-left" data-plot-control-home="model">
               <label class="plot-enable-control" data-plot-control="model">
-                <input type="checkbox" data-plot-toggle="model" checked aria-label="Hide One-Zone Shell plot">
-                <span>One-Zone Shell</span>
+                <input type="checkbox" data-plot-toggle="model" checked aria-label="Hide Shell plot">
+                <span>Shell</span>
               </label>
-              <h3>One-Zone Shell</h3>
+              <h3>Shell</h3>
             </div>
-            <label class="model-speed-control" aria-label="One-Zone Shell animation speed control">
+            <label class="model-speed-control" aria-label="Shell animation speed control">
               <span>speed</span>
-              <input id="modelSpeed" type="range" min="0.25" max="4" step="0.25" value="1" aria-label="one-zone shell speed">
+              <input id="modelSpeed" type="range" min="0.25" max="4" step="0.25" value="1" aria-label="shell speed">
               <output id="modelSpeedValue" for="modelSpeed">1x</output>
             </label>
           </div>
           <div class="model-canvas-wrap">
-            <canvas class="model-canvas" id="modelCanvas" aria-label="One-zone shell visualization"></canvas>
+            <canvas class="model-canvas" id="modelCanvas" aria-label="Shell visualization"></canvas>
           </div>
         </div>
 
@@ -2118,7 +2118,7 @@
               </thead>
               <tbody>
                 <tr><td class="symbol-cell" data-symbol="tau" style="--color:var(--tau)">\(\ozTau{\tau}\)</td><td>Time</td><td class="initial-cell" id="initialTau"></td><td>Dimensionless clock scaled by the model's dynamical time</td></tr>
-                <tr><td class="symbol-cell" style="--color:var(--radius)">\(\ozRadius{R}\)</td><td>Radius</td><td class="initial-cell" id="initialR"></td><td>Dimensionless radius of the one-zone shell</td></tr>
+                <tr><td class="symbol-cell" style="--color:var(--radius)">\(\ozRadius{R}\)</td><td>Radius</td><td class="initial-cell" id="initialR"></td><td>Dimensionless radius of the shell</td></tr>
                 <tr><td class="symbol-cell" style="--color:var(--velocity)">\(\ozVelocity{V}\)</td><td>Radial velocity</td><td class="initial-cell" id="initialV"></td><td>Time derivative of the shell radius</td></tr>
                 <tr><td class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{H}\)</td><td>Thermal-pressure state</td><td class="initial-cell" id="initialH"></td><td>Dimensionless thermal-pressure state; raises pressure support and radiative luminosity</td></tr>
                 <tr><td class="symbol-cell" style="--color:var(--convective)">\(\ozConvective{U_c}\)</td><td>Convective velocity</td><td class="initial-cell" id="initialUc"></td><td>Time-dependent turbulent/convective velocity scale</td></tr>
@@ -2155,7 +2155,7 @@
         <div class="content-panel">
           <h3>Physical Model</h3>
           <p>
-            The one-zone model compresses a pulsating stellar envelope into a single one-zone shell. The shell radius
+            The one-zone model compresses a pulsating stellar envelope into a single shell. The shell radius
             <span class="symbol-cell" style="--color:var(--radius)">\(\ozRadius{R}\)</span> and radial velocity
             <span class="symbol-cell" style="--color:var(--velocity)">\(\ozVelocity{V}\)</span> describe the mechanical motion.
             The independent clock <span class="symbol-cell" style="--color:var(--tau)">\(\ozTau{\tau}\)</span>

@@ -21,7 +21,7 @@ function row(tau: number, value: number): Row {
   };
 }
 
-describe("one-zone shell visualization helpers", () => {
+describe("shell visualization helpers", () => {
   it("infers an effective temperature from dimensionless luminosity and radius", () => {
     expect(inferEffectiveTemperature(1, 1)).toBeCloseTo(6500, 12);
     expect(inferEffectiveTemperature(16, 1)).toBeCloseTo(13000, 12);

@@ -1432,7 +1432,7 @@
     lum: { L: true, Lr: true, Lc: true }
   };
   var PLOT_PANEL_LABELS = {
-    model: "One-Zone Shell",
+    model: "Shell",
     light: "Lightcurve",
     velocity: "RV Curve",
     time: "History",

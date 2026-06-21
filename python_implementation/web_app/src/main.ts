@@ -345,7 +345,7 @@ const plotVisibility: Record<InteractivePlotId, Record<string, boolean>> = {
 };
 
 const PLOT_PANEL_LABELS: Record<UserPlotId, string> = {
-  model: "One-Zone Shell",
+  model: "Shell",
   light: "Lightcurve",
   velocity: "RV Curve",
   time: "History",
