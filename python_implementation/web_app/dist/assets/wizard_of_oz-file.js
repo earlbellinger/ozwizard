@@ -799,17 +799,39 @@
   function phaseWarmupTau(rows, requested) {
     return requested !== void 0 && Number.isFinite(requested) ? requested : defaultWarmupTau(rows);
   }
+  function refinedLuminosityExtremum(rows, index, mode) {
+    if (index <= 0 || index >= rows.length - 1) return rows[index];
+    const previous = rows[index - 1];
+    const current = rows[index];
+    const next = rows[index + 1];
+    const x0 = previous.tau - current.tau;
+    const x2 = next.tau - current.tau;
+    if (!(x0 < 0 && x2 > 0)) return current;
+    const y0 = previous.L - current.L;
+    const y2 = next.L - current.L;
+    const slope0 = y0 / x0;
+    const a = (slope0 - y2 / x2) / (x0 - x2);
+    const b = slope0 - a * x0;
+    if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a) < 1e-14) return current;
+    if (mode === "min" && a <= 0 || mode === "max" && a >= 0) return current;
+    const vertex = -b / (2 * a);
+    if (!Number.isFinite(vertex) || vertex < x0 || vertex > x2) return current;
+    const luminosity = current.L + a * vertex * vertex + b * vertex;
+    if (!Number.isFinite(luminosity)) return current;
+    return { ...current, tau: current.tau + vertex, L: luminosity };
+  }
   function findLuminosityMaxima(rows, after, minSeparation = 0.75) {
     const maxima = [];
     for (let i = 1; i < rows.length - 1; i += 1) {
       const row = rows[i];
       if (row.tau < after) continue;
       if (rows[i - 1].L < row.L && row.L >= rows[i + 1].L) {
+        const maximum = refinedLuminosityExtremum(rows, i, "max");
         const last = maxima.at(-1);
-        if (last && row.tau - last.tau < minSeparation) {
-          if (row.L > last.L) maxima[maxima.length - 1] = row;
+        if (last && maximum.tau - last.tau < minSeparation) {
+          if (maximum.L > last.L) maxima[maxima.length - 1] = maximum;
         } else {
-          maxima.push(row);
+          maxima.push(maximum);
         }
       }
     }
@@ -821,11 +843,12 @@
       const row = rows[i];
       if (row.tau < after) continue;
       if (rows[i - 1].L > row.L && row.L <= rows[i + 1].L) {
+        const minimum = refinedLuminosityExtremum(rows, i, "min");
         const last = minima.at(-1);
-        if (last && row.tau - last.tau < minSeparation) {
-          if (row.L < last.L) minima[minima.length - 1] = row;
+        if (last && minimum.tau - last.tau < minSeparation) {
+          if (minimum.L < last.L) minima[minima.length - 1] = minimum;
         } else {
-          minima.push(row);
+          minima.push(minimum);
         }
       }
     }
@@ -844,12 +867,19 @@
     return (max - min) / scale;
   }
   function minimumBetween(rows, startTau, endTau) {
+    let minimumIndex = -1;
     let minimum = null;
-    for (const row of rows) {
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i];
       if (row.tau <= startTau || row.tau >= endTau) continue;
-      if (!minimum || row.L < minimum.L) minimum = row;
+      if (!minimum || row.L < minimum.L) {
+        minimum = row;
+        minimumIndex = i;
+      }
     }
-    return minimum;
+    if (minimumIndex < 0) return minimum;
+    const refined = refinedLuminosityExtremum(rows, minimumIndex, "min");
+    return refined.tau > startTau && refined.tau < endTau ? refined : minimum;
   }
   function median(values) {
     const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
@@ -1400,7 +1430,7 @@
     lum: { L: true, Lr: true, Lc: true }
   };
   var PLOT_PANEL_LABELS = {
-    model: "Moving Shell",
+    model: "One-Zone Shell",
     light: "Lightcurve",
     velocity: "RV Curve",
     time: "History",
@@ -4070,11 +4100,13 @@
     const currentFourier = current?.fourier ? current : null;
     const xlim = range(allPoints.map((point) => point.period), 0.05);
     const panels = [
-      { label: "r21", value: (result) => result.fourier.r21 },
-      { label: "phi21", value: (result) => result.fourier.phi21 },
-      { label: "r31", value: (result) => result.fourier.r31 },
-      { label: "phi31", value: (result) => result.fourier.phi31 }
+      { latex: "r_{21}", label: { base: "r", subscript: "21" }, value: (result) => result.fourier.r21 },
+      { latex: "\\phi_{21}", label: { base: "phi", subscript: "21" }, value: (result) => result.fourier.phi21 },
+      { latex: "r_{31}", label: { base: "r", subscript: "31" }, value: (result) => result.fourier.r31 },
+      { latex: "\\phi_{31}", label: { base: "phi", subscript: "31" }, value: (result) => result.fourier.phi31 }
     ];
+    canvas.dataset.fourierAxisLabels = panels.map((item) => item.latex).join(",");
+    canvas.dataset.fourierPathCount = String(path.length);
     const gap = 16;
     const pad = { left: 78, right: 18, top: 24, bottom: 58 };
     const panelWidth = (rect.width - gap * (columns - 1)) / columns;
@@ -4090,10 +4122,13 @@
       };
       const values = allPoints.map(item.value);
       const ylim = range(values, 0.08);
-      drawAxes(ctx, box, xlim, ylim, "period/\u03C4", item.label, THEME.axisText, THEME.axisText, Math.max(8, box.left - 70));
+      const ylabelX = Math.max(8, box.left - 70);
+      drawAxes(ctx, box, xlim, ylim, "period/\u03C4", "", THEME.axisText, THEME.axisText, ylabelX);
+      drawFourierAxisLabel(ctx, item.label, ylabelX, box.top + box.height / 2);
       collectFourierPointHits(box, xlim, ylim, allPoints, item.value);
-      drawFourierPoints(ctx, box, xlim, ylim, gridPoints, item.value, "rgba(190, 200, 216, 0.28)", 2.4);
-      drawFourierPoints(ctx, box, xlim, ylim, path, item.value, (result) => gridResultColor(result, 0.72), 3.4);
+      drawFourierPoints(ctx, box, xlim, ylim, gridPoints, item.value, "rgba(190, 200, 216, 0.24)", 2.1);
+      drawFourierPath(ctx, box, xlim, ylim, path, item.value, 1.9);
+      drawFourierPoints(ctx, box, xlim, ylim, path, item.value, (result) => gridResultColor(result, 0.78), 2.9);
       const highlighted = gridState.heldResult || gridState.hoverResult;
       if (highlighted?.fourier && highlighted !== currentFourier) drawFourierPoints(ctx, box, xlim, ylim, [highlighted], item.value, (result) => gridResultColor(result, 0.98), 5.4);
       if (currentFourier) drawFourierPoints(ctx, box, xlim, ylim, [currentFourier], item.value, (result) => gridResultColor(result, 0.98), 6.2);
@@ -4117,6 +4152,53 @@
       if (!Number.isFinite(x) || !Number.isFinite(y)) return;
       fourierPointHits.push({ result, x, y, radius: 5 });
     });
+  }
+  function drawFourierAxisLabel(ctx, label, x, y) {
+    const base = label.base === "phi" ? "\u03C6" : label.base;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = "left";
+    ctx.fillStyle = THEME.axisText;
+    ctx.font = "12px Inter, sans-serif";
+    const baseWidth = ctx.measureText(base).width;
+    ctx.font = "8px Inter, sans-serif";
+    const subscriptWidth = ctx.measureText(label.subscript).width;
+    const start = -(baseWidth + subscriptWidth + 1) / 2;
+    ctx.font = "12px Inter, sans-serif";
+    ctx.textBaseline = "middle";
+    ctx.fillText(base, start, 0);
+    ctx.font = "8px Inter, sans-serif";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(label.subscript, start + baseWidth + 1, 5);
+    ctx.restore();
+  }
+  function drawFourierPath(ctx, plot, xlim, ylim, points, value, width) {
+    if (points.length < 2) return;
+    const sx = (x) => plot.left + (x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
+    const sy = (y) => plot.top + plot.height - (y - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(plot.left, plot.top, plot.width, plot.height);
+    ctx.clip();
+    ctx.lineWidth = width;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (let i = 1; i < points.length; i += 1) {
+      const previous = points[i - 1];
+      const current = points[i];
+      const x0 = sx(previous.period);
+      const y0 = sy(value(previous));
+      const x1 = sx(current.period);
+      const y1 = sy(value(current));
+      if (![x0, y0, x1, y1].every(Number.isFinite)) continue;
+      ctx.strokeStyle = gridResultColor(current, 0.62);
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
   function drawFourierPoints(ctx, plot, xlim, ylim, points, value, color, radius) {
     const sx = (x) => plot.left + (x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;

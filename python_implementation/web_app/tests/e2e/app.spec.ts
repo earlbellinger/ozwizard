@@ -471,8 +471,8 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
 
   await page.setViewportSize({ width: 1920, height: 1200 });
   const visibleCanvases = page.locator(".plot-panel canvas:visible");
-  await expect(page.getByRole("heading", { name: "Moving Shell" })).toBeVisible();
-  const modelSpeed = page.getByRole("slider", { name: "moving shell speed" });
+  await expect(page.getByRole("heading", { name: "One-Zone Shell" })).toBeVisible();
+  const modelSpeed = page.getByRole("slider", { name: "one-zone shell speed" });
   await expect(page.locator("[data-plot-panel='model'] .plot-title .model-speed-control")).toBeVisible();
   await expect(modelSpeed).toHaveValue("1");
   await expect(page.locator("#modelSpeedValue")).toHaveText("1x");
@@ -541,7 +541,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await page.locator("[data-plot-toggle='model']").uncheck();
   await expect(page.locator("[data-plot-panel='model']")).toBeHidden();
   await expect(page.locator("#hiddenPlotControls")).toBeVisible();
-  await expect(page.locator("#hiddenPlotControls")).toContainText("Moving Shell");
+  await expect(page.locator("#hiddenPlotControls")).toContainText("One-Zone Shell");
   await expect(page.locator("#plotGrid")).toHaveAttribute("data-visible-plots", "4");
   await expect(page.locator("#plotGrid")).not.toHaveAttribute("data-plot-columns", /.+/);
   await expect(page.locator(".plot-panel canvas:visible")).toHaveCount(4);
@@ -621,6 +621,8 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
   });
   expect(fourierHasPaint).toBe(true);
+  await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-axis-labels", String.raw`r_{21},\phi_{21},r_{31},\phi_{31}`);
+  await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-path-count", /[2-9]\d*/);
 
   await page.locator("#lightCanvas").scrollIntoViewIfNeeded();
   const lightCanvasBox = await page.locator("#lightCanvas").boundingBox();

@@ -40,17 +40,42 @@ export function phaseWarmupTau(rows: readonly Row[], requested?: number): number
   return requested !== undefined && Number.isFinite(requested) ? requested : defaultWarmupTau(rows);
 }
 
+function refinedLuminosityExtremum(rows: readonly Row[], index: number, mode: "min" | "max"): Row {
+  if (index <= 0 || index >= rows.length - 1) return rows[index];
+  const previous = rows[index - 1];
+  const current = rows[index];
+  const next = rows[index + 1];
+  const x0 = previous.tau - current.tau;
+  const x2 = next.tau - current.tau;
+  if (!(x0 < 0 && x2 > 0)) return current;
+
+  const y0 = previous.L - current.L;
+  const y2 = next.L - current.L;
+  const slope0 = y0 / x0;
+  const a = (slope0 - y2 / x2) / (x0 - x2);
+  const b = slope0 - a * x0;
+  if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a) < 1e-14) return current;
+  if ((mode === "min" && a <= 0) || (mode === "max" && a >= 0)) return current;
+
+  const vertex = -b / (2 * a);
+  if (!Number.isFinite(vertex) || vertex < x0 || vertex > x2) return current;
+  const luminosity = current.L + a * vertex * vertex + b * vertex;
+  if (!Number.isFinite(luminosity)) return current;
+  return { ...current, tau: current.tau + vertex, L: luminosity };
+}
+
 export function findLuminosityMaxima(rows: readonly Row[], after: number, minSeparation = 0.75): Row[] {
   const maxima: Row[] = [];
   for (let i = 1; i < rows.length - 1; i += 1) {
     const row = rows[i];
     if (row.tau < after) continue;
     if (rows[i - 1].L < row.L && row.L >= rows[i + 1].L) {
+      const maximum = refinedLuminosityExtremum(rows, i, "max");
       const last = maxima.at(-1);
-      if (last && row.tau - last.tau < minSeparation) {
-        if (row.L > last.L) maxima[maxima.length - 1] = row;
+      if (last && maximum.tau - last.tau < minSeparation) {
+        if (maximum.L > last.L) maxima[maxima.length - 1] = maximum;
       } else {
-        maxima.push(row);
+        maxima.push(maximum);
       }
     }
   }
@@ -63,11 +88,12 @@ export function findLuminosityMinima(rows: readonly Row[], after: number, minSep
     const row = rows[i];
     if (row.tau < after) continue;
     if (rows[i - 1].L > row.L && row.L <= rows[i + 1].L) {
+      const minimum = refinedLuminosityExtremum(rows, i, "min");
       const last = minima.at(-1);
-      if (last && row.tau - last.tau < minSeparation) {
-        if (row.L < last.L) minima[minima.length - 1] = row;
+      if (last && minimum.tau - last.tau < minSeparation) {
+        if (minimum.L < last.L) minima[minima.length - 1] = minimum;
       } else {
-        minima.push(row);
+        minima.push(minimum);
       }
     }
   }
@@ -88,12 +114,19 @@ function cycleAmplitude(rows: readonly Row[], startTau: number, endTau: number):
 }
 
 function minimumBetween(rows: readonly Row[], startTau: number, endTau: number): Row | null {
+  let minimumIndex = -1;
   let minimum: Row | null = null;
-  for (const row of rows) {
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
     if (row.tau <= startTau || row.tau >= endTau) continue;
-    if (!minimum || row.L < minimum.L) minimum = row;
+    if (!minimum || row.L < minimum.L) {
+      minimum = row;
+      minimumIndex = i;
+    }
   }
-  return minimum;
+  if (minimumIndex < 0) return minimum;
+  const refined = refinedLuminosityExtremum(rows, minimumIndex, "min");
+  return refined.tau > startTau && refined.tau < endTau ? refined : minimum;
 }
 
 function median(values: number[]): number | null {

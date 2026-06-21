@@ -214,6 +214,11 @@ interface FourierPointHit {
   radius: number;
 }
 
+interface FourierAxisLabel {
+  base: "r" | "phi";
+  subscript: string;
+}
+
 interface GridCanvasInteraction {
   type: "colorbar" | "fourier-hold";
   canvasId: string;
@@ -333,7 +338,7 @@ const plotVisibility: Record<InteractivePlotId, Record<string, boolean>> = {
 };
 
 const PLOT_PANEL_LABELS: Record<UserPlotId, string> = {
-  model: "Moving Shell",
+  model: "One-Zone Shell",
   light: "Lightcurve",
   velocity: "RV Curve",
   time: "History",
@@ -3345,12 +3350,14 @@ function drawFourierPanel(): void {
   const current = currentGridResult();
   const currentFourier = current?.fourier ? current : null;
   const xlim = range(allPoints.map((point) => point.period), 0.05);
-  const panels = [
-    { label: "r21", value: (result: GridModelResult) => result.fourier!.r21 },
-    { label: "phi21", value: (result: GridModelResult) => result.fourier!.phi21 },
-    { label: "r31", value: (result: GridModelResult) => result.fourier!.r31 },
-    { label: "phi31", value: (result: GridModelResult) => result.fourier!.phi31 }
+  const panels: Array<{ latex: string; label: FourierAxisLabel; value: (result: GridModelResult) => number }> = [
+    { latex: "r_{21}", label: { base: "r", subscript: "21" }, value: (result: GridModelResult) => result.fourier!.r21 },
+    { latex: "\\phi_{21}", label: { base: "phi", subscript: "21" }, value: (result: GridModelResult) => result.fourier!.phi21 },
+    { latex: "r_{31}", label: { base: "r", subscript: "31" }, value: (result: GridModelResult) => result.fourier!.r31 },
+    { latex: "\\phi_{31}", label: { base: "phi", subscript: "31" }, value: (result: GridModelResult) => result.fourier!.phi31 }
   ];
+  canvas.dataset.fourierAxisLabels = panels.map((item) => item.latex).join(",");
+  canvas.dataset.fourierPathCount = String(path.length);
   const gap = 16;
   const pad = { left: 78, right: 18, top: 24, bottom: 58 };
   const panelWidth = (rect.width - gap * (columns - 1)) / columns;
@@ -3367,10 +3374,13 @@ function drawFourierPanel(): void {
     };
     const values = allPoints.map(item.value);
     const ylim = range(values, 0.08);
-    drawAxes(ctx, box, xlim, ylim, "period/τ", item.label, THEME.axisText, THEME.axisText, Math.max(8, box.left - 70));
+    const ylabelX = Math.max(8, box.left - 70);
+    drawAxes(ctx, box, xlim, ylim, "period/τ", "", THEME.axisText, THEME.axisText, ylabelX);
+    drawFourierAxisLabel(ctx, item.label, ylabelX, box.top + box.height / 2);
     collectFourierPointHits(box, xlim, ylim, allPoints, item.value);
-    drawFourierPoints(ctx, box, xlim, ylim, gridPoints, item.value, "rgba(190, 200, 216, 0.28)", 2.4);
-    drawFourierPoints(ctx, box, xlim, ylim, path, item.value, (result) => gridResultColor(result, 0.72), 3.4);
+    drawFourierPoints(ctx, box, xlim, ylim, gridPoints, item.value, "rgba(190, 200, 216, 0.24)", 2.1);
+    drawFourierPath(ctx, box, xlim, ylim, path, item.value, 1.9);
+    drawFourierPoints(ctx, box, xlim, ylim, path, item.value, (result) => gridResultColor(result, 0.78), 2.9);
     const highlighted = gridState.heldResult || gridState.hoverResult;
     if (highlighted?.fourier && highlighted !== currentFourier) drawFourierPoints(ctx, box, xlim, ylim, [highlighted], item.value, (result) => gridResultColor(result, 0.98), 5.4);
     if (currentFourier) drawFourierPoints(ctx, box, xlim, ylim, [currentFourier], item.value, (result) => gridResultColor(result, 0.98), 6.2);
@@ -3403,6 +3413,68 @@ function collectFourierPointHits(
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     fourierPointHits.push({ result, x, y, radius: 5 });
   });
+}
+
+function drawFourierAxisLabel(
+  ctx: CanvasRenderingContext2D,
+  label: FourierAxisLabel,
+  x: number,
+  y: number
+): void {
+  const base = label.base === "phi" ? "φ" : label.base;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = "left";
+  ctx.fillStyle = THEME.axisText;
+  ctx.font = "12px Inter, sans-serif";
+  const baseWidth = ctx.measureText(base).width;
+  ctx.font = "8px Inter, sans-serif";
+  const subscriptWidth = ctx.measureText(label.subscript).width;
+  const start = -(baseWidth + subscriptWidth + 1) / 2;
+  ctx.font = "12px Inter, sans-serif";
+  ctx.textBaseline = "middle";
+  ctx.fillText(base, start, 0);
+  ctx.font = "8px Inter, sans-serif";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(label.subscript, start + baseWidth + 1, 5);
+  ctx.restore();
+}
+
+function drawFourierPath(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  points: GridModelResult[],
+  value: (result: GridModelResult) => number,
+  width: number
+): void {
+  if (points.length < 2) return;
+  const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.width, plot.height);
+  ctx.clip();
+  ctx.lineWidth = width;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (let i = 1; i < points.length; i += 1) {
+    const previous = points[i - 1];
+    const current = points[i];
+    const x0 = sx(previous.period);
+    const y0 = sy(value(previous));
+    const x1 = sx(current.period);
+    const y1 = sy(value(current));
+    if (![x0, y0, x1, y1].every(Number.isFinite)) continue;
+    ctx.strokeStyle = gridResultColor(current, 0.62);
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawFourierPoints(

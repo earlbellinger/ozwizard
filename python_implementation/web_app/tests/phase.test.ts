@@ -33,6 +33,23 @@ function syntheticRows(): Row[] {
   });
 }
 
+function offsetSyntheticRows(): Row[] {
+  return Array.from({ length: 120 }, (_value, index) => {
+    const tau = index * 0.047;
+    const luminosity = 1 + Math.cos(2 * Math.PI * (tau - 0.123));
+    return {
+      tau,
+      R: 1,
+      V: Math.sin(2 * Math.PI * tau),
+      H: 1,
+      Uc: 1,
+      Lr: luminosity,
+      Lc: 0,
+      L: luminosity
+    };
+  });
+}
+
 function rowsWithSpuriousMinimum(): Row[] {
   return Array.from({ length: 601 }, (_value, index) => {
     const tau = index / 100;
@@ -75,7 +92,7 @@ describe("phase folding", () => {
     expect(reference.anchor).toBe("max");
     expect(reference.period).toBeCloseTo(1, 12);
     expect(reference.startTau).toBeCloseTo(1, 12);
-    expect(reference.maximumRows?.map((row) => row.tau)).toEqual([1, 2, 3]);
+    reference.maximumRows?.forEach((row, index) => expect(row.tau).toBeCloseTo(index + 1, 12));
     reference.anchorRows.forEach((row, index) => {
       expect((row.tau - reference.startTau) / reference.period).toBeCloseTo(index, 12);
     });
@@ -89,6 +106,14 @@ describe("phase folding", () => {
     expect(phase.reference?.minimumRows?.map((row) => row.tau)).toEqual([1.5, 2.5, 3.5]);
     expect(phase.rows[0].tau).toBeCloseTo(0, 12);
     expect(phase.rows.at(-1)!.tau).toBeCloseTo(2, 12);
+  });
+
+  it("refines luminosity extrema between stored samples", () => {
+    const phase = buildTwoCyclePhase(offsetSyntheticRows(), { warmupTau: 0, minAmplitude: 0.1, minSeparation: 0.5 });
+    expect(phase.reason).toBe("ok");
+    expect(phase.period).toBeCloseTo(1, 3);
+    expect(phase.reference?.startTau).toBeCloseTo(0.623, 3);
+    expect(phase.reference?.minimumRows?.map((row) => Number(row.tau.toFixed(3)))).toEqual([0.623, 1.623, 2.623]);
   });
 
   it("matches the Python instability-strip two-phase reference period", () => {
