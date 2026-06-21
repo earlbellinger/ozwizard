@@ -400,6 +400,17 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#modelSpeedValue").textContent()) === "2x", "One-Zone Shell speed readout should update");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-animation-speed")) === "2x", "One-Zone Shell canvas should receive the animation speed");
     await modelSpeed.evaluate((input) => {
+      input.value = "0.25";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    assertOk((await page.locator("#modelSpeedValue").textContent()) === "0.25x", "One-Zone Shell speed readout should fit its longest value");
+    const modelHeadingLines = await page.locator("[data-plot-panel='model'] h3").evaluate((heading) => {
+      const range = document.createRange();
+      range.selectNodeContents(heading);
+      return Array.from(range.getClientRects()).filter((rect) => rect.width > 0).length;
+    });
+    assertOk(modelHeadingLines === 1, `One-Zone Shell heading should stay on one line, saw ${modelHeadingLines}`);
+    await modelSpeed.evaluate((input) => {
       input.value = "1";
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });

@@ -485,6 +485,18 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#modelCanvas")).toHaveAttribute("data-animation-speed", "2x");
   await modelSpeed.evaluate((input) => {
     const slider = input as HTMLInputElement;
+    slider.value = "0.25";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#modelSpeedValue")).toHaveText("0.25x");
+  const modelHeadingLines = await page.locator("[data-plot-panel='model'] h3").evaluate((heading) => {
+    const range = document.createRange();
+    range.selectNodeContents(heading);
+    return Array.from(range.getClientRects()).filter((rect) => rect.width > 0).length;
+  });
+  expect(modelHeadingLines).toBe(1);
+  await modelSpeed.evaluate((input) => {
+    const slider = input as HTMLInputElement;
     slider.value = "1";
     slider.dispatchEvent(new Event("input", { bubbles: true }));
   });
