@@ -51,7 +51,6 @@ import {
 import {
   analyticStabilityConditions,
   cepheidStripCoordinate,
-  linearStability,
   type AnalyticStabilityKind,
   type AnalyticStabilityResult,
   type StabilityKind
@@ -442,9 +441,12 @@ let activeSliderTapStart: { key: ControlParameterKey; pointerId: number; x: numb
 let lastSliderTap: { key: ControlParameterKey; time: number; x: number; y: number } | null = null;
 const DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
 const STABILITY_MAP_RESOLUTION = 54;
+const INSTABILITY_STRIP_X_RESOLUTION = 72;
+const INSTABILITY_STRIP_Y_RESOLUTION = 44;
 const STRIP_LOG_RATIO_MIN = -2;
 const STRIP_LOG_RATIO_MAX = 2;
 const stabilityMapCache = new Map<string, StabilityKind[]>();
+const instabilityStripCache = new Map<string, { kinds: StabilityKind[]; counts: Record<StabilityKind, number>; signature: string }>();
 const PLOT_LAYOUT = {
   left: 84,
   top: 18,
@@ -484,6 +486,7 @@ function s72State(stable: boolean): "stable" | "unstable" {
 
 function s72Verdict(kind: AnalyticStabilityKind, stable: boolean): string {
   const stateText = stable ? "stable" : "unstable";
+  if (kind === "convective") return `convectively/turbulently ${stateText}`;
   if (kind === "dynamic") return `dynamically ${stateText}`;
   if (kind === "secular") return `secularly ${stateText}`;
   return `pulsationally ${stateText}`;
@@ -502,34 +505,49 @@ function s72TextInequality(satisfied: boolean, symbol: ">" | "<"): string {
   return symbol === ">" ? "\u226F" : "\u226E";
 }
 
-function s72DynamicMetric(stability: AnalyticStabilityResult): string {
-  const symbol = s72LatexInequality(stability.dynamic.stable, ">");
-  return `\\(${TEX.gamma1}=${fmt(stability.dynamic.value, 2)} ${symbol} 4/${TEX.m}=${fmt(stability.dynamic.threshold, 2)}\\)`;
+function s72ConvectiveMetric(stability: AnalyticStabilityResult): string {
+  const symbol = s72LatexInequality(stability.convective.stable, ">");
+  return `\\(\\ozNeutral{A}=${fmt(stability.convective.value, 2)} ${symbol} 0\\)`;
 }
 
 function s72SecularMetric(stability: AnalyticStabilityResult): string {
   const symbol = s72LatexInequality(stability.secular.stable, ">");
-  return `\\(4+${TEX.m}${TEX.n}+(${TEX.m}-4)(${TEX.s}+4)=${fmt(stability.secular.value, 2)} ${symbol} 0\\)`;
+  return `\\(\\ozNeutral{B}=${fmt(stability.secular.value, 2)} ${symbol} 0\\)`;
+}
+
+function s72DynamicMetric(stability: AnalyticStabilityResult): string {
+  const symbol = s72LatexInequality(stability.dynamic.stable, ">");
+  return `\\(\\ozNeutral{BC-AD}=${fmt(stability.dynamic.value, 2)} ${symbol} 0\\)`;
 }
 
 function s72PulsationalMetric(stability: AnalyticStabilityResult): string {
-  const symbol = s72LatexInequality(stability.pulsational.stable, "<");
-  return `\\(b=4+${TEX.m}[${TEX.n}-(${TEX.s}+4)(${TEX.gamma1}-1)]=${fmt(stability.b, 2)} ${symbol} 0\\)`;
+  const symbol = s72LatexInequality(stability.pulsational.stable, ">");
+  return `\\(\\ozNeutral{D(BC-AD)-B^2}=${fmt(stability.pulsational.value, 2)} ${symbol} 0\\)`;
+}
+
+function s72CoefficientSummary(stability: AnalyticStabilityResult): string {
+  const { A, B, C, D } = stability.coefficients;
+  return `A=${fmt(A, 3)}, B=${fmt(B, 3)}, C=${fmt(C, 3)}, D=${fmt(D, 3)}`;
+}
+
+function s72ConvectiveTitle(stability: AnalyticStabilityResult): string {
+  const symbol = s72TextInequality(stability.convective.stable, ">");
+  return `Convective/turbulent stability: ${s72CoefficientSummary(stability)}; A=${fmt(stability.convective.value, 3)} ${symbol} 0 -> ${s72Verdict("convective", stability.convective.stable)}`;
 }
 
 function s72DynamicTitle(stability: AnalyticStabilityResult): string {
   const symbol = s72TextInequality(stability.dynamic.stable, ">");
-  return `Dynamic stability: Gamma1=${fmt(stability.dynamic.value, 3)}, chi0=${fmt(stability.m, 3)}; ${fmt(stability.dynamic.value, 3)} ${symbol} 4/${fmt(stability.m, 3)} = ${fmt(stability.dynamic.threshold, 3)} -> ${s72Verdict("dynamic", stability.dynamic.stable)}`;
+  return `Dynamic stability: ${s72CoefficientSummary(stability)}; B*C - A*D = ${fmt(stability.dynamic.value, 3)} ${symbol} 0 -> ${s72Verdict("dynamic", stability.dynamic.stable)}`;
 }
 
-function s72SecularTitle(stability: AnalyticStabilityResult, parameters: ModelParameters): string {
+function s72SecularTitle(stability: AnalyticStabilityResult): string {
   const symbol = s72TextInequality(stability.secular.stable, ">");
-  return `Secular stability: chi0=${fmt(stability.m, 3)}, n=${fmt(parameters.n, 3)}, s=${fmt(parameters.s, 3)}; 4 + ${fmt(stability.m, 3)}*${fmt(parameters.n, 3)} + (${fmt(stability.m, 3)} - 4)*(${fmt(parameters.s, 3)} + 4) = ${fmt(stability.secular.value, 3)} ${symbol} 0 -> ${s72Verdict("secular", stability.secular.stable)}`;
+  return `Secular stability: ${s72CoefficientSummary(stability)}; B=${fmt(stability.secular.value, 3)} ${symbol} 0 -> ${s72Verdict("secular", stability.secular.stable)}`;
 }
 
-function s72PulsationalTitle(stability: AnalyticStabilityResult, parameters: ModelParameters): string {
-  const symbol = s72TextInequality(stability.pulsational.stable, "<");
-  return `Pulsational stability: chi0=${fmt(stability.m, 3)}, n=${fmt(parameters.n, 3)}, s=${fmt(parameters.s, 3)}, Gamma1=${fmt(parameters.gamma1, 3)}; b = 4 + ${fmt(stability.m, 3)}*(${fmt(parameters.n, 3)} - (${fmt(parameters.s, 3)} + 4)*(${fmt(parameters.gamma1, 3)} - 1)) = ${fmt(stability.b, 3)} ${symbol} 0 -> ${s72Verdict("pulsational", stability.pulsational.stable)}`;
+function s72PulsationalTitle(stability: AnalyticStabilityResult): string {
+  const symbol = s72TextInequality(stability.pulsational.stable, ">");
+  return `Pulsational stability: ${s72CoefficientSummary(stability)}; D*(B*C - A*D) - B^2 = ${fmt(stability.pulsational.value, 3)} ${symbol} 0 -> ${s72Verdict("pulsational", stability.pulsational.stable)}`;
 }
 
 function fmtFixed(value: number, digits: number): string {
@@ -3084,15 +3102,17 @@ function updateEquationBlocks(): void {
     \\begin{aligned}
     ${geometry}\\\\[0.35em]
     \\ozRadiative{L_r} &=
+      (1-\\ozGammac{\\gamma_c})\\,
       \\ozRadius{R}^{4+\\ozChi{\\chi}
       \\left[\\ozBlue{n}-(\\ozPink{s}+4)(\\ozGamma{\\Gamma_1}-1)\\right]}
       \\ozPressure{H}^{\\ozPink{s}+4}\\\\[0.35em]
     \\ozConvLum{L_c} &=
+      \\ozGammac{\\gamma_c}\\,
       \\ozRadius{R}^{-(\\ozChi{\\chi}-2)}
       \\ozConvective{U_c}^{3}\\\\[0.35em]
     \\ozLuminosity{L} &=
-      \\ozNeutral{\\gamma_r}\\ozRadiative{L_r}
-      + \\ozGammac{\\gamma_c}\\ozConvLum{L_c}
+      \\ozRadiative{L_r}
+      + \\ozConvLum{L_c}
     \\end{aligned}
     \\]
   `;
@@ -4153,7 +4173,7 @@ function stabilityKindsForMap(parameters: ModelParameters, extent: number): Stab
     const zeta = Math.max(1e-4, ((row + 0.5) / STABILITY_MAP_RESOLUTION) * extent);
     for (let column = 0; column < STABILITY_MAP_RESOLUTION; column += 1) {
       const zetac = Math.max(1e-4, ((column + 0.5) / STABILITY_MAP_RESOLUTION) * extent);
-      kinds.push(linearStability({ ...parameters, zeta, zetac }).kind);
+      kinds.push(analyticStabilityConditions({ ...parameters, zeta, zetac }).kind);
     }
   }
   if (stabilityMapCache.size > 24) stabilityMapCache.clear();
@@ -4161,15 +4181,92 @@ function stabilityKindsForMap(parameters: ModelParameters, extent: number): Stab
   return kinds;
 }
 
+function instabilityStripCacheKey(parameters: ModelParameters): string {
+  return [
+    INSTABILITY_STRIP_X_RESOLUTION,
+    INSTABILITY_STRIP_Y_RESOLUTION,
+    parameters.zeta.toFixed(4),
+    parameters.n.toFixed(3),
+    parameters.s.toFixed(3),
+    parameters.m.toFixed(3),
+    parameters.gamma1.toFixed(3),
+    parameters.sourceExp.toFixed(3),
+    parameters.cq.toFixed(3),
+    String(parameters.variableM)
+  ].join("|");
+}
+
+function emptyStabilityCounts(): Record<StabilityKind, number> {
+  return {
+    stable: 0,
+    convective: 0,
+    secular: 0,
+    pulsational: 0,
+    dynamic: 0,
+    neutral: 0
+  };
+}
+
+function instabilityKindsForStrip(parameters: ModelParameters): { kinds: StabilityKind[]; counts: Record<StabilityKind, number>; signature: string } {
+  const key = instabilityStripCacheKey(parameters);
+  const cached = instabilityStripCache.get(key);
+  if (cached) return cached;
+  const kinds: StabilityKind[] = [];
+  const counts = emptyStabilityCounts();
+  const zeta = Math.max(1e-6, parameters.zeta);
+  for (let row = 0; row < INSTABILITY_STRIP_Y_RESOLUTION; row += 1) {
+    const gammac = (row + 0.5) / INSTABILITY_STRIP_Y_RESOLUTION;
+    for (let column = 0; column < INSTABILITY_STRIP_X_RESOLUTION; column += 1) {
+      const x = (column + 0.5) / INSTABILITY_STRIP_X_RESOLUTION;
+      const logRatio = STRIP_LOG_RATIO_MIN + x * (STRIP_LOG_RATIO_MAX - STRIP_LOG_RATIO_MIN);
+      const zetac = zeta * 10 ** logRatio;
+      const kind = analyticStabilityConditions({ ...parameters, zeta, zetac, gammac }).kind;
+      counts[kind] += 1;
+      kinds.push(kind);
+    }
+  }
+  const signature = [
+    key,
+    counts.stable,
+    counts.convective,
+    counts.secular,
+    counts.dynamic,
+    counts.pulsational,
+    counts.neutral
+  ].join("|");
+  const result = { kinds, counts, signature };
+  if (instabilityStripCache.size > 24) instabilityStripCache.clear();
+  instabilityStripCache.set(key, result);
+  return result;
+}
+
 function stabilityKindColor(kind: StabilityKind, alpha = 1): string {
   const colors: Record<StabilityKind, [number, number, number]> = {
     stable: [69, 137, 118],
+    convective: [61, 147, 196],
+    secular: [155, 113, 217],
     pulsational: [184, 82, 94],
     dynamic: [216, 155, 65],
     neutral: [132, 146, 170]
   };
   const [r, g, b] = colors[kind];
   return alpha >= 1 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function stabilityKindAlpha(kind: StabilityKind): number {
+  if (kind === "stable") return 0.5;
+  if (kind === "neutral") return 0.22;
+  return 0.6;
+}
+
+function linearStabilityLegendItems(): Array<{ label: string; color: string }> {
+  return [
+    { label: "damping", color: stabilityKindColor("stable", 0.75) },
+    { label: "conv/turb", color: stabilityKindColor("convective", 0.82) },
+    { label: "secular", color: stabilityKindColor("secular", 0.82) },
+    { label: "dynamic", color: stabilityKindColor("dynamic", 0.82) },
+    { label: "pulsational", color: stabilityKindColor("pulsational", 0.82) }
+  ];
 }
 
 function drawReferenceMarker(
@@ -4229,19 +4326,28 @@ function drawReferenceLegend(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  items: Array<{ label: string; color: string }>
+  items: Array<{ label: string; color: string }>,
+  options: { maxX?: number; lineHeight?: number } = {}
 ): void {
   ctx.save();
   ctx.font = "11px Inter, sans-serif";
   ctx.textBaseline = "middle";
   let cursor = x;
+  let rowY = y;
+  const maxX = options.maxX ?? Infinity;
+  const lineHeight = options.lineHeight ?? 14;
   items.forEach((item) => {
+    const itemWidth = 10 + 14 + ctx.measureText(item.label).width + 18;
+    if (cursor > x && cursor + itemWidth > maxX) {
+      cursor = x;
+      rowY += lineHeight;
+    }
     ctx.fillStyle = item.color;
-    ctx.fillRect(cursor, y - 5, 10, 10);
+    ctx.fillRect(cursor, rowY - 5, 10, 10);
     ctx.fillStyle = THEME.axisText;
     ctx.textAlign = "left";
-    ctx.fillText(item.label, cursor + 14, y);
-    cursor += 18 + ctx.measureText(item.label).width + 18;
+    ctx.fillText(item.label, cursor + 14, rowY);
+    cursor += itemWidth;
   });
   ctx.restore();
 }
@@ -4272,7 +4378,7 @@ function drawStabilityMap(): void {
   canvas.dataset.stabilityMode = gridState.enabled ? "grid" : "single";
   canvas.dataset.stabilityGamma = fmtFixed(parameters.gammac, 3);
   canvas.dataset.stabilityExtent = fmtFixed(extent, 1);
-  canvas.dataset.stabilityLegend = "linear damping,pulsational growth,dynamic growth";
+  canvas.dataset.stabilityLegend = "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability";
   canvas.dataset.editableParameters = "zetac,zeta";
   canvas.dataset.stellingwerfLabels = "zeta,zeta_c,gamma_c";
   canvas.dataset.axisLabels = "convective response zeta_c,thermal response zeta";
@@ -4280,7 +4386,7 @@ function drawStabilityMap(): void {
   kinds.forEach((kind, index) => {
     const row = Math.floor(index / STABILITY_MAP_RESOLUTION);
     const column = index % STABILITY_MAP_RESOLUTION;
-    ctx.fillStyle = stabilityKindColor(kind, kind === "stable" ? 0.5 : kind === "neutral" ? 0.22 : 0.58);
+    ctx.fillStyle = stabilityKindColor(kind, stabilityKindAlpha(kind));
     ctx.fillRect(plot.left + column * cellWidth, plot.top + plot.height - (row + 1) * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
   });
 
@@ -4305,11 +4411,7 @@ function drawStabilityMap(): void {
     { rotate: -Math.PI / 2, fontSize: 11 }
   );
   drawStabilityLinearizedLabel(ctx, plot.left, 16, parameters.gammac);
-  drawReferenceLegend(ctx, plot.left + 150, 15, [
-    { label: "linear damping", color: stabilityKindColor("stable", 0.75) },
-    { label: "pulsational growth", color: stabilityKindColor("pulsational", 0.78) },
-    { label: "dynamic growth", color: stabilityKindColor("dynamic", 0.82) }
-  ]);
+  drawReferenceLegend(ctx, plot.left + 150, 15, linearStabilityLegendItems(), { maxX: plot.left + plot.width - 4 });
   drawStabilityOverlays(ctx, plot, extent, parameters, overlays);
 }
 
@@ -4449,38 +4551,38 @@ function drawCepheidGuide(): void {
   canvas.dataset.editableParameters = "zetac,gammac";
   canvas.dataset.stellingwerfLabels = "gamma_c,log10_zeta_c_over_zeta,Teff_proxy";
   canvas.dataset.axisLabels = "log10(zeta_c/zeta) convective/thermal response,convective flux fraction gamma_c";
-  canvas.dataset.instabilityLabels = "schematic,damped equilibrium,dynamic instability";
+  canvas.dataset.instabilityLabels = "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability";
+  canvas.dataset.instabilityLegend = "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability";
 
-  ctx.fillStyle = "rgba(25, 43, 77, 0.5)";
-  ctx.fillRect(plot.left, plot.top, plot.width, plot.height);
-  ctx.fillStyle = "rgba(69, 137, 118, 0.38)";
-  ctx.beginPath();
-  ctx.moveTo(sx(0), sy(0.38));
-  for (let i = 0; i <= 80; i += 1) {
-    const x = i / 80;
-    const lower = 0.38 + 0.05 * Math.sin(Math.PI * x) - 0.04 * x;
-    ctx.lineTo(sx(x), sy(lower));
-  }
-  ctx.lineTo(sx(1), sy(1));
-  ctx.lineTo(sx(0), sy(1));
-  ctx.closePath();
-  ctx.fill();
+  const current = currentGridResult();
+  const parameters = current?.parameters || state;
+  const stripStability = instabilityKindsForStrip(parameters);
+  canvas.dataset.instabilitySignature = stripStability.signature;
+  canvas.dataset.instabilityCounts = [
+    `stable:${stripStability.counts.stable}`,
+    `convective:${stripStability.counts.convective}`,
+    `secular:${stripStability.counts.secular}`,
+    `dynamic:${stripStability.counts.dynamic}`,
+    `pulsational:${stripStability.counts.pulsational}`,
+    `neutral:${stripStability.counts.neutral}`
+  ].join(",");
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(plot.left, plot.top, plot.width * 0.37, plot.height * 0.2);
-  ctx.clip();
-  ctx.strokeStyle = "rgba(255, 209, 102, 0.7)";
-  ctx.lineWidth = 1;
-  for (let x = plot.left - plot.height; x < plot.left + plot.width; x += 8) {
-    ctx.beginPath();
-    ctx.moveTo(x, plot.top);
-    ctx.lineTo(x + plot.height, plot.top + plot.height);
-    ctx.stroke();
-  }
-  ctx.restore();
+  const stripCellWidth = plot.width / INSTABILITY_STRIP_X_RESOLUTION;
+  const stripCellHeight = plot.height / INSTABILITY_STRIP_Y_RESOLUTION;
+  stripStability.kinds.forEach((kind, index) => {
+    const row = Math.floor(index / INSTABILITY_STRIP_X_RESOLUTION);
+    const column = index % INSTABILITY_STRIP_X_RESOLUTION;
+    ctx.fillStyle = stabilityKindColor(kind, stabilityKindAlpha(kind));
+    ctx.fillRect(
+      plot.left + column * stripCellWidth,
+      plot.top + plot.height - (row + 1) * stripCellHeight,
+      stripCellWidth + 0.5,
+      stripCellHeight + 0.5
+    );
+  });
 
   drawAxes(ctx, plot, [STRIP_LOG_RATIO_MIN, STRIP_LOG_RATIO_MAX], [0, 1], "", "", THEME.axisText, THEME.axisText, 22);
+  drawReferenceLegend(ctx, plot.left + 8, 15, linearStabilityLegendItems(), { maxX: plot.left + plot.width - 4 });
   drawCanvasMathFragments(
     ctx,
     [
@@ -4517,8 +4619,6 @@ function drawCepheidGuide(): void {
   ctx.fillStyle = THEME.axisText;
   ctx.font = "700 13px Inter, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("DAMPED EQUIL.", sx(0.48), sy(0.67));
-  ctx.fillText("DYNAMIC INST.", sx(0.17), sy(0.91));
   ctx.font = "12px Inter, sans-serif";
   ctx.fillText("red edge", sx(0.67), sy(0.22));
   ctx.beginPath();
@@ -4574,8 +4674,6 @@ function drawCepheidGuide(): void {
       });
     });
   }
-  const current = currentGridResult();
-  const parameters = current?.parameters || state;
   const currentRows = current?.phaseRows ?? latestPhaseRows;
   const currentMode: DisplayWindowMode = current ? "phase" : latestDisplayWindow.mode;
   const hasTeffTrack = drawStripTeffTrack(ctx, plot, sx, sy, parameters, currentRows, {
@@ -4774,7 +4872,7 @@ function drawPhasePortraitPanel(): void {
     canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
     delete canvas.dataset.currentPhase;
   } else {
-    canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
+    canvas.dataset.currentPhase = fmtFixed(phaseModOne(currentAnimationPhase), 3);
     delete canvas.dataset.currentTime;
   }
 
@@ -4991,7 +5089,11 @@ function currentDisplayCoordinateLabel(): string {
   if (latestDisplayWindow.mode === "time") {
     return `time τ = ${fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 2)}`;
   }
-  return `phase = ${fmtFixed(currentAnimationPhase, 2)}`;
+  return `phase = ${fmtFixed(phaseModOne(currentAnimationPhase), 2)}`;
+}
+
+function phaseModOne(phase: number): number {
+  return ((phase % 1) + 1) % 1;
 }
 
 function updatePhaseAnchorControlAvailability(): void {
@@ -5055,18 +5157,6 @@ function scaledRgb(color: RgbColor, scale: number): RgbColor {
     g: clamp(Math.round(color.g * scale), 0, 255),
     b: clamp(Math.round(color.b * scale), 0, 255)
   };
-}
-
-function gammaR(): number {
-  return 1 - state.gammac;
-}
-
-function weightedRadiativeLuminosity(row: Row): number {
-  return gammaR() * row.Lr;
-}
-
-function weightedConvectiveLuminosity(row: Row): number {
-  return state.gammac * row.Lc;
 }
 
 function phaseMarker(): { x: number; color: string } | undefined {
@@ -5452,12 +5542,11 @@ function drawConvectionArcs(
   const arcs: Array<{
     value: number;
     color: string;
-    gammaSubscript?: LuminosityLabelSubscript;
     luminositySubscript?: LuminosityLabelSubscript;
   }> = [
-    { value: weightedConvectiveLuminosity(row), color: COLORS.Lc, gammaSubscript: "c" as const, luminositySubscript: "c" as const },
+    { value: row.Lc, color: COLORS.Lc, luminositySubscript: "c" as const },
     { value: row.L, color: COLORS.L },
-    { value: weightedRadiativeLuminosity(row), color: COLORS.Lr, gammaSubscript: "r" as const, luminositySubscript: "r" as const }
+    { value: row.Lr, color: COLORS.Lr, luminositySubscript: "r" as const }
   ];
   const arcWidths = arcs.map((arc) => clamp(equilibriumThickness * Math.max(0, arc.value), 2, equilibriumThickness * 3));
   const fixedLabelOffset = Math.max(18, equilibriumThickness * 0.75 + 10);
@@ -5485,7 +5574,7 @@ function drawConvectionArcs(
       centerX + Math.cos(angle) * labelRadius,
       centerY + Math.sin(angle) * labelRadius,
       arc.color,
-      arc.gammaSubscript,
+      undefined,
       arc.luminositySubscript
     );
   });
@@ -5543,7 +5632,7 @@ function drawModelVisualization(): void {
     canvas.dataset.currentPhase = fmtFixed(row.tau, 3);
     delete canvas.dataset.currentTime;
   }
-  canvas.dataset.luminosityArcLabels = convectionActive ? "gamma_c L_c,L,gamma_r L_r" : "";
+  canvas.dataset.luminosityArcLabels = convectionActive ? "L_c,L,L_r" : "";
   canvas.dataset.geometryGuides = "R=1,eta,minR,maxR";
 
   ctx.save();
@@ -5631,6 +5720,7 @@ function drawAll(): void {
   updateGridLoopSliderMarkers();
   updateSonificationSourceControls();
   const metricsNode = el<HTMLDivElement>("metrics");
+  metricsNode.dataset.s72Convective = s72State(s72Stability.convective.stable);
   metricsNode.dataset.s72Dynamic = s72State(s72Stability.dynamic.stable);
   metricsNode.dataset.s72Secular = s72State(s72Stability.secular.stable);
   metricsNode.dataset.s72Pulsational = s72State(s72Stability.pulsational.stable);
@@ -5647,6 +5737,20 @@ function drawAll(): void {
     { label: "period", value: displayWindow.period ? fmt(displayWindow.period, 3) : "n/a" },
     { label: "phase", value: displayWindow.mode === "time" ? "time window" : phase.reason === "ok" ? "available" : "unavailable" },
     {
+      label: "conv",
+      value: s72ConvectiveMetric(s72Stability),
+      detail: s72ConvectiveTitle(s72Stability),
+      className: s72MetricClass(s72Stability.convective.stable),
+      stabilityKind: "convective"
+    },
+    {
+      label: "sec",
+      value: s72SecularMetric(s72Stability),
+      detail: s72SecularTitle(s72Stability),
+      className: s72MetricClass(s72Stability.secular.stable),
+      stabilityKind: "secular"
+    },
+    {
       label: "dyn",
       value: s72DynamicMetric(s72Stability),
       detail: s72DynamicTitle(s72Stability),
@@ -5654,16 +5758,9 @@ function drawAll(): void {
       stabilityKind: "dynamic"
     },
     {
-      label: "sec",
-      value: s72SecularMetric(s72Stability),
-      detail: s72SecularTitle(s72Stability, stabilityParameters),
-      className: s72MetricClass(s72Stability.secular.stable),
-      stabilityKind: "secular"
-    },
-    {
       label: "puls",
       value: s72PulsationalMetric(s72Stability),
-      detail: s72PulsationalTitle(s72Stability, stabilityParameters),
+      detail: s72PulsationalTitle(s72Stability),
       className: s72MetricClass(s72Stability.pulsational.stable),
       stabilityKind: "pulsational"
     }
@@ -5733,8 +5830,8 @@ function drawAll(): void {
   ];
   if (!convectionOff) {
     lumSeries.push(
-      { label: "gamma_r Lr", color: COLORS.Lr, rows: visibleRows("lum", "Lr", sampledLumRows), x: (row) => row.tau, y: (row) => weightedRadiativeLuminosity(row) },
-      { label: "gamma_c Lc", color: COLORS.Lc, rows: visibleRows("lum", "Lc", sampledLumRows), x: (row) => row.tau, y: (row) => weightedConvectiveLuminosity(row) }
+      { label: "Lr", color: COLORS.Lr, rows: visibleRows("lum", "Lr", sampledLumRows), x: (row) => row.tau, y: (row) => row.Lr },
+      { label: "Lc", color: COLORS.Lc, rows: visibleRows("lum", "Lc", sampledLumRows), x: (row) => row.tau, y: (row) => row.Lc }
     );
   }
   drawSeries("lumCanvas", lumSeries, {
@@ -5751,8 +5848,8 @@ function drawAll(): void {
     ? [{ label: `\\(${TEX.L}\\) total`, color: COLORS.L }]
     : [
         { key: "L", label: `\\(${TEX.L}\\) total`, color: COLORS.L, toggleLabel: "total luminosity" },
-        { key: "Lr", label: `\\(\\ozNeutral{\\gamma_r}\\,${TEX.Lr}\\) radiative`, color: COLORS.Lr, toggleLabel: "radiative luminosity" },
-        { key: "Lc", label: `\\(${TEX.gammac}\\,${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
+        { key: "Lr", label: `\\(${TEX.Lr}\\) radiative`, color: COLORS.Lr, toggleLabel: "radiative luminosity" },
+        { key: "Lc", label: `\\(${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
       ];
   drawLegend("lumLegend", lumLegendItems, convectionOff ? {} : { plotId: "lum" });
   drawFourierPanel();

@@ -1,7 +1,7 @@
 import { derivedPowers, derivatives, mAt, type ModelParameters } from "./model";
 
-export type StabilityKind = "stable" | "pulsational" | "dynamic" | "neutral";
-export type AnalyticStabilityKind = "dynamic" | "secular" | "pulsational";
+export type StabilityKind = "stable" | "convective" | "secular" | "dynamic" | "pulsational" | "neutral";
+export type AnalyticStabilityKind = "convective" | "secular" | "dynamic" | "pulsational";
 
 export interface ComplexRoot {
   re: number;
@@ -27,9 +27,20 @@ export interface AnalyticStabilityCondition {
 export interface AnalyticStabilityResult {
   m: number;
   b: number;
+  coefficients: {
+    A: number;
+    B: number;
+    C: number;
+    D: number;
+    P: number;
+    Q: number;
+    R: number;
+  };
+  convective: AnalyticStabilityCondition;
   dynamic: AnalyticStabilityCondition;
   secular: AnalyticStabilityCondition;
   pulsational: AnalyticStabilityCondition;
+  kind: StabilityKind;
   allStable: boolean;
 }
 
@@ -39,41 +50,76 @@ export function analyticStabilityConditions(parameters: ModelParameters): Analyt
   const radius = 1;
   const m = mAt(radius, parameters);
   const powers = derivedPowers(radius, parameters);
-  const dynamicValue = parameters.gamma1;
-  const dynamicThreshold = 4 / m;
-  const secularValue = 4 + m * parameters.n + (m - 4) * (parameters.s + 4);
-  const pulsationalValue = powers.b;
-  const dynamic: AnalyticStabilityCondition = {
-    kind: "dynamic",
-    stable: dynamicValue > dynamicThreshold,
-    value: dynamicValue,
-    threshold: dynamicThreshold,
-    margin: dynamicValue - dynamicThreshold,
-    expression: "Gamma1 > 4 / chi0"
+  const radiativeWeight = 1 - parameters.gammac;
+  const pCoefficient = radiativeWeight * powers.b - parameters.gammac * powers.c - parameters.sourceExp;
+  const qCoefficient = radiativeWeight * (parameters.s + 4);
+  const rCoefficient = powers.q - 2;
+  const A = parameters.zeta * parameters.zetac * (
+    pCoefficient
+    + rCoefficient * qCoefficient
+    + 3 * parameters.gammac * (rCoefficient / 2 - powers.d)
+  );
+  const B = parameters.zetac * rCoefficient + parameters.zeta * (pCoefficient + rCoefficient * qCoefficient);
+  const C = parameters.zeta * parameters.zetac * (qCoefficient + 1.5 * parameters.gammac) + rCoefficient;
+  const D = parameters.zetac + parameters.zeta * qCoefficient;
+  const dynamicValue = B * C - A * D;
+  const pulsationalValue = D * dynamicValue - B ** 2;
+  const convective: AnalyticStabilityCondition = {
+    kind: "convective",
+    stable: A > 0,
+    value: A,
+    threshold: 0,
+    margin: A,
+    expression: "A > 0"
   };
   const secular: AnalyticStabilityCondition = {
     kind: "secular",
-    stable: secularValue > 0,
-    value: secularValue,
+    stable: B > 0,
+    value: B,
     threshold: 0,
-    margin: secularValue,
-    expression: "4 + chi0 n + (chi0 - 4)(s + 4) > 0"
+    margin: B,
+    expression: "B > 0"
+  };
+  const dynamic: AnalyticStabilityCondition = {
+    kind: "dynamic",
+    stable: dynamicValue > 0,
+    value: dynamicValue,
+    threshold: 0,
+    margin: dynamicValue,
+    expression: "B C - A D > 0"
   };
   const pulsational: AnalyticStabilityCondition = {
     kind: "pulsational",
-    stable: pulsationalValue < 0,
+    stable: pulsationalValue > 0,
     value: pulsationalValue,
     threshold: 0,
-    margin: -pulsationalValue,
-    expression: "b = 4 + chi0[n - (s + 4)(Gamma1 - 1)] < 0"
+    margin: pulsationalValue,
+    expression: "D(B C - A D) - B^2 > 0"
   };
+  const orderedConditions = [convective, secular, dynamic, pulsational] as const;
+  const neutralTolerance = 1e-10;
+  const firstUnstable = orderedConditions.find((condition) => !condition.stable);
+  const kind: StabilityKind = orderedConditions.some((condition) => Math.abs(condition.value) <= neutralTolerance)
+    ? "neutral"
+    : firstUnstable?.kind ?? "stable";
   return {
     m,
     b: powers.b,
+    coefficients: {
+      A,
+      B,
+      C,
+      D,
+      P: pCoefficient,
+      Q: qCoefficient,
+      R: rCoefficient
+    },
+    convective,
     dynamic,
     secular,
     pulsational,
-    allStable: dynamic.stable && secular.stable && pulsational.stable
+    kind,
+    allStable: orderedConditions.every((condition) => condition.stable)
   };
 }
 

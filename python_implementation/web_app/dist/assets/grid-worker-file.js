@@ -388,7 +388,6 @@
     cq: "\\ozDamping{C_q}"
   };
   var TEX_EXTRA = {
-    gammaR: "\\ozNeutral{\\gamma_r}",
     eta: "\\ozEta{\\eta}",
     kappa: "\\ozNeutral{\\kappa}",
     rho: "\\ozNeutral{\\rho}",
@@ -426,7 +425,7 @@
   var PARAMETER_DESCRIPTIONS = {
     zeta: `Ratio of the model dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\).`,
     zetac: `Ratio of the model dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\).`,
-    gammac: `Equilibrium convective luminosity fraction \\(${TEX.gammac}=${TEX.Lc}_{0}/${TEX.L}_{0}\\). The complementary radiative fraction is \\(${TEX_EXTRA.gammaR}=1-${TEX.gammac}\\).`,
+    gammac: `Equilibrium convective luminosity fraction used to weight \\(${TEX.Lc}\\); \\(${TEX.Lr}\\) carries the complementary radiative weight \\(1-${TEX.gammac}\\).`,
     m: `Thin shell form factor that sets \\(${TEX_EXTRA.eta}\\), the shell's inner boundary radius as a fraction of the reference outer radius. Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\).`,
     gamma1: `First adiabatic exponent used in the \\(${TEX.H}\\) response.`,
     n: `Density exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
@@ -526,10 +525,11 @@
   function sample(tau, y, p) {
     const [radius, velocity, pressure, convectiveVelocity] = y;
     const powers = derivedPowers(radius, p);
-    const lr = radius ** powers.b * pressure ** (p.s + 4);
-    const lc = radius ** -powers.c * convectiveVelocity ** 3;
-    const gammar = 1 - p.gammac;
-    return { tau, R: radius, V: velocity, H: pressure, Uc: convectiveVelocity, Lr: lr, Lc: lc, L: gammar * lr + p.gammac * lc };
+    const rawLr = radius ** powers.b * pressure ** (p.s + 4);
+    const rawLc = radius ** -powers.c * convectiveVelocity ** 3;
+    const lr = (1 - p.gammac) * rawLr;
+    const lc = p.gammac * rawLc;
+    return { tau, R: radius, V: velocity, H: pressure, Uc: convectiveVelocity, Lr: lr, Lc: lc, L: lr + lc };
   }
   function derivatives(_t, y, p) {
     const [radius, velocity, pressure, convectiveVelocity] = y;
@@ -539,12 +539,12 @@
     const powers = derivedPowers(radius, p);
     const lr = radius ** powers.b * pressure ** (p.s + 4);
     const lc = radius ** -powers.c * convectiveVelocity ** 3;
-    const gammar = 1 - p.gammac;
+    const radiativeWeight = 1 - p.gammac;
     const driver = p.driver === "h" ? Math.sqrt(pressure) : Math.sqrt(Math.abs(velocity));
     return [
       velocity,
       pressure / radius ** powers.q - 1 / radius ** 2 - p.cq * velocity ** 3,
-      p.zeta * radius ** (powers.m * (p.gamma1 - 1)) * (radius ** p.sourceExp - gammar * lr - p.gammac * lc),
+      p.zeta * radius ** (powers.m * (p.gamma1 - 1)) * (radius ** p.sourceExp - radiativeWeight * lr - p.gammac * lc),
       p.zetac * (radius ** -powers.d * driver - convectiveVelocity)
     ];
   }

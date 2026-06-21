@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CONTROL_GROUPS, DEFAULT_PRESET_NAME, PRESETS, compareRows, derivatives, solveModel, solverOptionsFromParameters, type Row } from "../src/model";
+import { CONTROL_GROUPS, DEFAULT_PRESET_NAME, PRESETS, compareRows, derivatives, sample, solveModel, solverOptionsFromParameters, type Row } from "../src/model";
 import { buildTwoCyclePhase, findLuminosityMaxima } from "../src/phase";
 import { integrate } from "../src/solvers";
 
@@ -56,6 +56,13 @@ describe("one-zone model", () => {
     expect(zetacControl?.[6]).toBe(1);
     expect(PRESETS[DEFAULT_PRESET_NAME].gammac).toBe(0.5);
     expect(gammacControl?.[6]).toBe(0.5);
+  });
+
+  it("stores weighted radiative and convective luminosity contributions", () => {
+    const p = PRESETS[STRIP_PRESET];
+    const row = sample(0, [p.r0, p.v0, p.h0, p.uc0], p);
+    expect(row.L).toBeCloseTo(row.Lr + row.Lc, 12);
+    expect(row.Lc).toBeCloseTo(p.gammac * p.r0 ** (-(p.m - 2)) * p.uc0 ** 3, 12);
   });
 
   it("matches the Python derivative fixture for the instability-strip initial state", () => {

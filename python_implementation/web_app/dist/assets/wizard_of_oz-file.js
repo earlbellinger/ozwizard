@@ -302,7 +302,6 @@
     cq: "\\ozDamping{C_q}"
   };
   var TEX_EXTRA = {
-    gammaR: "\\ozNeutral{\\gamma_r}",
     eta: "\\ozEta{\\eta}",
     kappa: "\\ozNeutral{\\kappa}",
     rho: "\\ozNeutral{\\rho}",
@@ -340,7 +339,7 @@
   var PARAMETER_DESCRIPTIONS = {
     zeta: `Ratio of the model dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\).`,
     zetac: `Ratio of the model dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\).`,
-    gammac: `Equilibrium convective luminosity fraction \\(${TEX.gammac}=${TEX.Lc}_{0}/${TEX.L}_{0}\\). The complementary radiative fraction is \\(${TEX_EXTRA.gammaR}=1-${TEX.gammac}\\).`,
+    gammac: `Equilibrium convective luminosity fraction used to weight \\(${TEX.Lc}\\); \\(${TEX.Lr}\\) carries the complementary radiative weight \\(1-${TEX.gammac}\\).`,
     m: `Thin shell form factor that sets \\(${TEX_EXTRA.eta}\\), the shell's inner boundary radius as a fraction of the reference outer radius. Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\).`,
     gamma1: `First adiabatic exponent used in the \\(${TEX.H}\\) response.`,
     n: `Density exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
@@ -441,10 +440,11 @@
   function sample(tau, y, p) {
     const [radius, velocity, pressure, convectiveVelocity] = y;
     const powers = derivedPowers(radius, p);
-    const lr = radius ** powers.b * pressure ** (p.s + 4);
-    const lc = radius ** -powers.c * convectiveVelocity ** 3;
-    const gammar = 1 - p.gammac;
-    return { tau, R: radius, V: velocity, H: pressure, Uc: convectiveVelocity, Lr: lr, Lc: lc, L: gammar * lr + p.gammac * lc };
+    const rawLr = radius ** powers.b * pressure ** (p.s + 4);
+    const rawLc = radius ** -powers.c * convectiveVelocity ** 3;
+    const lr = (1 - p.gammac) * rawLr;
+    const lc = p.gammac * rawLc;
+    return { tau, R: radius, V: velocity, H: pressure, Uc: convectiveVelocity, Lr: lr, Lc: lc, L: lr + lc };
   }
   function derivatives(_t, y, p) {
     const [radius, velocity, pressure, convectiveVelocity] = y;
@@ -454,12 +454,12 @@
     const powers = derivedPowers(radius, p);
     const lr = radius ** powers.b * pressure ** (p.s + 4);
     const lc = radius ** -powers.c * convectiveVelocity ** 3;
-    const gammar = 1 - p.gammac;
+    const radiativeWeight = 1 - p.gammac;
     const driver = p.driver === "h" ? Math.sqrt(pressure) : Math.sqrt(Math.abs(velocity));
     return [
       velocity,
       pressure / radius ** powers.q - 1 / radius ** 2 - p.cq * velocity ** 3,
-      p.zeta * radius ** (powers.m * (p.gamma1 - 1)) * (radius ** p.sourceExp - gammar * lr - p.gammac * lc),
+      p.zeta * radius ** (powers.m * (p.gamma1 - 1)) * (radius ** p.sourceExp - radiativeWeight * lr - p.gammac * lc),
       p.zetac * (radius ** -powers.d * driver - convectiveVelocity)
     ];
   }
@@ -1474,166 +1474,75 @@
   }
 
   // src/stability.ts
-  var EQUILIBRIUM_STATE = [1, 0, 1, 1];
   function analyticStabilityConditions(parameters) {
     const radius = 1;
     const m = mAt(radius, parameters);
     const powers = derivedPowers(radius, parameters);
-    const dynamicValue = parameters.gamma1;
-    const dynamicThreshold = 4 / m;
-    const secularValue = 4 + m * parameters.n + (m - 4) * (parameters.s + 4);
-    const pulsationalValue = powers.b;
-    const dynamic = {
-      kind: "dynamic",
-      stable: dynamicValue > dynamicThreshold,
-      value: dynamicValue,
-      threshold: dynamicThreshold,
-      margin: dynamicValue - dynamicThreshold,
-      expression: "Gamma1 > 4 / chi0"
+    const radiativeWeight = 1 - parameters.gammac;
+    const pCoefficient = radiativeWeight * powers.b - parameters.gammac * powers.c - parameters.sourceExp;
+    const qCoefficient = radiativeWeight * (parameters.s + 4);
+    const rCoefficient = powers.q - 2;
+    const A = parameters.zeta * parameters.zetac * (pCoefficient + rCoefficient * qCoefficient + 3 * parameters.gammac * (rCoefficient / 2 - powers.d));
+    const B = parameters.zetac * rCoefficient + parameters.zeta * (pCoefficient + rCoefficient * qCoefficient);
+    const C = parameters.zeta * parameters.zetac * (qCoefficient + 1.5 * parameters.gammac) + rCoefficient;
+    const D = parameters.zetac + parameters.zeta * qCoefficient;
+    const dynamicValue = B * C - A * D;
+    const pulsationalValue = D * dynamicValue - B ** 2;
+    const convective = {
+      kind: "convective",
+      stable: A > 0,
+      value: A,
+      threshold: 0,
+      margin: A,
+      expression: "A > 0"
     };
     const secular = {
       kind: "secular",
-      stable: secularValue > 0,
-      value: secularValue,
+      stable: B > 0,
+      value: B,
       threshold: 0,
-      margin: secularValue,
-      expression: "4 + chi0 n + (chi0 - 4)(s + 4) > 0"
+      margin: B,
+      expression: "B > 0"
+    };
+    const dynamic = {
+      kind: "dynamic",
+      stable: dynamicValue > 0,
+      value: dynamicValue,
+      threshold: 0,
+      margin: dynamicValue,
+      expression: "B C - A D > 0"
     };
     const pulsational = {
       kind: "pulsational",
-      stable: pulsationalValue < 0,
+      stable: pulsationalValue > 0,
       value: pulsationalValue,
       threshold: 0,
-      margin: -pulsationalValue,
-      expression: "b = 4 + chi0[n - (s + 4)(Gamma1 - 1)] < 0"
+      margin: pulsationalValue,
+      expression: "D(B C - A D) - B^2 > 0"
     };
+    const orderedConditions = [convective, secular, dynamic, pulsational];
+    const neutralTolerance = 1e-10;
+    const firstUnstable = orderedConditions.find((condition) => !condition.stable);
+    const kind = orderedConditions.some((condition) => Math.abs(condition.value) <= neutralTolerance) ? "neutral" : firstUnstable?.kind ?? "stable";
     return {
       m,
       b: powers.b,
+      coefficients: {
+        A,
+        B,
+        C,
+        D,
+        P: pCoefficient,
+        Q: qCoefficient,
+        R: rCoefficient
+      },
+      convective,
       dynamic,
       secular,
       pulsational,
-      allStable: dynamic.stable && secular.stable && pulsational.stable
+      kind,
+      allStable: orderedConditions.every((condition) => condition.stable)
     };
-  }
-  function cAdd(a, b) {
-    return { re: a.re + b.re, im: a.im + b.im };
-  }
-  function cSub(a, b) {
-    return { re: a.re - b.re, im: a.im - b.im };
-  }
-  function cMul(a, b) {
-    return { re: a.re * b.re - a.im * b.im, im: a.re * b.im + a.im * b.re };
-  }
-  function cDiv(a, b) {
-    const denominator = b.re * b.re + b.im * b.im;
-    if (denominator < 1e-30) return { re: 0, im: 0 };
-    return {
-      re: (a.re * b.re + a.im * b.im) / denominator,
-      im: (a.im * b.re - a.re * b.im) / denominator
-    };
-  }
-  function cAbs(a) {
-    return Math.hypot(a.re, a.im);
-  }
-  function evaluatePolynomial(coefficients, value) {
-    let result = { re: 1, im: 0 };
-    for (const coefficient of coefficients) {
-      result = cAdd(cMul(result, value), { re: coefficient, im: 0 });
-    }
-    return result;
-  }
-  function polynomialRoots(coefficients) {
-    const degree = coefficients.length;
-    if (degree <= 0) return [];
-    const finiteCoefficients = coefficients.map((value) => Number.isFinite(value) ? value : 0);
-    const radius = Math.max(1, 1 + Math.max(...finiteCoefficients.map(Math.abs)));
-    let roots = Array.from({ length: degree }, (_value, index) => {
-      const angle = 2 * Math.PI * (index + 0.35) / degree;
-      return { re: radius * Math.cos(angle), im: radius * Math.sin(angle) };
-    });
-    for (let iteration = 0; iteration < 80; iteration += 1) {
-      let maxDelta = 0;
-      roots = roots.map((root, index) => {
-        let denominator = { re: 1, im: 0 };
-        roots.forEach((other, otherIndex) => {
-          if (otherIndex !== index) denominator = cMul(denominator, cSub(root, other));
-        });
-        const delta = cDiv(evaluatePolynomial(finiteCoefficients, root), denominator);
-        maxDelta = Math.max(maxDelta, cAbs(delta));
-        return cSub(root, delta);
-      });
-      if (maxDelta < 1e-10) break;
-    }
-    return roots.map((root) => ({
-      re: Math.abs(root.re) < 1e-10 ? 0 : root.re,
-      im: Math.abs(root.im) < 1e-10 ? 0 : root.im
-    }));
-  }
-  function identity(size) {
-    return Array.from(
-      { length: size },
-      (_row, row) => Array.from({ length: size }, (_column, column) => row === column ? 1 : 0)
-    );
-  }
-  function multiply(a, b) {
-    const size = a.length;
-    return Array.from(
-      { length: size },
-      (_row, row) => Array.from({ length: size }, (_column, column) => {
-        let sum = 0;
-        for (let i = 0; i < size; i += 1) sum += a[row][i] * b[i][column];
-        return sum;
-      })
-    );
-  }
-  function trace(matrix) {
-    return matrix.reduce((sum, row, index) => sum + row[index], 0);
-  }
-  function characteristicCoefficients(matrix) {
-    const size = matrix.length;
-    let b = identity(size);
-    const coefficients = [];
-    for (let k = 1; k <= size; k += 1) {
-      const ab = multiply(matrix, b);
-      const coefficient = -trace(ab) / k;
-      coefficients.push(coefficient);
-      b = ab.map(
-        (row, rowIndex) => row.map((value, columnIndex) => value + (rowIndex === columnIndex ? coefficient : 0))
-      );
-    }
-    return coefficients;
-  }
-  function numericalJacobian(parameters) {
-    const base = [...EQUILIBRIUM_STATE];
-    return base.map((_stateValue, column) => {
-      const step2 = column === 1 ? 1e-6 : 1e-5;
-      const high = [...base];
-      const low = [...base];
-      high[column] += step2;
-      low[column] -= step2;
-      if (column !== 1) low[column] = Math.max(1e-7, low[column]);
-      const highDerivative = derivatives(0, high, parameters);
-      const lowDerivative = derivatives(0, low, parameters);
-      return highDerivative.map((value, row) => (value - lowDerivative[row]) / (high[column] - low[column]));
-    }).reduce((rows, columnValues, column) => {
-      columnValues.forEach((value, row) => {
-        rows[row] || (rows[row] = []);
-        rows[row][column] = value;
-      });
-      return rows;
-    }, []);
-  }
-  function linearStability(parameters) {
-    const roots = polynomialRoots(characteristicCoefficients(numericalJacobian({
-      ...parameters,
-      driver: "h"
-    })));
-    const dominant = roots.reduce((best, root) => root.re > best.re ? root : best, roots[0] || { re: 0, im: 0 });
-    const maxReal = dominant.re;
-    const tolerance = 1e-7;
-    const kind = Math.abs(maxReal) <= tolerance ? "neutral" : maxReal < 0 ? "stable" : Math.abs(dominant.im) < 1e-5 ? "dynamic" : "pulsational";
-    return { kind, maxReal, dominant, roots };
   }
   function cepheidStripCoordinate(parameters) {
     const zeta = Math.max(1e-6, parameters.zeta);
@@ -1837,9 +1746,12 @@
   var lastSliderTap = null;
   var DENSE_ENVELOPE_POINTS_PER_PIXEL = 2.25;
   var STABILITY_MAP_RESOLUTION = 54;
+  var INSTABILITY_STRIP_X_RESOLUTION = 72;
+  var INSTABILITY_STRIP_Y_RESOLUTION = 44;
   var STRIP_LOG_RATIO_MIN = -2;
   var STRIP_LOG_RATIO_MAX = 2;
   var stabilityMapCache = /* @__PURE__ */ new Map();
+  var instabilityStripCache = /* @__PURE__ */ new Map();
   var PLOT_LAYOUT = {
     left: 84,
     top: 18,
@@ -1863,6 +1775,7 @@
   }
   function s72Verdict(kind, stable) {
     const stateText = stable ? "stable" : "unstable";
+    if (kind === "convective") return `convectively/turbulently ${stateText}`;
     if (kind === "dynamic") return `dynamically ${stateText}`;
     if (kind === "secular") return `secularly ${stateText}`;
     return `pulsationally ${stateText}`;
@@ -1877,29 +1790,41 @@
     if (satisfied) return symbol;
     return symbol === ">" ? "\u226F" : "\u226E";
   }
-  function s72DynamicMetric(stability) {
-    const symbol = s72LatexInequality(stability.dynamic.stable, ">");
-    return `\\(${TEX.gamma1}=${fmt(stability.dynamic.value, 2)} ${symbol} 4/${TEX.m}=${fmt(stability.dynamic.threshold, 2)}\\)`;
+  function s72ConvectiveMetric(stability) {
+    const symbol = s72LatexInequality(stability.convective.stable, ">");
+    return `\\(\\ozNeutral{A}=${fmt(stability.convective.value, 2)} ${symbol} 0\\)`;
   }
   function s72SecularMetric(stability) {
     const symbol = s72LatexInequality(stability.secular.stable, ">");
-    return `\\(4+${TEX.m}${TEX.n}+(${TEX.m}-4)(${TEX.s}+4)=${fmt(stability.secular.value, 2)} ${symbol} 0\\)`;
+    return `\\(\\ozNeutral{B}=${fmt(stability.secular.value, 2)} ${symbol} 0\\)`;
+  }
+  function s72DynamicMetric(stability) {
+    const symbol = s72LatexInequality(stability.dynamic.stable, ">");
+    return `\\(\\ozNeutral{BC-AD}=${fmt(stability.dynamic.value, 2)} ${symbol} 0\\)`;
   }
   function s72PulsationalMetric(stability) {
-    const symbol = s72LatexInequality(stability.pulsational.stable, "<");
-    return `\\(b=4+${TEX.m}[${TEX.n}-(${TEX.s}+4)(${TEX.gamma1}-1)]=${fmt(stability.b, 2)} ${symbol} 0\\)`;
+    const symbol = s72LatexInequality(stability.pulsational.stable, ">");
+    return `\\(\\ozNeutral{D(BC-AD)-B^2}=${fmt(stability.pulsational.value, 2)} ${symbol} 0\\)`;
+  }
+  function s72CoefficientSummary(stability) {
+    const { A, B, C, D } = stability.coefficients;
+    return `A=${fmt(A, 3)}, B=${fmt(B, 3)}, C=${fmt(C, 3)}, D=${fmt(D, 3)}`;
+  }
+  function s72ConvectiveTitle(stability) {
+    const symbol = s72TextInequality(stability.convective.stable, ">");
+    return `Convective/turbulent stability: ${s72CoefficientSummary(stability)}; A=${fmt(stability.convective.value, 3)} ${symbol} 0 -> ${s72Verdict("convective", stability.convective.stable)}`;
   }
   function s72DynamicTitle(stability) {
     const symbol = s72TextInequality(stability.dynamic.stable, ">");
-    return `Dynamic stability: Gamma1=${fmt(stability.dynamic.value, 3)}, chi0=${fmt(stability.m, 3)}; ${fmt(stability.dynamic.value, 3)} ${symbol} 4/${fmt(stability.m, 3)} = ${fmt(stability.dynamic.threshold, 3)} -> ${s72Verdict("dynamic", stability.dynamic.stable)}`;
+    return `Dynamic stability: ${s72CoefficientSummary(stability)}; B*C - A*D = ${fmt(stability.dynamic.value, 3)} ${symbol} 0 -> ${s72Verdict("dynamic", stability.dynamic.stable)}`;
   }
-  function s72SecularTitle(stability, parameters) {
+  function s72SecularTitle(stability) {
     const symbol = s72TextInequality(stability.secular.stable, ">");
-    return `Secular stability: chi0=${fmt(stability.m, 3)}, n=${fmt(parameters.n, 3)}, s=${fmt(parameters.s, 3)}; 4 + ${fmt(stability.m, 3)}*${fmt(parameters.n, 3)} + (${fmt(stability.m, 3)} - 4)*(${fmt(parameters.s, 3)} + 4) = ${fmt(stability.secular.value, 3)} ${symbol} 0 -> ${s72Verdict("secular", stability.secular.stable)}`;
+    return `Secular stability: ${s72CoefficientSummary(stability)}; B=${fmt(stability.secular.value, 3)} ${symbol} 0 -> ${s72Verdict("secular", stability.secular.stable)}`;
   }
-  function s72PulsationalTitle(stability, parameters) {
-    const symbol = s72TextInequality(stability.pulsational.stable, "<");
-    return `Pulsational stability: chi0=${fmt(stability.m, 3)}, n=${fmt(parameters.n, 3)}, s=${fmt(parameters.s, 3)}, Gamma1=${fmt(parameters.gamma1, 3)}; b = 4 + ${fmt(stability.m, 3)}*(${fmt(parameters.n, 3)} - (${fmt(parameters.s, 3)} + 4)*(${fmt(parameters.gamma1, 3)} - 1)) = ${fmt(stability.b, 3)} ${symbol} 0 -> ${s72Verdict("pulsational", stability.pulsational.stable)}`;
+  function s72PulsationalTitle(stability) {
+    const symbol = s72TextInequality(stability.pulsational.stable, ">");
+    return `Pulsational stability: ${s72CoefficientSummary(stability)}; D*(B*C - A*D) - B^2 = ${fmt(stability.pulsational.value, 3)} ${symbol} 0 -> ${s72Verdict("pulsational", stability.pulsational.stable)}`;
   }
   function fmtFixed(value, digits) {
     if (!Number.isFinite(value)) return "n/a";
@@ -4195,15 +4120,17 @@
     \\begin{aligned}
     ${geometry}\\\\[0.35em]
     \\ozRadiative{L_r} &=
+      (1-\\ozGammac{\\gamma_c})\\,
       \\ozRadius{R}^{4+\\ozChi{\\chi}
       \\left[\\ozBlue{n}-(\\ozPink{s}+4)(\\ozGamma{\\Gamma_1}-1)\\right]}
       \\ozPressure{H}^{\\ozPink{s}+4}\\\\[0.35em]
     \\ozConvLum{L_c} &=
+      \\ozGammac{\\gamma_c}\\,
       \\ozRadius{R}^{-(\\ozChi{\\chi}-2)}
       \\ozConvective{U_c}^{3}\\\\[0.35em]
     \\ozLuminosity{L} &=
-      \\ozNeutral{\\gamma_r}\\ozRadiative{L_r}
-      + \\ozGammac{\\gamma_c}\\ozConvLum{L_c}
+      \\ozRadiative{L_r}
+      + \\ozConvLum{L_c}
     \\end{aligned}
     \\]
   `;
@@ -5080,22 +5007,94 @@
       const zeta = Math.max(1e-4, (row + 0.5) / STABILITY_MAP_RESOLUTION * extent);
       for (let column = 0; column < STABILITY_MAP_RESOLUTION; column += 1) {
         const zetac = Math.max(1e-4, (column + 0.5) / STABILITY_MAP_RESOLUTION * extent);
-        kinds.push(linearStability({ ...parameters, zeta, zetac }).kind);
+        kinds.push(analyticStabilityConditions({ ...parameters, zeta, zetac }).kind);
       }
     }
     if (stabilityMapCache.size > 24) stabilityMapCache.clear();
     stabilityMapCache.set(key, kinds);
     return kinds;
   }
+  function instabilityStripCacheKey(parameters) {
+    return [
+      INSTABILITY_STRIP_X_RESOLUTION,
+      INSTABILITY_STRIP_Y_RESOLUTION,
+      parameters.zeta.toFixed(4),
+      parameters.n.toFixed(3),
+      parameters.s.toFixed(3),
+      parameters.m.toFixed(3),
+      parameters.gamma1.toFixed(3),
+      parameters.sourceExp.toFixed(3),
+      parameters.cq.toFixed(3),
+      String(parameters.variableM)
+    ].join("|");
+  }
+  function emptyStabilityCounts() {
+    return {
+      stable: 0,
+      convective: 0,
+      secular: 0,
+      pulsational: 0,
+      dynamic: 0,
+      neutral: 0
+    };
+  }
+  function instabilityKindsForStrip(parameters) {
+    const key = instabilityStripCacheKey(parameters);
+    const cached = instabilityStripCache.get(key);
+    if (cached) return cached;
+    const kinds = [];
+    const counts = emptyStabilityCounts();
+    const zeta = Math.max(1e-6, parameters.zeta);
+    for (let row = 0; row < INSTABILITY_STRIP_Y_RESOLUTION; row += 1) {
+      const gammac = (row + 0.5) / INSTABILITY_STRIP_Y_RESOLUTION;
+      for (let column = 0; column < INSTABILITY_STRIP_X_RESOLUTION; column += 1) {
+        const x = (column + 0.5) / INSTABILITY_STRIP_X_RESOLUTION;
+        const logRatio = STRIP_LOG_RATIO_MIN + x * (STRIP_LOG_RATIO_MAX - STRIP_LOG_RATIO_MIN);
+        const zetac = zeta * 10 ** logRatio;
+        const kind = analyticStabilityConditions({ ...parameters, zeta, zetac, gammac }).kind;
+        counts[kind] += 1;
+        kinds.push(kind);
+      }
+    }
+    const signature = [
+      key,
+      counts.stable,
+      counts.convective,
+      counts.secular,
+      counts.dynamic,
+      counts.pulsational,
+      counts.neutral
+    ].join("|");
+    const result = { kinds, counts, signature };
+    if (instabilityStripCache.size > 24) instabilityStripCache.clear();
+    instabilityStripCache.set(key, result);
+    return result;
+  }
   function stabilityKindColor(kind, alpha = 1) {
     const colors = {
       stable: [69, 137, 118],
+      convective: [61, 147, 196],
+      secular: [155, 113, 217],
       pulsational: [184, 82, 94],
       dynamic: [216, 155, 65],
       neutral: [132, 146, 170]
     };
     const [r, g, b] = colors[kind];
     return alpha >= 1 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  function stabilityKindAlpha(kind) {
+    if (kind === "stable") return 0.5;
+    if (kind === "neutral") return 0.22;
+    return 0.6;
+  }
+  function linearStabilityLegendItems() {
+    return [
+      { label: "damping", color: stabilityKindColor("stable", 0.75) },
+      { label: "conv/turb", color: stabilityKindColor("convective", 0.82) },
+      { label: "secular", color: stabilityKindColor("secular", 0.82) },
+      { label: "dynamic", color: stabilityKindColor("dynamic", 0.82) },
+      { label: "pulsational", color: stabilityKindColor("pulsational", 0.82) }
+    ];
   }
   function drawReferenceMarker(ctx, x, y, color, radius = 4) {
     ctx.save();
@@ -5136,18 +5135,26 @@
     if (highlighted) drawReferenceMarker(ctx, sx(highlighted.parameters.zetac), sy(highlighted.parameters.zeta), gridResultColor(highlighted, 1), 6);
     else drawReferenceMarker(ctx, sx(current.zetac), sy(current.zeta), COLORS.gammac, 6);
   }
-  function drawReferenceLegend(ctx, x, y, items) {
+  function drawReferenceLegend(ctx, x, y, items, options = {}) {
     ctx.save();
     ctx.font = "11px Inter, sans-serif";
     ctx.textBaseline = "middle";
     let cursor = x;
+    let rowY = y;
+    const maxX = options.maxX ?? Infinity;
+    const lineHeight = options.lineHeight ?? 14;
     items.forEach((item) => {
+      const itemWidth = 10 + 14 + ctx.measureText(item.label).width + 18;
+      if (cursor > x && cursor + itemWidth > maxX) {
+        cursor = x;
+        rowY += lineHeight;
+      }
       ctx.fillStyle = item.color;
-      ctx.fillRect(cursor, y - 5, 10, 10);
+      ctx.fillRect(cursor, rowY - 5, 10, 10);
       ctx.fillStyle = THEME.axisText;
       ctx.textAlign = "left";
-      ctx.fillText(item.label, cursor + 14, y);
-      cursor += 18 + ctx.measureText(item.label).width + 18;
+      ctx.fillText(item.label, cursor + 14, rowY);
+      cursor += itemWidth;
     });
     ctx.restore();
   }
@@ -5175,14 +5182,14 @@
     canvas.dataset.stabilityMode = gridState.enabled ? "grid" : "single";
     canvas.dataset.stabilityGamma = fmtFixed(parameters.gammac, 3);
     canvas.dataset.stabilityExtent = fmtFixed(extent, 1);
-    canvas.dataset.stabilityLegend = "linear damping,pulsational growth,dynamic growth";
+    canvas.dataset.stabilityLegend = "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability";
     canvas.dataset.editableParameters = "zetac,zeta";
     canvas.dataset.stellingwerfLabels = "zeta,zeta_c,gamma_c";
     canvas.dataset.axisLabels = "convective response zeta_c,thermal response zeta";
     kinds.forEach((kind, index) => {
       const row = Math.floor(index / STABILITY_MAP_RESOLUTION);
       const column = index % STABILITY_MAP_RESOLUTION;
-      ctx.fillStyle = stabilityKindColor(kind, kind === "stable" ? 0.5 : kind === "neutral" ? 0.22 : 0.58);
+      ctx.fillStyle = stabilityKindColor(kind, stabilityKindAlpha(kind));
       ctx.fillRect(plot.left + column * cellWidth, plot.top + plot.height - (row + 1) * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
     });
     drawAxes(ctx, plot, [0, extent], [0, extent], "", "", THEME.axisText, THEME.axisText, 20);
@@ -5206,11 +5213,7 @@
       { rotate: -Math.PI / 2, fontSize: 11 }
     );
     drawStabilityLinearizedLabel(ctx, plot.left, 16, parameters.gammac);
-    drawReferenceLegend(ctx, plot.left + 150, 15, [
-      { label: "linear damping", color: stabilityKindColor("stable", 0.75) },
-      { label: "pulsational growth", color: stabilityKindColor("pulsational", 0.78) },
-      { label: "dynamic growth", color: stabilityKindColor("dynamic", 0.82) }
-    ]);
+    drawReferenceLegend(ctx, plot.left + 150, 15, linearStabilityLegendItems(), { maxX: plot.left + plot.width - 4 });
     drawStabilityOverlays(ctx, plot, extent, parameters, overlays);
   }
   function drawDashedCurve(ctx, points) {
@@ -5323,35 +5326,35 @@
     canvas.dataset.editableParameters = "zetac,gammac";
     canvas.dataset.stellingwerfLabels = "gamma_c,log10_zeta_c_over_zeta,Teff_proxy";
     canvas.dataset.axisLabels = "log10(zeta_c/zeta) convective/thermal response,convective flux fraction gamma_c";
-    canvas.dataset.instabilityLabels = "schematic,damped equilibrium,dynamic instability";
-    ctx.fillStyle = "rgba(25, 43, 77, 0.5)";
-    ctx.fillRect(plot.left, plot.top, plot.width, plot.height);
-    ctx.fillStyle = "rgba(69, 137, 118, 0.38)";
-    ctx.beginPath();
-    ctx.moveTo(sx(0), sy(0.38));
-    for (let i = 0; i <= 80; i += 1) {
-      const x = i / 80;
-      const lower = 0.38 + 0.05 * Math.sin(Math.PI * x) - 0.04 * x;
-      ctx.lineTo(sx(x), sy(lower));
-    }
-    ctx.lineTo(sx(1), sy(1));
-    ctx.lineTo(sx(0), sy(1));
-    ctx.closePath();
-    ctx.fill();
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(plot.left, plot.top, plot.width * 0.37, plot.height * 0.2);
-    ctx.clip();
-    ctx.strokeStyle = "rgba(255, 209, 102, 0.7)";
-    ctx.lineWidth = 1;
-    for (let x = plot.left - plot.height; x < plot.left + plot.width; x += 8) {
-      ctx.beginPath();
-      ctx.moveTo(x, plot.top);
-      ctx.lineTo(x + plot.height, plot.top + plot.height);
-      ctx.stroke();
-    }
-    ctx.restore();
+    canvas.dataset.instabilityLabels = "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability";
+    canvas.dataset.instabilityLegend = "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability";
+    const current = currentGridResult();
+    const parameters = current?.parameters || state;
+    const stripStability = instabilityKindsForStrip(parameters);
+    canvas.dataset.instabilitySignature = stripStability.signature;
+    canvas.dataset.instabilityCounts = [
+      `stable:${stripStability.counts.stable}`,
+      `convective:${stripStability.counts.convective}`,
+      `secular:${stripStability.counts.secular}`,
+      `dynamic:${stripStability.counts.dynamic}`,
+      `pulsational:${stripStability.counts.pulsational}`,
+      `neutral:${stripStability.counts.neutral}`
+    ].join(",");
+    const stripCellWidth = plot.width / INSTABILITY_STRIP_X_RESOLUTION;
+    const stripCellHeight = plot.height / INSTABILITY_STRIP_Y_RESOLUTION;
+    stripStability.kinds.forEach((kind, index) => {
+      const row = Math.floor(index / INSTABILITY_STRIP_X_RESOLUTION);
+      const column = index % INSTABILITY_STRIP_X_RESOLUTION;
+      ctx.fillStyle = stabilityKindColor(kind, stabilityKindAlpha(kind));
+      ctx.fillRect(
+        plot.left + column * stripCellWidth,
+        plot.top + plot.height - (row + 1) * stripCellHeight,
+        stripCellWidth + 0.5,
+        stripCellHeight + 0.5
+      );
+    });
     drawAxes(ctx, plot, [STRIP_LOG_RATIO_MIN, STRIP_LOG_RATIO_MAX], [0, 1], "", "", THEME.axisText, THEME.axisText, 22);
+    drawReferenceLegend(ctx, plot.left + 8, 15, linearStabilityLegendItems(), { maxX: plot.left + plot.width - 4 });
     drawCanvasMathFragments(
       ctx,
       [
@@ -5388,8 +5391,6 @@
     ctx.fillStyle = THEME.axisText;
     ctx.font = "700 13px Inter, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("DAMPED EQUIL.", sx(0.48), sy(0.67));
-    ctx.fillText("DYNAMIC INST.", sx(0.17), sy(0.91));
     ctx.font = "12px Inter, sans-serif";
     ctx.fillText("red edge", sx(0.67), sy(0.22));
     ctx.beginPath();
@@ -5443,8 +5444,6 @@
         });
       });
     }
-    const current = currentGridResult();
-    const parameters = current?.parameters || state;
     const currentRows = current?.phaseRows ?? latestPhaseRows;
     const currentMode = current ? "phase" : latestDisplayWindow.mode;
     const hasTeffTrack = drawStripTeffTrack(ctx, plot, sx, sy, parameters, currentRows, {
@@ -5612,7 +5611,7 @@
       canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
       delete canvas.dataset.currentPhase;
     } else {
-      canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
+      canvas.dataset.currentPhase = fmtFixed(phaseModOne(currentAnimationPhase), 3);
       delete canvas.dataset.currentTime;
     }
     const rows = downsample(latestPhaseRows, 1400, ["R", "H", "Uc"]);
@@ -5805,7 +5804,10 @@
     if (latestDisplayWindow.mode === "time") {
       return `time \u03C4 = ${fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 2)}`;
     }
-    return `phase = ${fmtFixed(currentAnimationPhase, 2)}`;
+    return `phase = ${fmtFixed(phaseModOne(currentAnimationPhase), 2)}`;
+  }
+  function phaseModOne(phase) {
+    return (phase % 1 + 1) % 1;
   }
   function updatePhaseAnchorControlAvailability() {
     const timeMode = latestDisplayWindow.mode === "time";
@@ -5859,15 +5861,6 @@
       g: clamp4(Math.round(color.g * scale), 0, 255),
       b: clamp4(Math.round(color.b * scale), 0, 255)
     };
-  }
-  function gammaR() {
-    return 1 - state.gammac;
-  }
-  function weightedRadiativeLuminosity(row) {
-    return gammaR() * row.Lr;
-  }
-  function weightedConvectiveLuminosity(row) {
-    return state.gammac * row.Lc;
   }
   function phaseMarker() {
     if (gridState.enabled) return void 0;
@@ -6149,9 +6142,9 @@
     const segment = Math.PI / 2 / 3;
     const gap = 0.018;
     const arcs = [
-      { value: weightedConvectiveLuminosity(row), color: COLORS.Lc, gammaSubscript: "c", luminositySubscript: "c" },
+      { value: row.Lc, color: COLORS.Lc, luminositySubscript: "c" },
       { value: row.L, color: COLORS.L },
-      { value: weightedRadiativeLuminosity(row), color: COLORS.Lr, gammaSubscript: "r", luminositySubscript: "r" }
+      { value: row.Lr, color: COLORS.Lr, luminositySubscript: "r" }
     ];
     const arcWidths = arcs.map((arc) => clamp4(equilibriumThickness * Math.max(0, arc.value), 2, equilibriumThickness * 3));
     const fixedLabelOffset = Math.max(18, equilibriumThickness * 0.75 + 10);
@@ -6177,7 +6170,7 @@
         centerX + Math.cos(angle) * labelRadius,
         centerY + Math.sin(angle) * labelRadius,
         arc.color,
-        arc.gammaSubscript,
+        void 0,
         arc.luminositySubscript
       );
     });
@@ -6230,7 +6223,7 @@
       canvas.dataset.currentPhase = fmtFixed(row.tau, 3);
       delete canvas.dataset.currentTime;
     }
-    canvas.dataset.luminosityArcLabels = convectionActive ? "gamma_c L_c,L,gamma_r L_r" : "";
+    canvas.dataset.luminosityArcLabels = convectionActive ? "L_c,L,L_r" : "";
     canvas.dataset.geometryGuides = "R=1,eta,minR,maxR";
     ctx.save();
     drawModelReferenceGuides(ctx, latestPhaseRows, centerX, centerY, radiusScale);
@@ -6307,6 +6300,7 @@
     updateGridLoopSliderMarkers();
     updateSonificationSourceControls();
     const metricsNode = el("metrics");
+    metricsNode.dataset.s72Convective = s72State(s72Stability.convective.stable);
     metricsNode.dataset.s72Dynamic = s72State(s72Stability.dynamic.stable);
     metricsNode.dataset.s72Secular = s72State(s72Stability.secular.stable);
     metricsNode.dataset.s72Pulsational = s72State(s72Stability.pulsational.stable);
@@ -6323,6 +6317,20 @@
       { label: "period", value: displayWindow.period ? fmt(displayWindow.period, 3) : "n/a" },
       { label: "phase", value: displayWindow.mode === "time" ? "time window" : phase.reason === "ok" ? "available" : "unavailable" },
       {
+        label: "conv",
+        value: s72ConvectiveMetric(s72Stability),
+        detail: s72ConvectiveTitle(s72Stability),
+        className: s72MetricClass(s72Stability.convective.stable),
+        stabilityKind: "convective"
+      },
+      {
+        label: "sec",
+        value: s72SecularMetric(s72Stability),
+        detail: s72SecularTitle(s72Stability),
+        className: s72MetricClass(s72Stability.secular.stable),
+        stabilityKind: "secular"
+      },
+      {
         label: "dyn",
         value: s72DynamicMetric(s72Stability),
         detail: s72DynamicTitle(s72Stability),
@@ -6330,16 +6338,9 @@
         stabilityKind: "dynamic"
       },
       {
-        label: "sec",
-        value: s72SecularMetric(s72Stability),
-        detail: s72SecularTitle(s72Stability, stabilityParameters),
-        className: s72MetricClass(s72Stability.secular.stable),
-        stabilityKind: "secular"
-      },
-      {
         label: "puls",
         value: s72PulsationalMetric(s72Stability),
-        detail: s72PulsationalTitle(s72Stability, stabilityParameters),
+        detail: s72PulsationalTitle(s72Stability),
         className: s72MetricClass(s72Stability.pulsational.stable),
         stabilityKind: "pulsational"
       }
@@ -6402,8 +6403,8 @@
     ];
     if (!convectionOff) {
       lumSeries.push(
-        { label: "gamma_r Lr", color: COLORS.Lr, rows: visibleRows("lum", "Lr", sampledLumRows), x: (row) => row.tau, y: (row) => weightedRadiativeLuminosity(row) },
-        { label: "gamma_c Lc", color: COLORS.Lc, rows: visibleRows("lum", "Lc", sampledLumRows), x: (row) => row.tau, y: (row) => weightedConvectiveLuminosity(row) }
+        { label: "Lr", color: COLORS.Lr, rows: visibleRows("lum", "Lr", sampledLumRows), x: (row) => row.tau, y: (row) => row.Lr },
+        { label: "Lc", color: COLORS.Lc, rows: visibleRows("lum", "Lc", sampledLumRows), x: (row) => row.tau, y: (row) => row.Lc }
       );
     }
     drawSeries("lumCanvas", lumSeries, {
@@ -6418,8 +6419,8 @@
     });
     const lumLegendItems = convectionOff ? [{ label: `\\(${TEX.L}\\) total`, color: COLORS.L }] : [
       { key: "L", label: `\\(${TEX.L}\\) total`, color: COLORS.L, toggleLabel: "total luminosity" },
-      { key: "Lr", label: `\\(\\ozNeutral{\\gamma_r}\\,${TEX.Lr}\\) radiative`, color: COLORS.Lr, toggleLabel: "radiative luminosity" },
-      { key: "Lc", label: `\\(${TEX.gammac}\\,${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
+      { key: "Lr", label: `\\(${TEX.Lr}\\) radiative`, color: COLORS.Lr, toggleLabel: "radiative luminosity" },
+      { key: "Lc", label: `\\(${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
     ];
     drawLegend("lumLegend", lumLegendItems, convectionOff ? {} : { plotId: "lum" });
     drawFourierPanel();

@@ -35,13 +35,22 @@ describe("linear stability helpers", () => {
     const stability = analyticStabilityConditions(base);
 
     expect(stability.m).toBeCloseTo(10, 12);
-    expect(stability.dynamic.value).toBeCloseTo(base.gamma1, 12);
-    expect(stability.dynamic.threshold).toBeCloseTo(4 / base.m, 12);
-    expect(stability.dynamic.stable).toBe(true);
-    expect(stability.secular.value).toBeCloseTo(4 + base.m * base.n + (base.m - 4) * (base.s + 4), 12);
+    expect(stability.coefficients.P).toBeCloseTo(4, 12);
+    expect(stability.coefficients.Q).toBeCloseTo(5.6, 12);
+    expect(stability.coefficients.R).toBeCloseTo(7, 12);
+    expect(stability.coefficients.A).toBeCloseTo(45, 12);
+    expect(stability.coefficients.B).toBeCloseTo(50.2, 12);
+    expect(stability.coefficients.C).toBeCloseTo(12.9, 12);
+    expect(stability.coefficients.D).toBeCloseTo(6.6, 12);
+    expect(stability.convective.value).toBeCloseTo(45, 12);
+    expect(stability.convective.stable).toBe(true);
+    expect(stability.secular.value).toBeCloseTo(50.2, 12);
     expect(stability.secular.stable).toBe(true);
-    expect(stability.pulsational.value).toBeCloseTo(4 + base.m * (base.n - (base.s + 4) * (base.gamma1 - 1)), 12);
+    expect(stability.dynamic.value).toBeCloseTo(350.58, 12);
+    expect(stability.dynamic.stable).toBe(true);
+    expect(stability.pulsational.value).toBeCloseTo(-206.212, 12);
     expect(stability.pulsational.stable).toBe(false);
+    expect(stability.kind).toBe("pulsational");
     expect(stability.allStable).toBe(false);
   });
 
@@ -50,20 +59,31 @@ describe("linear stability helpers", () => {
     const stability = analyticStabilityConditions({ ...base, m: 15, n: 0, s: 8, gamma1: 1.5 });
 
     expect(stability.m).toBeCloseTo(15, 12);
+    expect(stability.coefficients.P).toBeCloseTo(-71.4, 12);
+    expect(stability.coefficients.A).toBeCloseTo(109.5, 12);
+    expect(stability.coefficients.B).toBeCloseTo(124.7, 12);
+    expect(stability.coefficients.C).toBeCloseTo(28.4, 12);
+    expect(stability.coefficients.D).toBeCloseTo(10.6, 12);
+    expect(stability.convective.stable).toBe(true);
     expect(stability.dynamic.stable).toBe(true);
     expect(stability.secular.stable).toBe(true);
-    expect(stability.pulsational.value).toBeCloseTo(4 + 15 * (0 - 12 * 0.5), 12);
+    expect(stability.pulsational.value).toBeCloseTo(9686.178, 9);
     expect(stability.pulsational.stable).toBe(true);
+    expect(stability.kind).toBe("stable");
     expect(stability.allStable).toBe(true);
   });
 
-  it("marks failed S72 dynamic and secular conditions independently", () => {
+  it("marks failed S72 convective and secular conditions independently", () => {
     const base = PRESETS["Instability-strip convection"];
     const stability = analyticStabilityConditions({ ...base, m: 3, n: 0, s: 8, gamma1: 1.1 });
 
-    expect(stability.dynamic.threshold).toBeCloseTo(4 / 3, 12);
-    expect(stability.dynamic.stable).toBe(false);
-    expect(stability.secular.value).toBeCloseTo(4 + 3 * 0 + (3 - 4) * (8 + 4), 12);
+    expect(stability.coefficients.A).toBeCloseTo(-6.9, 12);
+    expect(stability.coefficients.B).toBeCloseTo(-7.3, 12);
+    expect(stability.convective.stable).toBe(false);
+    expect(stability.secular.value).toBeCloseTo(-7.3, 12);
     expect(stability.secular.stable).toBe(false);
+    expect(stability.dynamic.stable).toBe(true);
+    expect(stability.pulsational.stable).toBe(true);
+    expect(stability.kind).toBe("convective");
   });
 });

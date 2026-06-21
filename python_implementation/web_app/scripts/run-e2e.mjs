@@ -280,33 +280,38 @@ async function runPlaywrightChecks() {
     const stoppedLumXlim = await page.locator("#lumCanvas").getAttribute("data-xlim");
     assertOk(stoppedLumXlim === stoppedTimeXlim.map((value) => value.toFixed(3)).join(","), "luminosity evolution should share the auto-stopped x limits");
     await page.waitForFunction(() => !document.body.innerText.includes("\\("), null, { timeout: 15000 });
-    const dynamicChip = page.locator("#metrics [data-stability-kind='dynamic']");
+    assertOk((await page.locator("#metrics").getAttribute("data-s72-convective")) === "stable", "convective/turbulent stability should be reported");
+    assertOk((await page.locator("#metrics").getAttribute("data-s72-secular")) === "stable", "secular stability should be reported");
+    assertOk((await page.locator("#metrics").getAttribute("data-s72-dynamic")) === "stable", "dynamic stability should be reported");
+    assertOk((await page.locator("#metrics").getAttribute("data-s72-pulsational")) === "unstable", "pulsational stability should be reported");
+    const convectiveChip = page.locator("#metrics [data-stability-kind='convective']");
     const secularChip = page.locator("#metrics [data-stability-kind='secular']");
+    const dynamicChip = page.locator("#metrics [data-stability-kind='dynamic']");
     const pulsationalChip = page.locator("#metrics [data-stability-kind='pulsational']");
+    const convectiveDetail = await convectiveChip.getAttribute("data-stability-detail");
     const dynamicDetail = await dynamicChip.getAttribute("data-stability-detail");
     const secularDetail = await secularChip.getAttribute("data-stability-detail");
     const pulsationalDetail = await pulsationalChip.getAttribute("data-stability-detail");
-    assertOk(dynamicDetail?.includes("Gamma1=1.1") && dynamicDetail.includes("4/10 = 0.4") && dynamicDetail.includes("dynamically stable"), "dynamic stability chip should plug in current values");
-    assertOk(secularDetail?.includes("10*1") && secularDetail.includes("(10 - 4)*(3 + 4) = 56") && secularDetail.includes("secularly stable"), "secular stability chip should plug in current values");
-    assertOk(pulsationalDetail?.includes("Gamma1=1.1") && pulsationalDetail.includes("= 7 \u226E 0 -> pulsationally unstable"), "pulsational stability chip should plug in current values with a slashed failed inequality");
-    assertOk((await dynamicChip.getAttribute("title")) === null, "stability chips should not use a separate hover tooltip");
-    assertOk((await dynamicChip.getAttribute("data-stability-expanded")) === null, "stability chips should not carry inline expanded formulas");
-    assertOk((await dynamicChip.getAttribute("data-stability-view")) === null, "stability chips should not keep hover/toggle state");
-    assertOk((await dynamicChip.getAttribute("role")) === null, "stability chips should not be clickable controls");
-    const dynamicBox = await dynamicChip.boundingBox();
-    assertOk(Boolean(dynamicBox), "dynamic stability chip bounds should be available");
-    const dynamicInitialText = await dynamicChip.textContent();
-    assertOk(dynamicInitialText?.includes("χ0") && !dynamicInitialText.includes("4/10"), "dynamic stability chip should show the variable-name formula");
-    await dynamicChip.hover();
-    const dynamicHoverText = await dynamicChip.textContent();
-    assertOk(dynamicHoverText?.includes("χ0") && !dynamicHoverText.includes("4/10"), "hovering a stability chip should leave the formula unchanged");
-    assertOk((await dynamicChip.getAttribute("data-stability-view")) === null, "hovering a stability chip should not create hover state");
-    await dynamicChip.click();
-    const dynamicClickText = await dynamicChip.textContent();
-    assertOk(dynamicClickText?.includes("χ0") && !dynamicClickText.includes("4/10"), "clicking a stability chip should leave the formula unchanged");
-    assertOk((await dynamicChip.getAttribute("data-stability-view")) === null, "clicking a stability chip should not create toggle state");
+    assertOk(convectiveDetail?.includes("A=30.5") && convectiveDetail.includes("convectively/turbulently stable"), "convective/turbulent stability chip should plug in current values");
+    assertOk(secularDetail?.includes("B=33") && secularDetail.includes("secularly stable"), "secular stability chip should plug in current values");
+    assertOk(dynamicDetail?.includes("B*C - A*D = 234") && dynamicDetail.includes("dynamically stable"), "dynamic stability chip should plug in current values");
+    assertOk(pulsationalDetail?.includes("D*(B*C - A*D) - B^2 = -36") && pulsationalDetail.includes("pulsationally unstable"), "pulsational stability chip should plug in current values with a slashed failed inequality");
+    assertOk((await convectiveChip.getAttribute("title")) === null, "stability chips should not use a separate hover tooltip");
+    assertOk((await convectiveChip.getAttribute("data-stability-expanded")) === null, "stability chips should not carry inline expanded formulas");
+    assertOk((await convectiveChip.getAttribute("data-stability-view")) === null, "stability chips should not keep hover/toggle state");
+    assertOk((await convectiveChip.getAttribute("role")) === null, "stability chips should not be clickable controls");
+    const convectiveBox = await convectiveChip.boundingBox();
+    assertOk(Boolean(convectiveBox), "convective/turbulent stability chip bounds should be available");
+    const normalizeChipText = (value) => value?.replace(/\s+/g, " ").trim();
+    const convectiveInitialText = normalizeChipText(await convectiveChip.textContent());
+    await convectiveChip.hover();
+    assertOk(normalizeChipText(await convectiveChip.textContent()) === convectiveInitialText, "hovering a stability chip should leave the formula unchanged");
+    assertOk((await convectiveChip.getAttribute("data-stability-view")) === null, "hovering a stability chip should not create hover state");
+    await convectiveChip.click();
+    assertOk(normalizeChipText(await convectiveChip.textContent()) === convectiveInitialText, "clicking a stability chip should leave the formula unchanged");
+    assertOk((await convectiveChip.getAttribute("data-stability-view")) === null, "clicking a stability chip should not create toggle state");
     assertOk((await page.locator("#stabilityChipTooltip").count()) === 0, "stability chips should not create a separate tooltip box");
-    await dynamicChip.evaluate((node) => {
+    await convectiveChip.evaluate((node) => {
       node.dispatchEvent(new PointerEvent("pointerdown", {
         bubbles: true,
         cancelable: true,
@@ -316,7 +321,7 @@ async function runPlaywrightChecks() {
         clientY: 20
       }));
     });
-    await dynamicChip.evaluate((node) => {
+    await convectiveChip.evaluate((node) => {
       node.dispatchEvent(new PointerEvent("pointerup", {
         bubbles: true,
         cancelable: true,
@@ -326,9 +331,8 @@ async function runPlaywrightChecks() {
         clientY: 20
       }));
     });
-    const dynamicTouchText = await dynamicChip.textContent();
-    assertOk(dynamicTouchText?.includes("χ0") && !dynamicTouchText.includes("4/10"), "touching a stability chip should leave the formula unchanged");
-    assertOk((await dynamicChip.getAttribute("data-stability-view")) === null, "touching a stability chip should not create toggle state");
+    assertOk(normalizeChipText(await convectiveChip.textContent()) === convectiveInitialText, "touching a stability chip should leave the formula unchanged");
+    assertOk((await convectiveChip.getAttribute("data-stability-view")) === null, "touching a stability chip should not create toggle state");
 
     assertOk(await page.locator("[data-symbol='tau']").first().isVisible(), "tau symbol was not visible");
     const tauRowText = await page.locator("[data-symbol='tau']").first().locator("xpath=ancestor::tr").textContent();
@@ -349,7 +353,7 @@ async function runPlaywrightChecks() {
     const modelText = await page.evaluate(async () => (await fetch("/src/model.ts")).text());
     const htmlText = await page.evaluate(async () => (await fetch("/wizard_of_oz.html")).text());
     assertOk(
-      sourceText.includes("\\\\ozChiZero{\\\\chi_0}") && sourceText.includes("\\\\ozChi{\\\\chi}") && sourceText.includes("\\\\ozEta{\\\\eta}") && sourceText.includes("\\\\ozNeutral{\\\\gamma_r}") && htmlText.includes("\\ozChi{\\chi}"),
+      sourceText.includes("\\\\ozChiZero{\\\\chi_0}") && sourceText.includes("\\\\ozChi{\\\\chi}") && sourceText.includes("\\\\ozEta{\\\\eta}") && sourceText.includes("1-\\\\ozGammac{\\\\gamma_c}") && !sourceText.includes("\\\\ozNeutral{\\\\gamma_r}") && !htmlText.includes("\\ozNeutral{\\gamma_r}") && htmlText.includes("\\ozChi{\\chi}"),
       "web app source should use separate chi, chi0, and eta notation"
     );
     assertOk(modelText.includes("Thin shell form factor"), "chi0 should use Thin shell form factor terminology");
@@ -549,6 +553,8 @@ async function runPlaywrightChecks() {
     assertOk(firstRow.find((panel) => panel.id === "velocity")?.width > 360, "RV Curve should expand beside Shell");
     assertOk(plotLayout.panels.find((panel) => panel.id === "time")?.width > 360, "History should expand to fill its flex row");
     assertOk(referencePanels.every((panel) => panel.width >= 400), "reference panels should use the shared plot grid sizing");
+    assertOk((await page.locator("#cepheidGuideCanvas").getAttribute("data-instability-labels")) === "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability", "instability strip should use computed stability labels");
+    assertOk(/stable:\d+,convective:\d+,secular:\d+,dynamic:\d+,pulsational:\d+,neutral:\d+/.test(await page.locator("#cepheidGuideCanvas").getAttribute("data-instability-counts") || ""), "instability strip should expose computed stability counts");
     const hasModelPaint = await page.locator("#modelCanvas").evaluate((canvas) => {
       const node = canvas;
       const ctx = node.getContext("2d");
@@ -578,7 +584,7 @@ async function runPlaywrightChecks() {
     await page.waitForTimeout(260);
     const resumedPhase = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
     assertOk(phaseDelta(resumedPhase, releasePhase) > 0.04, "phase animation should resume from the released position");
-    assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "gamma_c L_c,L,gamma_r L_r", "model luminosity arc labels should be active");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "L_c,L,L_r", "model luminosity arc labels should be active");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-geometry-guides")) === "R=1,eta,minR,maxR", "model geometry guides should be active");
     assertOk((await page.locator("#plotGrid").getAttribute("data-plot-columns")) === null, "plot grid should not force a column mode");
     assertOk(!(await page.locator("#hiddenPlotControls").isVisible()), "hidden plot controls should start hidden");
@@ -768,7 +774,7 @@ async function runPlaywrightChecks() {
     assertOk(lumLegend?.includes("radiative") && lumLegend.includes("convective"), "luminosity legend should expose radiative and convective entries by default");
     assertOk((await page.locator("input[aria-label='convective response']").inputValue()) === "1", "convective response should still be one");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-convection-active")) === "true", "model arcs should start in convective mode");
-    assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "gamma_c L_c,L,gamma_r L_r", "model arcs should expose luminosity labels");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "L_c,L,L_r", "model arcs should expose luminosity labels");
     await page.locator("input[aria-label='convective response']").evaluate((input) => {
       const slider = input;
       slider.value = "0";
@@ -787,7 +793,7 @@ async function runPlaywrightChecks() {
     });
     await page.locator("#timeLegend [data-plot-series='Uc']").waitFor({ state: "attached", timeout: 15000 });
     await page.waitForFunction(() => document.querySelector("#modelCanvas")?.getAttribute("data-convection-active") === "true");
-    assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "gamma_c L_c,L,gamma_r L_r", "model luminosity arc labels should return when convection is on");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "L_c,L,L_r", "model luminosity arc labels should return when convection is on");
     const radiusToggle = page.locator("#timeLegend [data-plot-series='R']");
     assertOk((await radiusToggle.getAttribute("aria-pressed")) === "true", "radius toggle should start visible");
     await radiusToggle.click();
