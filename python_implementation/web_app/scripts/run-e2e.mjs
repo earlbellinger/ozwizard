@@ -370,7 +370,7 @@ async function runPlaywrightChecks() {
       .locator(".slider-name")
       .evaluate((node) => node.scrollWidth <= node.clientWidth + 1);
     assertOk(convectiveFluxLabelFit, "convective flux fraction label should fit without ellipsis on desktop");
-    assertOk((await page.getByRole("slider", { name: "convective flux fraction" }).inputValue()) === "0.2", "convective flux fraction should default to 0.2");
+    assertOk((await page.getByRole("slider", { name: "convective flux fraction" }).inputValue()) === "0.5", "convective flux fraction should default to 0.5");
     const maxTauLabel = await page.locator("input[aria-label='max time']").evaluate((input) => {
       const slider = input;
       slider.value = "3";

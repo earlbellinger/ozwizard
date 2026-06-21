@@ -53,8 +53,8 @@ describe("one-zone model", () => {
     const gammacControl = CONTROL_GROUPS.physical.find(([key]) => key === "gammac");
     expect(PRESETS[DEFAULT_PRESET_NAME].zetac).toBe(1);
     expect(zetacControl?.[6]).toBe(1);
-    expect(PRESETS[DEFAULT_PRESET_NAME].gammac).toBe(0.2);
-    expect(gammacControl?.[6]).toBe(0.2);
+    expect(PRESETS[DEFAULT_PRESET_NAME].gammac).toBe(0.5);
+    expect(gammacControl?.[6]).toBe(0.5);
   });
 
   it("matches the Python derivative fixture for the instability-strip initial state", () => {

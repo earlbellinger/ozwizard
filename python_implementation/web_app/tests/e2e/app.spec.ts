@@ -436,7 +436,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     .locator(".slider-name")
     .evaluate((node) => node.scrollWidth <= node.clientWidth + 1);
   expect(convectiveFluxLabelFit).toBe(true);
-  await expect(page.getByRole("slider", { name: "convective flux fraction" })).toHaveValue("0.2");
+  await expect(page.getByRole("slider", { name: "convective flux fraction" })).toHaveValue("0.5");
   const physicalControlsBox = await page.locator("#physicalControls").boundingBox();
   const geometryBox = await page.locator("#variableM").boundingBox();
   const driverBox = await page.locator("[data-driver='h']").boundingBox();
