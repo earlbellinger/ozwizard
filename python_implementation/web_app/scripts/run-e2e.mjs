@@ -730,8 +730,24 @@ async function runPlaywrightChecks() {
     console.log("interactions passed");
     assertOk(pageErrors.length === 0, `page errors: ${pageErrors.join("; ")}`);
 
-    await page.setViewportSize({ width: 760, height: 900 });
+    await page.setViewportSize({ width: 390, height: 900 });
     await page.waitForFunction(() => document.querySelector("#luminosityEquations")?.getAttribute("data-geometry-layout") === "stacked");
+    const mobilePhaseLayout = await page.locator("#plotGrid").evaluate((grid) => {
+      const lightPanel = grid.querySelector("[data-plot-panel='light']");
+      const velocityPanel = grid.querySelector("[data-plot-panel='velocity']");
+      const lightCanvas = grid.querySelector("#lightCanvas");
+      const velocityCanvas = grid.querySelector("#velocityCanvas");
+      return {
+        lightPanelHeight: lightPanel?.getBoundingClientRect().height ?? 0,
+        velocityPanelHeight: velocityPanel?.getBoundingClientRect().height ?? 0,
+        lightCanvasHeight: lightCanvas ? getComputedStyle(lightCanvas).height : "",
+        velocityCanvasHeight: velocityCanvas ? getComputedStyle(velocityCanvas).height : ""
+      };
+    });
+    assertOk(mobilePhaseLayout.lightCanvasHeight === "176px", `mobile Lightcurve canvas height should be 176px, saw ${mobilePhaseLayout.lightCanvasHeight}`);
+    assertOk(mobilePhaseLayout.velocityCanvasHeight === "176px", `mobile RV canvas height should be 176px, saw ${mobilePhaseLayout.velocityCanvasHeight}`);
+    assertOk(mobilePhaseLayout.lightPanelHeight < 245, `mobile Lightcurve panel should be compact, saw ${mobilePhaseLayout.lightPanelHeight}`);
+    assertOk(mobilePhaseLayout.velocityPanelHeight < 245, `mobile RV panel should be compact, saw ${mobilePhaseLayout.velocityPanelHeight}`);
     assertOk(!(await page.locator("#sidebarControls").evaluate((node) => node.open)), "sidebar controls should collapse below the half-width threshold");
     await page.locator("#sidebarControls > summary").click();
     assertOk(await page.locator("#physicalControls").isVisible(), "collapsed sidebar controls did not reopen");

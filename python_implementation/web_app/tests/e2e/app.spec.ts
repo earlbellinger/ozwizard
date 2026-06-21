@@ -884,6 +884,22 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-layout", "stacked");
+  const mobilePhaseLayout = await page.locator("#plotGrid").evaluate((grid) => {
+    const lightPanel = grid.querySelector<HTMLElement>("[data-plot-panel='light']");
+    const velocityPanel = grid.querySelector<HTMLElement>("[data-plot-panel='velocity']");
+    const lightCanvas = grid.querySelector<HTMLCanvasElement>("#lightCanvas");
+    const velocityCanvas = grid.querySelector<HTMLCanvasElement>("#velocityCanvas");
+    return {
+      lightPanelHeight: lightPanel?.getBoundingClientRect().height ?? 0,
+      velocityPanelHeight: velocityPanel?.getBoundingClientRect().height ?? 0,
+      lightCanvasHeight: lightCanvas ? getComputedStyle(lightCanvas).height : "",
+      velocityCanvasHeight: velocityCanvas ? getComputedStyle(velocityCanvas).height : ""
+    };
+  });
+  expect(mobilePhaseLayout.lightCanvasHeight).toBe("176px");
+  expect(mobilePhaseLayout.velocityCanvasHeight).toBe("176px");
+  expect(mobilePhaseLayout.lightPanelHeight).toBeLessThan(245);
+  expect(mobilePhaseLayout.velocityPanelHeight).toBeLessThan(245);
   await expect(page.locator("#sidebarControls")).not.toHaveAttribute("open", "");
   await expect(page.locator("#sidebarControls > summary")).toBeVisible();
   await page.locator("#sidebarControls > summary").click();
