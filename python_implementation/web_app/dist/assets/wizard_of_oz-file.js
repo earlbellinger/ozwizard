@@ -4673,6 +4673,7 @@
       });
     });
     const ylim = options.view?.ylim || options.ylim || range(yValues, 0.08);
+    canvas.dataset.xlim = `${fmtFixed(xlim[0], 3)},${fmtFixed(xlim[1], 3)}`;
     plotRenderStates.set(canvasId, { plotId: options.interactivePlotId, plot, xlim, ylim });
     const sx = (x) => plot.left + (x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
     const sy = (y) => plot.top + plot.height - (y - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
@@ -5881,8 +5882,10 @@
     const last = rows[rows.length - 1].tau;
     return first === last ? range([first, last], 0.02) : [first, last];
   }
-  function integrationTimeRange() {
-    return [0, Math.max(state.tEnd, Number.EPSILON)];
+  function integrationTimeRange(rows) {
+    const finalTau = rows.at(-1)?.tau;
+    const stoppedEarly = state.runUntilStable && Number.isFinite(finalTau) && finalTau < state.tEnd - Math.max(1e-9, state.tEnd * 1e-9);
+    return [0, Math.max(stoppedEarly ? finalTau : state.tEnd, Number.EPSILON)];
   }
   function clearStalePlotView(plotId, rows) {
     const view = plotViews[plotId];
@@ -6308,7 +6311,7 @@
     updateSonificationCurve(displayWindow.mode === "phase" ? latestPhaseRows : [], sonificationFallbackRows, latestPhaseParameters);
     drawModelVisualization();
     drawPhasePlots();
-    const timeXlim = integrationTimeRange();
+    const timeXlim = integrationTimeRange(rows);
     const convectionOff = convectiveResponseDisabled();
     const timeKeys = convectionOff ? ["R", "V", "H"] : ["R", "V", "H", "Uc"];
     const lumKeys = convectionOff ? ["L"] : ["L", "Lr", "Lc"];

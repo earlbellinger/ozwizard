@@ -273,6 +273,12 @@ async function runPlaywrightChecks() {
     assertOk(!initialMetrics?.includes("reference"), "metrics should not duplicate reference metadata");
     assertOk(!initialMetrics?.includes("driver"), "metrics should not duplicate driver controls");
     assertOk(!initialMetrics?.includes("solver"), "metrics should not duplicate solver controls");
+    const stoppedTimeXlim = (await page.locator("#timeCanvas").getAttribute("data-xlim"))?.split(",").map(Number);
+    assertOk(stoppedTimeXlim?.length === 2, "history plot should expose its x limits");
+    assertOk(stoppedTimeXlim[0] === 0, "history plot should start at tau 0");
+    assertOk(stoppedTimeXlim[1] > 0 && stoppedTimeXlim[1] < 300, "auto-stopped history plot should end at the final computed tau");
+    const stoppedLumXlim = await page.locator("#lumCanvas").getAttribute("data-xlim");
+    assertOk(stoppedLumXlim === stoppedTimeXlim.map((value) => value.toFixed(3)).join(","), "luminosity evolution should share the auto-stopped x limits");
     await page.waitForFunction(() => !document.body.innerText.includes("\\("), null, { timeout: 15000 });
     const dynamicChip = page.locator("#metrics [data-stability-kind='dynamic']");
     const secularChip = page.locator("#metrics [data-stability-kind='secular']");
@@ -444,6 +450,8 @@ async function runPlaywrightChecks() {
       return label;
     });
     assertOk(maxTauLabel === "1000", `max tau_max value should render as 1000, saw ${maxTauLabel}`);
+    await page.locator("[data-reset-key='tEnd']").click();
+    assertOk((await page.locator("[data-value-for='tEnd']").textContent()) === "300", "reset tau_max value should render as 300");
     assertOk(await page.getByRole("heading", { name: "Physical", exact: true }).isVisible(), "physical parameter section was not visible");
     assertOk((await page.getByRole("heading", { name: "Derived" }).count()) === 0, "derived parameter section should be removed");
     assertOk(await page.getByRole("heading", { name: "Numerical" }).isVisible(), "numerical parameter section was not visible");

@@ -484,6 +484,8 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     return label;
   });
   expect(maxTauLabel).toBe("1000");
+  await page.locator("[data-reset-key='tEnd']").click();
+  await expect(page.locator("[data-value-for='tEnd']")).toHaveText("300");
   await expect(page.getByRole("slider", { name: "κ-ρ exponent" })).toBeVisible();
   await expect(page.getByRole("slider", { name: "κ-T exponent" })).toBeVisible();
   await expect(page.getByRole("slider", { name: "inner L exponent" })).toBeVisible();
@@ -512,6 +514,12 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#metrics")).not.toContainText("reference");
   await expect(page.locator("#metrics")).not.toContainText("driver");
   await expect(page.locator("#metrics")).not.toContainText("solver");
+  const stoppedTimeXlim = (await page.locator("#timeCanvas").getAttribute("data-xlim"))?.split(",").map(Number);
+  expect(stoppedTimeXlim).toBeDefined();
+  expect(stoppedTimeXlim![0]).toBe(0);
+  expect(stoppedTimeXlim![1]).toBeGreaterThan(0);
+  expect(stoppedTimeXlim![1]).toBeLessThan(300);
+  await expect(page.locator("#lumCanvas")).toHaveAttribute("data-xlim", stoppedTimeXlim!.map((value) => value.toFixed(3)).join(","));
   await expect(page.locator("#metrics")).toHaveAttribute("data-s72-dynamic", "stable");
   await expect(page.locator("#metrics")).toHaveAttribute("data-s72-secular", "stable");
   await expect(page.locator("#metrics")).toHaveAttribute("data-s72-pulsational", "unstable");
@@ -1082,10 +1090,14 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     slider.value = "3";
     slider.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await expect(page.locator("#metrics")).toContainText("1000", { timeout: 15000 });
+  await expect(page.locator("[data-value-for='tEnd']")).toHaveText("1000");
+  const historyXmax = async () => Number((await page.locator("#timeCanvas").getAttribute("data-xlim"))?.split(",")[1] || NaN);
+  await expect.poll(historyXmax, { timeout: 15000 }).toBeLessThan(1000);
+  expect(await historyXmax()).toBeGreaterThan(0);
   await page.getByRole("button", { name: "DOP853" }).click();
   await expect(page.getByRole("button", { name: "DOP853" })).toHaveClass(/active/);
-  await expect(page.locator("#metrics")).toContainText("1000", { timeout: 15000 });
+  await expect.poll(historyXmax, { timeout: 15000 }).toBeLessThan(1000);
+  await expect(page.locator("#metrics")).toContainText("stable limit cycle");
   await page.getByRole("button", { name: "Final" }).click();
   await expect(page.getByRole("button", { name: "Final" })).toHaveClass(/active/);
   await expect(page.locator("#metrics")).not.toContainText("final cycles");

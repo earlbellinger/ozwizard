@@ -3677,6 +3677,7 @@ function drawSeries(
     });
   });
   const ylim = options.view?.ylim || options.ylim || range(yValues, 0.08);
+  canvas.dataset.xlim = `${fmtFixed(xlim[0], 3)},${fmtFixed(xlim[1], 3)}`;
   plotRenderStates.set(canvasId, { plotId: options.interactivePlotId, plot, xlim, ylim });
   const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
   const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
@@ -5086,8 +5087,12 @@ function timeDomain(rows: readonly Row[]): NumericRange {
   return first === last ? range([first, last], 0.02) : [first, last];
 }
 
-function integrationTimeRange(): NumericRange {
-  return [0, Math.max(state.tEnd, Number.EPSILON)];
+function integrationTimeRange(rows: readonly Row[]): NumericRange {
+  const finalTau = rows.at(-1)?.tau;
+  const stoppedEarly = state.runUntilStable
+    && Number.isFinite(finalTau)
+    && finalTau! < state.tEnd - Math.max(1e-9, state.tEnd * 1e-9);
+  return [0, Math.max(stoppedEarly ? finalTau! : state.tEnd, Number.EPSILON)];
 }
 
 function clearStalePlotView(plotId: InteractivePlotId, rows: readonly Row[]): void {
@@ -5618,7 +5623,7 @@ function drawAll(): void {
   drawModelVisualization();
   drawPhasePlots();
 
-  const timeXlim = integrationTimeRange();
+  const timeXlim = integrationTimeRange(rows);
   const convectionOff = convectiveResponseDisabled();
   const timeKeys: PlotSeriesKey[] = convectionOff ? ["R", "V", "H"] : ["R", "V", "H", "Uc"];
   const lumKeys: PlotSeriesKey[] = convectionOff ? ["L"] : ["L", "Lr", "Lc"];
