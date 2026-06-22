@@ -820,15 +820,6 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-current-phase", /\d+\.\d+/);
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-stellingwerf-labels", "R,H,U_c,current_phase");
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-axis-labels", "radius R,thermal-pressure state H and convective velocity U_c");
-  await expect(page.locator("#metrics")).toHaveAttribute("data-blazhko", /^(none|single|double)$/);
-  await expect(page.locator("#metrics")).toHaveAttribute("data-blazhko-reason", /^(ok|no_primary_period|not_enough_cycles|low_modulation|aperiodic)$/);
-  const defaultBlazhkoKind = await page.locator("#metrics").getAttribute("data-blazhko");
-  if (defaultBlazhkoKind === "double") {
-    await expect(page.locator("#doubleBlazhkoPanel")).toBeVisible();
-    await expect(page.locator("#doubleBlazhkoCanvas")).toHaveAttribute("data-blazhko-colorbar", "secondary");
-  } else {
-    await expect(page.locator("#doubleBlazhkoPanel")).toBeHidden();
-  }
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-tp-opacity-mode", "single");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-axis-labels", "log10(T/T0),log10(P/P0)");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-color-variable", "log10(kappa/kappa0)");
@@ -1322,6 +1313,9 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(wideVariables?.scrollHeight).toBeGreaterThanOrEqual(wideVariables?.clientHeight || 0);
   expect(wideParameters?.scrollHeight).toBeGreaterThan(wideParameters?.clientHeight || 0);
 
+  if (!(await page.locator("#phaseAnnotationsToggle").isChecked())) {
+    await page.locator("#phaseAnnotationsToggle").check();
+  }
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-layout", "stacked");
   const mobilePhaseLayout = await page.locator("#plotGrid").evaluate((grid) => {
@@ -1329,16 +1323,21 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     const velocityPanel = grid.querySelector<HTMLElement>("[data-plot-panel='velocity']");
     const lightCanvas = grid.querySelector<HTMLCanvasElement>("#lightCanvas");
     const velocityCanvas = grid.querySelector<HTMLCanvasElement>("#velocityCanvas");
+    const annotationLegend = grid.querySelector<HTMLElement>("#phaseAnnotationLegendItems");
     return {
       lightPanelHeight: lightPanel?.getBoundingClientRect().height ?? 0,
       velocityPanelHeight: velocityPanel?.getBoundingClientRect().height ?? 0,
       lightCanvasHeight: lightCanvas ? getComputedStyle(lightCanvas).height : "",
-      velocityCanvasHeight: velocityCanvas ? getComputedStyle(velocityCanvas).height : ""
+      velocityCanvasHeight: velocityCanvas ? getComputedStyle(velocityCanvas).height : "",
+      annotationLegendVisible: annotationLegend
+        ? getComputedStyle(annotationLegend).display !== "none" && annotationLegend.getBoundingClientRect().height > 0
+        : false
     };
   });
   expect(mobilePhaseLayout.lightCanvasHeight).toBe("176px");
   expect(mobilePhaseLayout.velocityCanvasHeight).toBe("176px");
-  expect(mobilePhaseLayout.lightPanelHeight).toBeLessThan(245);
+  expect(mobilePhaseLayout.annotationLegendVisible).toBe(true);
+  expect(mobilePhaseLayout.lightPanelHeight).toBeLessThan(330);
   expect(mobilePhaseLayout.velocityPanelHeight).toBeLessThan(245);
   await expect(page.locator("#sidebarControls")).not.toHaveAttribute("open", "");
   await expect(page.locator("#sidebarControls > summary")).toBeVisible();

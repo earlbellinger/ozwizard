@@ -1322,21 +1322,6 @@
       font-size: 12px;
     }
 
-    .blazhko-status-icon {
-      display: inline-block;
-      width: 13px;
-      height: 13px;
-      border: 1px solid currentColor;
-      border-radius: 999px;
-      background: currentColor;
-      box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
-      flex: 0 0 auto;
-    }
-
-    .double-blazhko-panel {
-      flex-basis: 100%;
-    }
-
     .plot-tools {
       display: inline-flex;
       align-items: center;
@@ -2043,13 +2028,8 @@
       }
 
       #lightCanvas,
-      #velocityCanvas,
-      #doubleBlazhkoCanvas {
+      #velocityCanvas {
         height: 176px;
-      }
-
-      .phase-annotation-controls {
-        display: none;
       }
 
       .reference-plot-panel canvas,
@@ -2300,16 +2280,6 @@
             </div>
           </div>
           <canvas id="velocityCanvas"></canvas>
-        </div>
-
-        <div class="plot-panel double-blazhko-panel" id="doubleBlazhkoPanel" hidden>
-          <div class="plot-title">
-            <div class="plot-title-left">
-              <span class="blazhko-status-icon status-ok" id="doubleBlazhkoStatus" aria-label="Second Blazhko period detected"></span>
-              <h3>Double Blazhko LC</h3>
-            </div>
-          </div>
-          <canvas id="doubleBlazhkoCanvas" aria-label="double Blazhko lightcurve"></canvas>
         </div>
 
         <div class="plot-panel" id="pressurePhasePanel" hidden>

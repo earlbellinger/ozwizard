@@ -593,14 +593,6 @@ async function runPlaywrightChecks() {
     assertOk(referencePanels.every((panel) => panel.width >= 400), "reference panels should use the shared plot grid sizing");
     assertOk((await page.locator("#cepheidGuideCanvas").getAttribute("data-instability-labels")) === "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability", "instability strip should use computed stability labels");
     assertOk(/stable:\d+,convective:\d+,secular:\d+,dynamic:\d+,pulsational:\d+,neutral:\d+/.test(await page.locator("#cepheidGuideCanvas").getAttribute("data-instability-counts") || ""), "instability strip should expose computed stability counts");
-    assertOk(/^(none|single|double)$/.test(await page.locator("#metrics").getAttribute("data-blazhko") || ""), "status bar should expose Blazhko classification");
-    assertOk(/^(ok|no_primary_period|not_enough_cycles|low_modulation|aperiodic)$/.test(await page.locator("#metrics").getAttribute("data-blazhko-reason") || ""), "status bar should expose Blazhko classification reason");
-    if ((await page.locator("#metrics").getAttribute("data-blazhko")) === "double") {
-      assertOk(await page.locator("#doubleBlazhkoPanel").isVisible(), "double Blazhko panel should show when a second period is detected");
-      assertOk((await page.locator("#doubleBlazhkoCanvas").getAttribute("data-blazhko-colorbar")) === "secondary", "double Blazhko panel should expose the secondary colorbar");
-    } else {
-      assertOk(!(await page.locator("#doubleBlazhkoPanel").isVisible()), "double Blazhko panel should stay hidden without a second period");
-    }
     assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-tp-opacity-mode")) === "single", "T-P opacity panel should start in single-model mode");
     assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-axis-labels")) === "log10(T/T0),log10(P/P0)", "T-P opacity panel should expose temperature-pressure axes");
     assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-color-variable")) === "log10(kappa/kappa0)", "T-P opacity panel should color by opacity");
@@ -974,6 +966,9 @@ async function runPlaywrightChecks() {
     console.log("interactions passed");
     assertOk(pageErrors.length === 0, `page errors: ${pageErrors.join("; ")}`);
 
+    if (!(await page.locator("#phaseAnnotationsToggle").isChecked())) {
+      await page.locator("#phaseAnnotationsToggle").check();
+    }
     await page.setViewportSize({ width: 390, height: 900 });
     await page.waitForFunction(() => document.querySelector("#luminosityEquations")?.getAttribute("data-geometry-layout") === "stacked");
     const mobilePhaseLayout = await page.locator("#plotGrid").evaluate((grid) => {
@@ -981,16 +976,21 @@ async function runPlaywrightChecks() {
       const velocityPanel = grid.querySelector("[data-plot-panel='velocity']");
       const lightCanvas = grid.querySelector("#lightCanvas");
       const velocityCanvas = grid.querySelector("#velocityCanvas");
+      const annotationLegend = grid.querySelector("#phaseAnnotationLegendItems");
       return {
         lightPanelHeight: lightPanel?.getBoundingClientRect().height ?? 0,
         velocityPanelHeight: velocityPanel?.getBoundingClientRect().height ?? 0,
         lightCanvasHeight: lightCanvas ? getComputedStyle(lightCanvas).height : "",
-        velocityCanvasHeight: velocityCanvas ? getComputedStyle(velocityCanvas).height : ""
+        velocityCanvasHeight: velocityCanvas ? getComputedStyle(velocityCanvas).height : "",
+        annotationLegendVisible: annotationLegend
+          ? getComputedStyle(annotationLegend).display !== "none" && annotationLegend.getBoundingClientRect().height > 0
+          : false
       };
     });
     assertOk(mobilePhaseLayout.lightCanvasHeight === "176px", `mobile Lightcurve canvas height should be 176px, saw ${mobilePhaseLayout.lightCanvasHeight}`);
     assertOk(mobilePhaseLayout.velocityCanvasHeight === "176px", `mobile RV canvas height should be 176px, saw ${mobilePhaseLayout.velocityCanvasHeight}`);
-    assertOk(mobilePhaseLayout.lightPanelHeight < 245, `mobile Lightcurve panel should be compact, saw ${mobilePhaseLayout.lightPanelHeight}`);
+    assertOk(mobilePhaseLayout.annotationLegendVisible, "mobile annotation legend should remain visible");
+    assertOk(mobilePhaseLayout.lightPanelHeight < 330, `mobile Lightcurve panel should stay reasonably compact with the legend, saw ${mobilePhaseLayout.lightPanelHeight}`);
     assertOk(mobilePhaseLayout.velocityPanelHeight < 245, `mobile RV panel should be compact, saw ${mobilePhaseLayout.velocityPanelHeight}`);
     assertOk(!(await page.locator("#sidebarControls").evaluate((node) => node.open)), "sidebar controls should collapse below the half-width threshold");
     await page.locator("#sidebarControls > summary").click();

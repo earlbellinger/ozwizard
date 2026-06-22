@@ -35,12 +35,6 @@ import {
   type GridWorkerMessage
 } from "./grid";
 import { computeGridWithMessages } from "./gridCompute";
-import {
-  blazhkoPhaseAt,
-  detectBlazhkoPeriods,
-  type BlazhkoAnalysis,
-  type BlazhkoPeriod
-} from "./blazhko";
 import { buildTwoCyclePhase, guidedMinSeparationFromPeriod, type PhaseAnchor, type PhaseResult } from "./phase";
 import {
   buildPhaseDisplayWindow,
@@ -120,7 +114,6 @@ const SONIFICATION_MAX_HARMONICS = 32;
 const PIANO_DEFAULT_ENVELOPE: PianoEnvelope = { attack: 0.015, decay: 0.22, release: 0.36 };
 const PIANO_DEFAULT_SUSTAIN_LEVEL = 0.38;
 const MODEL_ANIMATION_BASE_DURATION_MS = 4000;
-const BLAZHKO_ANIMATION_BASE_DURATION_MS = 9000;
 const MODEL_ANIMATION_MIN_SPEED = 0.25;
 const MODEL_ANIMATION_MAX_SPEED = 4;
 const GRID_LOOP_BASE_INTERVAL_MS = 90;
@@ -139,8 +132,8 @@ const FOURIER_HARMONIC_COLORS: Record<number, string> = {
   6: "#C297FF",
   7: "#39C5CF"
 };
-const PHASE_SCRUB_CANVAS_IDS = ["lightCanvas", "velocityCanvas", "pressureCanvas", "doubleBlazhkoCanvas"] as const;
-const PHASE_HOVER_CANVAS_IDS = ["lightCanvas", "velocityCanvas", "doubleBlazhkoCanvas"] as const;
+const PHASE_SCRUB_CANVAS_IDS = ["lightCanvas", "velocityCanvas", "pressureCanvas"] as const;
+const PHASE_HOVER_CANVAS_IDS = ["lightCanvas", "velocityCanvas"] as const;
 const SONIFICATION_SOURCE_LABELS: Record<SonificationSource, string> = {
   luminosity: "luminosity",
   velocity: "radial velocity",
@@ -171,12 +164,10 @@ const gridState: GridModeState = {
   restorePlotVisibility: null
 };
 let currentAnimationPhase = 0;
-let currentBlazhkoPhase = 0;
 let modelAnimationSpeed = 1;
 let gridLoopSpeed = 1;
 let modelAnimationFrame = 0;
 let modelAnimationStartTime: number | null = null;
-let blazhkoAnimationStartTime: number | null = null;
 let latestDisplayWindow: DisplayWindow = {
   mode: "phase",
   reason: "phase_unavailable",
@@ -184,21 +175,12 @@ let latestDisplayWindow: DisplayWindow = {
   xlim: [0, 2],
   period: null
 };
-let latestPhaseReference: PhaseResult["reference"] = null;
 let latestPhaseRows: Row[] = [];
 let latestPhaseSample: Row[] = [];
 let latestPhaseMessage: string | undefined;
 let latestPhasePeriodLabel = "phase (period = n/a τ)";
 let latestPhaseLuminosityRange: NumericRange = [0, 1];
 let latestPhaseParameters: ModelParameters = state;
-let latestBlazhkoAnalysis: BlazhkoAnalysis = {
-  kind: "none",
-  primaryPeriod: null,
-  modulationDepth: 0,
-  cycles: [],
-  periods: [],
-  reason: "no_primary_period"
-};
 let phaseAnnotationsVisible = true;
 let sonificationReferenceNote = MIDDLE_C_NOTE;
 let sonificationReferenceHz = noteToFrequency(MIDDLE_C_NOTE);
@@ -1806,7 +1788,6 @@ function setupModelSpeedControl(): void {
     output.value = modelSpeedLabel(modelAnimationSpeed);
     output.textContent = output.value;
     modelAnimationStartTime = null;
-    blazhkoAnimationStartTime = null;
     drawAnimatedPhaseViews();
   };
   input.addEventListener("input", sync);
@@ -3868,16 +3849,6 @@ interface EnvelopeBin {
   count: number;
 }
 
-interface BlazhkoPlotRow extends Row {
-  blazhkoPhase: number;
-  blazhkoCycleIndex: number;
-}
-
-interface BlazhkoCurve {
-  phase: number;
-  rows: BlazhkoPlotRow[];
-}
-
 function colorWithAlpha(color: string, alpha: number): string {
   const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
   if (!match) return color;
@@ -4212,116 +4183,6 @@ function luminosityCurveWidth(value: number): number {
   return 1.15 + 3.35 * level;
 }
 
-function circularDistance(a: number, b: number): number {
-  const delta = Math.abs(((a - b) % 1 + 1) % 1);
-  return Math.min(delta, 1 - delta);
-}
-
-function meanCircularPhase(phases: readonly number[]): number {
-  if (!phases.length) return 0;
-  const vector = phases.reduce(
-    (sum, phase) => {
-      const angle = 2 * Math.PI * phaseModOne(phase);
-      sum.x += Math.cos(angle);
-      sum.y += Math.sin(angle);
-      return sum;
-    },
-    { x: 0, y: 0 }
-  );
-  const angle = Math.atan2(vector.y, vector.x);
-  return ((angle / (2 * Math.PI)) % 1 + 1) % 1;
-}
-
-function blazhkoColor(phase: number, alpha = 1): string {
-  const hue = 222 + 126 * clamp(phase, 0, 1);
-  return alpha >= 1
-    ? `hsl(${hue.toFixed(1)} 88% 67%)`
-    : `hsla(${hue.toFixed(1)} 88% 67% / ${clamp(alpha, 0, 1).toFixed(3)})`;
-}
-
-function blazhkoAnimationDurationMs(): number {
-  return BLAZHKO_ANIMATION_BASE_DURATION_MS / modelAnimationSpeed;
-}
-
-function buildBlazhkoCurves(
-  rows: readonly Row[],
-  period: BlazhkoPeriod | undefined,
-  primaryPeriod: number | null,
-  phaseReference: PhaseResult["reference"],
-  maxCurves = 80
-): BlazhkoCurve[] {
-  if (!period || !primaryPeriod || !phaseReference || primaryPeriod <= 0) return [];
-  const startTau = phaseReference.startTau;
-  const groups = new Map<number, BlazhkoPlotRow[]>();
-  rows.forEach((row) => {
-    if (row.tau < startTau || !Number.isFinite(row.tau)) return;
-    const phasePosition = (row.tau - startTau) / primaryPeriod;
-    if (phasePosition < 0) return;
-    const cycleIndex = Math.floor(phasePosition);
-    const phase = ((phasePosition % 1) + 1) % 1;
-    const blazhkoPhase = blazhkoPhaseAt(row.tau, period);
-    const folded: BlazhkoPlotRow = { ...row, tau: phase, blazhkoPhase, blazhkoCycleIndex: cycleIndex };
-    const bucket = groups.get(cycleIndex);
-    if (bucket) bucket.push(folded);
-    else groups.set(cycleIndex, [folded]);
-  });
-  const curves = [...groups.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([cycleIndex, cycleRows]) => {
-      const sorted = cycleRows
-        .filter((row) => Number.isFinite(row.tau) && Number.isFinite(row.L) && Number.isFinite(row.V))
-        .sort((a, b) => a.tau - b.tau);
-      const rowsWithSecondCycle = [
-        ...sorted,
-        ...sorted.map((row): BlazhkoPlotRow => ({ ...row, tau: row.tau + 1 }))
-      ];
-      const phase = sorted.length
-        ? meanCircularPhase(sorted.map((row) => row.blazhkoPhase))
-        : blazhkoPhaseAt(startTau + (cycleIndex + 0.5) * primaryPeriod, period);
-      return { phase: ((phase % 1) + 1) % 1, rows: rowsWithSecondCycle };
-    })
-    .filter((curve) => curve.rows.length >= 6);
-  if (curves.length <= maxCurves) return curves;
-  const stride = Math.ceil(curves.length / maxCurves);
-  return curves.filter((_curve, index) => index % stride === 0 || index === curves.length - 1);
-}
-
-function blazhkoPhaseSeries(
-  quantity: "L" | "V",
-  color: string,
-  fallbackRows: Row[],
-  period: BlazhkoPeriod | undefined,
-  options: { secondary?: boolean } = {}
-): Series[] {
-  const accessor = (row: Row) => row[quantity];
-  if (gridState.enabled || latestBlazhkoAnalysis.kind === "none" || !period || !latestDisplayWindow.period) {
-    return gridPhaseSeries(quantity, color, fallbackRows);
-  }
-  const curves = buildBlazhkoCurves(latestRows, period, latestDisplayWindow.period, latestPhaseReference);
-  if (!curves.length) return gridPhaseSeries(quantity, color, fallbackRows);
-  const highlightWidth = options.secondary ? 2.8 : 3.2;
-  const background = curves.map((curve): Series => ({
-    label: `${quantity}-blazhko-${curve.phase.toFixed(3)}`,
-    color: blazhkoColor(curve.phase, 0.24),
-    rows: curve.rows,
-    x: (row) => row.tau,
-    y: accessor,
-    width: 0.9
-  }));
-  const highlighted = curves
-    .filter((curve) => circularDistance(curve.phase, currentBlazhkoPhase) <= 0.09)
-    .sort((a, b) => circularDistance(b.phase, currentBlazhkoPhase) - circularDistance(a.phase, currentBlazhkoPhase))
-    .map((curve): Series => ({
-      label: `${quantity}-blazhko-current-${curve.phase.toFixed(3)}`,
-      color: blazhkoColor(curve.phase, 0.98),
-      rows: curve.rows,
-      x: (row) => row.tau,
-      y: accessor,
-      width: highlightWidth
-    }));
-  return [...background, ...highlighted];
-}
-
 function gridPhaseSeries(
   quantity: "L" | "V",
   color: string,
@@ -4484,77 +4345,6 @@ function drawGridColorbar(
   ctx.font = "11px Inter, sans-serif";
   ctx.fillStyle = THEME.axisText;
   ctx.fillText(valueText, labelLeft + symbolWidth, top + height + 28);
-  ctx.restore();
-}
-
-function clearBlazhkoColorbar(canvasId: string): void {
-  const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
-  if (!canvas) return;
-  delete canvas.dataset.blazhkoColorbar;
-  delete canvas.dataset.blazhkoPeriod;
-  delete canvas.dataset.blazhkoPhase;
-  delete canvas.dataset.blazhkoLabel;
-}
-
-function drawBlazhkoColorbar(
-  ctx: CanvasRenderingContext2D,
-  plot: PlotBox,
-  period: BlazhkoPeriod | undefined,
-  options: { secondary?: boolean; canvasId?: string } = {}
-): void {
-  const canvasId = options.canvasId ?? "lightCanvas";
-  if (!period || latestDisplayWindow.mode !== "phase" || gridState.enabled) {
-    clearBlazhkoColorbar(canvasId);
-    return;
-  }
-  const width = Math.min(172, Math.max(122, plot.width * 0.3));
-  const height = 9;
-  const left = plot.left + plot.width - width - 12;
-  const top = plot.top + 12;
-  const phase = phaseModOne(currentBlazhkoPhase);
-  const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
-  if (canvas) {
-    canvas.dataset.blazhkoColorbar = options.secondary ? "secondary" : "primary";
-    canvas.dataset.blazhkoPeriod = fmtFixed(period.period, 4);
-    canvas.dataset.blazhkoPhase = fmtFixed(phase, 3);
-    canvas.dataset.blazhkoLabel = options.secondary ? "Blazhko Phi_2" : "Blazhko Phi";
-  }
-
-  const gradient = ctx.createLinearGradient(left, top, left + width, top);
-  for (let index = 0; index <= 24; index += 1) {
-    const fraction = index / 24;
-    gradient.addColorStop(fraction, blazhkoColor(fraction, 1));
-  }
-  const label = options.secondary
-    ? `Blazhko Φ₂ (P₂ = ${fmt(period.period, 3)} τ)`
-    : `Blazhko Φ (P = ${fmt(period.period, 3)} τ)`;
-  const markerX = left + phase * width;
-
-  ctx.save();
-  ctx.fillStyle = "rgba(5, 8, 20, 0.72)";
-  ctx.fillRect(left - 8, top - 8, width + 16, 50);
-  ctx.fillStyle = gradient;
-  ctx.fillRect(left, top, width, height);
-  ctx.strokeStyle = "rgba(238, 245, 255, 0.62)";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(left, top, width, height);
-  ctx.strokeStyle = "#050814";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(markerX, top - 2);
-  ctx.lineTo(markerX, top + height + 2);
-  ctx.stroke();
-  ctx.strokeStyle = "#FFFFFF";
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.moveTo(markerX, top - 2);
-  ctx.lineTo(markerX, top + height + 2);
-  ctx.stroke();
-  ctx.fillStyle = THEME.axisText;
-  ctx.font = "11px Inter, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "top";
-  ctx.fillText(label, left + width / 2, top + height + 12);
   ctx.restore();
 }
 
@@ -6451,40 +6241,6 @@ function stopReasonLabel(message: string, runUntilStable: boolean): string {
   }
 }
 
-function emptyBlazhkoAnalysis(reason: BlazhkoAnalysis["reason"], primaryPeriod: number | null = null): BlazhkoAnalysis {
-  return {
-    kind: "none",
-    primaryPeriod,
-    modulationDepth: 0,
-    cycles: [],
-    periods: [],
-    reason
-  };
-}
-
-function blazhkoAnalysisForPhase(rows: readonly Row[], phase: PhaseResult): BlazhkoAnalysis {
-  if (gridState.enabled) return emptyBlazhkoAnalysis("no_primary_period", phase.period);
-  if (phase.reason !== "ok" || !phase.period) return emptyBlazhkoAnalysis("no_primary_period", phase.period);
-  return detectBlazhkoPeriods(rows, phase.period, { warmupTau: phase.reference?.warmupTau ?? state.phaseWarmupTau });
-}
-
-function statusLabelWithBlazhko(label: string, analysis: BlazhkoAnalysis): string {
-  if (analysis.kind === "double") return `${label} + double blazhko`;
-  if (analysis.kind === "single") return `${label} + blazhko`;
-  return label;
-}
-
-function updateBlazhkoMetricsDataset(node: HTMLElement, analysis: BlazhkoAnalysis): void {
-  node.dataset.blazhko = analysis.kind;
-  node.dataset.blazhkoReason = analysis.reason;
-  node.dataset.blazhkoDepth = fmtFixed(analysis.modulationDepth, 4);
-  node.dataset.blazhkoCycles = String(analysis.cycles.length);
-  if (analysis.periods[0]) node.dataset.blazhkoPeriod = fmtFixed(analysis.periods[0].period, 4);
-  else delete node.dataset.blazhkoPeriod;
-  if (analysis.periods[1]) node.dataset.blazhkoPeriod2 = fmtFixed(analysis.periods[1].period, 4);
-  else delete node.dataset.blazhkoPeriod2;
-}
-
 function phaseUnavailableLabel(phase: PhaseResult): string | undefined {
   switch (phase.reason) {
     case "ok":
@@ -6810,55 +6566,12 @@ function drawPhasePlotOverlays(
   if (canvasId === "lightCanvas") drawPhaseAnnotations(ctx, plot, xlim, ylim, canvasId, "L");
   if (canvasId === "velocityCanvas") drawPhaseAnnotations(ctx, plot, xlim, ylim, canvasId, "V");
   drawGridColorbar(ctx, plot, xlim, ylim, canvasId);
-  if (canvasId === "lightCanvas" || canvasId === "velocityCanvas") {
-    drawBlazhkoColorbar(ctx, plot, latestBlazhkoAnalysis.periods[0], { canvasId });
-  } else {
-    clearBlazhkoColorbar(canvasId);
-  }
-}
-
-function drawDoubleBlazhkoPanel(marker: { x: number; color: string } | undefined): void {
-  const panel = document.getElementById("doubleBlazhkoPanel");
-  const status = document.getElementById("doubleBlazhkoStatus");
-  if (!(panel instanceof HTMLElement)) return;
-  const period = latestBlazhkoAnalysis.periods[1];
-  const visible = latestBlazhkoAnalysis.kind === "double"
-    && Boolean(period)
-    && latestDisplayWindow.mode === "phase"
-    && !gridState.enabled
-    && latestPhaseSample.length > 0;
-  const wasHidden = panel.hidden;
-  panel.hidden = !visible;
-  panel.style.display = visible ? "" : "none";
-  if (wasHidden !== panel.hidden) updatePlotGridColumns();
-  if (!visible) {
-    clearBlazhkoColorbar("doubleBlazhkoCanvas");
-    plotRenderStates.delete("doubleBlazhkoCanvas");
-    return;
-  }
-  panel.dataset.blazhkoKind = "double";
-  panel.dataset.blazhkoPeriod2 = fmtFixed(period!.period, 4);
-  if (status instanceof HTMLElement) {
-    status.classList.toggle("status-ok", true);
-    status.title = `Second Blazhko period detected: ${fmt(period!.period, 3)} τ`;
-  }
-  drawSeries("doubleBlazhkoCanvas", blazhkoPhaseSeries("L", COLORS.L, latestPhaseSample, period, { secondary: true }), {
-    xlabel: latestPhasePeriodLabel,
-    ylabel: "luminosity L",
-    ylabelColor: COLORS.L,
-    xlim: latestDisplayWindow.xlim,
-    ylim: latestPhaseSample.length ? undefined : [0, 1],
-    minimumYlim: [0.99, 1.01],
-    message: latestPhaseMessage,
-    phaseMarker: marker,
-    afterDraw: (ctx, plot, _xlim, _ylim, canvasId) => drawBlazhkoColorbar(ctx, plot, period, { secondary: true, canvasId })
-  });
 }
 
 function drawPhasePlots(): void {
   updatePhaseAnnotationControls();
   const marker = phaseMarker();
-  drawSeries("lightCanvas", blazhkoPhaseSeries("L", COLORS.L, latestPhaseSample, latestBlazhkoAnalysis.periods[0]), {
+  drawSeries("lightCanvas", gridPhaseSeries("L", COLORS.L, latestPhaseSample), {
     xlabel: latestPhasePeriodLabel,
     ylabel: "luminosity L",
     ylabelColor: COLORS.L,
@@ -6870,7 +6583,7 @@ function drawPhasePlots(): void {
     afterDraw: drawPhasePlotOverlays
   });
 
-  drawSeries("velocityCanvas", blazhkoPhaseSeries("V", COLORS.V, latestPhaseSample, latestBlazhkoAnalysis.periods[0]), {
+  drawSeries("velocityCanvas", gridPhaseSeries("V", COLORS.V, latestPhaseSample), {
     xlabel: latestPhasePeriodLabel,
     ylabel: "radial velocity V",
     ylabelColor: COLORS.V,
@@ -6895,7 +6608,6 @@ function drawPhasePlots(): void {
       phaseMarker: marker
     });
   }
-  drawDoubleBlazhkoPanel(marker);
   syncPhaseCanvasState();
 }
 
@@ -7212,20 +6924,6 @@ function drawAnimatedPhaseViews(): void {
   drawPhasePortraitPanel();
 }
 
-function syncBlazhkoAnimationPhase(timestamp: number): void {
-  const hasBlazhkoPeriod = Boolean(latestBlazhkoAnalysis.periods[0]);
-  if (!hasBlazhkoPeriod || latestDisplayWindow.mode !== "phase" || gridState.enabled) {
-    currentBlazhkoPhase = 0;
-    blazhkoAnimationStartTime = null;
-    return;
-  }
-  const duration = blazhkoAnimationDurationMs();
-  if (blazhkoAnimationStartTime === null) {
-    blazhkoAnimationStartTime = timestamp - phaseModOne(currentBlazhkoPhase) * duration;
-  }
-  currentBlazhkoPhase = ((timestamp - blazhkoAnimationStartTime) % duration) / duration;
-}
-
 function startModelAnimationLoop(): void {
   if (modelAnimationFrame) return;
   const tick = (timestamp: number) => {
@@ -7240,11 +6938,9 @@ function startModelAnimationLoop(): void {
         const elapsed = (timestamp - modelAnimationStartTime) % duration;
         currentAnimationPhase = (elapsed / duration) * displayAnimationEnd(latestDisplayWindow);
       }
-      syncBlazhkoAnimationPhase(timestamp);
       drawAnimatedPhaseViews();
     } else {
       modelAnimationStartTime = null;
-      blazhkoAnimationStartTime = null;
     }
     modelAnimationFrame = window.requestAnimationFrame(tick);
   };
@@ -7268,9 +6964,6 @@ function drawAll(): void {
     ? gridState.statusText
     : phaseUnavailableLabel(phase);
   const displayWindow = buildCurrentDisplayWindow(rows, phase, gridResult, phaseMessage);
-  const blazhkoAnalysis = blazhkoAnalysisForPhase(rows, phase);
-  latestBlazhkoAnalysis = blazhkoAnalysis;
-  const displayStopReason = statusLabelWithBlazhko(stopReason, blazhkoAnalysis);
   const stabilityParameters = stabilityDisplayParameters();
   const s72Stability = analyticStabilityConditions(stabilityParameters);
   const linearPeriod = linearDynamicPeriod(stabilityParameters);
@@ -7279,7 +6972,6 @@ function drawAll(): void {
   updateSonificationSourceControls();
   updateDerivationPanel(stabilityParameters, s72Stability);
   const metricsNode = el<HTMLDivElement>("metrics");
-  updateBlazhkoMetricsDataset(metricsNode, blazhkoAnalysis);
   if (s72Stability.convective) metricsNode.dataset.s72Convective = s72State(s72Stability.convective.stable);
   else delete metricsNode.dataset.s72Convective;
   metricsNode.dataset.s72Dynamic = s72State(s72Stability.dynamic.stable);
@@ -7304,7 +6996,7 @@ function drawAll(): void {
     };
   });
   const metricItems: StatusMetricItem[] = [
-    { label: "stop", value: displayStopReason, className: okStatus ? "status-ok" : "status-warn" },
+    { label: "stop", value: stopReason, className: okStatus ? "status-ok" : "status-warn" },
     { label: `final \\(${TEX.tau}\\)`, value: final ? fmt(final.tau || 0, 4) : "n/a" },
     { label: "models", value: rows.length },
     { label: "accepted", value: latestResult.stats.acceptedSteps },
@@ -7341,7 +7033,6 @@ function drawAll(): void {
   queueMathTypeset([metricsNode]);
 
   latestDisplayWindow = displayWindow;
-  latestPhaseReference = displayWindow.mode === "phase" && !gridResult ? phase.reference : null;
   syncAnimationPositionToDisplayWindow();
   const phasePeriod = displayWindow.period;
   latestPhaseRows = [...displayWindow.rows];
