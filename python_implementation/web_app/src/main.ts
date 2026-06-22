@@ -626,7 +626,7 @@ function s72ConditionMetric(stability: AnalyticStabilityResult, condition: Analy
 
 function s72ConciseVerdict(kind: AnalyticStabilityKind, stable: boolean): string {
   const stateText = stable ? "stable" : "unstable";
-  if (kind === "convective") return `conv/turb ${stateText}`;
+  if (kind === "convective") return `convectively ${stateText}`;
   if (kind === "dynamic") return `dynamically ${stateText}`;
   if (kind === "secular") return `secularly ${stateText}`;
   return `pulsationally ${stateText}`;

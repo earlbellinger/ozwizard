@@ -317,7 +317,7 @@ async function runPlaywrightChecks() {
     assertOk(Boolean(convectiveBox), "convective/turbulent stability chip bounds should be available");
     const normalizeChipText = (value) => value?.replace(/\s+/g, " ").trim();
     const convectiveInitialText = normalizeChipText(await convectiveChip.locator(".stability-summary").innerText());
-    assertOk(convectiveInitialText?.includes("conv/turb stable") && convectiveInitialText.includes("(30.5 > 0)"), "convective chip should use concise summary text");
+    assertOk(convectiveInitialText?.includes("convectively stable") && convectiveInitialText.includes("(30.5 > 0)"), "convective chip should use concise summary text");
     assertOk(normalizeChipText(await secularChip.locator(".stability-summary").innerText())?.includes("secularly stable"), "secular chip should use concise summary text");
     assertOk(normalizeChipText(await dynamicChip.locator(".stability-summary").innerText())?.includes("dynamically stable"), "dynamic chip should use concise summary text");
     assertOk(normalizeChipText(await pulsationalChip.locator(".stability-summary").innerText())?.includes("pulsationally unstable (-36 ≯ 0)"), "pulsational chip should use concise summary text with a slashed failed inequality");
