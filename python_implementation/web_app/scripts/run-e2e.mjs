@@ -313,6 +313,7 @@ async function runPlaywrightChecks() {
     assertOk((await convectiveChip.getAttribute("role")) === "button", "stability chips should be clickable controls");
     assertOk((await convectiveChip.getAttribute("aria-expanded")) === "false", "stability chips should start collapsed");
     assertOk(/\\\(.*=30\.5 > 0\\\)/.test(await convectiveChip.getAttribute("data-stability-formula") || ""), "stability chips should expose the full formula");
+    assertOk(/\\not\\gt 0\\\)/.test(await pulsationalChip.getAttribute("data-stability-formula") || ""), "failed stability formulas should use a slashed greater-than");
     const convectiveBox = await convectiveChip.boundingBox();
     assertOk(Boolean(convectiveBox), "convective/turbulent stability chip bounds should be available");
     const normalizeChipText = (value) => value?.replace(/\s+/g, " ").trim();

@@ -550,7 +550,8 @@ function s72MetricClass(stable: boolean): "status-ok" | "status-bad" {
 }
 
 function s72LatexInequality(satisfied: boolean, symbol: ">" | "<"): string {
-  return satisfied ? symbol : `\\not${symbol}`;
+  if (satisfied) return symbol;
+  return symbol === ">" ? "\\not\\gt" : "\\not\\lt";
 }
 
 function s72TextInequality(satisfied: boolean, symbol: ">" | "<"): string {

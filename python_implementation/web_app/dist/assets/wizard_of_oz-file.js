@@ -2014,7 +2014,8 @@
     return stable ? "status-ok" : "status-bad";
   }
   function s72LatexInequality(satisfied, symbol) {
-    return satisfied ? symbol : `\\not${symbol}`;
+    if (satisfied) return symbol;
+    return symbol === ">" ? "\\not\\gt" : "\\not\\lt";
   }
   function s72TextInequality(satisfied, symbol) {
     if (satisfied) return symbol;
