@@ -181,7 +181,7 @@ let latestPhaseMessage: string | undefined;
 let latestPhasePeriodLabel = "phase (period = n/a τ)";
 let latestPhaseLuminosityRange: NumericRange = [0, 1];
 let latestPhaseParameters: ModelParameters = state;
-let phaseAnnotationsVisible = true;
+let phaseAnnotationsVisible = false;
 let sonificationReferenceNote = MIDDLE_C_NOTE;
 let sonificationReferenceHz = noteToFrequency(MIDDLE_C_NOTE);
 let sonificationSamples: SonificationSample[] = [];
@@ -4179,11 +4179,6 @@ function radialVelocityCurveColor(value: number, maxAbs: number): string {
   return mixHexColors("#FFFFFF", color, Math.min(1, Math.abs(value) / maxAbs));
 }
 
-function luminosityCurveWidth(value: number): number {
-  const level = normalizedInRange(value, latestPhaseLuminosityRange);
-  return 1.15 + 3.35 * level;
-}
-
 function gridPhaseSeries(
   quantity: "L" | "V",
   color: string,
@@ -4192,7 +4187,6 @@ function gridPhaseSeries(
   const accessor = (row: Row) => row[quantity];
   if (!gridState.enabled || !gridState.results.length) {
     const singleSeries: Series = { label: quantity, color, rows: fallbackRows, x: (row) => row.tau, y: accessor };
-    if (!gridState.enabled && quantity === "L") singleSeries.widthAt = (row) => luminosityCurveWidth(row.L);
     if (!gridState.enabled && quantity === "V") {
       const maxAbs = Math.max(1e-12, ...fallbackRows.map((row) => Math.abs(row.V)).filter(Number.isFinite));
       singleSeries.colorAt = (row) => radialVelocityCurveColor(row.V, maxAbs);
@@ -6489,7 +6483,6 @@ function drawPhaseAnnotations(
   }
   if (!phaseAnnotationsVisible || !latestPhaseRows.length) return;
   const annotations = phasePlotAnnotations(latestPhaseRows);
-  const radiusRange = rawRange(latestPhaseRows.map((row) => row.R));
   const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
   const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
   let drawn = 0;
@@ -6501,7 +6494,7 @@ function drawPhaseAnnotations(
     const x = annotation.row.tau;
     const y = annotation.row[quantity];
     if (!Number.isFinite(x + y) || x < xlim[0] || x > xlim[1] || y < ylim[0] || y > ylim[1]) return;
-    drawPhaseAnnotationSymbol(ctx, sx(x), sy(y), annotation, radiusRange);
+    drawPhaseAnnotationSymbol(ctx, sx(x), sy(y), annotation);
     drawn += 1;
   });
   ctx.restore();
@@ -6512,8 +6505,7 @@ function drawPhaseAnnotationSymbol(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  annotation: PhasePlotAnnotation,
-  radiusRange: NumericRange
+  annotation: PhasePlotAnnotation
 ): void {
   ctx.save();
   ctx.lineWidth = 1.7;
@@ -6528,7 +6520,7 @@ function drawPhaseAnnotationSymbol(
     ctx.strokeText(symbol, x, y);
     ctx.fillText(symbol, x, y);
   } else if (annotation.kind === "maxR" || annotation.kind === "minR") {
-    const size = 4.2 + 5.6 * normalizedInRange(annotation.row.R, radiusRange);
+    const size = annotation.kind === "maxR" ? 4.6 : 3.1;
     ctx.beginPath();
     ctx.arc(x, y, size, 0, 2 * Math.PI);
     ctx.stroke();

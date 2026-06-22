@@ -1559,9 +1559,12 @@
       gap: 5px 9px;
     }
 
-    .annotation-symbol-break {
-      flex-basis: 100%;
-      height: 0;
+    .annotation-symbol-group {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: 5px 9px;
+      white-space: nowrap;
     }
 
     .annotation-symbol-item {
@@ -1587,11 +1590,13 @@
       border: 1.6px solid var(--color);
       border-radius: 999px;
       color: transparent;
+      width: 11px;
+      height: 11px;
     }
 
     .annotation-symbol.open.small {
-      width: 10px;
-      height: 10px;
+      width: 8px;
+      height: 8px;
     }
 
     .annotation-symbol.dot {
@@ -2244,22 +2249,25 @@
               <h3>Lightcurve</h3>
             </div>
             <label class="legend-item legend-toggle annotation-toggle" id="phaseAnnotationToggleLabel" style="--accent:#FFD166">
-              <input id="phaseAnnotationsToggle" type="checkbox" aria-label="Annotations" checked>
+              <input id="phaseAnnotationsToggle" type="checkbox" aria-label="Annotations">
               <span>Annotations</span>
             </label>
           </div>
           <canvas id="lightCanvas"></canvas>
           <div class="legend phase-annotation-controls" id="phaseAnnotationControls">
             <div class="annotation-symbol-legend" id="phaseAnnotationLegendItems" hidden aria-label="Annotation legend">
-              <span class="annotation-symbol-item"><span class="annotation-symbol dot" style="--color:#B884FF"></span>max L</span>
-              <span class="annotation-symbol-item"><span class="annotation-symbol dot small" style="--color:#B884FF"></span>min L</span>
-              <span class="annotation-symbol-item"><span class="annotation-symbol open" style="--color:#8FAEFF"></span>max R</span>
-              <span class="annotation-symbol-item"><span class="annotation-symbol open small" style="--color:#8FAEFF"></span>min R</span>
-              <span class="annotation-symbol-break" aria-hidden="true"></span>
-              <span class="annotation-symbol-item"><span class="annotation-symbol" style="--color:#4DA3FF">×</span>max V</span>
-              <span class="annotation-symbol-item"><span class="annotation-symbol small" style="--color:#FF5F6D">×</span>min V</span>
-              <span class="annotation-symbol-item"><span class="annotation-symbol" style="--color:#FFD166">↑</span>max T</span>
-              <span class="annotation-symbol-item"><span class="annotation-symbol" style="--color:#FFD166">↓</span>min T</span>
+              <span class="annotation-symbol-group">
+                <span class="annotation-symbol-item"><span class="annotation-symbol dot" style="--color:#B884FF"></span>max L</span>
+                <span class="annotation-symbol-item"><span class="annotation-symbol dot small" style="--color:#B884FF"></span>min L</span>
+                <span class="annotation-symbol-item"><span class="annotation-symbol open" style="--color:#8FAEFF"></span>max R</span>
+                <span class="annotation-symbol-item"><span class="annotation-symbol open small" style="--color:#8FAEFF"></span>min R</span>
+              </span>
+              <span class="annotation-symbol-group">
+                <span class="annotation-symbol-item"><span class="annotation-symbol" style="--color:#4DA3FF">×</span>max V</span>
+                <span class="annotation-symbol-item"><span class="annotation-symbol small" style="--color:#FF5F6D">×</span>min V</span>
+                <span class="annotation-symbol-item"><span class="annotation-symbol" style="--color:#FFD166">↑</span>max T</span>
+                <span class="annotation-symbol-item"><span class="annotation-symbol" style="--color:#FFD166">↓</span>min T</span>
+              </span>
             </div>
           </div>
         </div>

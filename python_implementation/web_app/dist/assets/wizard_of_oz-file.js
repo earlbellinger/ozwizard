@@ -1866,7 +1866,7 @@
   var latestPhasePeriodLabel = "phase (period = n/a \u03C4)";
   var latestPhaseLuminosityRange = [0, 1];
   var latestPhaseParameters = state;
-  var phaseAnnotationsVisible = true;
+  var phaseAnnotationsVisible = false;
   var sonificationReferenceNote = MIDDLE_C_NOTE;
   var sonificationReferenceHz = noteToFrequency(MIDDLE_C_NOTE);
   var sonificationSamples = [];
@@ -5190,15 +5190,10 @@
     const color = value >= 0 ? POSITIVE_VELOCITY_COLOR : NEGATIVE_VELOCITY_COLOR;
     return mixHexColors("#FFFFFF", color, Math.min(1, Math.abs(value) / maxAbs));
   }
-  function luminosityCurveWidth(value) {
-    const level = normalizedInRange(value, latestPhaseLuminosityRange);
-    return 1.15 + 3.35 * level;
-  }
   function gridPhaseSeries(quantity, color, fallbackRows) {
     const accessor = (row) => row[quantity];
     if (!gridState.enabled || !gridState.results.length) {
       const singleSeries = { label: quantity, color, rows: fallbackRows, x: (row) => row.tau, y: accessor };
-      if (!gridState.enabled && quantity === "L") singleSeries.widthAt = (row) => luminosityCurveWidth(row.L);
       if (!gridState.enabled && quantity === "V") {
         const maxAbs = Math.max(1e-12, ...fallbackRows.map((row) => Math.abs(row.V)).filter(Number.isFinite));
         singleSeries.colorAt = (row) => radialVelocityCurveColor(row.V, maxAbs);
@@ -7161,7 +7156,6 @@
     }
     if (!phaseAnnotationsVisible || !latestPhaseRows.length) return;
     const annotations = phasePlotAnnotations(latestPhaseRows);
-    const radiusRange = rawRange(latestPhaseRows.map((row) => row.R));
     const sx = (x) => plot.left + (x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
     const sy = (y) => plot.top + plot.height - (y - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
     let drawn = 0;
@@ -7173,13 +7167,13 @@
       const x = annotation.row.tau;
       const y = annotation.row[quantity];
       if (!Number.isFinite(x + y) || x < xlim[0] || x > xlim[1] || y < ylim[0] || y > ylim[1]) return;
-      drawPhaseAnnotationSymbol(ctx, sx(x), sy(y), annotation, radiusRange);
+      drawPhaseAnnotationSymbol(ctx, sx(x), sy(y), annotation);
       drawn += 1;
     });
     ctx.restore();
     if (canvas instanceof HTMLCanvasElement) canvas.dataset.annotationCount = String(drawn);
   }
-  function drawPhaseAnnotationSymbol(ctx, x, y, annotation, radiusRange) {
+  function drawPhaseAnnotationSymbol(ctx, x, y, annotation) {
     ctx.save();
     ctx.lineWidth = 1.7;
     ctx.strokeStyle = "#050814";
@@ -7193,7 +7187,7 @@
       ctx.strokeText(symbol, x, y);
       ctx.fillText(symbol, x, y);
     } else if (annotation.kind === "maxR" || annotation.kind === "minR") {
-      const size = 4.2 + 5.6 * normalizedInRange(annotation.row.R, radiusRange);
+      const size = annotation.kind === "maxR" ? 4.6 : 3.1;
       ctx.beginPath();
       ctx.arc(x, y, size, 0, 2 * Math.PI);
       ctx.stroke();

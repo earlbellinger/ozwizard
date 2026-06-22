@@ -1049,6 +1049,10 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#lightLegend")).toHaveCount(0);
   await expect(page.locator("#velocityLegend")).toHaveCount(0);
   await expect(page.locator("#phaseLegend")).toHaveCount(0);
+  await expect(page.getByLabel("Annotations")).not.toBeChecked();
+  await expect(page.locator("#phaseAnnotationLegendItems")).toBeHidden();
+  await expect(page.locator("#lightCanvas")).toHaveAttribute("data-annotations", "off");
+  await page.getByLabel("Annotations").check();
   await expect(page.getByLabel("Annotations")).toBeChecked();
   await expect(page.locator("#phaseAnnotationLegendItems")).toBeVisible();
   await expect(page.locator("#lightCanvas")).toHaveAttribute("data-annotations", "on");
@@ -1062,13 +1066,24 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     "↑max T",
     "↓min T"
   ]);
-  const annotationLegendRows = await page.locator("#phaseAnnotationLegendItems .annotation-symbol-item").evaluateAll((items) =>
-    items.map((item) => Math.round(item.getBoundingClientRect().top))
-  );
-  expect(annotationLegendRows[4]).toBeGreaterThan(annotationLegendRows[3]);
-  expect(annotationLegendRows[5]).toBe(annotationLegendRows[4]);
-  expect(annotationLegendRows[6]).toBe(annotationLegendRows[4]);
-  expect(annotationLegendRows[7]).toBe(annotationLegendRows[4]);
+  const annotationLegendLayout = await page.locator("#phaseAnnotationLegendItems").evaluate((legend) => {
+    const items = [...legend.querySelectorAll<HTMLElement>(".annotation-symbol-item")];
+    const columnGap = parseFloat(getComputedStyle(legend).columnGap || "0") || 0;
+    const rows = items.map((item) => Math.round(item.getBoundingClientRect().top));
+    const totalTermWidth = items.reduce((sum, item) => sum + item.getBoundingClientRect().width, 0)
+      + columnGap * Math.max(0, items.length - 1);
+    return {
+      rows,
+      allTermsFit: totalTermWidth <= legend.getBoundingClientRect().width + 0.5
+    };
+  });
+  if (annotationLegendLayout.allTermsFit) {
+    expect(new Set(annotationLegendLayout.rows).size).toBe(1);
+  } else {
+    expect(annotationLegendLayout.rows.slice(0, 4).every((row) => row === annotationLegendLayout.rows[0])).toBe(true);
+    expect(annotationLegendLayout.rows[4]).toBeGreaterThan(annotationLegendLayout.rows[3]);
+    expect(annotationLegendLayout.rows.slice(4).every((row) => row === annotationLegendLayout.rows[4])).toBe(true);
+  }
   await expect.poll(async () => Number(await page.locator("#lightCanvas").getAttribute("data-annotation-count") || "0"))
     .toBe(16);
   await expect.poll(async () => Number(await page.locator("#velocityCanvas").getAttribute("data-annotation-count") || "0"))
