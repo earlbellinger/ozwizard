@@ -568,42 +568,46 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(convectiveChip.locator(".stability-summary")).toBeVisible();
   await expect(convectiveChip.locator(".stability-formula")).toBeHidden();
   await convectiveChip.hover();
-  await expect(convectiveChip.locator(".stability-summary")).toBeHidden();
-  await expect(convectiveChip.locator(".stability-formula")).toBeVisible();
+  await expect(convectiveChip.locator(".stability-summary")).toBeVisible();
+  await expect(convectiveChip.locator(".stability-formula")).toBeHidden();
   await expect(convectiveChip).not.toHaveAttribute("data-stability-view");
   await page.mouse.move(1, 1);
   await expect(convectiveChip.locator(".stability-summary")).toBeVisible();
   await convectiveChip.click();
   await expect(convectiveChip).toHaveAttribute("aria-expanded", "true");
   await expect(convectiveChip).toHaveAttribute("data-stability-view", "formula");
+  await expect(convectiveChip.locator(".stability-summary")).toBeVisible();
   await expect(convectiveChip.locator(".stability-formula")).toBeVisible();
+  await expect(convectiveChip.locator(".stability-formula .stability-equation-chunk")).not.toHaveCount(0);
+  await expect(page.locator("body")).not.toContainText(/Extra \\left|missing \\right/i);
   await convectiveChip.click();
   await expect(convectiveChip).toHaveAttribute("aria-expanded", "false");
+  await expect(convectiveChip.locator(".stability-formula")).toBeHidden();
+  await secularChip.click();
+  await expect(secularChip).toHaveAttribute("aria-expanded", "true");
+  await expect(secularChip.locator(".stability-summary")).toBeVisible();
+  await expect(secularChip.locator(".stability-formula")).toBeVisible();
+  await expect(secularChip.locator(".stability-formula .stability-equation-chunk")).not.toHaveCount(0);
+  await expect(page.locator("body")).not.toContainText(/Extra \\left|missing \\right/i);
+  await secularChip.click();
+  await expect(secularChip).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator("#stabilityChipTooltip")).toHaveCount(0);
-  await pulsationalChip.evaluate((node) => {
-    node.dispatchEvent(new PointerEvent("pointerdown", {
-      bubbles: true,
-      cancelable: true,
-      pointerId: 91,
-      pointerType: "touch",
-      clientX: 20,
-      clientY: 20
-    }));
-  });
-  await page.waitForTimeout(560);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await pulsationalChip.click();
   await expect(pulsationalChip).toHaveAttribute("aria-expanded", "true");
   await expect(pulsationalChip).toHaveAttribute("data-stability-view", "formula");
+  await expect(pulsationalChip.locator(".stability-summary")).toContainText("pulsationally unstable");
   await expect(pulsationalChip.locator(".stability-formula")).toBeVisible();
-  await pulsationalChip.evaluate((node) => {
-    node.dispatchEvent(new PointerEvent("pointerup", {
-      bubbles: true,
-      cancelable: true,
-      pointerId: 91,
-      pointerType: "touch",
-      clientX: 20,
-      clientY: 20
-    }));
+  const expandedStabilityFitsMobile = await pulsationalChip.evaluate((chip) => {
+    const page = document.documentElement;
+    return {
+      chipFits: chip.scrollWidth <= chip.clientWidth + 1,
+      pageFits: page.scrollWidth <= page.clientWidth + 1
+    };
   });
+  expect(expandedStabilityFitsMobile).toEqual({ chipFits: true, pageFits: true });
+  await pulsationalChip.click();
+  await page.setViewportSize({ width: 1280, height: 720 });
   await expect(page.getByRole("heading", { name: "Lightcurve" })).toBeVisible();
   await expect(page.locator("[data-plot-panel='light'] .plot-title #phaseAnnotationToggleLabel")).toContainText("Annotations");
   await expect(page.locator("[data-plot-panel='velocity'] .phase-anchor-control")).toContainText("phase to");
@@ -721,14 +725,19 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(plotLayout.display).toBe("flex");
   expect(plotLayout.flexWrap).toBe("wrap");
   const firstRow = plotLayout.panels.filter((panel) => panel.top === plotLayout.panels[0].top);
+  const phaseRowTop = plotLayout.panels.find((panel) => panel.id === "velocity")!.top;
+  const phaseRow = plotLayout.panels.filter((panel) => panel.top === phaseRowTop);
   const referencePanels = plotLayout.panels.filter((panel) => ["stability", "strip", "phasePortrait"].includes(panel.id));
-  expect(plotLayout.panels.map((panel) => panel.id)).toEqual(["model", "light", "velocity", "time", "lum", "tpOpacity", "stability", "strip", "phasePortrait"]);
-  expect(firstRow.map((panel) => panel.id)).toEqual(["model", "light", "velocity"]);
+  expect(plotLayout.panels.map((panel) => panel.id)).toEqual(["model", "light", "velocity", "tpOpacity", "phasePortrait", "heatEngine", "time", "lum", "stability", "strip"]);
+  expect(plotLayout.panels.map((panel) => panel.id).slice(1, 5)).toEqual(["light", "velocity", "tpOpacity", "phasePortrait"]);
+  expect(firstRow.map((panel) => panel.id)).toEqual(["model", "light"]);
+  expect(phaseRow.map((panel) => panel.id)).toEqual(["velocity", "tpOpacity", "phasePortrait"]);
   expect(firstRow.find((panel) => panel.id === "model")!.width).toBeLessThan(360);
   expect(firstRow.find((panel) => panel.id === "light")!.width).toBeGreaterThan(360);
-  expect(firstRow.find((panel) => panel.id === "velocity")!.width).toBeGreaterThan(360);
+  expect(phaseRow.find((panel) => panel.id === "velocity")!.width).toBeGreaterThan(360);
+  expect(phaseRow.find((panel) => panel.id === "phasePortrait")!.width).toBeGreaterThan(360);
+  expect(phaseRow.find((panel) => panel.id === "tpOpacity")!.width).toBeGreaterThan(360);
   expect(plotLayout.panels.find((panel) => panel.id === "time")!.width).toBeGreaterThan(360);
-  expect(plotLayout.panels.find((panel) => panel.id === "tpOpacity")!.width).toBeGreaterThan(360);
   expect(referencePanels.every((panel) => panel.width >= 400)).toBe(true);
   expect(new Set(referencePanels.map((panel) => panel.top)).size).toBeLessThanOrEqual(2);
   const hasModelPaint = await page.locator("#modelCanvas").evaluate((canvas) => {
@@ -825,6 +834,10 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-axis-labels", "log10(T/T0),log10(P/P0)");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-color-variable", "log10(kappa/kappa0)");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-colorbar", "log10(kappa/kappa0)");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-palette", "blue-gold");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-vector-field", "gradient");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-colorbar-marker", "current-phase");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-current-opacity", /-?\d+\.\d+/);
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-current-phase", /\d+\.\d+/);
   const zetaSlider = page.getByRole("slider", { name: "thermal response" });
   const zetacSlider = page.getByRole("slider", { name: "convective response" });
@@ -885,13 +898,13 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("[data-plot-panel='model']")).toBeHidden();
   await expect(page.locator("#hiddenPlotControls")).toBeVisible();
   await expect(page.locator("#hiddenPlotControls")).toContainText("Shell");
-  await expect(page.locator("#plotGrid")).toHaveAttribute("data-visible-plots", "8");
+  await expect(page.locator("#plotGrid")).toHaveAttribute("data-visible-plots", "9");
   await expect(page.locator("#plotGrid")).not.toHaveAttribute("data-plot-columns", /.+/);
-  await expect(page.locator("#plotGrid .plot-panel canvas:visible")).toHaveCount(8);
+  await expect(page.locator("#plotGrid .plot-panel canvas:visible")).toHaveCount(9);
   await page.locator("#hiddenPlotControls [data-plot-toggle='model']").check();
   await expect(page.locator("[data-plot-panel='model']")).toBeVisible();
   await expect(page.locator("#hiddenPlotControls")).toBeHidden();
-  await expect(page.locator("#plotGrid")).toHaveAttribute("data-visible-plots", "9");
+  await expect(page.locator("#plotGrid")).toHaveAttribute("data-visible-plots", "10");
   await expect(page.locator("#plotGrid")).not.toHaveAttribute("data-plot-columns", /.+/);
   const doubleTapRadiusControl = page.locator("[data-control-key='r0']");
   const doubleTapRadiusSlider = doubleTapRadiusControl.locator(".single-slider");
@@ -911,19 +924,31 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await fluxControl.dispatchEvent("contextmenu");
   await expect(page.getByLabel("Enable grid mode")).toBeChecked();
   await expect(page.locator("[data-plot-panel='model']")).toBeHidden();
+  await expect(page.locator("[data-plot-panel='heatEngine']")).toBeHidden();
   await expect(page.locator("[data-plot-panel='time']")).toBeHidden();
   await expect(page.locator("[data-plot-panel='lum']")).toBeHidden();
   await expect(page.locator("[data-plot-panel='tpOpacity']")).toBeVisible();
   await expect(page.locator("[data-plot-panel='stability']")).toBeVisible();
   await expect(page.locator("[data-plot-panel='strip']")).toBeVisible();
   await expect(page.locator("[data-plot-panel='phasePortrait']")).toBeVisible();
+  await expect(page.locator("#plotGrid")).toHaveAttribute("data-visible-plots", "6");
   await expect(page.locator("#hiddenPlotControls [data-plot-toggle='model']")).toBeDisabled();
+  await expect(page.locator("#hiddenPlotControls [data-plot-toggle='heatEngine']")).toBeDisabled();
   await expect(page.locator("#hiddenPlotControls [data-plot-toggle='time']")).toBeDisabled();
   await expect(page.locator("#hiddenPlotControls [data-plot-toggle='lum']")).toBeDisabled();
   await expect(page.locator("[data-plot-toggle='tpOpacity']")).not.toBeDisabled();
   await expect(page.locator("[data-plot-toggle='stability']")).not.toBeDisabled();
   await expect(page.locator("[data-plot-toggle='strip']")).not.toBeDisabled();
   await expect(page.locator("[data-plot-toggle='phasePortrait']")).not.toBeDisabled();
+  await expect(page.locator("#lightCanvas")).not.toHaveAttribute("data-current-phase");
+  await expect(page.locator("#velocityCanvas")).not.toHaveAttribute("data-current-phase");
+  await expect(page.locator("#tpOpacityCanvas")).not.toHaveAttribute("data-current-phase");
+  await expect(page.locator("#tpOpacityCanvas")).not.toHaveAttribute("data-opacity-colorbar-marker");
+  await expect(page.locator("#phasePortraitCanvas")).not.toHaveAttribute("data-current-phase");
+  const gridPhaseBefore = Number(await page.locator("#cepheidGuideCanvas").getAttribute("data-current-phase"));
+  await page.waitForTimeout(260);
+  const gridPhaseAfter = Number(await page.locator("#cepheidGuideCanvas").getAttribute("data-current-phase"));
+  expect(phaseDelta(gridPhaseAfter, gridPhaseBefore)).toBeLessThan(0.01);
   await expect(page.locator("#fourierGridPanel")).toBeVisible();
   const loopSpeed = page.getByRole("slider", { name: "parameter loop speed" });
   await expect(loopSpeed).toHaveValue("1");
@@ -999,6 +1024,9 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-tp-opacity-mode", "grid");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-tp-opacity-tracks", /[2-9]\d*/);
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-colorbar", "log10(kappa/kappa0)");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-palette", "blue-gold");
+  await expect(page.locator("#tpOpacityCanvas")).not.toHaveAttribute("data-opacity-colorbar-marker");
+  await expect(page.locator("#phasePortraitCanvas")).not.toHaveAttribute("data-current-phase");
   const fourierHasPaint = await page.locator("#fourierCanvas").evaluate((canvas) => {
     const node = canvas as HTMLCanvasElement;
     const ctx = node.getContext("2d");
@@ -1039,10 +1067,12 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await page.getByLabel("Enable grid mode").uncheck();
   await expect(page.locator("#fourierGridPanel")).toBeHidden();
   await expect(page.locator("[data-plot-panel='model']")).toBeVisible();
+  await expect(page.locator("[data-plot-panel='heatEngine']")).toBeVisible();
   await expect(page.locator("[data-plot-panel='time']")).toBeVisible();
   await expect(page.locator("[data-plot-panel='lum']")).toBeVisible();
   await expect(page.locator("[data-plot-panel='tpOpacity']")).toBeVisible();
   await expect(page.locator("[data-plot-toggle='model']")).not.toBeDisabled();
+  await expect(page.locator("[data-plot-toggle='heatEngine']")).not.toBeDisabled();
   await expect(page.locator("[data-plot-toggle='time']")).not.toBeDisabled();
   await expect(page.locator("[data-plot-toggle='lum']")).not.toBeDisabled();
   await expect(page.locator("#adsrCanvas")).toHaveCount(1);

@@ -1976,12 +1976,8 @@
   var INSTABILITY_STRIP_Y_RESOLUTION = 44;
   var STRIP_LOG_RATIO_MIN = -2;
   var STRIP_LOG_RATIO_MAX = 2;
-  var STABILITY_CHIP_LONG_PRESS_MS = 480;
   var stabilityMapCache = /* @__PURE__ */ new Map();
   var instabilityStripCache = /* @__PURE__ */ new Map();
-  var stabilityChipLongPressTimer = null;
-  var stabilityChipLongPressTarget = null;
-  var stabilityChipSuppressClickTarget = null;
   var PLOT_LAYOUT = {
     left: 84,
     top: 18,
@@ -2065,8 +2061,46 @@
   }
   function s72ConditionMetric(stability, condition2) {
     const symbol = s72LatexInequality(condition2.stable, ">");
-    const formula = condition2.kind === "convective" ? s72ConvectiveMargin() : condition2.kind === "secular" ? s72SecularMargin(stability) : condition2.kind === "dynamic" ? s72DynamicMargin(stability) : s72PulsationalMargin(stability);
+    const formula = s72ConditionFormula(stability, condition2);
     return `\\(${formula}=${fmt(condition2.value, 2)} ${symbol} 0\\)`;
+  }
+  function s72ConditionFormula(stability, condition2) {
+    return condition2.kind === "convective" ? s72ConvectiveMargin() : condition2.kind === "secular" ? s72SecularMargin(stability) : condition2.kind === "dynamic" ? s72DynamicMargin(stability) : s72PulsationalMargin(stability);
+  }
+  function mathChunk(latex) {
+    return `<span class="stability-equation-chunk">\\(${latex}\\)</span>`;
+  }
+  function s72ConditionFormulaChunks(stability, condition2) {
+    if (condition2.kind === "convective") {
+      return [
+        `${TEX.zeta}${TEX.zetac}\\bigl[`,
+        s72E(),
+        `+${s72Restoring()}${s72RadiativeThermal()}`,
+        `+${s72ConvectiveCorrection()}\\bigr]`
+      ];
+    }
+    if (condition2.kind === "secular") {
+      return stability.physicsMode === "radiative" ? [`${TEX.zeta}\\bigl[`, s72E(), `+${s72Restoring()}${s72RadiativeThermal()}\\bigr]`] : [`${TEX.zetac}${s72Restoring()}`, `+${TEX.zeta}\\bigl[`, s72E(), `+${s72Restoring()}${s72RadiativeThermal()}\\bigr]`];
+    }
+    if (condition2.kind === "dynamic") {
+      if (stability.physicsMode === "radiative") return [s72Restoring()];
+      return [
+        `\\left[${s72SecularMargin(stability)}\\right]`,
+        `\\left[${s72DynamicCoupling()}\\right]`,
+        `-\\left[${s72ConvectiveMargin()}\\right]`,
+        `\\left[${s72ThermalResponse()}\\right]`
+      ];
+    }
+    return stability.physicsMode === "radiative" ? [`-${s72E()}`] : [
+      `\\left[${s72ThermalResponse()}\\right]`,
+      `\\ozNeutral{\\Delta_{\\rm dyn}}`,
+      `-\\left[${s72SecularMargin(stability)}\\right]^2`
+    ];
+  }
+  function s72ConditionMetricHtml(stability, condition2) {
+    const symbol = s72LatexInequality(condition2.stable, ">");
+    const chunks = s72ConditionFormulaChunks(stability, condition2).map(mathChunk).join("<wbr>");
+    return `<span class="stability-equation">${chunks}<wbr>${mathChunk(`=${fmt(condition2.value, 2)} ${symbol} 0`)}</span>`;
   }
   function s72ConciseVerdict(kind, stable) {
     const stateText = stable ? "stable" : "unstable";
@@ -2987,21 +3021,12 @@
   function toggleStabilityChip(chip) {
     setStabilityChipExpanded(chip, chip.getAttribute("aria-expanded") !== "true");
   }
-  function clearStabilityChipLongPress() {
-    if (stabilityChipLongPressTimer !== null) window.clearTimeout(stabilityChipLongPressTimer);
-    stabilityChipLongPressTimer = null;
-    stabilityChipLongPressTarget = null;
-  }
   function setupStabilityChipInteractions() {
     const metrics = el("metrics");
     metrics.addEventListener("click", (event) => {
       const chip = stabilityChipFromEvent(event);
       if (!chip) return;
       event.preventDefault();
-      if (stabilityChipSuppressClickTarget === chip) {
-        stabilityChipSuppressClickTarget = null;
-        return;
-      }
       toggleStabilityChip(chip);
     });
     metrics.addEventListener("keydown", (event) => {
@@ -3010,21 +3035,6 @@
       event.preventDefault();
       toggleStabilityChip(chip);
     });
-    metrics.addEventListener("pointerdown", (event) => {
-      const chip = stabilityChipFromEvent(event);
-      if (!chip || event.pointerType !== "touch" && event.pointerType !== "pen") return;
-      clearStabilityChipLongPress();
-      stabilityChipLongPressTarget = chip;
-      stabilityChipLongPressTimer = window.setTimeout(() => {
-        if (!stabilityChipLongPressTarget) return;
-        setStabilityChipExpanded(stabilityChipLongPressTarget, true);
-        stabilityChipSuppressClickTarget = stabilityChipLongPressTarget;
-        clearStabilityChipLongPress();
-      }, STABILITY_CHIP_LONG_PRESS_MS);
-    });
-    metrics.addEventListener("pointerup", clearStabilityChipLongPress);
-    metrics.addEventListener("pointercancel", clearStabilityChipLongPress);
-    metrics.addEventListener("pointerleave", clearStabilityChipLongPress);
   }
   function buildControls() {
     setupResponsiveSidebarControls();
@@ -3175,7 +3185,7 @@
     const hiddenControls = el("hiddenPlotControls");
     let hiddenCount = 0;
     Object.keys(plotPanelVisibility).forEach((plotId) => {
-      const forcedHidden = gridState.enabled && (plotId === "model" || plotId === "time" || plotId === "lum");
+      const forcedHidden = gridState.enabled && (plotId === "model" || plotId === "heatEngine" || plotId === "time" || plotId === "lum");
       const visible = forcedHidden ? false : plotPanelVisibility[plotId];
       const panel = document.querySelector(`[data-plot-panel="${plotId}"]`);
       const control = document.querySelector(`[data-plot-control="${plotId}"]`);
@@ -3224,12 +3234,15 @@
     if (enabled) {
       gridState.restorePlotVisibility = {
         model: plotPanelVisibility.model,
+        heatEngine: plotPanelVisibility.heatEngine,
         time: plotPanelVisibility.time,
         lum: plotPanelVisibility.lum
       };
       plotPanelVisibility.model = false;
+      plotPanelVisibility.heatEngine = false;
       plotPanelVisibility.time = false;
       plotPanelVisibility.lum = false;
+      modelAnimationStartTime = null;
       gridState.status = "idle";
       gridState.statusText = "Click a slider to define a grid range";
       if (options.defaultGammaRange) setDefaultGammaGridRange();
@@ -3245,10 +3258,12 @@
       gridState.statusText = "Grid off";
       if (gridState.restorePlotVisibility) {
         plotPanelVisibility.model = gridState.restorePlotVisibility.model;
+        plotPanelVisibility.heatEngine = gridState.restorePlotVisibility.heatEngine;
         plotPanelVisibility.time = gridState.restorePlotVisibility.time;
         plotPanelVisibility.lum = gridState.restorePlotVisibility.lum;
       }
       gridState.restorePlotVisibility = null;
+      modelAnimationStartTime = null;
     }
     updatePlotPanelVisibility();
     updateGridRangeUi();
@@ -6431,10 +6446,11 @@
   }
   function opacityColor(logOpacity, opacityRange, alpha = 1) {
     const stops = [
-      { t: 0, r: 80, g: 105, b: 196 },
-      { t: 0.36, r: 57, g: 197, b: 207 },
-      { t: 0.68, r: 255, g: 209, b: 102 },
-      { t: 1, r: 255, g: 95, b: 109 }
+      { t: 0, r: 86, g: 105, b: 202 },
+      { t: 0.28, r: 51, g: 145, b: 176 },
+      { t: 0.54, r: 72, g: 173, b: 128 },
+      { t: 0.78, r: 198, g: 171, b: 76 },
+      { t: 1, r: 255, g: 220, b: 98 }
     ];
     const t = normalizedInRange(logOpacity, opacityRange);
     let start = stops[0];
@@ -6451,6 +6467,26 @@
     const channel = (a, b) => Math.round(a + (b - a) * local);
     return `rgba(${channel(start.r, end.r)}, ${channel(start.g, end.g)}, ${channel(start.b, end.b)}, ${clamp4(alpha, 0, 1)})`;
   }
+  function drawOpacityFieldBackground(ctx, plot, xlim, ylim, parameters, opacityRange) {
+    const columns = Math.max(14, Math.min(42, Math.ceil(plot.width / 18)));
+    const rows = Math.max(8, Math.min(28, Math.ceil(plot.height / 16)));
+    const cellWidth = plot.width / columns;
+    const cellHeight = plot.height / rows;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(plot.left, plot.top, plot.width, plot.height);
+    ctx.clip();
+    for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        const logT = xlim[0] + (column + 0.5) / columns * (xlim[1] - xlim[0]);
+        const logP = ylim[1] - (rowIndex + 0.5) / rows * (ylim[1] - ylim[0]);
+        const logOpacity = opacityLogFromLogTemperaturePressure(logT, logP, parameters);
+        ctx.fillStyle = opacityColor(logOpacity, opacityRange, 0.13);
+        ctx.fillRect(plot.left + column * cellWidth - 0.5, plot.top + rowIndex * cellHeight - 0.5, cellWidth + 1, cellHeight + 1);
+      }
+    }
+    ctx.restore();
+  }
   function drawOpacityVectorField(ctx, plot, xlim, ylim, parameters, opacityRange, sx, sy) {
     const dataDx = -(parameters.n + parameters.s);
     const dataDy = parameters.n;
@@ -6460,14 +6496,16 @@
     if (magnitude <= 1e-9) return;
     const unitX = screenDx / magnitude;
     const unitY = screenDy / magnitude;
-    const columns = Math.max(5, Math.min(11, Math.floor(plot.width / 72)));
-    const rows = Math.max(4, Math.min(8, Math.floor(plot.height / 54)));
-    const length = Math.max(10, Math.min(18, plot.width / 34));
+    const columns = Math.max(4, Math.min(8, Math.floor(plot.width / 96)));
+    const rows = Math.max(3, Math.min(6, Math.floor(plot.height / 62)));
+    const length = Math.max(18, Math.min(30, Math.min(plot.width / 18, plot.height / 5.5)));
+    const headLength = Math.max(5.5, Math.min(7.5, length * 0.32));
     ctx.save();
     ctx.beginPath();
     ctx.rect(plot.left, plot.top, plot.width, plot.height);
     ctx.clip();
     ctx.lineCap = "round";
+    ctx.lineJoin = "round";
     for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
       for (let column = 0; column < columns; column += 1) {
         const logT = xlim[0] + (column + 0.5) / columns * (xlim[1] - xlim[0]);
@@ -6480,26 +6518,31 @@
         const x1 = x + unitX * length * 0.5;
         const y1 = y + unitY * length * 0.5;
         const angle = Math.atan2(unitY, unitX);
-        ctx.strokeStyle = opacityColor(logOpacity, opacityRange, 0.22);
-        ctx.lineWidth = 1.1;
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
-        ctx.stroke();
-        ctx.fillStyle = opacityColor(logOpacity, opacityRange, 0.24);
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x1 - Math.cos(angle - 0.52) * 5, y1 - Math.sin(angle - 0.52) * 5);
-        ctx.lineTo(x1 - Math.cos(angle + 0.52) * 5, y1 - Math.sin(angle + 0.52) * 5);
-        ctx.closePath();
-        ctx.fill();
+        const vectorAlpha = 0.58 + normalizedInRange(logOpacity, opacityRange) * 0.14;
+        const drawArrow = (strokeStyle, fillStyle, lineWidth, headScale = 1) => {
+          ctx.strokeStyle = strokeStyle;
+          ctx.fillStyle = fillStyle;
+          ctx.lineWidth = lineWidth;
+          ctx.beginPath();
+          ctx.moveTo(x0, y0);
+          ctx.lineTo(x1, y1);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x1 - Math.cos(angle - 0.55) * headLength * headScale, y1 - Math.sin(angle - 0.55) * headLength * headScale);
+          ctx.lineTo(x1 - Math.cos(angle + 0.55) * headLength * headScale, y1 - Math.sin(angle + 0.55) * headLength * headScale);
+          ctx.closePath();
+          ctx.fill();
+        };
+        drawArrow("rgba(3, 7, 18, 0.84)", "rgba(3, 7, 18, 0.84)", 4.8, 1.2);
+        drawArrow(`rgba(236, 243, 255, ${vectorAlpha})`, `rgba(236, 243, 255, ${Math.min(0.88, vectorAlpha + 0.1)})`, 1.8);
       }
     }
     ctx.restore();
   }
-  function drawOpacityColorbar(ctx, plot, opacityRange, canvas) {
+  function drawOpacityColorbar(ctx, plot, opacityRange, canvas, currentLogOpacity) {
     const width = Math.min(156, Math.max(118, plot.width * 0.26));
-    const height = 10;
+    const height = 12;
     const left = plot.left + plot.width - width - 12;
     const top = plot.top + 12;
     const gradient = ctx.createLinearGradient(left, top, left + width, top);
@@ -6509,13 +6552,28 @@
       gradient.addColorStop(fraction, opacityColor(value, opacityRange, 1));
     }
     ctx.save();
-    ctx.fillStyle = "rgba(5, 8, 20, 0.7)";
-    ctx.fillRect(left - 8, top - 8, width + 16, 50);
+    ctx.fillStyle = "rgba(3, 7, 18, 0.78)";
+    ctx.fillRect(left - 9, top - 9, width + 18, 53);
     ctx.fillStyle = gradient;
     ctx.fillRect(left, top, width, height);
     ctx.strokeStyle = "rgba(238, 245, 255, 0.62)";
     ctx.lineWidth = 1;
     ctx.strokeRect(left, top, width, height);
+    if (Number.isFinite(currentLogOpacity)) {
+      const markerX = left + normalizedInRange(currentLogOpacity, opacityRange) * width;
+      ctx.strokeStyle = "rgba(3, 7, 18, 0.9)";
+      ctx.lineWidth = 4.2;
+      ctx.beginPath();
+      ctx.moveTo(markerX, top - 3);
+      ctx.lineTo(markerX, top + height + 4);
+      ctx.stroke();
+      ctx.strokeStyle = PHASE_MARKER_COLOR;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(markerX, top - 3);
+      ctx.lineTo(markerX, top + height + 4);
+      ctx.stroke();
+    }
     ctx.font = "11px Inter, sans-serif";
     ctx.fillStyle = THEME.axisText;
     ctx.textBaseline = "top";
@@ -6528,7 +6586,15 @@
     ctx.fillText("log10 \u03BA/\u03BA0", left + width / 2, top + height + 25);
     ctx.restore();
     canvas.dataset.opacityColorbar = "log10(kappa/kappa0)";
+    canvas.dataset.opacityPalette = "blue-gold";
     canvas.dataset.opacityRange = `${fmtFixed(opacityRange[0], 3)},${fmtFixed(opacityRange[1], 3)}`;
+    if (Number.isFinite(currentLogOpacity)) {
+      canvas.dataset.opacityColorbarMarker = "current-phase";
+      canvas.dataset.currentOpacity = fmtFixed(currentLogOpacity, 3);
+    } else {
+      delete canvas.dataset.opacityColorbarMarker;
+      delete canvas.dataset.currentOpacity;
+    }
   }
   function drawThermodynamicTrack(ctx, points, plot, xlim, ylim, opacityRange, width, alpha, sx, sy) {
     if (points.length < 2) return;
@@ -6546,6 +6612,14 @@
       const x1 = sx(current.logT);
       const y1 = sy(current.logP);
       if (![x0, y0, x1, y1].every(Number.isFinite)) continue;
+      if (width >= 2.2 && alpha > 0.7) {
+        ctx.strokeStyle = "rgba(3, 7, 18, 0.72)";
+        ctx.lineWidth = width + 2.4;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+      }
       ctx.strokeStyle = opacityColor((previous.logOpacity + current.logOpacity) / 2, opacityRange, alpha);
       ctx.lineWidth = width;
       ctx.beginPath();
@@ -6555,9 +6629,8 @@
     }
     ctx.restore();
   }
-  function drawThermodynamicCurrentMarker(ctx, plot, xlim, ylim, opacityRange, parameters) {
-    const row = rowAtCurrentDisplayPosition(latestPhaseRows);
-    const point = row ? thermodynamicPoint(row, parameters) : null;
+  function drawThermodynamicCurrentMarker(ctx, plot, xlim, ylim, opacityRange, parameters, currentPoint) {
+    const point = currentPoint === void 0 ? currentThermodynamicPoint(parameters) : currentPoint;
     if (!point) return;
     const sx = (x2) => plot.left + (x2 - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
     const sy = (y2) => plot.top + plot.height - (y2 - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
@@ -6575,6 +6648,10 @@
     ctx.fill();
     ctx.stroke();
     ctx.restore();
+  }
+  function currentThermodynamicPoint(parameters) {
+    const row = rowAtCurrentDisplayPosition(latestPhaseRows);
+    return row ? thermodynamicPoint(row, parameters) : null;
   }
   function drawThermodynamicPanel() {
     const canvas = document.getElementById("tpOpacityCanvas");
@@ -6594,7 +6671,10 @@
     canvas.dataset.tpOpacityMode = gridState.enabled ? "grid" : "single";
     canvas.dataset.axisLabels = "log10(T/T0),log10(P/P0)";
     canvas.dataset.colorVariable = "log10(kappa/kappa0)";
-    if (latestDisplayWindow.mode === "time") {
+    if (gridState.enabled) {
+      delete canvas.dataset.currentPhase;
+      delete canvas.dataset.currentTime;
+    } else if (latestDisplayWindow.mode === "time") {
       canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
       delete canvas.dataset.currentPhase;
     } else {
@@ -6626,7 +6706,11 @@
     canvas.dataset.tpOpacityRows = String(currentPoints.length);
     if (!allPoints.length) {
       delete canvas.dataset.opacityColorbar;
+      delete canvas.dataset.opacityPalette;
       delete canvas.dataset.opacityRange;
+      delete canvas.dataset.opacityVectorField;
+      delete canvas.dataset.opacityColorbarMarker;
+      delete canvas.dataset.currentOpacity;
       drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
       return;
     }
@@ -6636,11 +6720,14 @@
     const plot = { left: 82, top: 24, width: width - 106, height: height - 88 };
     const sx = (x) => plot.left + (x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
     const sy = (y) => plot.top + plot.height - (y - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
+    const currentPoint = gridState.enabled ? null : currentThermodynamicPoint(latestPhaseParameters);
+    drawOpacityFieldBackground(ctx, plot, xlim, ylim, latestPhaseParameters, opacityRange);
     drawAxes(ctx, plot, xlim, ylim, "", "", THEME.axisText, THEME.axisText, 22);
     drawOpacityVectorField(ctx, plot, xlim, ylim, latestPhaseParameters, opacityRange, sx, sy);
     tracks.forEach((track) => drawThermodynamicTrack(ctx, track.points, plot, xlim, ylim, opacityRange, track.width, track.alpha, sx, sy));
-    drawThermodynamicCurrentMarker(ctx, plot, xlim, ylim, opacityRange, latestPhaseParameters);
-    drawOpacityColorbar(ctx, plot, opacityRange, canvas);
+    drawThermodynamicCurrentMarker(ctx, plot, xlim, ylim, opacityRange, latestPhaseParameters, currentPoint);
+    drawOpacityColorbar(ctx, plot, opacityRange, canvas, currentPoint?.logOpacity);
+    canvas.dataset.opacityVectorField = "gradient";
     drawCanvasMathFragments(
       ctx,
       [
@@ -6684,7 +6771,10 @@
       drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
       return;
     }
-    if (latestDisplayWindow.mode === "time") {
+    if (gridState.enabled) {
+      delete canvas.dataset.currentPhase;
+      delete canvas.dataset.currentTime;
+    } else if (latestDisplayWindow.mode === "time") {
       canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
       delete canvas.dataset.currentPhase;
     } else {
@@ -6724,9 +6814,9 @@
     drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "H", COLORS.H, 0.62);
     drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, 0.3);
     drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, 0.74);
-    drawPhasePortraitCurrentMarkers(ctx, plot, xlim, ylim);
+    if (!gridState.enabled) drawPhasePortraitCurrentMarkers(ctx, plot, xlim, ylim);
     drawPhasePortraitLegend(ctx, plot);
-    drawPhasePortraitPhaseLabel(ctx, plot);
+    if (!gridState.enabled) drawPhasePortraitPhaseLabel(ctx, plot);
   }
   function drawStellingwerfReferencePanel() {
     drawStabilityMap();
@@ -6951,7 +7041,10 @@
       const scrubEnabled = latestDisplayWindow.mode === "phase" && latestPhaseRows.length > 0 && !gridState.enabled;
       canvas.classList.toggle("phase-scrub-enabled", scrubEnabled);
       canvas.dataset.displayMode = latestDisplayWindow.mode;
-      if (latestPhaseRows.length && latestDisplayWindow.mode === "phase") {
+      if (gridState.enabled) {
+        delete canvas.dataset.currentPhase;
+        delete canvas.dataset.currentTime;
+      } else if (latestPhaseRows.length && latestDisplayWindow.mode === "phase") {
         canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
         delete canvas.dataset.currentTime;
       } else if (latestPhaseRows.length) {
@@ -7337,7 +7430,7 @@
     if (modelAnimationFrame) return;
     const tick = (timestamp) => {
       if (!document.hidden) {
-        if (activePhaseScrub || activePhaseHoverCanvasId) {
+        if (gridState.enabled || activePhaseScrub || activePhaseHoverCanvasId) {
           modelAnimationStartTime = null;
         } else {
           if (modelAnimationStartTime === null) {
@@ -7392,7 +7485,7 @@
       const formula = s72ConditionMetric(s72Stability, condition2);
       return {
         label: "",
-        value: `<span class="stability-summary">${s72ConditionSummary(condition2)}</span><span class="stability-formula">${formula}</span>`,
+        value: `<span class="stability-summary">${s72ConditionSummary(condition2)}</span><span class="stability-formula">${s72ConditionMetricHtml(s72Stability, condition2)}</span>`,
         detail: s72ConditionTitle(s72Stability, condition2),
         formula,
         className: s72MetricClass(condition2.stable),

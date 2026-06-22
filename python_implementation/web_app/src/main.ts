@@ -220,7 +220,7 @@ type NumericRange = [number, number];
 type InteractivePlotId = "time" | "lum";
 type RowSeriesKey = "R" | "V" | "H" | "Uc" | "L" | "Lr" | "Lc";
 type PlotSeriesKey = RowSeriesKey | "Lb";
-type UserPlotId = "model" | "light" | "velocity" | "time" | "lum" | "tpOpacity" | "stability" | "strip" | "phasePortrait";
+type UserPlotId = "model" | "light" | "velocity" | "heatEngine" | "time" | "lum" | "tpOpacity" | "stability" | "strip" | "phasePortrait";
 type SonificationSource = "luminosity" | "velocity" | "pressure";
 
 interface PlotView {
@@ -323,6 +323,7 @@ type PhasePortraitKey = "H" | "Uc";
 interface CanvasMathFragment {
   text: string;
   subscript?: string;
+  superscript?: string;
   color?: string;
   weight?: string | number;
 }
@@ -332,6 +333,8 @@ interface CanvasMathOptions {
   color?: string;
   fontSize?: number;
   rotate?: number;
+  strokeColor?: string;
+  strokeWidth?: number;
   subscriptSize?: number;
 }
 
@@ -363,7 +366,7 @@ interface GridModeState {
   hoverResult: GridModelResult | null;
   heldResult: GridModelResult | null;
   lastComplete: GridCompleteMessage | null;
-  restorePlotVisibility: Pick<Record<UserPlotId, boolean>, "model" | "time" | "lum"> | null;
+  restorePlotVisibility: Pick<Record<UserPlotId, boolean>, "model" | "heatEngine" | "time" | "lum"> | null;
 }
 
 interface GridRangeElements {
@@ -457,6 +460,7 @@ const PLOT_PANEL_LABELS: Record<UserPlotId, string> = {
   model: "Shell",
   light: "Lightcurve",
   velocity: "RV Curve",
+  heatEngine: "Heat Engine",
   time: "History",
   lum: "Luminosity Evolution",
   tpOpacity: "T-P Opacity",
@@ -469,6 +473,7 @@ const plotPanelVisibility: Record<UserPlotId, boolean> = {
   model: true,
   light: true,
   velocity: true,
+  heatEngine: true,
   time: true,
   lum: true,
   tpOpacity: true,
@@ -493,12 +498,8 @@ const INSTABILITY_STRIP_X_RESOLUTION = 72;
 const INSTABILITY_STRIP_Y_RESOLUTION = 44;
 const STRIP_LOG_RATIO_MIN = -2;
 const STRIP_LOG_RATIO_MAX = 2;
-const STABILITY_CHIP_LONG_PRESS_MS = 480;
 const stabilityMapCache = new Map<string, StabilityKind[]>();
 const instabilityStripCache = new Map<string, { kinds: StabilityKind[]; counts: Record<StabilityKind, number>; signature: string }>();
-let stabilityChipLongPressTimer: number | null = null;
-let stabilityChipLongPressTarget: HTMLElement | null = null;
-let stabilityChipSuppressClickTarget: HTMLElement | null = null;
 const PLOT_LAYOUT = {
   left: 84,
   top: 18,
@@ -615,14 +616,62 @@ function s72PulsationalMargin(stability: AnalyticStabilityResult): string {
 
 function s72ConditionMetric(stability: AnalyticStabilityResult, condition: AnalyticStabilityCondition): string {
   const symbol = s72LatexInequality(condition.stable, ">");
-  const formula = condition.kind === "convective"
+  const formula = s72ConditionFormula(stability, condition);
+  return `\\(${formula}=${fmt(condition.value, 2)} ${symbol} 0\\)`;
+}
+
+function s72ConditionFormula(stability: AnalyticStabilityResult, condition: AnalyticStabilityCondition): string {
+  return condition.kind === "convective"
     ? s72ConvectiveMargin()
     : condition.kind === "secular"
       ? s72SecularMargin(stability)
       : condition.kind === "dynamic"
         ? s72DynamicMargin(stability)
         : s72PulsationalMargin(stability);
-  return `\\(${formula}=${fmt(condition.value, 2)} ${symbol} 0\\)`;
+}
+
+function mathChunk(latex: string): string {
+  return `<span class="stability-equation-chunk">\\(${latex}\\)</span>`;
+}
+
+function s72ConditionFormulaChunks(stability: AnalyticStabilityResult, condition: AnalyticStabilityCondition): string[] {
+  if (condition.kind === "convective") {
+    return [
+      `${TEX.zeta}${TEX.zetac}\\bigl[`,
+      s72E(),
+      `+${s72Restoring()}${s72RadiativeThermal()}`,
+      `+${s72ConvectiveCorrection()}\\bigr]`
+    ];
+  }
+  if (condition.kind === "secular") {
+    return stability.physicsMode === "radiative"
+      ? [`${TEX.zeta}\\bigl[`, s72E(), `+${s72Restoring()}${s72RadiativeThermal()}\\bigr]`]
+      : [`${TEX.zetac}${s72Restoring()}`, `+${TEX.zeta}\\bigl[`, s72E(), `+${s72Restoring()}${s72RadiativeThermal()}\\bigr]`];
+  }
+  if (condition.kind === "dynamic") {
+    if (stability.physicsMode === "radiative") return [s72Restoring()];
+    return [
+      `\\left[${s72SecularMargin(stability)}\\right]`,
+      `\\left[${s72DynamicCoupling()}\\right]`,
+      `-\\left[${s72ConvectiveMargin()}\\right]`,
+      `\\left[${s72ThermalResponse()}\\right]`
+    ];
+  }
+  return stability.physicsMode === "radiative"
+    ? [`-${s72E()}`]
+    : [
+        `\\left[${s72ThermalResponse()}\\right]`,
+        `\\ozNeutral{\\Delta_{\\rm dyn}}`,
+        `-\\left[${s72SecularMargin(stability)}\\right]^2`
+      ];
+}
+
+function s72ConditionMetricHtml(stability: AnalyticStabilityResult, condition: AnalyticStabilityCondition): string {
+  const symbol = s72LatexInequality(condition.stable, ">");
+  const chunks = s72ConditionFormulaChunks(stability, condition)
+    .map(mathChunk)
+    .join("<wbr>");
+  return `<span class="stability-equation">${chunks}<wbr>${mathChunk(`=${fmt(condition.value, 2)} ${symbol} 0`)}</span>`;
 }
 
 function s72ConciseVerdict(kind: AnalyticStabilityKind, stable: boolean): string {
@@ -1653,22 +1702,12 @@ function toggleStabilityChip(chip: HTMLElement): void {
   setStabilityChipExpanded(chip, chip.getAttribute("aria-expanded") !== "true");
 }
 
-function clearStabilityChipLongPress(): void {
-  if (stabilityChipLongPressTimer !== null) window.clearTimeout(stabilityChipLongPressTimer);
-  stabilityChipLongPressTimer = null;
-  stabilityChipLongPressTarget = null;
-}
-
 function setupStabilityChipInteractions(): void {
   const metrics = el<HTMLDivElement>("metrics");
   metrics.addEventListener("click", (event) => {
     const chip = stabilityChipFromEvent(event);
     if (!chip) return;
     event.preventDefault();
-    if (stabilityChipSuppressClickTarget === chip) {
-      stabilityChipSuppressClickTarget = null;
-      return;
-    }
     toggleStabilityChip(chip);
   });
   metrics.addEventListener("keydown", (event) => {
@@ -1677,21 +1716,6 @@ function setupStabilityChipInteractions(): void {
     event.preventDefault();
     toggleStabilityChip(chip);
   });
-  metrics.addEventListener("pointerdown", (event) => {
-    const chip = stabilityChipFromEvent(event);
-    if (!chip || (event.pointerType !== "touch" && event.pointerType !== "pen")) return;
-    clearStabilityChipLongPress();
-    stabilityChipLongPressTarget = chip;
-    stabilityChipLongPressTimer = window.setTimeout(() => {
-      if (!stabilityChipLongPressTarget) return;
-      setStabilityChipExpanded(stabilityChipLongPressTarget, true);
-      stabilityChipSuppressClickTarget = stabilityChipLongPressTarget;
-      clearStabilityChipLongPress();
-    }, STABILITY_CHIP_LONG_PRESS_MS);
-  });
-  metrics.addEventListener("pointerup", clearStabilityChipLongPress);
-  metrics.addEventListener("pointercancel", clearStabilityChipLongPress);
-  metrics.addEventListener("pointerleave", clearStabilityChipLongPress);
 }
 
 function buildControls(): void {
@@ -1858,7 +1882,7 @@ function updatePlotPanelVisibility(): void {
   const hiddenControls = el<HTMLDivElement>("hiddenPlotControls");
   let hiddenCount = 0;
   (Object.keys(plotPanelVisibility) as UserPlotId[]).forEach((plotId) => {
-    const forcedHidden = gridState.enabled && (plotId === "model" || plotId === "time" || plotId === "lum");
+    const forcedHidden = gridState.enabled && (plotId === "model" || plotId === "heatEngine" || plotId === "time" || plotId === "lum");
     const visible = forcedHidden ? false : plotPanelVisibility[plotId];
     const panel = document.querySelector<HTMLElement>(`[data-plot-panel="${plotId}"]`);
     const control = document.querySelector<HTMLElement>(`[data-plot-control="${plotId}"]`);
@@ -1914,12 +1938,15 @@ function setGridModeEnabled(enabled: boolean, options: { defaultGammaRange?: boo
   if (enabled) {
     gridState.restorePlotVisibility = {
       model: plotPanelVisibility.model,
+      heatEngine: plotPanelVisibility.heatEngine,
       time: plotPanelVisibility.time,
       lum: plotPanelVisibility.lum
     };
     plotPanelVisibility.model = false;
+    plotPanelVisibility.heatEngine = false;
     plotPanelVisibility.time = false;
     plotPanelVisibility.lum = false;
+    modelAnimationStartTime = null;
     gridState.status = "idle";
     gridState.statusText = "Click a slider to define a grid range";
     if (options.defaultGammaRange) setDefaultGammaGridRange();
@@ -1935,10 +1962,12 @@ function setGridModeEnabled(enabled: boolean, options: { defaultGammaRange?: boo
     gridState.statusText = "Grid off";
     if (gridState.restorePlotVisibility) {
       plotPanelVisibility.model = gridState.restorePlotVisibility.model;
+      plotPanelVisibility.heatEngine = gridState.restorePlotVisibility.heatEngine;
       plotPanelVisibility.time = gridState.restorePlotVisibility.time;
       plotPanelVisibility.lum = gridState.restorePlotVisibility.lum;
     }
     gridState.restorePlotVisibility = null;
+    modelAnimationStartTime = null;
   }
 
   updatePlotPanelVisibility();
@@ -3797,8 +3826,8 @@ function activeSeriesKeys(plotId: InteractivePlotId, keys: readonly PlotSeriesKe
   return keys.filter((key) => seriesIsVisible(plotId, key));
 }
 
-function convectiveResponseDisabled(): boolean {
-  return state.zetac <= 0;
+function convectiveResponseDisabled(parameters: ModelParameters = state): boolean {
+  return parameters.zetac <= 0;
 }
 
 function plotSeriesIsAvailable(plotId: InteractivePlotId, key: PlotSeriesKey): boolean {
@@ -4818,9 +4847,11 @@ function canvasMathWidth(
   return fragments.reduce((total, fragment) => {
     ctx.font = canvasMathFont(fontSize, fragment.weight);
     const baseWidth = ctx.measureText(fragment.text).width;
-    if (!fragment.subscript) return total + baseWidth;
+    if (!fragment.subscript && !fragment.superscript) return total + baseWidth;
     ctx.font = canvasMathFont(subscriptSize, fragment.weight);
-    return total + baseWidth + ctx.measureText(fragment.subscript).width + 1;
+    const subscriptWidth = fragment.subscript ? ctx.measureText(fragment.subscript).width : 0;
+    const superscriptWidth = fragment.superscript ? ctx.measureText(fragment.superscript).width : 0;
+    return total + baseWidth + Math.max(subscriptWidth, superscriptWidth) + 1;
   }, 0);
 }
 
@@ -4840,19 +4871,37 @@ function drawCanvasMathFragments(
   ctx.translate(x, y);
   if (options.rotate) ctx.rotate(options.rotate);
   let cursor = start;
+  const drawText = (text: string, textX: number, textY: number) => {
+    if (options.strokeWidth && options.strokeWidth > 0) {
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = options.strokeColor || "rgba(5, 8, 20, 0.9)";
+      ctx.lineWidth = options.strokeWidth;
+      ctx.strokeText(text, textX, textY);
+    }
+    ctx.fillText(text, textX, textY);
+  };
   fragments.forEach((fragment) => {
     ctx.font = canvasMathFont(fontSize, fragment.weight);
     ctx.fillStyle = fragment.color || options.color || THEME.axisText;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(fragment.text, cursor, 0);
+    drawText(fragment.text, cursor, 0);
     const baseWidth = ctx.measureText(fragment.text).width;
     cursor += baseWidth;
-    if (fragment.subscript) {
+    if (fragment.subscript || fragment.superscript) {
       ctx.font = canvasMathFont(subscriptSize, fragment.weight);
-      ctx.textBaseline = "alphabetic";
-      ctx.fillText(fragment.subscript, cursor + 1, fontSize * 0.42);
-      cursor += ctx.measureText(fragment.subscript).width + 1;
+      const scriptX = cursor + 1;
+      const subscriptWidth = fragment.subscript ? ctx.measureText(fragment.subscript).width : 0;
+      const superscriptWidth = fragment.superscript ? ctx.measureText(fragment.superscript).width : 0;
+      if (fragment.superscript) {
+        ctx.textBaseline = "alphabetic";
+        drawText(fragment.superscript, scriptX, -fontSize * 0.28);
+      }
+      if (fragment.subscript) {
+        ctx.textBaseline = "alphabetic";
+        drawText(fragment.subscript, scriptX, fontSize * 0.42);
+      }
+      cursor += Math.max(subscriptWidth, superscriptWidth) + 1;
     }
   });
   ctx.restore();
@@ -5638,10 +5687,11 @@ function drawPhasePortraitPhaseLabel(ctx: CanvasRenderingContext2D, plot: PlotBo
 
 function opacityColor(logOpacity: number, opacityRange: NumericRange, alpha = 1): string {
   const stops = [
-    { t: 0, r: 80, g: 105, b: 196 },
-    { t: 0.36, r: 57, g: 197, b: 207 },
-    { t: 0.68, r: 255, g: 209, b: 102 },
-    { t: 1, r: 255, g: 95, b: 109 }
+    { t: 0, r: 86, g: 105, b: 202 },
+    { t: 0.28, r: 51, g: 145, b: 176 },
+    { t: 0.54, r: 72, g: 173, b: 128 },
+    { t: 0.78, r: 198, g: 171, b: 76 },
+    { t: 1, r: 255, g: 220, b: 98 }
   ];
   const t = normalizedInRange(logOpacity, opacityRange);
   let start = stops[0];
@@ -5657,6 +5707,34 @@ function opacityColor(logOpacity: number, opacityRange: NumericRange, alpha = 1)
   const local = clamp((t - start.t) / span, 0, 1);
   const channel = (a: number, b: number) => Math.round(a + (b - a) * local);
   return `rgba(${channel(start.r, end.r)}, ${channel(start.g, end.g)}, ${channel(start.b, end.b)}, ${clamp(alpha, 0, 1)})`;
+}
+
+function drawOpacityFieldBackground(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  parameters: ModelParameters,
+  opacityRange: NumericRange
+): void {
+  const columns = Math.max(14, Math.min(42, Math.ceil(plot.width / 18)));
+  const rows = Math.max(8, Math.min(28, Math.ceil(plot.height / 16)));
+  const cellWidth = plot.width / columns;
+  const cellHeight = plot.height / rows;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.width, plot.height);
+  ctx.clip();
+  for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const logT = xlim[0] + ((column + 0.5) / columns) * (xlim[1] - xlim[0]);
+      const logP = ylim[1] - ((rowIndex + 0.5) / rows) * (ylim[1] - ylim[0]);
+      const logOpacity = opacityLogFromLogTemperaturePressure(logT, logP, parameters);
+      ctx.fillStyle = opacityColor(logOpacity, opacityRange, 0.13);
+      ctx.fillRect(plot.left + column * cellWidth - 0.5, plot.top + rowIndex * cellHeight - 0.5, cellWidth + 1, cellHeight + 1);
+    }
+  }
+  ctx.restore();
 }
 
 function drawOpacityVectorField(
@@ -5677,14 +5755,16 @@ function drawOpacityVectorField(
   if (magnitude <= 1e-9) return;
   const unitX = screenDx / magnitude;
   const unitY = screenDy / magnitude;
-  const columns = Math.max(5, Math.min(11, Math.floor(plot.width / 72)));
-  const rows = Math.max(4, Math.min(8, Math.floor(plot.height / 54)));
-  const length = Math.max(10, Math.min(18, plot.width / 34));
+  const columns = Math.max(4, Math.min(8, Math.floor(plot.width / 96)));
+  const rows = Math.max(3, Math.min(6, Math.floor(plot.height / 62)));
+  const length = Math.max(18, Math.min(30, Math.min(plot.width / 18, plot.height / 5.5)));
+  const headLength = Math.max(5.5, Math.min(7.5, length * 0.32));
   ctx.save();
   ctx.beginPath();
   ctx.rect(plot.left, plot.top, plot.width, plot.height);
   ctx.clip();
   ctx.lineCap = "round";
+  ctx.lineJoin = "round";
   for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
     for (let column = 0; column < columns; column += 1) {
       const logT = xlim[0] + ((column + 0.5) / columns) * (xlim[1] - xlim[0]);
@@ -5697,19 +5777,24 @@ function drawOpacityVectorField(
       const x1 = x + unitX * length * 0.5;
       const y1 = y + unitY * length * 0.5;
       const angle = Math.atan2(unitY, unitX);
-      ctx.strokeStyle = opacityColor(logOpacity, opacityRange, 0.22);
-      ctx.lineWidth = 1.1;
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x1, y1);
-      ctx.stroke();
-      ctx.fillStyle = opacityColor(logOpacity, opacityRange, 0.24);
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x1 - Math.cos(angle - 0.52) * 5, y1 - Math.sin(angle - 0.52) * 5);
-      ctx.lineTo(x1 - Math.cos(angle + 0.52) * 5, y1 - Math.sin(angle + 0.52) * 5);
-      ctx.closePath();
-      ctx.fill();
+      const vectorAlpha = 0.58 + normalizedInRange(logOpacity, opacityRange) * 0.14;
+      const drawArrow = (strokeStyle: string, fillStyle: string, lineWidth: number, headScale = 1) => {
+        ctx.strokeStyle = strokeStyle;
+        ctx.fillStyle = fillStyle;
+        ctx.lineWidth = lineWidth;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x1 - Math.cos(angle - 0.55) * headLength * headScale, y1 - Math.sin(angle - 0.55) * headLength * headScale);
+        ctx.lineTo(x1 - Math.cos(angle + 0.55) * headLength * headScale, y1 - Math.sin(angle + 0.55) * headLength * headScale);
+        ctx.closePath();
+        ctx.fill();
+      };
+      drawArrow("rgba(3, 7, 18, 0.84)", "rgba(3, 7, 18, 0.84)", 4.8, 1.2);
+      drawArrow(`rgba(236, 243, 255, ${vectorAlpha})`, `rgba(236, 243, 255, ${Math.min(0.88, vectorAlpha + 0.1)})`, 1.8);
     }
   }
   ctx.restore();
@@ -5719,10 +5804,11 @@ function drawOpacityColorbar(
   ctx: CanvasRenderingContext2D,
   plot: PlotBox,
   opacityRange: NumericRange,
-  canvas: HTMLCanvasElement
+  canvas: HTMLCanvasElement,
+  currentLogOpacity?: number
 ): void {
   const width = Math.min(156, Math.max(118, plot.width * 0.26));
-  const height = 10;
+  const height = 12;
   const left = plot.left + plot.width - width - 12;
   const top = plot.top + 12;
   const gradient = ctx.createLinearGradient(left, top, left + width, top);
@@ -5732,13 +5818,28 @@ function drawOpacityColorbar(
     gradient.addColorStop(fraction, opacityColor(value, opacityRange, 1));
   }
   ctx.save();
-  ctx.fillStyle = "rgba(5, 8, 20, 0.7)";
-  ctx.fillRect(left - 8, top - 8, width + 16, 50);
+  ctx.fillStyle = "rgba(3, 7, 18, 0.78)";
+  ctx.fillRect(left - 9, top - 9, width + 18, 53);
   ctx.fillStyle = gradient;
   ctx.fillRect(left, top, width, height);
   ctx.strokeStyle = "rgba(238, 245, 255, 0.62)";
   ctx.lineWidth = 1;
   ctx.strokeRect(left, top, width, height);
+  if (Number.isFinite(currentLogOpacity)) {
+    const markerX = left + normalizedInRange(currentLogOpacity as number, opacityRange) * width;
+    ctx.strokeStyle = "rgba(3, 7, 18, 0.9)";
+    ctx.lineWidth = 4.2;
+    ctx.beginPath();
+    ctx.moveTo(markerX, top - 3);
+    ctx.lineTo(markerX, top + height + 4);
+    ctx.stroke();
+    ctx.strokeStyle = PHASE_MARKER_COLOR;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(markerX, top - 3);
+    ctx.lineTo(markerX, top + height + 4);
+    ctx.stroke();
+  }
   ctx.font = "11px Inter, sans-serif";
   ctx.fillStyle = THEME.axisText;
   ctx.textBaseline = "top";
@@ -5748,10 +5849,18 @@ function drawOpacityColorbar(
   ctx.fillText(fmt(opacityRange[1], 2), left + width, top + height + 8);
   ctx.textAlign = "center";
   ctx.font = "600 11px Inter, sans-serif";
-  ctx.fillText("log10 κ/κ0", left + width / 2, top + height + 25);
+  ctx.fillText("log10 \u03BA/\u03BA0", left + width / 2, top + height + 25);
   ctx.restore();
   canvas.dataset.opacityColorbar = "log10(kappa/kappa0)";
+  canvas.dataset.opacityPalette = "blue-gold";
   canvas.dataset.opacityRange = `${fmtFixed(opacityRange[0], 3)},${fmtFixed(opacityRange[1], 3)}`;
+  if (Number.isFinite(currentLogOpacity)) {
+    canvas.dataset.opacityColorbarMarker = "current-phase";
+    canvas.dataset.currentOpacity = fmtFixed(currentLogOpacity as number, 3);
+  } else {
+    delete canvas.dataset.opacityColorbarMarker;
+    delete canvas.dataset.currentOpacity;
+  }
 }
 
 function drawThermodynamicTrack(
@@ -5781,6 +5890,14 @@ function drawThermodynamicTrack(
     const x1 = sx(current.logT);
     const y1 = sy(current.logP);
     if (![x0, y0, x1, y1].every(Number.isFinite)) continue;
+    if (width >= 2.2 && alpha > 0.7) {
+      ctx.strokeStyle = "rgba(3, 7, 18, 0.72)";
+      ctx.lineWidth = width + 2.4;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+    }
     ctx.strokeStyle = opacityColor((previous.logOpacity + current.logOpacity) / 2, opacityRange, alpha);
     ctx.lineWidth = width;
     ctx.beginPath();
@@ -5797,10 +5914,10 @@ function drawThermodynamicCurrentMarker(
   xlim: NumericRange,
   ylim: NumericRange,
   opacityRange: NumericRange,
-  parameters: ModelParameters
+  parameters: ModelParameters,
+  currentPoint?: ThermodynamicPoint | null
 ): void {
-  const row = rowAtCurrentDisplayPosition(latestPhaseRows);
-  const point = row ? thermodynamicPoint(row, parameters) : null;
+  const point = currentPoint === undefined ? currentThermodynamicPoint(parameters) : currentPoint;
   if (!point) return;
   const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
   const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
@@ -5818,6 +5935,11 @@ function drawThermodynamicCurrentMarker(
   ctx.fill();
   ctx.stroke();
   ctx.restore();
+}
+
+function currentThermodynamicPoint(parameters: ModelParameters): ThermodynamicPoint | null {
+  const row = rowAtCurrentDisplayPosition(latestPhaseRows);
+  return row ? thermodynamicPoint(row, parameters) : null;
 }
 
 function drawThermodynamicPanel(): void {
@@ -5839,7 +5961,10 @@ function drawThermodynamicPanel(): void {
   canvas.dataset.tpOpacityMode = gridState.enabled ? "grid" : "single";
   canvas.dataset.axisLabels = "log10(T/T0),log10(P/P0)";
   canvas.dataset.colorVariable = "log10(kappa/kappa0)";
-  if (latestDisplayWindow.mode === "time") {
+  if (gridState.enabled) {
+    delete canvas.dataset.currentPhase;
+    delete canvas.dataset.currentTime;
+  } else if (latestDisplayWindow.mode === "time") {
     canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
     delete canvas.dataset.currentPhase;
   } else {
@@ -5874,7 +5999,11 @@ function drawThermodynamicPanel(): void {
   canvas.dataset.tpOpacityRows = String(currentPoints.length);
   if (!allPoints.length) {
     delete canvas.dataset.opacityColorbar;
+    delete canvas.dataset.opacityPalette;
     delete canvas.dataset.opacityRange;
+    delete canvas.dataset.opacityVectorField;
+    delete canvas.dataset.opacityColorbarMarker;
+    delete canvas.dataset.currentOpacity;
     drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
     return;
   }
@@ -5885,12 +6014,15 @@ function drawThermodynamicPanel(): void {
   const plot = { left: 82, top: 24, width: width - 106, height: height - 88 };
   const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
   const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  const currentPoint = gridState.enabled ? null : currentThermodynamicPoint(latestPhaseParameters);
 
+  drawOpacityFieldBackground(ctx, plot, xlim, ylim, latestPhaseParameters, opacityRange);
   drawAxes(ctx, plot, xlim, ylim, "", "", THEME.axisText, THEME.axisText, 22);
   drawOpacityVectorField(ctx, plot, xlim, ylim, latestPhaseParameters, opacityRange, sx, sy);
   tracks.forEach((track) => drawThermodynamicTrack(ctx, track.points, plot, xlim, ylim, opacityRange, track.width, track.alpha, sx, sy));
-  drawThermodynamicCurrentMarker(ctx, plot, xlim, ylim, opacityRange, latestPhaseParameters);
-  drawOpacityColorbar(ctx, plot, opacityRange, canvas);
+  drawThermodynamicCurrentMarker(ctx, plot, xlim, ylim, opacityRange, latestPhaseParameters, currentPoint);
+  drawOpacityColorbar(ctx, plot, opacityRange, canvas, currentPoint?.logOpacity);
+  canvas.dataset.opacityVectorField = "gradient";
   drawCanvasMathFragments(
     ctx,
     [
@@ -5936,7 +6068,10 @@ function drawPhasePortraitPanel(): void {
     drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
     return;
   }
-  if (latestDisplayWindow.mode === "time") {
+  if (gridState.enabled) {
+    delete canvas.dataset.currentPhase;
+    delete canvas.dataset.currentTime;
+  } else if (latestDisplayWindow.mode === "time") {
     canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
     delete canvas.dataset.currentPhase;
   } else {
@@ -5977,9 +6112,9 @@ function drawPhasePortraitPanel(): void {
   drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "H", COLORS.H, 0.62);
   drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, 0.3);
   drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, 0.74);
-  drawPhasePortraitCurrentMarkers(ctx, plot, xlim, ylim);
+  if (!gridState.enabled) drawPhasePortraitCurrentMarkers(ctx, plot, xlim, ylim);
   drawPhasePortraitLegend(ctx, plot);
-  drawPhasePortraitPhaseLabel(ctx, plot);
+  if (!gridState.enabled) drawPhasePortraitPhaseLabel(ctx, plot);
 }
 
 function drawStellingwerfReferencePanel(): void {
@@ -6240,7 +6375,10 @@ function syncPhaseCanvasState(): void {
     const scrubEnabled = latestDisplayWindow.mode === "phase" && latestPhaseRows.length > 0 && !gridState.enabled;
     canvas.classList.toggle("phase-scrub-enabled", scrubEnabled);
     canvas.dataset.displayMode = latestDisplayWindow.mode;
-    if (latestPhaseRows.length && latestDisplayWindow.mode === "phase") {
+    if (gridState.enabled) {
+      delete canvas.dataset.currentPhase;
+      delete canvas.dataset.currentTime;
+    } else if (latestPhaseRows.length && latestDisplayWindow.mode === "phase") {
       canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
       delete canvas.dataset.currentTime;
     } else if (latestPhaseRows.length) {
@@ -6668,6 +6806,1310 @@ function drawConvectionArcs(
   ctx.restore();
 }
 
+interface HeatEngineTerms {
+  q: number;
+  pressureForce: number;
+  gravityForce: number;
+  dampingAcceleration: number;
+  acceleration: number;
+  pressurePower: number;
+  gravityPower: number;
+  dampingPower: number;
+  mechanicalPower: number;
+  source: number;
+  radiativeLeak: number;
+  convectiveLeak: number;
+  heatNet: number;
+  convectiveTarget: number;
+  convectiveLag: number;
+}
+
+interface HeatEngineCycleWork {
+  pressure: number;
+  gravity: number;
+  damping: number;
+  net: number;
+  mechanicalNet: number;
+  pressureDampingRatio: number | null;
+}
+
+interface HeatEngineEvent {
+  kind: "rMin" | "fpMax" | "lMax" | "lrMax" | "lcMax" | "rMax";
+  label: readonly CanvasMathFragment[];
+  row: Row;
+  color: string;
+}
+
+type HeatEngineCanvasLabel = string | readonly CanvasMathFragment[];
+
+function pressureSupport(row: Row, parameters: ModelParameters): number {
+  if (!Number.isFinite(row.R + row.H) || row.R <= 0) return NaN;
+  const { q } = derivedPowers(row.R, parameters);
+  const value = row.H / row.R ** q;
+  return Number.isFinite(value) ? value : NaN;
+}
+
+function convectiveVelocityTarget(row: Row, parameters: ModelParameters): number {
+  if (!Number.isFinite(row.R + row.H + row.V) || row.R <= 0) return NaN;
+  const { d } = derivedPowers(row.R, parameters);
+  const driver = parameters.driver === "h" ? Math.sqrt(Math.max(0, row.H)) : Math.sqrt(Math.abs(row.V));
+  const value = row.R ** (-d) * driver;
+  return Number.isFinite(value) ? value : NaN;
+}
+
+function heatEngineTerms(row: Row, parameters: ModelParameters): HeatEngineTerms | null {
+  if (!Number.isFinite(row.R + row.V + row.H + row.Uc) || row.R <= 0 || row.H <= 0) return null;
+  const powers = derivedPowers(row.R, parameters);
+  const pressureForce = row.H / row.R ** powers.q;
+  const gravityForce = 1 / row.R ** 2;
+  const dampingAcceleration = -parameters.cq * row.V ** 3;
+  const source = baseLuminosity(row, parameters);
+  const heatScale = parameters.zeta * row.R ** (powers.m * (parameters.gamma1 - 1));
+  const radiativeLeak = row.Lr;
+  const convectiveLeak = row.Lc;
+  const convectiveTarget = convectiveVelocityTarget(row, parameters);
+  const terms = {
+    q: powers.q,
+    pressureForce,
+    gravityForce,
+    dampingAcceleration,
+    acceleration: pressureForce - gravityForce + dampingAcceleration,
+    pressurePower: row.V * pressureForce,
+    gravityPower: -row.V * gravityForce,
+    dampingPower: -parameters.cq * row.V ** 4,
+    mechanicalPower: row.V * (pressureForce - gravityForce + dampingAcceleration),
+    source,
+    radiativeLeak,
+    convectiveLeak,
+    heatNet: heatScale * (source - radiativeLeak - convectiveLeak),
+    convectiveTarget,
+    convectiveLag: convectiveTarget - row.Uc
+  };
+  return Object.values(terms).every(Number.isFinite) ? terms : null;
+}
+
+function heatEngineCycleRows(rows: readonly Row[]): Row[] {
+  if (latestDisplayWindow.mode === "phase") {
+    const cycle = phaseWindowRows(rows, 0, 1, true);
+    if (cycle.length > 2) return cycle;
+  }
+  return [...rows];
+}
+
+function heatEngineWorkIntegral(rows: readonly Row[], parameters: ModelParameters): number {
+  let work = 0;
+  for (let index = 1; index < rows.length; index += 1) {
+    const left = rows[index - 1];
+    const right = rows[index];
+    const leftForce = pressureSupport(left, parameters);
+    const rightForce = pressureSupport(right, parameters);
+    const deltaR = right.R - left.R;
+    if (!Number.isFinite(leftForce + rightForce + deltaR)) continue;
+    work += 0.5 * (leftForce + rightForce) * deltaR;
+  }
+  return work;
+}
+
+function heatEngineCycleWork(rows: readonly Row[], parameters: ModelParameters): HeatEngineCycleWork {
+  let pressure = 0;
+  let gravity = 0;
+  let damping = 0;
+  const phaseTimeScale = latestDisplayWindow.mode === "phase" && latestDisplayWindow.period
+    ? latestDisplayWindow.period
+    : 1;
+
+  for (let index = 1; index < rows.length; index += 1) {
+    const left = rows[index - 1];
+    const right = rows[index];
+    const leftForce = pressureSupport(left, parameters);
+    const rightForce = pressureSupport(right, parameters);
+    const deltaR = right.R - left.R;
+    if (Number.isFinite(leftForce + rightForce + deltaR)) {
+      pressure += 0.5 * (leftForce + rightForce) * deltaR;
+    }
+
+    const dt = (right.tau - left.tau) * phaseTimeScale;
+    if (!Number.isFinite(dt) || dt <= 0) continue;
+    const leftGravityPower = -left.V / left.R ** 2;
+    const rightGravityPower = -right.V / right.R ** 2;
+    const leftDampingPower = -parameters.cq * left.V ** 4;
+    const rightDampingPower = -parameters.cq * right.V ** 4;
+    if (Number.isFinite(leftGravityPower + rightGravityPower)) {
+      gravity += 0.5 * (leftGravityPower + rightGravityPower) * dt;
+    }
+    if (Number.isFinite(leftDampingPower + rightDampingPower)) {
+      damping += 0.5 * (leftDampingPower + rightDampingPower) * dt;
+    }
+  }
+
+  const net = pressure + damping;
+  const mechanicalNet = net + gravity;
+  return {
+    pressure,
+    gravity,
+    damping,
+    net,
+    mechanicalNet,
+    pressureDampingRatio: Math.abs(damping) > 1e-12 ? pressure / Math.abs(damping) : null
+  };
+}
+
+function heatEngineWorkState(work: number): "driving" | "balanced" | "damping" {
+  if (!Number.isFinite(work) || Math.abs(work) < 1e-4) return "balanced";
+  return work > 0 ? "driving" : "damping";
+}
+
+function heatEngineRegime(work: HeatEngineCycleWork, rows: readonly Row[]): "driving" | "damped" | "limit cycle" | "runaway" | "equilibrium" {
+  if (latestResult.message === "equilibrium") return "equilibrium";
+  if (latestResult.message === "runaway" || latestResult.message === "runaway_trend") return "runaway";
+  const radiusRange = rawRange(rows.map((row) => row.R));
+  const velocityMax = Math.max(...rows.map((row) => Math.abs(row.V)).filter(Number.isFinite), 0);
+  if (radiusRange[1] - radiusRange[0] < 1e-4 && velocityMax < 1e-4) return "equilibrium";
+  const scale = Math.max(Math.abs(work.pressure), Math.abs(work.damping), 1e-8);
+  if (Math.abs(work.net) <= scale * 0.08) return "limit cycle";
+  return work.net > 0 ? "driving" : "damped";
+}
+
+function heatEngineEventRows(rows: readonly Row[], parameters: ModelParameters): HeatEngineEvent[] {
+  const eventRows = latestDisplayWindow.mode === "phase"
+    ? phaseWindowRows(rows, 0, 1, true)
+    : [...rows];
+  if (!eventRows.length) return [];
+  const add = (
+    kind: HeatEngineEvent["kind"],
+    label: readonly CanvasMathFragment[],
+    row: Row | null,
+    color: string
+  ): HeatEngineEvent | null => (
+    row ? { kind, label, row, color } : null
+  );
+  return [
+    add("rMin", [{ text: "R", subscript: "min", color: COLORS.R }], extremaRow(eventRows, (row) => row.R, "min"), COLORS.R),
+    add("fpMax", [{ text: "F", subscript: "P,max", color: COLORS.H }], extremaRow(eventRows, (row) => pressureSupport(row, parameters), "max"), COLORS.H),
+    add("lMax", [{ text: "L", subscript: "max", color: COLORS.L }], extremaRow(eventRows, (row) => row.L, "max"), COLORS.L),
+    add("lrMax", [{ text: "L", subscript: "r,max", color: COLORS.Lr }], extremaRow(eventRows, (row) => row.Lr, "max"), COLORS.Lr),
+    add("lcMax", [{ text: "L", subscript: "c,max", color: COLORS.Lc }], extremaRow(eventRows, (row) => row.Lc, "max"), COLORS.Lc),
+    add("rMax", [{ text: "R", subscript: "max", color: COLORS.R }], extremaRow(eventRows, (row) => row.R, "max"), COLORS.R)
+  ].filter((event): event is HeatEngineEvent => Boolean(event));
+}
+
+function heatEngineEventFraction(row: Row, rows: readonly Row[]): number {
+  if (latestDisplayWindow.mode === "phase") return clamp(row.tau, 0, 1);
+  const first = rows[0]?.tau ?? 0;
+  const last = rows.at(-1)?.tau ?? first + 1;
+  return normalizedInRange(row.tau, first === last ? [first, first + 1] : [first, last]);
+}
+
+function heatEngineCurrentFraction(rows: readonly Row[]): number {
+  if (latestDisplayWindow.mode === "phase") return phaseModOne(currentAnimationPhase);
+  const coordinate = displayMarkerX(latestDisplayWindow, currentAnimationPhase);
+  const first = rows[0]?.tau ?? 0;
+  const last = rows.at(-1)?.tau ?? first + 1;
+  return normalizedInRange(coordinate, first === last ? [first, first + 1] : [first, last]);
+}
+
+function phaseOffsetLabel(target: Row | undefined, reference: Row | undefined, rows: readonly Row[]): string {
+  if (!target || !reference) return "n/a";
+  const targetFraction = heatEngineEventFraction(target, rows);
+  const referenceFraction = heatEngineEventFraction(reference, rows);
+  let delta = targetFraction - referenceFraction;
+  if (latestDisplayWindow.mode === "phase") {
+    delta = ((delta + 0.5) % 1 + 1) % 1 - 0.5;
+  }
+  if (!Number.isFinite(delta)) return "n/a";
+  return `${delta >= 0 ? "+" : ""}${fmt(delta, 2)}`;
+}
+
+function heatEnginePhaseLagItems(events: readonly HeatEngineEvent[], rows: readonly Row[]): Array<{
+  label: readonly CanvasMathFragment[];
+  color: string;
+}> {
+  const byKind = (kind: HeatEngineEvent["kind"]) => events.find((event) => event.kind === kind)?.row;
+  return [
+    {
+      label: [
+        { text: "Δφ(" },
+        { text: "F", subscript: "P,max", color: COLORS.H },
+        { text: "-R", subscript: "min", color: COLORS.R },
+        { text: `) ${phaseOffsetLabel(byKind("fpMax"), byKind("rMin"), rows)}` }
+      ],
+      color: COLORS.H
+    },
+    {
+      label: [
+        { text: "Δφ(" },
+        { text: "L", subscript: "c,max", color: COLORS.Lc },
+        { text: "-L", subscript: "r,max", color: COLORS.Lr },
+        { text: `) ${phaseOffsetLabel(byKind("lcMax"), byKind("lrMax"), rows)}` }
+      ],
+      color: COLORS.Lc
+    },
+    {
+      label: [
+        { text: "Δφ(" },
+        { text: "L", subscript: "max", color: COLORS.L },
+        { text: "-R", subscript: "min", color: COLORS.R },
+        { text: `) ${phaseOffsetLabel(byKind("lMax"), byKind("rMin"), rows)}` }
+      ],
+      color: COLORS.L
+    }
+  ];
+}
+
+function roundedRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+): void {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawHeatEngineLabel(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  color: string = THEME.axisText,
+  align: CanvasTextAlign = "center",
+  size = 11,
+  weight: string | number = 700
+): void {
+  ctx.save();
+  ctx.font = `${weight} ${size}px Inter, sans-serif`;
+  ctx.textAlign = align;
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(5, 8, 20, 0.9)";
+  ctx.lineWidth = 4;
+  ctx.fillStyle = color;
+  ctx.strokeText(text, x, y);
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+function drawHeatEngineMathLabel(
+  ctx: CanvasRenderingContext2D,
+  fragments: readonly CanvasMathFragment[],
+  x: number,
+  y: number,
+  options: CanvasMathOptions = {}
+): void {
+  drawCanvasMathFragments(ctx, fragments, x, y, {
+    fontSize: options.fontSize ?? 11,
+    subscriptSize: options.subscriptSize,
+    align: options.align,
+    color: options.color,
+    rotate: options.rotate,
+    strokeColor: options.strokeColor || "rgba(5, 8, 20, 0.9)",
+    strokeWidth: options.strokeWidth ?? 4
+  });
+}
+
+function drawHeatEngineCanvasLabel(
+  ctx: CanvasRenderingContext2D,
+  label: HeatEngineCanvasLabel,
+  x: number,
+  y: number,
+  color: string = THEME.axisText,
+  align: CanvasTextAlign = "center",
+  size = 11,
+  weight: string | number = 700
+): void {
+  if (typeof label === "string") {
+    drawHeatEngineLabel(ctx, label, x, y, color, align, size, weight);
+    return;
+  }
+  drawHeatEngineMathLabel(
+    ctx,
+    label.map((fragment) => ({
+      ...fragment,
+      color: fragment.color || color,
+      weight: fragment.weight || weight
+    })),
+    x,
+    y,
+    { align, fontSize: size }
+  );
+}
+
+function heatEngineSignedValue(value: number, digits = 3): string {
+  if (!Number.isFinite(value)) return "n/a";
+  const formatted = fmt(value, digits);
+  return value > 0 ? `+${formatted}` : formatted;
+}
+
+function heatEngineNormalizedMagnitude(value: number, values: readonly number[]): number {
+  const maxMagnitude = Math.max(
+    1e-9,
+    Math.abs(value),
+    ...values.map((item) => Math.abs(item)).filter(Number.isFinite)
+  );
+  return clamp(Math.abs(value) / maxMagnitude, 0, 1);
+}
+
+function heatEngineRegimeColor(regime: ReturnType<typeof heatEngineRegime>): string {
+  if (regime === "driving") return COLORS.Lc;
+  if (regime === "damped") return NEGATIVE_VELOCITY_COLOR;
+  if (regime === "runaway") return sourceLuminosityColor();
+  if (regime === "equilibrium") return THEME.axisText;
+  return PHASE_MARKER_COLOR;
+}
+
+function drawHeatEngineArrow(
+  ctx: CanvasRenderingContext2D,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  color: string,
+  width = 2.2,
+  label?: HeatEngineCanvasLabel,
+  labelOffset = 12
+): void {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.hypot(dx, dy);
+  if (length < 1) return;
+  const ux = dx / length;
+  const uy = dy / length;
+  const head = Math.min(10, Math.max(6, length * 0.22));
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2 - ux * head, y2 - uy * head);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - ux * head - uy * head * 0.52, y2 - uy * head + ux * head * 0.52);
+  ctx.lineTo(x2 - ux * head + uy * head * 0.52, y2 - uy * head - ux * head * 0.52);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  if (label) {
+    const lx = (x1 + x2) / 2 - uy * labelOffset;
+    const ly = (y1 + y2) / 2 + ux * labelOffset;
+    drawHeatEngineCanvasLabel(ctx, label, lx, ly, color);
+  }
+}
+
+function drawHeatEngineArrowHead(
+  ctx: CanvasRenderingContext2D,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  color: string,
+  size = 8
+): void {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.hypot(dx, dy);
+  if (length < 1) return;
+  const ux = dx / length;
+  const uy = dy / length;
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - ux * size - uy * size * 0.55, y2 - uy * size + ux * size * 0.55);
+  ctx.lineTo(x2 - ux * size + uy * size * 0.55, y2 - uy * size - ux * size * 0.55);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawHeatEnginePhaseRail(
+  ctx: CanvasRenderingContext2D,
+  rows: readonly Row[],
+  events: readonly HeatEngineEvent[],
+  x: number,
+  y: number,
+  width: number
+): void {
+  const current = heatEngineCurrentFraction(rows);
+  const displayEventKinds: Array<HeatEngineEvent["kind"]> = ["rMin", "fpMax", "lMax", "lcMax", "rMax"];
+  const displayEvents = displayEventKinds
+    .map((kind) => events.find((event) => event.kind === kind))
+    .filter((event): event is HeatEngineEvent => Boolean(event));
+  ctx.save();
+  ctx.strokeStyle = "rgba(82, 100, 137, 0.78)";
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + width, y);
+  ctx.stroke();
+  const currentX = x + current * width;
+  ctx.strokeStyle = PHASE_MARKER_COLOR;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(currentX, y - 12);
+  ctx.lineTo(currentX, y + 34);
+  ctx.stroke();
+  drawHeatEngineLabel(ctx, currentDisplayCoordinateLabel(), currentX, y - 17, PHASE_MARKER_COLOR, "center", 10, 700);
+  displayEvents.forEach((event, index) => {
+    const ex = x + heatEngineEventFraction(event.row, rows) * width;
+    ctx.fillStyle = event.color;
+    ctx.beginPath();
+    ctx.arc(ex, y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    drawHeatEngineCanvasLabel(ctx, event.label, ex, y + 15 + (index % 2) * 12, event.color, "center", 9.3, 700);
+  });
+  const lags = heatEnginePhaseLagItems(events, rows);
+  const lagWidth = width / Math.max(1, lags.length);
+  lags.forEach((lag, index) => {
+    drawHeatEngineCanvasLabel(
+      ctx,
+      lag.label,
+      x + lagWidth * (index + 0.5),
+      y + 50,
+      lag.color,
+      "center",
+      9.2,
+      700
+    );
+  });
+  ctx.restore();
+}
+
+function drawHeatEnginePiston(
+  ctx: CanvasRenderingContext2D,
+  row: Row,
+  rows: readonly Row[],
+  terms: HeatEngineTerms,
+  chamber: { left: number; top: number; width: number; height: number },
+  parameters: ModelParameters
+): void {
+  const right = chamber.left + chamber.width;
+  const bottom = chamber.top + chamber.height;
+  const centerX = chamber.left + chamber.width / 2;
+  const radiusRange = range(rows.map((item) => item.R), 0.08);
+  const hRange = range(rows.map((item) => item.H), 0.08);
+  const velocityRange = rawRange(rows.map((item) => Math.abs(item.V)));
+  const pressureRange = rawRange(rows.map((item) => pressureSupport(item, parameters)));
+  const gravityRange = rawRange(rows.map((item) => 1 / item.R ** 2));
+  const dampingRange = rawRange(rows.map((item) => Math.abs(parameters.cq * item.V ** 3)));
+  const travelTop = chamber.top + 34;
+  const travelBottom = bottom - 102;
+  const pistonY = travelBottom - normalizedInRange(row.R, radiusRange) * Math.max(1, travelBottom - travelTop);
+  const pistonHeight = 18;
+  const gasTop = pistonY + pistonHeight / 2;
+  const hLevel = normalizedInRange(row.H, hRange);
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(82, 100, 137, 0.88)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(chamber.left, chamber.top);
+  ctx.lineTo(chamber.left, bottom);
+  ctx.lineTo(right, bottom);
+  ctx.lineTo(right, chamber.top);
+  ctx.stroke();
+
+  const fillGradient = ctx.createLinearGradient(0, gasTop, 0, bottom);
+  fillGradient.addColorStop(0, colorWithAlpha(COLORS.H, 0.18 + hLevel * 0.22));
+  fillGradient.addColorStop(1, colorWithAlpha(COLORS.H, 0.42 + hLevel * 0.38));
+  ctx.fillStyle = fillGradient;
+  ctx.shadowColor = colorWithAlpha(COLORS.H, 0.78);
+  ctx.shadowBlur = 8 + hLevel * 18;
+  ctx.fillRect(chamber.left + 3, gasTop, chamber.width - 6, bottom - gasTop - 3);
+  ctx.shadowBlur = 0;
+
+  roundedRectPath(ctx, chamber.left - 5, pistonY - pistonHeight / 2, chamber.width + 10, pistonHeight, 5);
+  ctx.fillStyle = "#C6D2EA";
+  ctx.fill();
+  ctx.strokeStyle = "#F0F5FF";
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  drawHeatEngineLabel(ctx, "piston", centerX, pistonY - 27, THEME.axisText, "center", 10, 800);
+
+  ctx.setLineDash([5, 5]);
+  ctx.strokeStyle = colorWithAlpha(COLORS.R, 0.5);
+  ctx.beginPath();
+  ctx.moveTo(chamber.left - 14, bottom);
+  ctx.lineTo(chamber.left - 14, pistonY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  drawHeatEngineCanvasLabel(ctx, [{ text: "R", color: COLORS.R }, { text: `=${fmt(row.R, 2)}` }], Math.max(8, chamber.left - 46), (bottom + pistonY) / 2, COLORS.R, "left");
+
+  const velocitySign = Math.abs(row.V) < 1e-6 ? 0 : Math.sign(row.V);
+  const velocityLength = 18 + normalizedInRange(Math.abs(row.V), velocityRange) * 32;
+  const velocityStartY = pistonY + (velocitySign >= 0 ? velocityLength / 2 : -velocityLength / 2);
+  const velocityEndY = pistonY - (velocitySign >= 0 ? velocityLength / 2 : -velocityLength / 2);
+  drawHeatEngineArrow(ctx, chamber.left - 36, velocityStartY, chamber.left - 36, velocityEndY, row.V >= 0 ? POSITIVE_VELOCITY_COLOR : NEGATIVE_VELOCITY_COLOR, 2.2, [{ text: "V" }, { text: `=${fmt(row.V, 2)}` }], 14);
+
+  const pressureLength = 28 + normalizedInRange(terms.pressureForce, pressureRange) * 34;
+  drawHeatEngineArrow(ctx, centerX - 30, gasTop + pressureLength, centerX - 30, gasTop + 8, COLORS.H, 3, [{ text: "H/R", superscript: "q" }], 18);
+  const gravityLength = 26 + normalizedInRange(terms.gravityForce, gravityRange) * 28;
+  drawHeatEngineArrow(ctx, centerX + 32, pistonY - gravityLength, centerX + 32, pistonY - 3, THEME.axisText, 2.6, [{ text: "1/R", superscript: "2" }], -20);
+  const dampingDirection = row.V >= 0 ? 1 : -1;
+  const dampingLength = 18 + normalizedInRange(Math.abs(terms.dampingAcceleration), dampingRange) * 32;
+  drawHeatEngineArrow(ctx, right + 22, pistonY - dampingDirection * dampingLength / 2, right + 22, pistonY + dampingDirection * dampingLength / 2, COLORS.cq, 2.4, [{ text: "C", subscript: "q" }, { text: "V", superscript: "3" }], -26);
+
+  drawHeatEngineArrow(ctx, chamber.left + 36, bottom + 28, chamber.left + 36, bottom - 12, sourceLuminosityColor(), 3, [{ text: "R", superscript: "U" }], 19);
+  drawHeatEngineArrow(ctx, centerX, pistonY - 16, centerX, chamber.top - 24, COLORS.Lr, 2.4, [{ text: "L", subscript: "r" }], -18);
+
+  const targetValues = rows.map((item) => convectiveVelocityTarget(item, parameters));
+  const ucRange = range([...rows.map((item) => item.Uc), ...targetValues], 0.12);
+  const slotWidth = 28;
+  const slotHeight = 70;
+  const slotX = right - slotWidth - 16;
+  const slotBottom = bottom - 22;
+  const slotTop = slotBottom - slotHeight;
+  const currentAperture = normalizedInRange(row.Uc, ucRange);
+  const targetAperture = normalizedInRange(terms.convectiveTarget, ucRange);
+  const currentY = slotBottom - currentAperture * slotHeight;
+  const targetY = slotBottom - targetAperture * slotHeight;
+  ctx.strokeStyle = "rgba(192, 202, 232, 0.5)";
+  ctx.lineWidth = 1.4;
+  ctx.strokeRect(slotX, slotTop, slotWidth, slotHeight);
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = colorWithAlpha(COLORS.Uc, 0.58);
+  ctx.strokeRect(slotX - 4, targetY, slotWidth + 8, slotBottom - targetY);
+  ctx.setLineDash([]);
+  ctx.fillStyle = colorWithAlpha(COLORS.Uc, 0.48 + currentAperture * 0.32);
+  ctx.fillRect(slotX + 3, currentY, slotWidth - 6, slotBottom - currentY);
+  ctx.strokeStyle = COLORS.Uc;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(slotX, currentY);
+  ctx.lineTo(slotX + slotWidth, currentY);
+  ctx.stroke();
+  drawHeatEngineCanvasLabel(ctx, [{ text: "U", subscript: "c" }], slotX + slotWidth / 2, slotBottom + 13, COLORS.Uc, "center", 10);
+  drawHeatEngineCanvasLabel(ctx, [{ text: "U", subscript: "c,eq" }], slotX + slotWidth + 16, targetY, colorWithAlpha(COLORS.Uc, 0.9), "left", 9.5);
+  if (!convectiveResponseDisabled(parameters)) {
+    drawHeatEngineCanvasLabel(ctx, [{ text: "ζ", subscript: "c" }, { text: ` lag ${fmt(terms.convectiveLag, 2)}` }], slotX + slotWidth + 14, slotTop + 12, COLORS.zetac, "left", 9.5);
+  } else {
+    drawHeatEngineCanvasLabel(ctx, [{ text: "ζ", subscript: "c" }, { text: " frozen" }], slotX + slotWidth + 14, slotTop + 12, COLORS.zetac, "left", 9.5);
+  }
+  drawHeatEngineArrow(ctx, slotX + slotWidth + 10, slotBottom - 8, slotX + slotWidth + 10, slotTop - 34, COLORS.Lc, 2.4, [{ text: "L", subscript: "c" }, { text: " ∝ " }, { text: "U", subscript: "c", superscript: "3" }], 24);
+
+  drawHeatEngineCanvasLabel(ctx, [{ text: "H" }, { text: `=${fmt(row.H, 2)}` }], centerX, gasTop + Math.max(26, (bottom - gasTop) * 0.42), COLORS.H, "center", 12, 800);
+  ctx.restore();
+}
+
+function drawHeatEnginePistonCausal(
+  ctx: CanvasRenderingContext2D,
+  row: Row,
+  rows: readonly Row[],
+  terms: HeatEngineTerms,
+  chamber: { left: number; top: number; width: number; height: number },
+  parameters: ModelParameters
+): void {
+  const right = chamber.left + chamber.width;
+  const bottom = chamber.top + chamber.height;
+  const centerX = chamber.left + chamber.width / 2;
+  const radiusRange = range(rows.map((item) => item.R), 0.08);
+  const hRange = range(rows.map((item) => item.H), 0.08);
+  const velocityValues = rows.map((item) => item.V);
+  const pressureValues = rows.map((item) => pressureSupport(item, parameters));
+  const gravityValues = rows.map((item) => 1 / item.R ** 2);
+  const dampingValues = rows.map((item) => parameters.cq * item.V ** 3);
+  const sourceValues = rows.map((item) => baseLuminosity(item, parameters));
+  const radiativeValues = rows.map((item) => item.Lr);
+  const convectiveValues = rows.map((item) => item.Lc);
+  const travelTop = chamber.top + 34;
+  const travelBottom = bottom - 88;
+  const pistonY = travelBottom - normalizedInRange(row.R, radiusRange) * Math.max(1, travelBottom - travelTop);
+  const pistonHeight = 18;
+  const gasTop = pistonY + pistonHeight / 2;
+  const hLevel = normalizedInRange(row.H, hRange);
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(82, 100, 137, 0.88)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(chamber.left, chamber.top);
+  ctx.lineTo(chamber.left, bottom);
+  ctx.lineTo(right, bottom);
+  ctx.lineTo(right, chamber.top);
+  ctx.stroke();
+
+  const radiativeNorm = heatEngineNormalizedMagnitude(terms.radiativeLeak, radiativeValues);
+  const radiativeX = right - Math.max(26, chamber.width * 0.18);
+  ctx.strokeStyle = colorWithAlpha(COLORS.Lr, 0.78);
+  ctx.lineWidth = 2.2 + radiativeNorm * 5.2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(radiativeX, chamber.top + 4);
+  ctx.lineTo(radiativeX, chamber.top - 22);
+  ctx.stroke();
+  ctx.lineWidth = 1.4;
+  for (let ray = -1; ray <= 1; ray += 1) {
+    ctx.beginPath();
+    ctx.moveTo(radiativeX + ray * 7, chamber.top - 25);
+    ctx.lineTo(radiativeX + ray * 11, chamber.top - 37);
+    ctx.stroke();
+  }
+  drawHeatEngineLabel(ctx, "radiative leak", radiativeX + 36, chamber.top + 14, COLORS.Lr, "left", 9.2, 760);
+  drawHeatEngineMathLabel(ctx, [{ text: "L", subscript: "r", color: COLORS.Lr }], radiativeX + 36, chamber.top + 29, {
+    align: "left",
+    fontSize: 10.2
+  });
+
+  const fillGradient = ctx.createLinearGradient(0, gasTop, 0, bottom);
+  fillGradient.addColorStop(0, colorWithAlpha(COLORS.H, 0.18 + hLevel * 0.22));
+  fillGradient.addColorStop(1, colorWithAlpha(COLORS.H, 0.42 + hLevel * 0.38));
+  ctx.fillStyle = fillGradient;
+  ctx.shadowColor = colorWithAlpha(COLORS.H, 0.78);
+  ctx.shadowBlur = 8 + hLevel * 18;
+  ctx.fillRect(chamber.left + 3, gasTop, chamber.width - 6, bottom - gasTop - 3);
+  ctx.shadowBlur = 0;
+
+  roundedRectPath(ctx, chamber.left - 5, pistonY - pistonHeight / 2, chamber.width + 10, pistonHeight, 5);
+  ctx.fillStyle = "#C6D2EA";
+  ctx.fill();
+  ctx.strokeStyle = "#F0F5FF";
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  drawHeatEngineLabel(ctx, "piston", centerX, pistonY - 27, THEME.axisText, "center", 10, 800);
+
+  ctx.setLineDash([5, 5]);
+  ctx.strokeStyle = colorWithAlpha(COLORS.R, 0.5);
+  ctx.beginPath();
+  ctx.moveTo(chamber.left - 14, bottom);
+  ctx.lineTo(chamber.left - 14, pistonY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  drawHeatEngineMathLabel(ctx, [{ text: "R", color: COLORS.R }], Math.max(8, chamber.left - 34), (bottom + pistonY) / 2, {
+    align: "left",
+    fontSize: 12
+  });
+
+  const velocitySign = Math.abs(row.V) < 1e-6 ? 1 : Math.sign(row.V);
+  const velocityLength = 18 + heatEngineNormalizedMagnitude(row.V, velocityValues) * 32;
+  const velocityStartY = pistonY + (velocitySign >= 0 ? velocityLength / 2 : -velocityLength / 2);
+  const velocityEndY = pistonY - (velocitySign >= 0 ? velocityLength / 2 : -velocityLength / 2);
+  const velocityColor = row.V >= 0 ? POSITIVE_VELOCITY_COLOR : NEGATIVE_VELOCITY_COLOR;
+  drawHeatEngineArrow(ctx, chamber.left - 36, velocityStartY, chamber.left - 36, velocityEndY, velocityColor, 2.2);
+  drawHeatEngineMathLabel(ctx, [{ text: "V", color: velocityColor }], chamber.left - 48, pistonY, {
+    align: "right",
+    fontSize: 11
+  });
+
+  const pressureLength = 24 + heatEngineNormalizedMagnitude(terms.pressureForce, pressureValues) * 38;
+  const pressureX = centerX - 28;
+  drawHeatEngineArrow(ctx, pressureX, Math.min(bottom - 10, gasTop + pressureLength + 8), pressureX, gasTop + 2, COLORS.H, 3.1);
+  drawHeatEngineLabel(ctx, "pressure", centerX - 58, gasTop + 27, COLORS.H, "center", 9.4, 760);
+  drawHeatEngineMathLabel(
+    ctx,
+    [{ text: "F", subscript: "P", color: COLORS.H }, { text: "=H/R", superscript: "q", color: COLORS.H }],
+    centerX - 58,
+    gasTop + 42,
+    { align: "center", fontSize: 9.8 }
+  );
+
+  const gravityLength = 22 + heatEngineNormalizedMagnitude(terms.gravityForce, gravityValues) * 34;
+  const gravityX = centerX + 28;
+  drawHeatEngineArrow(
+    ctx,
+    gravityX,
+    Math.max(chamber.top + 8, pistonY - pistonHeight / 2 - gravityLength),
+    gravityX,
+    pistonY - pistonHeight / 2 - 2,
+    THEME.axisText,
+    2.6
+  );
+  drawHeatEngineLabel(ctx, "gravity", centerX + 64, pistonY - gravityLength * 0.62, THEME.axisText, "center", 9.4, 760);
+  drawHeatEngineMathLabel(
+    ctx,
+    [{ text: "F", subscript: "g" }, { text: "=-1/R", superscript: "2" }],
+    centerX + 64,
+    pistonY - gravityLength * 0.62 + 15,
+    { align: "center", fontSize: 9.8 }
+  );
+
+  const dampingLength = 18 + heatEngineNormalizedMagnitude(terms.dampingAcceleration, dampingValues) * 34;
+  const dampingDirection = velocitySign >= 0 ? 1 : -1;
+  const dampingX = right + 12;
+  ctx.strokeStyle = colorWithAlpha(COLORS.cq, 0.72);
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(right - 1, pistonY);
+  ctx.lineTo(dampingX, pistonY);
+  ctx.stroke();
+  drawHeatEngineArrow(ctx, dampingX, pistonY - dampingDirection * dampingLength / 2, dampingX, pistonY + dampingDirection * dampingLength / 2, COLORS.cq, 2.4);
+  const dragLabelY = Math.min(bottom - 38, Math.max(pistonY + 34, gasTop + 42));
+  drawHeatEngineLabel(ctx, "drag", right - 30, dragLabelY, COLORS.cq, "center", 9.4, 760);
+  drawHeatEngineMathLabel(
+    ctx,
+    [{ text: "F", subscript: "d", color: COLORS.cq }, { text: "=-C", subscript: "q", color: COLORS.cq }, { text: "V", superscript: "3", color: COLORS.cq }],
+    right - 30,
+    dragLabelY + 15,
+    { align: "center", fontSize: 9.8 }
+  );
+
+  const sourceNorm = heatEngineNormalizedMagnitude(terms.source, sourceValues);
+  const sourceX = centerX - chamber.width * 0.22;
+  ctx.strokeStyle = sourceLuminosityColor();
+  ctx.lineWidth = 3 + sourceNorm * 5.5;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(sourceX, bottom + 30);
+  ctx.lineTo(sourceX, bottom + 2);
+  ctx.stroke();
+  ctx.fillStyle = colorWithAlpha(sourceLuminosityColor(), 0.82);
+  ctx.beginPath();
+  ctx.moveTo(sourceX, bottom + 34);
+  ctx.quadraticCurveTo(sourceX - 12, bottom + 18, sourceX, bottom + 5);
+  ctx.quadraticCurveTo(sourceX + 14, bottom + 19, sourceX, bottom + 34);
+  ctx.fill();
+  drawHeatEngineLabel(ctx, "source", sourceX - 4, bottom + 48, sourceLuminosityColor(), "center", 9.4, 760);
+  drawHeatEngineMathLabel(ctx, [{ text: "R", superscript: "U", color: sourceLuminosityColor() }], sourceX - 4, bottom + 63, {
+    align: "center",
+    fontSize: 10.2
+  });
+
+  const targetValues = rows.map((item) => convectiveVelocityTarget(item, parameters));
+  const ucRange = range([...rows.map((item) => item.Uc), ...targetValues], 0.12);
+  const slotWidth = 34;
+  const slotHeight = Math.min(84, Math.max(62, chamber.height * 0.32));
+  const slotX = right + 14;
+  const slotBottom = bottom - 34;
+  const slotTop = slotBottom - slotHeight;
+  const currentAperture = normalizedInRange(row.Uc, ucRange);
+  const targetAperture = normalizedInRange(terms.convectiveTarget, ucRange);
+  const currentY = slotBottom - currentAperture * slotHeight;
+  const targetY = slotBottom - targetAperture * slotHeight;
+  const convectiveNorm = Math.max(currentAperture, heatEngineNormalizedMagnitude(terms.convectiveLeak, convectiveValues) * 0.75);
+  const outletY = slotBottom - Math.max(14, currentAperture * slotHeight * 0.55);
+
+  ctx.strokeStyle = colorWithAlpha(COLORS.Lc, 0.54);
+  ctx.lineWidth = 3.2 + convectiveNorm * 4.8;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(right + 1, outletY);
+  ctx.lineTo(slotX, outletY);
+  ctx.stroke();
+
+  roundedRectPath(ctx, slotX, slotTop, slotWidth, slotHeight, 6);
+  ctx.fillStyle = "rgba(17, 27, 51, 0.66)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(192, 202, 232, 0.5)";
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = colorWithAlpha(COLORS.Uc, 0.58);
+  roundedRectPath(ctx, slotX - 4, targetY, slotWidth + 8, slotBottom - targetY, 5);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = colorWithAlpha(COLORS.Uc, 0.48 + currentAperture * 0.32);
+  roundedRectPath(ctx, slotX + 4, currentY, slotWidth - 8, slotBottom - currentY, 4);
+  ctx.fill();
+  ctx.strokeStyle = COLORS.Uc;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(slotX, currentY);
+  ctx.lineTo(slotX + slotWidth, currentY);
+  ctx.stroke();
+  drawHeatEngineMathLabel(ctx, [{ text: "U", subscript: "c", color: COLORS.Uc }], slotX + slotWidth / 2, slotBottom + 12, {
+    align: "center",
+    fontSize: 10
+  });
+  drawHeatEngineMathLabel(ctx, [{ text: "U", subscript: "c,eq", color: colorWithAlpha(COLORS.Uc, 0.9) }], slotX + slotWidth + 10, targetY, {
+    align: "left",
+    fontSize: 9.4
+  });
+  drawHeatEngineMathLabel(
+    ctx,
+    convectiveResponseDisabled(parameters)
+      ? [{ text: "ζ", subscript: "c", color: COLORS.zetac }, { text: "=0", color: COLORS.zetac }]
+      : [{ text: "U", subscript: "c", color: COLORS.Uc }, { text: " → " }, { text: "U", subscript: "c,eq", color: colorWithAlpha(COLORS.Uc, 0.9) }],
+    slotX + slotWidth / 2,
+    slotBottom + 28,
+    { align: "center", fontSize: 9.4 }
+  );
+
+  const leakX = slotX + slotWidth / 2;
+  ctx.strokeStyle = COLORS.Lc;
+  ctx.lineWidth = 3 + convectiveNorm * 7;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(leakX, slotTop + 2);
+  ctx.lineTo(leakX, slotTop - 28);
+  ctx.stroke();
+  ctx.lineWidth = 1.5;
+  for (let ray = -1; ray <= 1; ray += 1) {
+    ctx.beginPath();
+    ctx.moveTo(leakX + ray * 6, slotTop - 30);
+    ctx.lineTo(leakX + ray * 10, slotTop - 42);
+    ctx.stroke();
+  }
+  drawHeatEngineLabel(ctx, "convective leak", leakX, slotTop - 58, COLORS.Lc, "center", 9.4, 760);
+  drawHeatEngineMathLabel(
+    ctx,
+    [{ text: "L", subscript: "c", color: COLORS.Lc }, { text: " ∝ " }, { text: "U", subscript: "c", superscript: "3", color: COLORS.Uc }],
+    leakX,
+    slotTop - 43,
+    { align: "center", fontSize: 9.8 }
+  );
+
+  const heatLabelY = Math.min(bottom - 24, gasTop + Math.max(26, (bottom - gasTop) * 0.58));
+  drawHeatEngineMathLabel(ctx, [{ text: "H", color: COLORS.H, weight: 800 }], centerX, heatLabelY + 3, {
+    align: "center",
+    fontSize: 13
+  });
+  ctx.restore();
+}
+
+function drawHeatEngineLoop(
+  ctx: CanvasRenderingContext2D,
+  rows: readonly Row[],
+  currentRow: Row,
+  parameters: ModelParameters,
+  plot: PlotBox,
+  work: number
+): void {
+  const forces = rows.map((row) => pressureSupport(row, parameters));
+  const xlim = range(rows.map((row) => row.R), 0.08);
+  const ylim = range(forces, 0.1);
+  const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  const state = heatEngineWorkState(work);
+  const loopColor = state === "driving" ? COLORS.Lc : state === "damping" ? NEGATIVE_VELOCITY_COLOR : PHASE_MARKER_COLOR;
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(38, 51, 78, 0.9)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 3; i += 1) {
+    const x = plot.left + (plot.width * i) / 3;
+    const y = plot.top + (plot.height * i) / 3;
+    ctx.beginPath();
+    ctx.moveTo(x, plot.top);
+    ctx.lineTo(x, plot.top + plot.height);
+    ctx.moveTo(plot.left, y);
+    ctx.lineTo(plot.left + plot.width, y);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = THEME.axisBorder;
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
+  drawHeatEngineCanvasLabel(ctx, [{ text: "R" }], plot.left + plot.width / 2, plot.top + plot.height + 21, COLORS.R, "center", 11);
+  drawHeatEngineCanvasLabel(
+    ctx,
+    [{ text: "F", subscript: "P" }, { text: "=" }, { text: "H/R", superscript: "q" }],
+    plot.left - 24,
+    plot.top + plot.height / 2,
+    COLORS.H,
+    "center",
+    10
+  );
+
+  ctx.beginPath();
+  let started = false;
+  rows.forEach((row) => {
+    const x = row.R;
+    const y = pressureSupport(row, parameters);
+    if (!Number.isFinite(x + y)) return;
+    const px = sx(x);
+    const py = sy(y);
+    if (!started) {
+      ctx.moveTo(px, py);
+      started = true;
+    } else {
+      ctx.lineTo(px, py);
+    }
+  });
+  if (started) {
+    ctx.closePath();
+    ctx.fillStyle = colorWithAlpha(loopColor, 0.16);
+    ctx.strokeStyle = colorWithAlpha(loopColor, 0.94);
+    ctx.lineWidth = 2.2;
+    ctx.fill();
+    ctx.stroke();
+  }
+  const currentForce = pressureSupport(currentRow, parameters);
+  if (Number.isFinite(currentRow.R + currentForce)) {
+    ctx.fillStyle = PHASE_MARKER_COLOR;
+    ctx.strokeStyle = "#050814";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(sx(currentRow.R), sy(currentForce), 5.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  drawHeatEngineCanvasLabel(ctx, [{ text: "W", subscript: "P" }, { text: ` ${state}` }], plot.left + plot.width - 4, plot.top + 13, loopColor, "right", 11, 800);
+  drawHeatEngineLabel(ctx, `area ${fmt(work, 3)}`, plot.left + plot.width - 4, plot.top + 29, loopColor, "right", 10, 700);
+  ctx.restore();
+}
+
+function drawHeatEngineWorkLoop(
+  ctx: CanvasRenderingContext2D,
+  rows: readonly Row[],
+  currentRow: Row,
+  parameters: ModelParameters,
+  plot: PlotBox,
+  work: HeatEngineCycleWork,
+  regime: ReturnType<typeof heatEngineRegime>
+): void {
+  const forces = rows.map((row) => pressureSupport(row, parameters));
+  const xlim = range(rows.map((row) => row.R), 0.08);
+  const ylim = range(forces, 0.1);
+  const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  const loopColor = heatEngineRegimeColor(regime);
+  const plotted = rows
+    .map((loopRow) => {
+      const force = pressureSupport(loopRow, parameters);
+      return Number.isFinite(loopRow.R + force) ? { x: sx(loopRow.R), y: sy(force) } : null;
+    })
+    .filter((point): point is { x: number; y: number } => Boolean(point));
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(38, 51, 78, 0.9)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 3; i += 1) {
+    const x = plot.left + (plot.width * i) / 3;
+    const y = plot.top + (plot.height * i) / 3;
+    ctx.beginPath();
+    ctx.moveTo(x, plot.top);
+    ctx.lineTo(x, plot.top + plot.height);
+    ctx.moveTo(plot.left, y);
+    ctx.lineTo(plot.left + plot.width, y);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = THEME.axisBorder;
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
+  drawHeatEngineLabel(ctx, "work loop", plot.left + 4, plot.top - 18, THEME.axisText, "left", 10, 800);
+  drawHeatEngineMathLabel(ctx, [{ text: "R", color: COLORS.R }], plot.left + plot.width / 2, plot.top + plot.height + 24, {
+    align: "center",
+    fontSize: 11
+  });
+  drawHeatEngineMathLabel(
+    ctx,
+    [{ text: "F", subscript: "P", color: COLORS.H }, { text: "=H/R", superscript: "q", color: COLORS.H }],
+    plot.left - 35,
+    plot.top + plot.height / 2,
+    { align: "center", fontSize: 10, rotate: -Math.PI / 2 }
+  );
+
+  if (plotted.length > 2) {
+    ctx.beginPath();
+    plotted.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = colorWithAlpha(loopColor, 0.16);
+    ctx.strokeStyle = colorWithAlpha(loopColor, 0.95);
+    ctx.lineWidth = 2.4;
+    ctx.fill();
+    ctx.stroke();
+    [0.22, 0.48, 0.74].forEach((fraction) => {
+      const index = Math.min(plotted.length - 2, Math.max(0, Math.round(fraction * (plotted.length - 2))));
+      drawHeatEngineArrowHead(ctx, plotted[index].x, plotted[index].y, plotted[index + 1].x, plotted[index + 1].y, loopColor, 7);
+    });
+  }
+
+  const currentForce = pressureSupport(currentRow, parameters);
+  if (Number.isFinite(currentRow.R + currentForce)) {
+    ctx.fillStyle = PHASE_MARKER_COLOR;
+    ctx.strokeStyle = "#050814";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(sx(currentRow.R), sy(currentForce), 5.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  const labelX = plot.left + plot.width - 8;
+  drawHeatEngineMathLabel(ctx, [{ text: "W", subscript: "P", color: loopColor }, { text: `=${heatEngineSignedValue(work.pressure, 3)}`, color: loopColor }], labelX, plot.top + 15, {
+    align: "right",
+    fontSize: 10.6
+  });
+  drawHeatEngineMathLabel(
+    ctx,
+    [{ text: "W", subscript: "P", color: loopColor }, { text: "=∮" }, { text: "F", subscript: "P", color: COLORS.H }, { text: "dR" }],
+    labelX,
+    plot.top + 32,
+    { align: "right", fontSize: 9.7 }
+  );
+  drawHeatEngineMathLabel(
+    ctx,
+    [
+      { text: "W", subscript: "P", color: loopColor },
+      { text: "/|" },
+      { text: "W", subscript: "damp", color: COLORS.cq },
+      { text: `|=${work.pressureDampingRatio === null ? "n/a" : fmt(work.pressureDampingRatio, 2)}` }
+    ],
+    labelX,
+    plot.top + 49,
+    { align: "right", fontSize: 9.7 }
+  );
+
+  const regimeWidth = Math.max(68, ctx.measureText(regime).width + 22);
+  roundedRectPath(ctx, plot.left + plot.width - regimeWidth - 8, plot.top + plot.height - 31, regimeWidth, 22, 6);
+  ctx.fillStyle = colorWithAlpha(loopColor, 0.22);
+  ctx.fill();
+  ctx.strokeStyle = colorWithAlpha(loopColor, 0.58);
+  ctx.stroke();
+  drawHeatEngineLabel(ctx, regime, plot.left + plot.width - regimeWidth / 2 - 8, plot.top + plot.height - 20, loopColor, "center", 10, 800);
+  ctx.restore();
+}
+
+function drawHeatEnginePowerStrip(
+  ctx: CanvasRenderingContext2D,
+  terms: HeatEngineTerms,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): void {
+  const components: Array<{ label: readonly CanvasMathFragment[]; value: number; color: string }> = [
+    { label: [{ text: "V " }, { text: "H/R", superscript: "q" }], value: terms.pressurePower, color: COLORS.H },
+    { label: [{ text: "-V/R", superscript: "2" }], value: terms.gravityPower, color: COLORS.R },
+    { label: [{ text: "-C", subscript: "q" }, { text: "V", superscript: "4" }], value: terms.dampingPower, color: COLORS.cq }
+  ];
+  const maxAbs = Math.max(1e-6, Math.abs(terms.mechanicalPower), ...components.map((item) => Math.abs(item.value)));
+  const center = x + width / 2;
+  ctx.save();
+  roundedRectPath(ctx, x, y, width, height, 5);
+  ctx.fillStyle = "rgba(5, 8, 20, 0.36)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(82, 100, 137, 0.72)";
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(192, 202, 232, 0.48)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(center, y + 6);
+  ctx.lineTo(center, y + height - 6);
+  ctx.stroke();
+
+  const laneGap = (height - 10) / components.length;
+  components.forEach((component, index) => {
+    const laneY = y + 7 + laneGap * (index + 0.5);
+    const bar = (component.value / maxAbs) * (width * 0.42);
+    ctx.strokeStyle = colorWithAlpha(component.color, 0.92);
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(center, laneY);
+    ctx.lineTo(center + bar, laneY);
+    ctx.stroke();
+    drawHeatEngineCanvasLabel(ctx, component.label, x + 8, laneY, component.color, "left", 9.5, 700);
+  });
+  const totalX = center + (terms.mechanicalPower / maxAbs) * (width * 0.42);
+  ctx.fillStyle = PHASE_MARKER_COLOR;
+  ctx.beginPath();
+  ctx.arc(totalX, y + height / 2, 5, 0, Math.PI * 2);
+  ctx.fill();
+  drawHeatEngineCanvasLabel(ctx, [{ text: "V V̇" }, { text: `=${fmt(terms.mechanicalPower, 3)}` }], x + width - 8, y + height / 2, PHASE_MARKER_COLOR, "right", 10.5, 800);
+  ctx.restore();
+}
+
+function drawHeatEngineCycleWorkLedger(
+  ctx: CanvasRenderingContext2D,
+  work: HeatEngineCycleWork,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  regime: ReturnType<typeof heatEngineRegime>
+): void {
+  const rows: Array<{ label: readonly CanvasMathFragment[]; value: number; color: string }> = [
+    { label: [{ text: "W", subscript: "P", color: COLORS.H }], value: work.pressure, color: COLORS.H },
+    { label: [{ text: "W", subscript: "damp", color: COLORS.cq }], value: work.damping, color: COLORS.cq },
+    { label: [{ text: "W", subscript: "g", color: COLORS.R }, { text: "≈0" }], value: work.gravity, color: COLORS.R },
+    { label: [{ text: "ΔE", subscript: "mech", color: heatEngineRegimeColor(regime) }], value: work.net, color: heatEngineRegimeColor(regime) }
+  ];
+  const maxAbs = Math.max(1e-8, ...rows.map((item) => Math.abs(item.value)));
+  const center = x + width * 0.49;
+  const barLimit = width * 0.31;
+
+  ctx.save();
+  roundedRectPath(ctx, x, y, width, height, 6);
+  ctx.fillStyle = "rgba(5, 8, 20, 0.36)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(82, 100, 137, 0.72)";
+  ctx.stroke();
+  drawHeatEngineLabel(ctx, "cycle work", x + 12, y + 13, THEME.axisText, "left", 10.5, 800);
+  drawHeatEngineLabel(ctx, "+ adds mechanical energy", x + width - 12, y + 13, colorWithAlpha(THEME.axisText, 0.72), "right", 9.3, 650);
+  ctx.strokeStyle = "rgba(192, 202, 232, 0.54)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(center, y + 22);
+  ctx.lineTo(center, y + height - 8);
+  ctx.stroke();
+
+  const laneGap = (height - 28) / rows.length;
+  rows.forEach((rowItem, index) => {
+    const laneY = y + 25 + laneGap * (index + 0.5);
+    const bar = (rowItem.value / maxAbs) * barLimit;
+    ctx.strokeStyle = colorWithAlpha(rowItem.color, 0.94);
+    ctx.lineWidth = index === rows.length - 1 ? 5 : 4;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(center, laneY);
+    ctx.lineTo(center + bar, laneY);
+    ctx.stroke();
+    drawHeatEngineCanvasLabel(ctx, rowItem.label, x + 12, laneY, rowItem.color, "left", 9.8, 760);
+    drawHeatEngineLabel(ctx, heatEngineSignedValue(rowItem.value, 3), x + width - 12, laneY, rowItem.color, "right", 9.5, 700);
+  });
+  drawHeatEngineLabel(ctx, regime, center + barLimit + 12, y + height - 13, heatEngineRegimeColor(regime), "left", 10.5, 800);
+  ctx.restore();
+}
+
+function drawHeatEngineEquationTags(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number
+): void {
+  const tags = [
+    {
+      fragments: [{ text: "Ṙ", color: COLORS.R }, { text: " = " }, { text: "V", color: COLORS.V }],
+      color: COLORS.V
+    },
+    {
+      fragments: [
+        { text: "V̇", color: COLORS.V },
+        { text: " = " },
+        { text: "H/R", superscript: "q", color: COLORS.H },
+        { text: " - " },
+        { text: "1/R", superscript: "2" },
+        { text: " - " },
+        { text: "C", subscript: "q", color: COLORS.cq },
+        { text: "V", superscript: "3", color: COLORS.V }
+      ],
+      color: THEME.axisText
+    },
+    {
+      fragments: [
+        { text: "Ḣ", color: COLORS.H },
+        { text: " ~ " },
+        { text: "ζ", color: COLORS.zeta },
+        { text: "R", superscript: "χ(Γ₁-1)", color: COLORS.R },
+        { text: " [" },
+        { text: "R", superscript: "U", color: sourceLuminosityColor() },
+        { text: " - " },
+        { text: "L", subscript: "r", color: COLORS.Lr },
+        { text: " - " },
+        { text: "L", subscript: "c", color: COLORS.Lc },
+        { text: "]" }
+      ],
+      color: COLORS.H
+    }
+  ];
+  const tagWidth = width / tags.length;
+  tags.forEach((tag, index) => {
+    const left = x + index * tagWidth + 4;
+    const boxWidth = tagWidth - 8;
+    roundedRectPath(ctx, left, y, boxWidth, 24, 5);
+    ctx.fillStyle = "rgba(17, 27, 51, 0.72)";
+    ctx.fill();
+    ctx.strokeStyle = colorWithAlpha(tag.color, 0.36);
+    ctx.stroke();
+    drawHeatEngineCanvasLabel(ctx, tag.fragments, left + boxWidth / 2, y + 12, tag.color, "center", 9.2, 760);
+  });
+}
+
+function drawHeatEnginePanel(): void {
+  const canvas = document.getElementById("heatEngineCanvas");
+  if (!(canvas instanceof HTMLCanvasElement)) return;
+  const panel = canvas.closest<HTMLElement>(".plot-panel");
+  if (panel?.hidden) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(360, rect.width || 560);
+  const height = Math.max(410, rect.height || 480);
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+
+  const row = latestPhaseRows.length ? rowAtCurrentDisplayPosition(latestPhaseRows) : null;
+  if (!row) {
+    canvas.dataset.heatEngineMode = "unavailable";
+    canvas.dataset.heatEngineRows = "0";
+    delete canvas.dataset.currentPhase;
+    delete canvas.dataset.currentTime;
+    drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
+    return;
+  }
+  const terms = heatEngineTerms(row, latestPhaseParameters);
+  if (!terms) {
+    canvas.dataset.heatEngineMode = "domain-error";
+    drawCanvasMessage(ctx, width, height, "heat engine terms unavailable");
+    return;
+  }
+
+  const cycleRows = downsample(heatEngineCycleRows(latestPhaseRows), 1100, ["R", "H", "Uc", "L"]);
+  const cycleWork = heatEngineCycleWork(cycleRows, latestPhaseParameters);
+  const regime = heatEngineRegime(cycleWork, cycleRows);
+  const events = heatEngineEventRows(latestPhaseRows, latestPhaseParameters);
+  canvas.dataset.heatEngineMode = gridState.enabled ? "grid" : "single";
+  canvas.dataset.heatEngineRows = String(cycleRows.length);
+  canvas.dataset.forceTerms = "pressure H/R^q,gravity 1/R^2,damping Cq V^3";
+  canvas.dataset.heatFluxTerms = "source R^U,radiative leak L_r,convective leak L_c";
+  canvas.dataset.workLoop = "F_P=H/R^q versus R";
+  canvas.dataset.workState = regime;
+  canvas.dataset.workIntegral = fmt(cycleWork.pressure, 6);
+  canvas.dataset.cycleWorkNet = fmt(cycleWork.net, 6);
+  canvas.dataset.cycleWorkRatio = cycleWork.pressureDampingRatio === null ? "n/a" : fmt(cycleWork.pressureDampingRatio, 6);
+  canvas.dataset.regime = regime;
+  canvas.dataset.convectiveValve = convectiveResponseDisabled(latestPhaseParameters) ? "frozen" : "time-dependent";
+  canvas.dataset.convectiveLag = fmt(terms.convectiveLag, 6);
+  canvas.dataset.eventLabels = "R_min,F_P_max,L_max,L_c_max,R_max";
+  if (gridState.enabled) {
+    delete canvas.dataset.currentPhase;
+    delete canvas.dataset.currentTime;
+  } else if (latestDisplayWindow.mode === "time") {
+    canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
+    delete canvas.dataset.currentPhase;
+  } else {
+    canvas.dataset.currentPhase = fmtFixed(phaseModOne(currentAnimationPhase), 3);
+    delete canvas.dataset.currentTime;
+  }
+
+  drawHeatEnginePhaseRail(ctx, latestPhaseRows, events, 30, 31, width - 60);
+
+  const stripHeight = 76;
+  const stripTop = height - stripHeight - 12;
+  const mainTop = 92;
+  const mainBottom = stripTop - 14;
+  const mainHeight = Math.max(250, mainBottom - mainTop);
+  const compact = width < 650;
+  const chamberWidth = compact ? Math.max(168, Math.min(195, width * 0.33)) : Math.min(260, width * 0.36);
+  const chamber = {
+    left: compact ? 34 : 54,
+    top: mainTop + 12,
+    width: chamberWidth,
+    height: mainHeight - 32
+  };
+  drawHeatEnginePistonCausal(ctx, row, cycleRows, terms, chamber, latestPhaseParameters);
+
+  const loopLeft = chamber.left + chamber.width + (compact ? 68 : 92);
+  const loopWidth = Math.max(150, width - loopLeft - 24);
+  const loopPlot = {
+    left: loopLeft + 30,
+    top: mainTop + 26,
+    width: Math.max(112, loopWidth - 42),
+    height: Math.min(230, mainHeight - 58)
+  };
+  drawHeatEngineWorkLoop(ctx, cycleRows, row, latestPhaseParameters, loopPlot, cycleWork, regime);
+  drawHeatEngineCycleWorkLedger(ctx, cycleWork, 24, stripTop, width - 48, stripHeight, regime);
+}
+
 function drawModelVisualization(): void {
   const canvas = el<HTMLCanvasElement>("modelCanvas");
   const panel = canvas.closest<HTMLElement>(".plot-panel");
@@ -6752,6 +8194,7 @@ function drawModelVisualization(): void {
 function drawAnimatedPhaseViews(): void {
   drawModelVisualization();
   drawPhasePlots();
+  drawHeatEnginePanel();
   drawThermodynamicPanel();
   drawCepheidGuide();
   drawPhasePortraitPanel();
@@ -6761,7 +8204,7 @@ function startModelAnimationLoop(): void {
   if (modelAnimationFrame) return;
   const tick = (timestamp: number) => {
     if (!document.hidden) {
-      if (activePhaseScrub || activePhaseHoverCanvasId) {
+      if (gridState.enabled || activePhaseScrub || activePhaseHoverCanvasId) {
         modelAnimationStartTime = null;
       } else {
         if (modelAnimationStartTime === null) {
@@ -6821,7 +8264,7 @@ function drawAll(): void {
     const formula = s72ConditionMetric(s72Stability, condition);
     return {
       label: "",
-      value: `<span class="stability-summary">${s72ConditionSummary(condition)}</span><span class="stability-formula">${formula}</span>`,
+      value: `<span class="stability-summary">${s72ConditionSummary(condition)}</span><span class="stability-formula">${s72ConditionMetricHtml(s72Stability, condition)}</span>`,
       detail: s72ConditionTitle(s72Stability, condition),
       formula,
       className: s72MetricClass(condition.stable),
@@ -6878,6 +8321,7 @@ function drawAll(): void {
   updateSonificationCurve(displayWindow.mode === "phase" ? latestPhaseRows : [], sonificationFallbackRows, latestPhaseParameters);
   drawModelVisualization();
   drawPhasePlots();
+  drawHeatEnginePanel();
   drawThermodynamicPanel();
 
   const timeXlim = integrationTimeRange(rows);

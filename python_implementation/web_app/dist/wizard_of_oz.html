@@ -1075,6 +1075,7 @@
     .metric[data-stability-expanded] {
       cursor: pointer;
       touch-action: manipulation;
+      max-width: 100%;
     }
 
     .metric[data-stability-expanded] b,
@@ -1088,18 +1089,29 @@
 
     .metric .stability-formula {
       display: none;
+      margin-left: 6px;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
 
-    .metric[data-stability-expanded]:hover .stability-summary,
-    .metric[data-stability-expanded]:focus-visible .stability-summary,
-    .metric[data-stability-expanded][aria-expanded="true"] .stability-summary {
-      display: none;
+    .metric .stability-equation {
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
 
-    .metric[data-stability-expanded]:hover .stability-formula,
-    .metric[data-stability-expanded]:focus-visible .stability-formula,
+    .metric .stability-equation-chunk {
+      display: inline-block;
+      max-width: 100%;
+      vertical-align: middle;
+    }
+
     .metric[data-stability-expanded][aria-expanded="true"] .stability-formula {
       display: inline;
+    }
+
+    .metric[data-stability-expanded][aria-expanded="true"] {
+      flex: 1 1 min(100%, 520px);
+      white-space: normal;
     }
 
     .metric[data-stability-expanded]:focus-visible,
@@ -2290,6 +2302,32 @@
           <canvas id="velocityCanvas"></canvas>
         </div>
 
+        <div class="plot-panel" data-plot-panel="tpOpacity">
+          <div class="plot-title">
+            <div class="plot-title-left" data-plot-control-home="tpOpacity">
+              <label class="plot-enable-control" data-plot-control="tpOpacity">
+                <input type="checkbox" data-plot-toggle="tpOpacity" checked aria-label="Hide T-P Opacity plot">
+                <span>T-P Opacity</span>
+              </label>
+              <h3>T-P Opacity</h3>
+            </div>
+          </div>
+          <canvas id="tpOpacityCanvas" aria-label="temperature pressure opacity plot"></canvas>
+        </div>
+
+        <div class="plot-panel reference-plot-panel" data-plot-panel="phasePortrait" data-reference-panel="phase">
+          <div class="plot-title">
+            <div class="plot-title-left" data-plot-control-home="phasePortrait">
+              <label class="plot-enable-control" data-plot-control="phasePortrait">
+                <input type="checkbox" data-plot-toggle="phasePortrait" checked aria-label="Hide Thermal-Convection Loop plot">
+                <span>Thermal-Convection Loop</span>
+              </label>
+              <h3>Thermal-Convection Loop</h3>
+            </div>
+          </div>
+          <canvas id="phasePortraitCanvas" aria-label="H of R and U_c of R phase portrait"></canvas>
+        </div>
+
         <div class="plot-panel" id="pressurePhasePanel" hidden>
           <div class="plot-title">
             <h3>Pressure</h3>
@@ -2331,19 +2369,6 @@
           <div class="legend" id="lumLegend"></div>
         </div>
 
-        <div class="plot-panel" data-plot-panel="tpOpacity">
-          <div class="plot-title">
-            <div class="plot-title-left" data-plot-control-home="tpOpacity">
-              <label class="plot-enable-control" data-plot-control="tpOpacity">
-                <input type="checkbox" data-plot-toggle="tpOpacity" checked aria-label="Hide T-P Opacity plot">
-                <span>T-P Opacity</span>
-              </label>
-              <h3>T-P Opacity</h3>
-            </div>
-          </div>
-          <canvas id="tpOpacityCanvas" aria-label="temperature pressure opacity plot"></canvas>
-        </div>
-
         <div class="plot-panel reference-plot-panel" data-plot-panel="stability" data-reference-panel="stability">
           <div class="plot-title">
             <div class="plot-title-left" data-plot-control-home="stability">
@@ -2368,19 +2393,6 @@
             </div>
           </div>
           <canvas id="cepheidGuideCanvas" aria-label="instability strip"></canvas>
-        </div>
-
-        <div class="plot-panel reference-plot-panel" data-plot-panel="phasePortrait" data-reference-panel="phase">
-          <div class="plot-title">
-            <div class="plot-title-left" data-plot-control-home="phasePortrait">
-              <label class="plot-enable-control" data-plot-control="phasePortrait">
-                <input type="checkbox" data-plot-toggle="phasePortrait" checked aria-label="Hide Thermal-Convection Loop plot">
-                <span>Thermal-Convection Loop</span>
-              </label>
-              <h3>Thermal-Convection Loop</h3>
-            </div>
-          </div>
-          <canvas id="phasePortraitCanvas" aria-label="H of R and U_c of R phase portrait"></canvas>
         </div>
 
       </section>
