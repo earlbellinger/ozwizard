@@ -13,15 +13,16 @@ import {
 import { computeGridWithMessages } from "../src/gridCompute";
 import { PRESETS, type Row } from "../src/model";
 
-function syntheticFourierRows(phi1: number, phi2: number, phi3: number): Row[] {
-  const amplitudes = [0.5, 0.15, 0.05];
+function syntheticFourierRows(phi1: number, phi2: number, phi3: number, phi4 = 0): Row[] {
+  const amplitudes = [0.5, 0.15, 0.05, 0.025];
   return Array.from({ length: 720 }, (_value, index) => {
     const phase = (2 * index) / 720;
     const folded = phase % 1;
     const luminosity = 1
       + amplitudes[0] * Math.cos(2 * Math.PI * folded + phi1)
       + amplitudes[1] * Math.cos(4 * Math.PI * folded + phi2)
-      + amplitudes[2] * Math.cos(6 * Math.PI * folded + phi3);
+      + amplitudes[2] * Math.cos(6 * Math.PI * folded + phi3)
+      + amplitudes[3] * Math.cos(8 * Math.PI * folded + phi4);
     return { tau: phase, R: 1, V: 0, H: 1, Uc: 0, Lr: luminosity, Lc: 0, L: luminosity };
   });
 }
@@ -160,13 +161,31 @@ describe("Fourier helper", () => {
     const phi1 = 0.4;
     const phi2 = 1.1;
     const phi3 = 2.2;
-    const fourier = computeFourierParameters(syntheticFourierRows(phi1, phi2, phi3));
-    const expectedLuminosityAmplitude = luminosityAmplitude(syntheticFourierRows(phi1, phi2, phi3));
+    const phi4 = 2.7;
+    const fourier = computeFourierParameters(syntheticFourierRows(phi1, phi2, phi3, phi4));
+    const expectedLuminosityAmplitude = luminosityAmplitude(syntheticFourierRows(phi1, phi2, phi3, phi4));
     expect(hasUsableFourierAmplitudes(fourier)).toBe(true);
     expect(fourier!.luminosityAmplitude).toBeCloseTo(expectedLuminosityAmplitude, 12);
     expect(fourier!.r21).toBeCloseTo(0.3, 8);
     expect(fourier!.r31).toBeCloseTo(0.1, 8);
+    expect(fourier!.r41).toBeCloseTo(0.05, 8);
     expect(fourier!.phi21).toBeCloseTo(wrapTwoPi(phi2 - 2 * phi1), 8);
     expect(fourier!.phi31).toBeCloseTo(wrapTwoPi(phi3 - 3 * phi1), 8);
+    expect(fourier!.phi41).toBeCloseTo(wrapTwoPi(phi4 - 4 * phi1), 8);
+    expect(fourier!.phiK1[4]).toBeCloseTo(fourier!.phi41, 12);
+    expect(fourier!.amplitudes[4]).toBeCloseTo(fourier!.amplitude4, 12);
+    expect(fourier!.skewness).toBeGreaterThan(0);
+    expect(fourier!.acuteness).toBeGreaterThan(0);
+  });
+
+  it("reports symmetric morphology ratios for a pure sinusoid", () => {
+    const rows = Array.from({ length: 720 }, (_value, index): Row => {
+      const phase = (2 * index) / 720;
+      const luminosity = 1 + 0.25 * Math.cos(2 * Math.PI * (phase % 1));
+      return { tau: phase, R: 1, V: 0, H: 1, Uc: 0, Lr: luminosity, Lc: 0, L: luminosity };
+    });
+    const fourier = computeFourierParameters(rows);
+    expect(fourier!.skewness).toBeCloseTo(1, 2);
+    expect(fourier!.acuteness).toBeCloseTo(1, 2);
   });
 });

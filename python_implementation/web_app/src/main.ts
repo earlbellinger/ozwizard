@@ -35,6 +35,12 @@ import {
   type GridWorkerMessage
 } from "./grid";
 import { computeGridWithMessages } from "./gridCompute";
+import {
+  blazhkoPhaseAt,
+  detectBlazhkoPeriods,
+  type BlazhkoAnalysis,
+  type BlazhkoPeriod
+} from "./blazhko";
 import { buildTwoCyclePhase, guidedMinSeparationFromPeriod, type PhaseAnchor, type PhaseResult } from "./phase";
 import {
   buildPhaseDisplayWindow,
@@ -47,6 +53,7 @@ import {
   type DisplayWindow,
   type DisplayWindowMode
 } from "./displayWindow";
+import { computeFourierParameters } from "./fourier";
 import { SOLVER_NAMES, type SolverName } from "./solvers";
 import {
   blackbodyRgbForTemperature,
@@ -113,6 +120,7 @@ const SONIFICATION_MAX_HARMONICS = 32;
 const PIANO_DEFAULT_ENVELOPE: PianoEnvelope = { attack: 0.015, decay: 0.22, release: 0.36 };
 const PIANO_DEFAULT_SUSTAIN_LEVEL = 0.38;
 const MODEL_ANIMATION_BASE_DURATION_MS = 4000;
+const BLAZHKO_ANIMATION_BASE_DURATION_MS = 9000;
 const MODEL_ANIMATION_MIN_SPEED = 0.25;
 const MODEL_ANIMATION_MAX_SPEED = 4;
 const GRID_LOOP_BASE_INTERVAL_MS = 90;
@@ -121,8 +129,18 @@ const GRID_LOOP_MAX_SPEED = 4;
 const PHASE_MARKER_COLOR = "#FFD166";
 const POSITIVE_VELOCITY_COLOR = "#4DA3FF";
 const NEGATIVE_VELOCITY_COLOR = "#FF5F6D";
-const PHASE_SCRUB_CANVAS_IDS = ["lightCanvas", "velocityCanvas", "pressureCanvas"] as const;
-const PHASE_HOVER_CANVAS_IDS = ["lightCanvas", "velocityCanvas"] as const;
+const FOURIER_PHASE_HARMONICS = [2, 3, 4, 5, 6, 7] as const;
+const FOURIER_PHASE_DIFF_HARMONICS = [2, 3, 4, 5] as const;
+const FOURIER_HARMONIC_COLORS: Record<number, string> = {
+  2: "#79C0FF",
+  3: "#FF7B72",
+  4: "#7EE787",
+  5: "#FFD166",
+  6: "#C297FF",
+  7: "#39C5CF"
+};
+const PHASE_SCRUB_CANVAS_IDS = ["lightCanvas", "velocityCanvas", "pressureCanvas", "doubleBlazhkoCanvas"] as const;
+const PHASE_HOVER_CANVAS_IDS = ["lightCanvas", "velocityCanvas", "doubleBlazhkoCanvas"] as const;
 const SONIFICATION_SOURCE_LABELS: Record<SonificationSource, string> = {
   luminosity: "luminosity",
   velocity: "radial velocity",
@@ -153,10 +171,12 @@ const gridState: GridModeState = {
   restorePlotVisibility: null
 };
 let currentAnimationPhase = 0;
+let currentBlazhkoPhase = 0;
 let modelAnimationSpeed = 1;
 let gridLoopSpeed = 1;
 let modelAnimationFrame = 0;
 let modelAnimationStartTime: number | null = null;
+let blazhkoAnimationStartTime: number | null = null;
 let latestDisplayWindow: DisplayWindow = {
   mode: "phase",
   reason: "phase_unavailable",
@@ -164,12 +184,21 @@ let latestDisplayWindow: DisplayWindow = {
   xlim: [0, 2],
   period: null
 };
+let latestPhaseReference: PhaseResult["reference"] = null;
 let latestPhaseRows: Row[] = [];
 let latestPhaseSample: Row[] = [];
 let latestPhaseMessage: string | undefined;
 let latestPhasePeriodLabel = "phase (period = n/a τ)";
 let latestPhaseLuminosityRange: NumericRange = [0, 1];
 let latestPhaseParameters: ModelParameters = state;
+let latestBlazhkoAnalysis: BlazhkoAnalysis = {
+  kind: "none",
+  primaryPeriod: null,
+  modulationDepth: 0,
+  cycles: [],
+  periods: [],
+  reason: "no_primary_period"
+};
 let phaseAnnotationsVisible = true;
 let sonificationReferenceNote = MIDDLE_C_NOTE;
 let sonificationReferenceHz = noteToFrequency(MIDDLE_C_NOTE);
@@ -209,7 +238,7 @@ type NumericRange = [number, number];
 type InteractivePlotId = "time" | "lum";
 type RowSeriesKey = "R" | "V" | "H" | "Uc" | "L" | "Lr" | "Lc";
 type PlotSeriesKey = RowSeriesKey | "Lb";
-type UserPlotId = "model" | "light" | "velocity" | "time" | "lum" | "stability" | "strip" | "phasePortrait";
+type UserPlotId = "model" | "light" | "velocity" | "time" | "lum" | "tpOpacity" | "stability" | "strip" | "phasePortrait";
 type SonificationSource = "luminosity" | "velocity" | "pressure";
 
 interface PlotView {
@@ -282,6 +311,29 @@ interface FourierPointHit {
 interface FourierAxisLabel {
   base: "A" | "r" | "phi";
   subscript: string;
+}
+
+type FourierValueAccessor = (result: GridModelResult) => number;
+
+interface FourierPanelSpec {
+  latex: string;
+  xLabel: string;
+  yLabel: FourierAxisLabel;
+  xValue: FourierValueAccessor;
+  yValue?: FourierValueAccessor;
+  harmonicValues?: (result: GridModelResult, harmonic: number) => number;
+  harmonics?: number[];
+  xPhase?: boolean;
+  yPhase?: boolean;
+  upperSkewnessAxis?: boolean;
+  identityLine?: boolean;
+  adiabaticReference?: boolean;
+}
+
+interface FourierSeriesPoint {
+  x: number;
+  y: number;
+  result?: GridModelResult;
 }
 
 type PhasePortraitKey = "H" | "Uc";
@@ -425,6 +477,7 @@ const PLOT_PANEL_LABELS: Record<UserPlotId, string> = {
   velocity: "RV Curve",
   time: "History",
   lum: "Luminosity Evolution",
+  tpOpacity: "T-P Opacity",
   stability: "Stability Map",
   strip: "Instability Strip",
   phasePortrait: "Thermal-Convection Loop"
@@ -436,6 +489,7 @@ const plotPanelVisibility: Record<UserPlotId, boolean> = {
   velocity: true,
   time: true,
   lum: true,
+  tpOpacity: true,
   stability: true,
   strip: true,
   phasePortrait: true
@@ -1676,6 +1730,7 @@ function setupModelSpeedControl(): void {
     output.value = modelSpeedLabel(modelAnimationSpeed);
     output.textContent = output.value;
     modelAnimationStartTime = null;
+    blazhkoAnimationStartTime = null;
     drawAnimatedPhaseViews();
   };
   input.addEventListener("input", sync);
@@ -3576,6 +3631,50 @@ function baseLuminosity(row: Row, parameters: ModelParameters = state): number {
   return Number.isFinite(value) ? value : NaN;
 }
 
+interface ThermodynamicPoint {
+  row: Row;
+  logT: number;
+  logP: number;
+  logOpacity: number;
+}
+
+function log10Positive(value: number): number {
+  return Number.isFinite(value) && value > 0 ? Math.log10(value) : NaN;
+}
+
+function temperatureRatio(row: Row, parameters: ModelParameters): number {
+  if (!Number.isFinite(row.R) || row.R <= 0 || !Number.isFinite(row.H) || row.H <= 0) return NaN;
+  const chi = mAt(row.R, parameters);
+  const value = row.R ** (-chi * (parameters.gamma1 - 1)) * row.H;
+  return Number.isFinite(value) && value > 0 ? value : NaN;
+}
+
+function pressureRatio(row: Row, parameters: ModelParameters): number {
+  if (!Number.isFinite(row.R) || row.R <= 0 || !Number.isFinite(row.H) || row.H <= 0) return NaN;
+  const chi = mAt(row.R, parameters);
+  const value = row.R ** (-chi * parameters.gamma1) * row.H;
+  return Number.isFinite(value) && value > 0 ? value : NaN;
+}
+
+function opacityLogFromLogTemperaturePressure(logT: number, logP: number, parameters: ModelParameters): number {
+  if (!Number.isFinite(logT) || !Number.isFinite(logP)) return NaN;
+  return parameters.n * logP - (parameters.n + parameters.s) * logT;
+}
+
+function thermodynamicPoint(row: Row, parameters: ModelParameters): ThermodynamicPoint | null {
+  const logT = log10Positive(temperatureRatio(row, parameters));
+  const logP = log10Positive(pressureRatio(row, parameters));
+  const logOpacity = opacityLogFromLogTemperaturePressure(logT, logP, parameters);
+  if (![logT, logP, logOpacity].every(Number.isFinite)) return null;
+  return { row, logT, logP, logOpacity };
+}
+
+function thermodynamicPoints(rows: Row[], parameters: ModelParameters, maxPoints = 1400): ThermodynamicPoint[] {
+  return downsample(rows, maxPoints, ["R", "H"])
+    .map((row) => thermodynamicPoint(row, parameters))
+    .filter((point): point is ThermodynamicPoint => Boolean(point));
+}
+
 function downsample(rows: Row[], maxPoints = 2200, keys: readonly PlotSeriesKey[] = []): Row[] {
   if (rows.length <= maxPoints) return rows;
   const uniqueKeys = [...new Set(keys.filter(rowSeriesKey))];
@@ -3691,6 +3790,16 @@ interface EnvelopeBin {
   max: number;
   sum: number;
   count: number;
+}
+
+interface BlazhkoPlotRow extends Row {
+  blazhkoPhase: number;
+  blazhkoCycleIndex: number;
+}
+
+interface BlazhkoCurve {
+  phase: number;
+  rows: BlazhkoPlotRow[];
 }
 
 function colorWithAlpha(color: string, alpha: number): string {
@@ -4027,6 +4136,116 @@ function luminosityCurveWidth(value: number): number {
   return 1.15 + 3.35 * level;
 }
 
+function circularDistance(a: number, b: number): number {
+  const delta = Math.abs(((a - b) % 1 + 1) % 1);
+  return Math.min(delta, 1 - delta);
+}
+
+function meanCircularPhase(phases: readonly number[]): number {
+  if (!phases.length) return 0;
+  const vector = phases.reduce(
+    (sum, phase) => {
+      const angle = 2 * Math.PI * phaseModOne(phase);
+      sum.x += Math.cos(angle);
+      sum.y += Math.sin(angle);
+      return sum;
+    },
+    { x: 0, y: 0 }
+  );
+  const angle = Math.atan2(vector.y, vector.x);
+  return ((angle / (2 * Math.PI)) % 1 + 1) % 1;
+}
+
+function blazhkoColor(phase: number, alpha = 1): string {
+  const hue = 222 + 126 * clamp(phase, 0, 1);
+  return alpha >= 1
+    ? `hsl(${hue.toFixed(1)} 88% 67%)`
+    : `hsla(${hue.toFixed(1)} 88% 67% / ${clamp(alpha, 0, 1).toFixed(3)})`;
+}
+
+function blazhkoAnimationDurationMs(): number {
+  return BLAZHKO_ANIMATION_BASE_DURATION_MS / modelAnimationSpeed;
+}
+
+function buildBlazhkoCurves(
+  rows: readonly Row[],
+  period: BlazhkoPeriod | undefined,
+  primaryPeriod: number | null,
+  phaseReference: PhaseResult["reference"],
+  maxCurves = 80
+): BlazhkoCurve[] {
+  if (!period || !primaryPeriod || !phaseReference || primaryPeriod <= 0) return [];
+  const startTau = phaseReference.startTau;
+  const groups = new Map<number, BlazhkoPlotRow[]>();
+  rows.forEach((row) => {
+    if (row.tau < startTau || !Number.isFinite(row.tau)) return;
+    const phasePosition = (row.tau - startTau) / primaryPeriod;
+    if (phasePosition < 0) return;
+    const cycleIndex = Math.floor(phasePosition);
+    const phase = ((phasePosition % 1) + 1) % 1;
+    const blazhkoPhase = blazhkoPhaseAt(row.tau, period);
+    const folded: BlazhkoPlotRow = { ...row, tau: phase, blazhkoPhase, blazhkoCycleIndex: cycleIndex };
+    const bucket = groups.get(cycleIndex);
+    if (bucket) bucket.push(folded);
+    else groups.set(cycleIndex, [folded]);
+  });
+  const curves = [...groups.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([cycleIndex, cycleRows]) => {
+      const sorted = cycleRows
+        .filter((row) => Number.isFinite(row.tau) && Number.isFinite(row.L) && Number.isFinite(row.V))
+        .sort((a, b) => a.tau - b.tau);
+      const rowsWithSecondCycle = [
+        ...sorted,
+        ...sorted.map((row): BlazhkoPlotRow => ({ ...row, tau: row.tau + 1 }))
+      ];
+      const phase = sorted.length
+        ? meanCircularPhase(sorted.map((row) => row.blazhkoPhase))
+        : blazhkoPhaseAt(startTau + (cycleIndex + 0.5) * primaryPeriod, period);
+      return { phase: ((phase % 1) + 1) % 1, rows: rowsWithSecondCycle };
+    })
+    .filter((curve) => curve.rows.length >= 6);
+  if (curves.length <= maxCurves) return curves;
+  const stride = Math.ceil(curves.length / maxCurves);
+  return curves.filter((_curve, index) => index % stride === 0 || index === curves.length - 1);
+}
+
+function blazhkoPhaseSeries(
+  quantity: "L" | "V",
+  color: string,
+  fallbackRows: Row[],
+  period: BlazhkoPeriod | undefined,
+  options: { secondary?: boolean } = {}
+): Series[] {
+  const accessor = (row: Row) => row[quantity];
+  if (gridState.enabled || latestBlazhkoAnalysis.kind === "none" || !period || !latestDisplayWindow.period) {
+    return gridPhaseSeries(quantity, color, fallbackRows);
+  }
+  const curves = buildBlazhkoCurves(latestRows, period, latestDisplayWindow.period, latestPhaseReference);
+  if (!curves.length) return gridPhaseSeries(quantity, color, fallbackRows);
+  const highlightWidth = options.secondary ? 2.8 : 3.2;
+  const background = curves.map((curve): Series => ({
+    label: `${quantity}-blazhko-${curve.phase.toFixed(3)}`,
+    color: blazhkoColor(curve.phase, 0.24),
+    rows: curve.rows,
+    x: (row) => row.tau,
+    y: accessor,
+    width: 0.9
+  }));
+  const highlighted = curves
+    .filter((curve) => circularDistance(curve.phase, currentBlazhkoPhase) <= 0.09)
+    .sort((a, b) => circularDistance(b.phase, currentBlazhkoPhase) - circularDistance(a.phase, currentBlazhkoPhase))
+    .map((curve): Series => ({
+      label: `${quantity}-blazhko-current-${curve.phase.toFixed(3)}`,
+      color: blazhkoColor(curve.phase, 0.98),
+      rows: curve.rows,
+      x: (row) => row.tau,
+      y: accessor,
+      width: highlightWidth
+    }));
+  return [...background, ...highlighted];
+}
+
 function gridPhaseSeries(
   quantity: "L" | "V",
   color: string,
@@ -4192,6 +4411,77 @@ function drawGridColorbar(
   ctx.restore();
 }
 
+function clearBlazhkoColorbar(canvasId: string): void {
+  const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
+  if (!canvas) return;
+  delete canvas.dataset.blazhkoColorbar;
+  delete canvas.dataset.blazhkoPeriod;
+  delete canvas.dataset.blazhkoPhase;
+  delete canvas.dataset.blazhkoLabel;
+}
+
+function drawBlazhkoColorbar(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  period: BlazhkoPeriod | undefined,
+  options: { secondary?: boolean; canvasId?: string } = {}
+): void {
+  const canvasId = options.canvasId ?? "lightCanvas";
+  if (!period || latestDisplayWindow.mode !== "phase" || gridState.enabled) {
+    clearBlazhkoColorbar(canvasId);
+    return;
+  }
+  const width = Math.min(172, Math.max(122, plot.width * 0.3));
+  const height = 9;
+  const left = plot.left + plot.width - width - 12;
+  const top = plot.top + 12;
+  const phase = phaseModOne(currentBlazhkoPhase);
+  const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
+  if (canvas) {
+    canvas.dataset.blazhkoColorbar = options.secondary ? "secondary" : "primary";
+    canvas.dataset.blazhkoPeriod = fmtFixed(period.period, 4);
+    canvas.dataset.blazhkoPhase = fmtFixed(phase, 3);
+    canvas.dataset.blazhkoLabel = options.secondary ? "Blazhko Phi_2" : "Blazhko Phi";
+  }
+
+  const gradient = ctx.createLinearGradient(left, top, left + width, top);
+  for (let index = 0; index <= 24; index += 1) {
+    const fraction = index / 24;
+    gradient.addColorStop(fraction, blazhkoColor(fraction, 1));
+  }
+  const label = options.secondary
+    ? `Blazhko Φ₂ (P₂ = ${fmt(period.period, 3)} τ)`
+    : `Blazhko Φ (P = ${fmt(period.period, 3)} τ)`;
+  const markerX = left + phase * width;
+
+  ctx.save();
+  ctx.fillStyle = "rgba(5, 8, 20, 0.72)";
+  ctx.fillRect(left - 8, top - 8, width + 16, 50);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(left, top, width, height);
+  ctx.strokeStyle = "rgba(238, 245, 255, 0.62)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(left, top, width, height);
+  ctx.strokeStyle = "#050814";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(markerX, top - 2);
+  ctx.lineTo(markerX, top + height + 2);
+  ctx.stroke();
+  ctx.strokeStyle = "#FFFFFF";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(markerX, top - 2);
+  ctx.lineTo(markerX, top + height + 2);
+  ctx.stroke();
+  ctx.fillStyle = THEME.axisText;
+  ctx.font = "11px Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText(label, left + width / 2, top + height + 12);
+  ctx.restore();
+}
+
 function drawFourierPanel(): void {
   const panel = document.getElementById("fourierGridPanel");
   const canvas = document.getElementById("fourierCanvas");
@@ -4208,16 +4498,96 @@ function drawFourierPanel(): void {
   const gridPoints = gridState.results.filter((result) => result.fourier);
   const path = gridPathResults().filter((result) => result.fourier);
   const allPoints = [...gridPoints, ...path];
-  const panels: Array<{ latex: string; label: FourierAxisLabel; value: (result: GridModelResult) => number }> = [
-    { latex: "A_L", label: { base: "A", subscript: "L" }, value: (result: GridModelResult) => result.fourier!.luminosityAmplitude },
-    { latex: "r_{21}", label: { base: "r", subscript: "21" }, value: (result: GridModelResult) => result.fourier!.r21 },
-    { latex: "\\phi_{21}", label: { base: "phi", subscript: "21" }, value: (result: GridModelResult) => result.fourier!.phi21 },
-    { latex: "r_{31}", label: { base: "r", subscript: "31" }, value: (result: GridModelResult) => result.fourier!.r31 },
-    { latex: "\\phi_{31}", label: { base: "phi", subscript: "31" }, value: (result: GridModelResult) => result.fourier!.phi31 }
+  const panels: FourierPanelSpec[] = [
+    {
+      latex: "A_L",
+      xLabel: "period/τ",
+      yLabel: { base: "A", subscript: "L" },
+      xValue: (result) => result.period,
+      yValue: (result) => result.fourier!.luminosityAmplitude
+    },
+    {
+      latex: "r_{21}",
+      xLabel: "period/τ",
+      yLabel: { base: "r", subscript: "21" },
+      xValue: (result) => result.period,
+      yValue: (result) => result.fourier!.r21
+    },
+    {
+      latex: "\\phi_{21}",
+      xLabel: "period/τ",
+      yLabel: { base: "phi", subscript: "21" },
+      xValue: (result) => result.period,
+      yValue: (result) => result.fourier!.phi21,
+      yPhase: true
+    },
+    {
+      latex: "r_{31}",
+      xLabel: "period/τ",
+      yLabel: { base: "r", subscript: "31" },
+      xValue: (result) => result.period,
+      yValue: (result) => result.fourier!.r31
+    },
+    {
+      latex: "\\phi_{31}",
+      xLabel: "period/τ",
+      yLabel: { base: "phi", subscript: "31" },
+      xValue: (result) => result.period,
+      yValue: (result) => result.fourier!.phi31,
+      yPhase: true
+    },
+    {
+      latex: "\\phi_{31}/\\phi_{21}",
+      xLabel: "φ21",
+      yLabel: { base: "phi", subscript: "31" },
+      xValue: (result) => fourierPhiK1(result, 2),
+      yValue: (result) => fourierPhiK1(result, 3),
+      xPhase: true,
+      yPhase: true,
+      identityLine: true,
+      adiabaticReference: true
+    },
+    {
+      latex: "\\phi_{k1}/S_k",
+      xLabel: "S_k",
+      yLabel: { base: "phi", subscript: "k1" },
+      xValue: (result) => result.fourier!.skewness,
+      harmonicValues: fourierPhiK1,
+      harmonics: [...FOURIER_PHASE_HARMONICS],
+      yPhase: true
+    },
+    {
+      latex: "\\phi_{k1}/P",
+      xLabel: "period/τ",
+      yLabel: { base: "phi", subscript: "k1" },
+      xValue: (result) => result.period,
+      harmonicValues: fourierPhiK1,
+      harmonics: [...FOURIER_PHASE_HARMONICS],
+      yPhase: true,
+      upperSkewnessAxis: true
+    },
+    {
+      latex: "\\phi_{k1}/A_c",
+      xLabel: "A_c",
+      yLabel: { base: "phi", subscript: "k1" },
+      xValue: (result) => result.fourier!.acuteness,
+      harmonicValues: fourierPhiK1,
+      harmonics: [...FOURIER_PHASE_DIFF_HARMONICS],
+      yPhase: true
+    },
+    {
+      latex: "\\phi_{k1}/S_k",
+      xLabel: "S_k",
+      yLabel: { base: "phi", subscript: "k1" },
+      xValue: (result) => result.fourier!.skewness,
+      harmonicValues: fourierPhiK1,
+      harmonics: [...FOURIER_PHASE_DIFF_HARMONICS],
+      yPhase: true
+    }
   ];
-  const columns = rect.width >= 1600 ? 5 : rect.width >= 1320 ? 4 : rect.width >= 780 ? 2 : 1;
+  const columns = rect.width >= 1760 ? 5 : rect.width >= 1320 ? 4 : rect.width >= 780 ? 2 : 1;
   const rows = Math.ceil(panels.length / columns);
-  const cssHeight = Math.max(260, rows * 214);
+  const cssHeight = Math.max(280, rows * 238);
   canvas.width = Math.max(320, Math.floor(rect.width * dpr));
   canvas.height = Math.floor(cssHeight * dpr);
   canvas.style.height = `${cssHeight}px`;
@@ -4241,11 +4611,14 @@ function drawFourierPanel(): void {
 
   const current = currentGridResult();
   const currentFourier = current?.fourier ? current : null;
-  const xlim = range(allPoints.map((point) => point.period), 0.05);
   canvas.dataset.fourierAxisLabels = panels.map((item) => item.latex).join(",");
   canvas.dataset.fourierPathCount = String(path.length);
+  canvas.dataset.fourierPhaseTicks = "pi-multiples";
+  canvas.dataset.fourierStructuralPanels = "phi31_vs_phi21,phi_k1_vs_skewness,phi_k1_vs_period,phi_k1_vs_acuteness";
+  const adiabaticReference = buildAdiabaticFourierReference(current?.parameters || state);
+  canvas.dataset.fourierAdiabaticReference = String(adiabaticReference.length);
   const gap = 16;
-  const pad = { left: 78, right: 18, top: 24, bottom: 58 };
+  const pad = { left: 78, right: 22, top: 42, bottom: 60 };
   const panelWidth = (rect.width - gap * (columns - 1)) / columns;
   const panelHeight = (cssHeight - gap * (rows - 1)) / rows;
 
@@ -4258,18 +4631,62 @@ function drawFourierPanel(): void {
       width: panelWidth - pad.left - pad.right,
       height: panelHeight - pad.top - pad.bottom
     };
-    const values = allPoints.map(item.value);
-    const ylim = range(values, 0.08);
+    const xValues = fourierPanelXValues(item, allPoints, item.adiabaticReference ? adiabaticReference : []);
+    const yValues = fourierPanelYValues(item, allPoints, path, item.adiabaticReference ? adiabaticReference : []);
+    const xlim = item.xPhase ? phaseRange(xValues, false) : range(xValues, 0.05);
+    const ylim = item.yPhase ? phaseRange(yValues, true) : range(yValues, 0.08);
     const ylabelX = Math.max(8, box.left - 70);
-    drawAxes(ctx, box, xlim, ylim, "period/τ", "", THEME.axisText, THEME.axisText, ylabelX);
-    drawFourierAxisLabel(ctx, item.label, ylabelX, box.top + box.height / 2);
-    collectFourierPointHits(box, xlim, ylim, allPoints, item.value);
-    drawFourierPoints(ctx, box, xlim, ylim, gridPoints, item.value, "rgba(190, 200, 216, 0.24)", 2.1);
-    drawFourierPath(ctx, box, xlim, ylim, path, item.value, 1.9);
-    drawFourierPoints(ctx, box, xlim, ylim, path, item.value, (result) => gridResultColor(result, 0.78), 2.9);
+    drawFourierAxes(ctx, box, xlim, ylim, item.xLabel, ylabelX, {
+      xPhase: item.xPhase,
+      yPhase: item.yPhase,
+      upperSkewnessAxis: item.upperSkewnessAxis ? path : null
+    });
+    drawFourierAxisLabel(ctx, item.yLabel, ylabelX, box.top + box.height / 2);
+    if (item.identityLine) drawFourierIdentityLine(ctx, box, xlim, ylim);
+    if (item.adiabaticReference) drawAdiabaticFourierReference(ctx, box, xlim, ylim, adiabaticReference);
+
+    if (item.harmonics?.length && item.harmonicValues) {
+      drawFourierHarmonicLegend(ctx, box, item.harmonics);
+      item.harmonics.forEach((harmonic) => {
+        const color = FOURIER_HARMONIC_COLORS[harmonic] || THEME.axisText;
+        const yValue = (result: GridModelResult) => item.harmonicValues!(result, harmonic);
+        collectFourierPointHits(box, xlim, ylim, allPoints, item.xValue, yValue);
+        drawFourierPoints(ctx, box, xlim, ylim, gridPoints, item.xValue, yValue, colorWithAlpha(color, 0.28), 1.8);
+        drawFourierSeriesPath(
+          ctx,
+          box,
+          xlim,
+          ylim,
+          buildFourierSeries(path, item.xValue, yValue, Boolean(item.yPhase)),
+          1.45,
+          colorWithAlpha(color, 0.72)
+        );
+        drawFourierPoints(ctx, box, xlim, ylim, path, item.xValue, yValue, colorWithAlpha(color, 0.76), 2.2);
+        const highlighted = gridState.heldResult || gridState.hoverResult;
+        if (highlighted?.fourier && highlighted !== currentFourier) {
+          drawFourierPoints(ctx, box, xlim, ylim, [highlighted], item.xValue, yValue, colorWithAlpha(color, 0.96), 4.5);
+        }
+        if (currentFourier) drawFourierPoints(ctx, box, xlim, ylim, [currentFourier], item.xValue, yValue, colorWithAlpha(color, 1), 5.2);
+      });
+      return;
+    }
+
+    if (!item.yValue) return;
+    collectFourierPointHits(box, xlim, ylim, allPoints, item.xValue, item.yValue);
+    drawFourierPoints(ctx, box, xlim, ylim, gridPoints, item.xValue, item.yValue, "rgba(190, 200, 216, 0.24)", 2.1);
+    drawFourierSeriesPath(
+      ctx,
+      box,
+      xlim,
+      ylim,
+      buildFourierSeries(path, item.xValue, item.yValue, Boolean(item.yPhase)),
+      1.9,
+      (point) => point.result ? gridResultColor(point.result, 0.62) : colorWithAlpha(PHASE_MARKER_COLOR, 0.58)
+    );
+    drawFourierPoints(ctx, box, xlim, ylim, path, item.xValue, item.yValue, (result) => gridResultColor(result, 0.78), 2.9);
     const highlighted = gridState.heldResult || gridState.hoverResult;
-    if (highlighted?.fourier && highlighted !== currentFourier) drawFourierPoints(ctx, box, xlim, ylim, [highlighted], item.value, (result) => gridResultColor(result, 0.98), 5.4);
-    if (currentFourier) drawFourierPoints(ctx, box, xlim, ylim, [currentFourier], item.value, (result) => gridResultColor(result, 0.98), 6.2);
+    if (highlighted?.fourier && highlighted !== currentFourier) drawFourierPoints(ctx, box, xlim, ylim, [highlighted], item.xValue, item.yValue, (result) => gridResultColor(result, 0.98), 5.4);
+    if (currentFourier) drawFourierPoints(ctx, box, xlim, ylim, [currentFourier], item.xValue, item.yValue, (result) => gridResultColor(result, 0.98), 6.2);
   });
 
   canvas.dataset.fourierHitCount = String(fourierPointHits.length);
@@ -4284,18 +4701,291 @@ function drawFourierPanel(): void {
   if (firstHit) canvas.dataset.firstFourierHit = `${firstHit.x.toFixed(1)},${firstHit.y.toFixed(1)}`;
 }
 
+function fourierPhiK1(result: GridModelResult, harmonic: number): number {
+  return result.fourier?.phiK1[harmonic] ?? NaN;
+}
+
+function fourierPanelXValues(
+  panel: FourierPanelSpec,
+  points: GridModelResult[],
+  reference: FourierSeriesPoint[]
+): number[] {
+  return [
+    ...points.map(panel.xValue),
+    ...reference.map((point) => point.x)
+  ].filter(Number.isFinite);
+}
+
+function fourierPanelYValues(
+  panel: FourierPanelSpec,
+  points: GridModelResult[],
+  path: GridModelResult[],
+  reference: FourierSeriesPoint[]
+): number[] {
+  const values: number[] = [];
+  if (panel.harmonics?.length && panel.harmonicValues) {
+    panel.harmonics.forEach((harmonic) => {
+      const yValue = (result: GridModelResult) => panel.harmonicValues!(result, harmonic);
+      values.push(...points.map(yValue));
+      if (panel.yPhase) values.push(...buildFourierSeries(path, panel.xValue, yValue, true).map((point) => point.y));
+    });
+  } else if (panel.yValue) {
+    values.push(...points.map(panel.yValue));
+    if (panel.yPhase) values.push(...buildFourierSeries(path, panel.xValue, panel.yValue, true).map((point) => point.y));
+  }
+  values.push(...reference.map((point) => point.y));
+  return values.filter(Number.isFinite);
+}
+
+function phaseRange(values: number[], allowUnwrapped: boolean): NumericRange {
+  const finite = values.filter(Number.isFinite);
+  if (!finite.length) return [0, 2 * Math.PI];
+  const min = allowUnwrapped ? Math.min(0, ...finite) : 0;
+  const max = allowUnwrapped ? Math.max(2 * Math.PI, ...finite) : 2 * Math.PI;
+  const step = Math.PI / 2;
+  const lower = allowUnwrapped ? Math.floor(min / step) * step : 0;
+  return [lower, Math.max(2 * Math.PI, Math.ceil(max / step) * step)];
+}
+
+function phaseTickLabel(value: number): string {
+  const halfPi = Math.PI / 2;
+  const rounded = Math.round(value / halfPi);
+  const wrapped = ((rounded % 4) + 4) % 4;
+  if (rounded === 0) return "0";
+  if (wrapped === 0) return "2π";
+  if (wrapped === 1) return "π/2";
+  if (wrapped === 2) return "π";
+  return "3π/2";
+}
+
+function axisTickValues(lim: NumericRange, phase = false): number[] {
+  if (!phase) {
+    return Array.from({ length: 5 }, (_value, index) => lim[0] + ((lim[1] - lim[0]) * index) / 4);
+  }
+  const step = Math.PI / 2;
+  const first = Math.ceil(lim[0] / step) * step;
+  const ticks: number[] = [];
+  for (let value = first; value <= lim[1] + step * 0.1; value += step) ticks.push(value);
+  return ticks;
+}
+
+function skewnessAtPeriod(points: GridModelResult[], period: number): number | null {
+  const sorted = points
+    .filter((point) => point.fourier && Number.isFinite(point.period) && Number.isFinite(point.fourier.skewness))
+    .sort((a, b) => a.period - b.period);
+  if (!sorted.length) return null;
+  if (period <= sorted[0].period) return sorted[0].fourier!.skewness;
+  const last = sorted[sorted.length - 1];
+  if (period >= last.period) return last.fourier!.skewness;
+  for (let index = 1; index < sorted.length; index += 1) {
+    const left = sorted[index - 1];
+    const right = sorted[index];
+    if (period <= right.period) {
+      const span = right.period - left.period || 1;
+      const t = (period - left.period) / span;
+      return left.fourier!.skewness + (right.fourier!.skewness - left.fourier!.skewness) * t;
+    }
+  }
+  return null;
+}
+
+function drawFourierAxes(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  xlabel: string,
+  ylabelX: number,
+  options: { xPhase?: boolean; yPhase?: boolean; upperSkewnessAxis?: GridModelResult[] | null } = {}
+): void {
+  ctx.save();
+  ctx.strokeStyle = THEME.axisGrid;
+  ctx.lineWidth = 1;
+  ctx.fillStyle = THEME.axisText;
+  ctx.font = "11px Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+
+  axisTickValues(xlim, Boolean(options.xPhase)).forEach((value) => {
+    const x = plot.left + ((value - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+    if (!Number.isFinite(x)) return;
+    ctx.beginPath();
+    ctx.moveTo(x, plot.top);
+    ctx.lineTo(x, plot.top + plot.height);
+    ctx.stroke();
+    ctx.fillText(options.xPhase ? phaseTickLabel(value) : fmt(value, 2), x, plot.top + plot.height + 8);
+  });
+
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  axisTickValues(ylim, Boolean(options.yPhase)).forEach((value) => {
+    const y = plot.top + plot.height - ((value - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+    if (!Number.isFinite(y)) return;
+    ctx.beginPath();
+    ctx.moveTo(plot.left, y);
+    ctx.lineTo(plot.left + plot.width, y);
+    ctx.stroke();
+    ctx.fillText(options.yPhase ? phaseTickLabel(value) : fmt(value, 2), plot.left - PLOT_LAYOUT.yTickGap, y);
+  });
+
+  ctx.strokeStyle = THEME.axisBorder;
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
+
+  if (options.upperSkewnessAxis?.length) {
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.font = "10px Inter, sans-serif";
+    ctx.fillStyle = THEME.axisText;
+    axisTickValues(xlim, false).forEach((period) => {
+      const skewness = skewnessAtPeriod(options.upperSkewnessAxis || [], period);
+      if (skewness === null) return;
+      const x = plot.left + ((period - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+      ctx.fillText(fmt(skewness, 2), x, plot.top - 10);
+    });
+    ctx.fillText("S_k", plot.left + plot.width / 2, plot.top - 26);
+  }
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.font = "12px Inter, sans-serif";
+  ctx.fillStyle = THEME.axisText;
+  ctx.fillText(xlabel, plot.left + plot.width / 2, plot.top + plot.height + 42);
+  ctx.restore();
+
+  void ylabelX;
+}
+
+function buildFourierSeries(
+  points: GridModelResult[],
+  xValue: FourierValueAccessor,
+  yValue: FourierValueAccessor,
+  unwrapY: boolean
+): FourierSeriesPoint[] {
+  let previous: number | null = null;
+  return points.map((result) => {
+    const x = xValue(result);
+    let y = yValue(result);
+    if (unwrapY && Number.isFinite(y)) {
+      if (previous !== null) {
+        while (y - previous > Math.PI) y -= 2 * Math.PI;
+        while (previous - y > Math.PI) y += 2 * Math.PI;
+      }
+      previous = y;
+    }
+    return { x, y, result };
+  }).filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+}
+
+function buildAdiabaticFourierReference(parameters: ModelParameters): FourierSeriesPoint[] {
+  const reference: FourierSeriesPoint[] = [];
+  const adiabaticParameters = { ...parameters, gammac: 0, zetac: 0, cq: 0 };
+  for (let index = 0; index <= 28; index += 1) {
+    const amplitude = 0.015 + (index / 28) * 0.42;
+    const rows: Row[] = Array.from({ length: 360 }, (_value, sampleIndex) => {
+      const phase = (2 * sampleIndex) / 360;
+      const folded = phase % 1;
+      const radius = Math.max(0.2, 1 + amplitude * Math.cos(2 * Math.PI * folded));
+      const pressure = radius ** (-mAt(radius, parameters) * (parameters.gamma1 - 1));
+      return sample(phase, [radius, 0, pressure, 0], adiabaticParameters);
+    });
+    const fourier = computeFourierParameters(rows);
+    if (fourier && Number.isFinite(fourier.phi21) && Number.isFinite(fourier.phi31)) {
+      reference.push({ x: fourier.phi21, y: fourier.phi31 });
+    }
+  }
+  return reference;
+}
+
+function drawFourierIdentityLine(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange
+): void {
+  const start = Math.max(xlim[0], ylim[0]);
+  const end = Math.min(xlim[1], ylim[1]);
+  if (!(end > start)) return;
+  const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  ctx.save();
+  ctx.strokeStyle = "rgba(190, 200, 216, 0.46)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(sx(start), sy(start));
+  ctx.lineTo(sx(end), sy(end));
+  ctx.stroke();
+  ctx.fillStyle = "rgba(190, 200, 216, 0.82)";
+  ctx.font = "10px Inter, sans-serif";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillText("φ31=φ21", plot.left + plot.width - 6, plot.top + 6);
+  ctx.restore();
+}
+
+function drawAdiabaticFourierReference(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  reference: FourierSeriesPoint[]
+): void {
+  drawFourierSeriesPath(ctx, plot, xlim, ylim, reference, 1.4, "rgba(255, 255, 255, 0.58)", [5, 5]);
+  const point = reference[Math.floor(reference.length * 0.68)];
+  if (!point) return;
+  const x = plot.left + ((point.x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const y = plot.top + plot.height - ((point.y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+  ctx.save();
+  ctx.fillStyle = "rgba(255, 255, 255, 0.76)";
+  ctx.font = "10px Inter, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "bottom";
+  ctx.fillText("adiabatic", x + 6, y - 4);
+  ctx.restore();
+}
+
+function drawFourierHarmonicLegend(ctx: CanvasRenderingContext2D, plot: PlotBox, harmonics: readonly number[]): void {
+  ctx.save();
+  ctx.font = "10px Inter, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  const startX = plot.left + 8;
+  const maxX = plot.left + plot.width - 8;
+  let x = startX;
+  let y = plot.top + 9;
+  harmonics.forEach((harmonic) => {
+    const color = FOURIER_HARMONIC_COLORS[harmonic] || THEME.axisText;
+    if (x > startX && x + 40 > maxX) {
+      x = startX;
+      y += 13;
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 12, y);
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.fillText(`φ${harmonic}1`, x + 16, y);
+    x += 44;
+  });
+  ctx.restore();
+}
+
 function collectFourierPointHits(
   plot: PlotBox,
   xlim: NumericRange,
   ylim: NumericRange,
   points: GridModelResult[],
-  value: (result: GridModelResult) => number
+  xValue: FourierValueAccessor,
+  yValue: FourierValueAccessor
 ): void {
   const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
   const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
   points.forEach((result) => {
-    const x = sx(result.period);
-    const y = sy(value(result));
+    const x = sx(xValue(result));
+    const y = sy(yValue(result));
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     fourierPointHits.push({ result, x, y, radius: 5 });
   });
@@ -4392,14 +5082,15 @@ function drawStabilityLinearizedLabel(
   );
 }
 
-function drawFourierPath(
+function drawFourierSeriesPath(
   ctx: CanvasRenderingContext2D,
   plot: PlotBox,
   xlim: NumericRange,
   ylim: NumericRange,
-  points: GridModelResult[],
-  value: (result: GridModelResult) => number,
-  width: number
+  points: FourierSeriesPoint[],
+  width: number,
+  color: string | ((point: FourierSeriesPoint) => string),
+  dash: number[] = []
 ): void {
   if (points.length < 2) return;
   const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
@@ -4411,15 +5102,16 @@ function drawFourierPath(
   ctx.lineWidth = width;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  ctx.setLineDash(dash);
   for (let i = 1; i < points.length; i += 1) {
     const previous = points[i - 1];
     const current = points[i];
-    const x0 = sx(previous.period);
-    const y0 = sy(value(previous));
-    const x1 = sx(current.period);
-    const y1 = sy(value(current));
+    const x0 = sx(previous.x);
+    const y0 = sy(previous.y);
+    const x1 = sx(current.x);
+    const y1 = sy(current.y);
     if (![x0, y0, x1, y1].every(Number.isFinite)) continue;
-    ctx.strokeStyle = gridResultColor(current, 0.62);
+    ctx.strokeStyle = typeof color === "function" ? color(current) : color;
     ctx.beginPath();
     ctx.moveTo(x0, y0);
     ctx.lineTo(x1, y1);
@@ -4434,7 +5126,8 @@ function drawFourierPoints(
   xlim: NumericRange,
   ylim: NumericRange,
   points: GridModelResult[],
-  value: (result: GridModelResult) => number,
+  xValue: FourierValueAccessor,
+  yValue: FourierValueAccessor,
   color: string | ((result: GridModelResult) => string),
   radius: number
 ): void {
@@ -4445,8 +5138,8 @@ function drawFourierPoints(
   ctx.rect(plot.left, plot.top, plot.width, plot.height);
   ctx.clip();
   points.forEach((point) => {
-    const x = sx(point.period);
-    const y = sy(value(point));
+    const x = sx(xValue(point));
+    const y = sy(yValue(point));
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     ctx.fillStyle = typeof color === "function" ? color(point) : color;
     ctx.beginPath();
@@ -5242,6 +5935,282 @@ function drawPhasePortraitPhaseLabel(ctx: CanvasRenderingContext2D, plot: PlotBo
   ctx.restore();
 }
 
+function opacityColor(logOpacity: number, opacityRange: NumericRange, alpha = 1): string {
+  const stops = [
+    { t: 0, r: 80, g: 105, b: 196 },
+    { t: 0.36, r: 57, g: 197, b: 207 },
+    { t: 0.68, r: 255, g: 209, b: 102 },
+    { t: 1, r: 255, g: 95, b: 109 }
+  ];
+  const t = normalizedInRange(logOpacity, opacityRange);
+  let start = stops[0];
+  let end = stops[stops.length - 1];
+  for (let index = 1; index < stops.length; index += 1) {
+    if (t <= stops[index].t) {
+      start = stops[index - 1];
+      end = stops[index];
+      break;
+    }
+  }
+  const span = Math.max(1e-12, end.t - start.t);
+  const local = clamp((t - start.t) / span, 0, 1);
+  const channel = (a: number, b: number) => Math.round(a + (b - a) * local);
+  return `rgba(${channel(start.r, end.r)}, ${channel(start.g, end.g)}, ${channel(start.b, end.b)}, ${clamp(alpha, 0, 1)})`;
+}
+
+function drawOpacityVectorField(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  parameters: ModelParameters,
+  opacityRange: NumericRange,
+  sx: (x: number) => number,
+  sy: (y: number) => number
+): void {
+  const dataDx = -(parameters.n + parameters.s);
+  const dataDy = parameters.n;
+  const screenDx = (dataDx / Math.max(1e-12, xlim[1] - xlim[0])) * plot.width;
+  const screenDy = -(dataDy / Math.max(1e-12, ylim[1] - ylim[0])) * plot.height;
+  const magnitude = Math.hypot(screenDx, screenDy);
+  if (magnitude <= 1e-9) return;
+  const unitX = screenDx / magnitude;
+  const unitY = screenDy / magnitude;
+  const columns = Math.max(5, Math.min(11, Math.floor(plot.width / 72)));
+  const rows = Math.max(4, Math.min(8, Math.floor(plot.height / 54)));
+  const length = Math.max(10, Math.min(18, plot.width / 34));
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.width, plot.height);
+  ctx.clip();
+  ctx.lineCap = "round";
+  for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const logT = xlim[0] + ((column + 0.5) / columns) * (xlim[1] - xlim[0]);
+      const logP = ylim[0] + ((rowIndex + 0.5) / rows) * (ylim[1] - ylim[0]);
+      const x = sx(logT);
+      const y = sy(logP);
+      const logOpacity = opacityLogFromLogTemperaturePressure(logT, logP, parameters);
+      const x0 = x - unitX * length * 0.5;
+      const y0 = y - unitY * length * 0.5;
+      const x1 = x + unitX * length * 0.5;
+      const y1 = y + unitY * length * 0.5;
+      const angle = Math.atan2(unitY, unitX);
+      ctx.strokeStyle = opacityColor(logOpacity, opacityRange, 0.22);
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+      ctx.fillStyle = opacityColor(logOpacity, opacityRange, 0.24);
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x1 - Math.cos(angle - 0.52) * 5, y1 - Math.sin(angle - 0.52) * 5);
+      ctx.lineTo(x1 - Math.cos(angle + 0.52) * 5, y1 - Math.sin(angle + 0.52) * 5);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawOpacityColorbar(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  opacityRange: NumericRange,
+  canvas: HTMLCanvasElement
+): void {
+  const width = Math.min(156, Math.max(118, plot.width * 0.26));
+  const height = 10;
+  const left = plot.left + plot.width - width - 12;
+  const top = plot.top + 12;
+  const gradient = ctx.createLinearGradient(left, top, left + width, top);
+  for (let index = 0; index <= 24; index += 1) {
+    const fraction = index / 24;
+    const value = opacityRange[0] + fraction * (opacityRange[1] - opacityRange[0]);
+    gradient.addColorStop(fraction, opacityColor(value, opacityRange, 1));
+  }
+  ctx.save();
+  ctx.fillStyle = "rgba(5, 8, 20, 0.7)";
+  ctx.fillRect(left - 8, top - 8, width + 16, 50);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(left, top, width, height);
+  ctx.strokeStyle = "rgba(238, 245, 255, 0.62)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(left, top, width, height);
+  ctx.font = "11px Inter, sans-serif";
+  ctx.fillStyle = THEME.axisText;
+  ctx.textBaseline = "top";
+  ctx.textAlign = "left";
+  ctx.fillText(fmt(opacityRange[0], 2), left, top + height + 8);
+  ctx.textAlign = "right";
+  ctx.fillText(fmt(opacityRange[1], 2), left + width, top + height + 8);
+  ctx.textAlign = "center";
+  ctx.font = "600 11px Inter, sans-serif";
+  ctx.fillText("log10 κ/κ0", left + width / 2, top + height + 25);
+  ctx.restore();
+  canvas.dataset.opacityColorbar = "log10(kappa/kappa0)";
+  canvas.dataset.opacityRange = `${fmtFixed(opacityRange[0], 3)},${fmtFixed(opacityRange[1], 3)}`;
+}
+
+function drawThermodynamicTrack(
+  ctx: CanvasRenderingContext2D,
+  points: ThermodynamicPoint[],
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  opacityRange: NumericRange,
+  width: number,
+  alpha: number,
+  sx: (x: number) => number,
+  sy: (y: number) => number
+): void {
+  if (points.length < 2) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.width, plot.height);
+  ctx.clip();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const x0 = sx(previous.logT);
+    const y0 = sy(previous.logP);
+    const x1 = sx(current.logT);
+    const y1 = sy(current.logP);
+    if (![x0, y0, x1, y1].every(Number.isFinite)) continue;
+    ctx.strokeStyle = opacityColor((previous.logOpacity + current.logOpacity) / 2, opacityRange, alpha);
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawThermodynamicCurrentMarker(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  opacityRange: NumericRange,
+  parameters: ModelParameters
+): void {
+  const row = rowAtCurrentDisplayPosition(latestPhaseRows);
+  const point = row ? thermodynamicPoint(row, parameters) : null;
+  if (!point) return;
+  const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  const x = sx(point.logT);
+  const y = sy(point.logP);
+  if (![x, y].every(Number.isFinite)) return;
+  ctx.save();
+  ctx.shadowColor = opacityColor(point.logOpacity, opacityRange, 0.65);
+  ctx.shadowBlur = 9;
+  ctx.fillStyle = opacityColor(point.logOpacity, opacityRange, 1);
+  ctx.strokeStyle = PHASE_MARKER_COLOR;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.arc(x, y, 5.8, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawThermodynamicPanel(): void {
+  const canvas = document.getElementById("tpOpacityCanvas");
+  if (!(canvas instanceof HTMLCanvasElement)) return;
+  const panel = canvas.closest<HTMLElement>(".plot-panel");
+  if (panel?.hidden) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(360, rect.width || 720);
+  const height = Math.max(260, rect.height || 300);
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+
+  canvas.dataset.tpOpacityMode = gridState.enabled ? "grid" : "single";
+  canvas.dataset.axisLabels = "log10(T/T0),log10(P/P0)";
+  canvas.dataset.colorVariable = "log10(kappa/kappa0)";
+  if (latestDisplayWindow.mode === "time") {
+    canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
+    delete canvas.dataset.currentPhase;
+  } else {
+    canvas.dataset.currentPhase = fmtFixed(phaseModOne(currentAnimationPhase), 3);
+    delete canvas.dataset.currentTime;
+  }
+
+  const tracks: Array<{ points: ThermodynamicPoint[]; width: number; alpha: number }> = [];
+  if (gridState.enabled && gridState.results.length) {
+    const backgroundStride = Math.max(1, Math.ceil(gridState.results.length / 80));
+    gridState.results.forEach((result, index) => {
+      if (index % backgroundStride !== 0) return;
+      const points = thermodynamicPoints(result.phaseRows, result.parameters, 220);
+      if (points.length > 1) tracks.push({ points, width: 0.7, alpha: 0.2 });
+    });
+    gridPathResults().forEach((result) => {
+      const points = thermodynamicPoints(result.phaseRows, result.parameters, 360);
+      if (points.length > 1) tracks.push({ points, width: 1.25, alpha: 0.38 });
+    });
+    const highlighted = gridState.heldResult || gridState.hoverResult;
+    if (highlighted) {
+      const points = thermodynamicPoints(highlighted.phaseRows, highlighted.parameters, 900);
+      if (points.length > 1) tracks.push({ points, width: 3.4, alpha: 0.92 });
+    }
+  }
+
+  const currentPoints = thermodynamicPoints(latestPhaseRows, latestPhaseParameters, gridState.enabled ? 900 : 1400);
+  if (currentPoints.length > 1) tracks.push({ points: currentPoints, width: gridState.enabled ? 3.1 : 2.8, alpha: 0.98 });
+
+  const allPoints = tracks.flatMap((track) => track.points);
+  canvas.dataset.tpOpacityTracks = String(tracks.length);
+  canvas.dataset.tpOpacityRows = String(currentPoints.length);
+  if (!allPoints.length) {
+    delete canvas.dataset.opacityColorbar;
+    delete canvas.dataset.opacityRange;
+    drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
+    return;
+  }
+
+  const xlim = range([...allPoints.map((point) => point.logT), 0], 0.14);
+  const ylim = range([...allPoints.map((point) => point.logP), 0], 0.14);
+  const opacityRange = range([...allPoints.map((point) => point.logOpacity), 0], 0.12);
+  const plot = { left: 82, top: 24, width: width - 106, height: height - 88 };
+  const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+
+  drawAxes(ctx, plot, xlim, ylim, "", "", THEME.axisText, THEME.axisText, 22);
+  drawOpacityVectorField(ctx, plot, xlim, ylim, latestPhaseParameters, opacityRange, sx, sy);
+  tracks.forEach((track) => drawThermodynamicTrack(ctx, track.points, plot, xlim, ylim, opacityRange, track.width, track.alpha, sx, sy));
+  drawThermodynamicCurrentMarker(ctx, plot, xlim, ylim, opacityRange, latestPhaseParameters);
+  drawOpacityColorbar(ctx, plot, opacityRange, canvas);
+  drawCanvasMathFragments(
+    ctx,
+    [
+      { text: "log10 ", color: THEME.axisText },
+      { text: "T/T0", color: PHASE_MARKER_COLOR, weight: 600 }
+    ],
+    plot.left + plot.width / 2,
+    plot.top + plot.height + 42
+  );
+  drawCanvasMathFragments(
+    ctx,
+    [
+      { text: "log10 ", color: THEME.axisText },
+      { text: "P/P0", color: COLORS.H, weight: 600 }
+    ],
+    22,
+    plot.top + plot.height / 2,
+    { rotate: -Math.PI / 2 }
+  );
+}
+
 function drawPhasePortraitPanel(): void {
   const canvas = document.getElementById("phasePortraitCanvas");
   if (!(canvas instanceof HTMLCanvasElement)) return;
@@ -5404,6 +6373,40 @@ function stopReasonLabel(message: string, runUntilStable: boolean): string {
     default:
       return message.replaceAll("_", " ");
   }
+}
+
+function emptyBlazhkoAnalysis(reason: BlazhkoAnalysis["reason"], primaryPeriod: number | null = null): BlazhkoAnalysis {
+  return {
+    kind: "none",
+    primaryPeriod,
+    modulationDepth: 0,
+    cycles: [],
+    periods: [],
+    reason
+  };
+}
+
+function blazhkoAnalysisForPhase(rows: readonly Row[], phase: PhaseResult): BlazhkoAnalysis {
+  if (gridState.enabled) return emptyBlazhkoAnalysis("no_primary_period", phase.period);
+  if (phase.reason !== "ok" || !phase.period) return emptyBlazhkoAnalysis("no_primary_period", phase.period);
+  return detectBlazhkoPeriods(rows, phase.period, { warmupTau: phase.reference?.warmupTau ?? state.phaseWarmupTau });
+}
+
+function statusLabelWithBlazhko(label: string, analysis: BlazhkoAnalysis): string {
+  if (analysis.kind === "double") return `${label} + double blazhko`;
+  if (analysis.kind === "single") return `${label} + blazhko`;
+  return label;
+}
+
+function updateBlazhkoMetricsDataset(node: HTMLElement, analysis: BlazhkoAnalysis): void {
+  node.dataset.blazhko = analysis.kind;
+  node.dataset.blazhkoReason = analysis.reason;
+  node.dataset.blazhkoDepth = fmtFixed(analysis.modulationDepth, 4);
+  node.dataset.blazhkoCycles = String(analysis.cycles.length);
+  if (analysis.periods[0]) node.dataset.blazhkoPeriod = fmtFixed(analysis.periods[0].period, 4);
+  else delete node.dataset.blazhkoPeriod;
+  if (analysis.periods[1]) node.dataset.blazhkoPeriod2 = fmtFixed(analysis.periods[1].period, 4);
+  else delete node.dataset.blazhkoPeriod2;
 }
 
 function phaseUnavailableLabel(phase: PhaseResult): string | undefined {
@@ -5731,12 +6734,55 @@ function drawPhasePlotOverlays(
   if (canvasId === "lightCanvas") drawPhaseAnnotations(ctx, plot, xlim, ylim, canvasId, "L");
   if (canvasId === "velocityCanvas") drawPhaseAnnotations(ctx, plot, xlim, ylim, canvasId, "V");
   drawGridColorbar(ctx, plot, xlim, ylim, canvasId);
+  if (canvasId === "lightCanvas" || canvasId === "velocityCanvas") {
+    drawBlazhkoColorbar(ctx, plot, latestBlazhkoAnalysis.periods[0], { canvasId });
+  } else {
+    clearBlazhkoColorbar(canvasId);
+  }
+}
+
+function drawDoubleBlazhkoPanel(marker: { x: number; color: string } | undefined): void {
+  const panel = document.getElementById("doubleBlazhkoPanel");
+  const status = document.getElementById("doubleBlazhkoStatus");
+  if (!(panel instanceof HTMLElement)) return;
+  const period = latestBlazhkoAnalysis.periods[1];
+  const visible = latestBlazhkoAnalysis.kind === "double"
+    && Boolean(period)
+    && latestDisplayWindow.mode === "phase"
+    && !gridState.enabled
+    && latestPhaseSample.length > 0;
+  const wasHidden = panel.hidden;
+  panel.hidden = !visible;
+  panel.style.display = visible ? "" : "none";
+  if (wasHidden !== panel.hidden) updatePlotGridColumns();
+  if (!visible) {
+    clearBlazhkoColorbar("doubleBlazhkoCanvas");
+    plotRenderStates.delete("doubleBlazhkoCanvas");
+    return;
+  }
+  panel.dataset.blazhkoKind = "double";
+  panel.dataset.blazhkoPeriod2 = fmtFixed(period!.period, 4);
+  if (status instanceof HTMLElement) {
+    status.classList.toggle("status-ok", true);
+    status.title = `Second Blazhko period detected: ${fmt(period!.period, 3)} τ`;
+  }
+  drawSeries("doubleBlazhkoCanvas", blazhkoPhaseSeries("L", COLORS.L, latestPhaseSample, period, { secondary: true }), {
+    xlabel: latestPhasePeriodLabel,
+    ylabel: "luminosity L",
+    ylabelColor: COLORS.L,
+    xlim: latestDisplayWindow.xlim,
+    ylim: latestPhaseSample.length ? undefined : [0, 1],
+    minimumYlim: [0.99, 1.01],
+    message: latestPhaseMessage,
+    phaseMarker: marker,
+    afterDraw: (ctx, plot, _xlim, _ylim, canvasId) => drawBlazhkoColorbar(ctx, plot, period, { secondary: true, canvasId })
+  });
 }
 
 function drawPhasePlots(): void {
   updatePhaseAnnotationControls();
   const marker = phaseMarker();
-  drawSeries("lightCanvas", gridPhaseSeries("L", COLORS.L, latestPhaseSample), {
+  drawSeries("lightCanvas", blazhkoPhaseSeries("L", COLORS.L, latestPhaseSample, latestBlazhkoAnalysis.periods[0]), {
     xlabel: latestPhasePeriodLabel,
     ylabel: "luminosity L",
     ylabelColor: COLORS.L,
@@ -5748,7 +6794,7 @@ function drawPhasePlots(): void {
     afterDraw: drawPhasePlotOverlays
   });
 
-  drawSeries("velocityCanvas", gridPhaseSeries("V", COLORS.V, latestPhaseSample), {
+  drawSeries("velocityCanvas", blazhkoPhaseSeries("V", COLORS.V, latestPhaseSample, latestBlazhkoAnalysis.periods[0]), {
     xlabel: latestPhasePeriodLabel,
     ylabel: "radial velocity V",
     ylabelColor: COLORS.V,
@@ -5773,6 +6819,7 @@ function drawPhasePlots(): void {
       phaseMarker: marker
     });
   }
+  drawDoubleBlazhkoPanel(marker);
   syncPhaseCanvasState();
 }
 
@@ -6162,8 +7209,23 @@ function drawModelVisualization(): void {
 function drawAnimatedPhaseViews(): void {
   drawModelVisualization();
   drawPhasePlots();
+  drawThermodynamicPanel();
   drawCepheidGuide();
   drawPhasePortraitPanel();
+}
+
+function syncBlazhkoAnimationPhase(timestamp: number): void {
+  const hasBlazhkoPeriod = Boolean(latestBlazhkoAnalysis.periods[0]);
+  if (!hasBlazhkoPeriod || latestDisplayWindow.mode !== "phase" || gridState.enabled) {
+    currentBlazhkoPhase = 0;
+    blazhkoAnimationStartTime = null;
+    return;
+  }
+  const duration = blazhkoAnimationDurationMs();
+  if (blazhkoAnimationStartTime === null) {
+    blazhkoAnimationStartTime = timestamp - phaseModOne(currentBlazhkoPhase) * duration;
+  }
+  currentBlazhkoPhase = ((timestamp - blazhkoAnimationStartTime) % duration) / duration;
 }
 
 function startModelAnimationLoop(): void {
@@ -6180,9 +7242,11 @@ function startModelAnimationLoop(): void {
         const elapsed = (timestamp - modelAnimationStartTime) % duration;
         currentAnimationPhase = (elapsed / duration) * displayAnimationEnd(latestDisplayWindow);
       }
+      syncBlazhkoAnimationPhase(timestamp);
       drawAnimatedPhaseViews();
     } else {
       modelAnimationStartTime = null;
+      blazhkoAnimationStartTime = null;
     }
     modelAnimationFrame = window.requestAnimationFrame(tick);
   };
@@ -6206,6 +7270,9 @@ function drawAll(): void {
     ? gridState.statusText
     : phaseUnavailableLabel(phase);
   const displayWindow = buildCurrentDisplayWindow(rows, phase, gridResult, phaseMessage);
+  const blazhkoAnalysis = blazhkoAnalysisForPhase(rows, phase);
+  latestBlazhkoAnalysis = blazhkoAnalysis;
+  const displayStopReason = statusLabelWithBlazhko(stopReason, blazhkoAnalysis);
   const stabilityParameters = stabilityDisplayParameters();
   const s72Stability = analyticStabilityConditions(stabilityParameters);
   const linearPeriod = linearDynamicPeriod(stabilityParameters);
@@ -6214,6 +7281,7 @@ function drawAll(): void {
   updateSonificationSourceControls();
   updateDerivationPanel(stabilityParameters, s72Stability);
   const metricsNode = el<HTMLDivElement>("metrics");
+  updateBlazhkoMetricsDataset(metricsNode, blazhkoAnalysis);
   if (s72Stability.convective) metricsNode.dataset.s72Convective = s72State(s72Stability.convective.stable);
   else delete metricsNode.dataset.s72Convective;
   metricsNode.dataset.s72Dynamic = s72State(s72Stability.dynamic.stable);
@@ -6234,7 +7302,7 @@ function drawAll(): void {
     stabilityKind: condition.kind
   }));
   const metricItems: StatusMetricItem[] = [
-    { label: "stop", value: stopReason, className: okStatus ? "status-ok" : "status-warn" },
+    { label: "stop", value: displayStopReason, className: okStatus ? "status-ok" : "status-warn" },
     { label: `final \\(${TEX.tau}\\)`, value: final ? fmt(final.tau || 0, 4) : "n/a" },
     { label: "models", value: rows.length },
     { label: "accepted", value: latestResult.stats.acceptedSteps },
@@ -6268,6 +7336,7 @@ function drawAll(): void {
   queueMathTypeset([metricsNode]);
 
   latestDisplayWindow = displayWindow;
+  latestPhaseReference = displayWindow.mode === "phase" && !gridResult ? phase.reference : null;
   syncAnimationPositionToDisplayWindow();
   const phasePeriod = displayWindow.period;
   latestPhaseRows = [...displayWindow.rows];
@@ -6280,6 +7349,7 @@ function drawAll(): void {
   updateSonificationCurve(displayWindow.mode === "phase" ? latestPhaseRows : [], sonificationFallbackRows, latestPhaseParameters);
   drawModelVisualization();
   drawPhasePlots();
+  drawThermodynamicPanel();
 
   const timeXlim = integrationTimeRange(rows);
   const convectionOff = convectiveResponseDisabled();

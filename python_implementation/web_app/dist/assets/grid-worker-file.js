@@ -6,7 +6,7 @@
 
   // src/fourier.ts
   var TWO_PI = 2 * Math.PI;
-  var HARMONICS = 3;
+  var FOURIER_HARMONICS = 7;
   var MIN_FOURIER_AMPLITUDE = 1e-4;
   function solveLinearSystem(matrix, rhs) {
     const n = rhs.length;
@@ -31,11 +31,89 @@
   function fourierBasis(phase) {
     const wrappedPhase = phase >= 2 ? 0 : (phase % 1 + 1) % 1;
     const basis = [1];
-    for (let harmonic = 1; harmonic <= HARMONICS; harmonic += 1) {
+    for (let harmonic = 1; harmonic <= FOURIER_HARMONICS; harmonic += 1) {
       const angle = TWO_PI * harmonic * wrappedPhase;
       basis.push(Math.cos(angle), Math.sin(angle));
     }
     return basis;
+  }
+  function foldedPhase(phase) {
+    const wrapped = (phase % 1 + 1) % 1;
+    return wrapped >= 1 ? 0 : wrapped;
+  }
+  function foldedLightCurvePoints(rows) {
+    const sorted = rows.filter((row) => Number.isFinite(row.tau) && Number.isFinite(row.L)).map((row) => ({ phase: foldedPhase(row.tau), luminosity: row.L })).sort((a, b) => a.phase - b.phase);
+    const merged = [];
+    for (const point of sorted) {
+      const previous = merged.at(-1);
+      if (previous && Math.abs(point.phase - previous.phase) < 1e-6) {
+        previous.luminosity = 0.5 * (previous.luminosity + point.luminosity);
+      } else {
+        merged.push({ ...point });
+      }
+    }
+    return merged;
+  }
+  function interpolatedFoldedLuminosity(points, phase) {
+    if (!points.length) return NaN;
+    if (points.length === 1) return points[0].luminosity;
+    const targetPhase = foldedPhase(phase);
+    for (let i = 1; i < points.length; i += 1) {
+      const left2 = points[i - 1];
+      const right2 = points[i];
+      if (targetPhase <= right2.phase) {
+        const span2 = right2.phase - left2.phase || 1;
+        const t2 = (targetPhase - left2.phase) / span2;
+        return left2.luminosity + (right2.luminosity - left2.luminosity) * t2;
+      }
+    }
+    const left = points[points.length - 1];
+    const right = points[0];
+    const shiftedTarget = targetPhase < right.phase ? targetPhase + 1 : targetPhase;
+    const span = right.phase + 1 - left.phase || 1;
+    const t = (shiftedTarget - left.phase) / span;
+    return left.luminosity + (right.luminosity - left.luminosity) * t;
+  }
+  function lightCurveMorphology(rows) {
+    const points = foldedLightCurvePoints(rows);
+    const sampleCount = 720;
+    if (points.length < 3) return { skewness: 1, acuteness: 1 };
+    const samples = Array.from({ length: sampleCount }, (_value, index) => {
+      const phase = index / sampleCount;
+      return { phase, luminosity: interpolatedFoldedLuminosity(points, phase) };
+    }).filter((point) => Number.isFinite(point.luminosity));
+    if (samples.length < 3) return { skewness: 1, acuteness: 1 };
+    let maxPoint = samples[0];
+    let minPoint = samples[0];
+    for (const point of samples) {
+      if (point.luminosity > maxPoint.luminosity) maxPoint = point;
+      if (point.luminosity < minPoint.luminosity) minPoint = point;
+    }
+    const amplitude = maxPoint.luminosity - minPoint.luminosity;
+    if (!(amplitude > 0)) return { skewness: 1, acuteness: 1 };
+    const riseFraction = (maxPoint.phase - minPoint.phase + 1) % 1 || 1;
+    const midpoint = 0.5 * (maxPoint.luminosity + minPoint.luminosity);
+    let brightFraction = 0;
+    for (let index = 0; index < samples.length; index += 1) {
+      const left = samples[index];
+      const right = samples[(index + 1) % samples.length];
+      const rightPhase = index === samples.length - 1 ? 1 : right.phase;
+      const span = rightPhase - left.phase;
+      const leftOffset = left.luminosity - midpoint;
+      const rightOffset = right.luminosity - midpoint;
+      if (leftOffset >= 0 && rightOffset >= 0) {
+        brightFraction += span;
+      } else if (leftOffset > 0 || rightOffset > 0) {
+        const crossing = span * (Math.abs(leftOffset) / (Math.abs(leftOffset) + Math.abs(rightOffset) || 1));
+        brightFraction += leftOffset > 0 ? crossing : span - crossing;
+      }
+    }
+    const boundedRise = Math.min(1, Math.max(1 / samples.length, riseFraction));
+    const boundedBright = Math.min(1, Math.max(1 / samples.length, brightFraction));
+    return {
+      skewness: 1 / boundedRise - 1,
+      acuteness: 1 / boundedBright - 1
+    };
   }
   function luminosityAmplitude(rows) {
     const values = rows.map((row) => row.L).filter(Number.isFinite);
@@ -49,7 +127,7 @@
     const finiteRows = phaseRows.filter(
       (row) => Number.isFinite(row.tau) && Number.isFinite(row.L)
     );
-    const parameterCount = 1 + 2 * HARMONICS;
+    const parameterCount = 1 + 2 * FOURIER_HARMONICS;
     if (finiteRows.length < parameterCount) return null;
     const normal = Array.from({ length: parameterCount }, () => Array(parameterCount).fill(0));
     const rhs = Array(parameterCount).fill(0);
@@ -63,27 +141,56 @@
     const coefficients = solveLinearSystem(normal, rhs);
     if (!coefficients) return null;
     const harmonics = [];
-    for (let harmonic = 1; harmonic <= HARMONICS; harmonic += 1) {
+    for (let harmonic = 1; harmonic <= FOURIER_HARMONICS; harmonic += 1) {
       const cosine = coefficients[2 * harmonic - 1];
       const sine = coefficients[2 * harmonic];
       const amplitude = Math.hypot(cosine, sine);
       const phase = Math.atan2(-sine, cosine);
       harmonics.push({ amplitude, phase });
     }
-    const [h1, h2, h3] = harmonics;
+    const [h1, h2, h3, h4, h5, h6, h7] = harmonics;
     if (!h1 || !h2 || !h3 || h1.amplitude <= 0) return null;
+    const phases = [NaN, ...harmonics.map((harmonic) => wrapTwoPi(harmonic.phase))];
+    const amplitudes = [NaN, ...harmonics.map((harmonic) => harmonic.amplitude)];
+    const phiK1 = [NaN, 0, ...harmonics.slice(1).map(
+      (harmonic, index) => wrapTwoPi(harmonic.phase - (index + 2) * h1.phase)
+    )];
+    const amplitudeRatios = [NaN, 1, ...harmonics.slice(1).map((harmonic) => harmonic.amplitude / h1.amplitude)];
+    const morphology = lightCurveMorphology(finiteRows);
     return {
       luminosityAmplitude: luminosityAmplitude(finiteRows),
-      phi1: wrapTwoPi(h1.phase),
-      phi2: wrapTwoPi(h2.phase),
-      phi3: wrapTwoPi(h3.phase),
-      phi21: wrapTwoPi(h2.phase - 2 * h1.phase),
-      phi31: wrapTwoPi(h3.phase - 3 * h1.phase),
-      r21: h2.amplitude / h1.amplitude,
-      r31: h3.amplitude / h1.amplitude,
+      phi1: phases[1],
+      phi2: phases[2],
+      phi3: phases[3],
+      phi4: phases[4],
+      phi5: phases[5],
+      phi6: phases[6],
+      phi7: phases[7],
+      phi21: phiK1[2],
+      phi31: phiK1[3],
+      phi41: phiK1[4],
+      phi51: phiK1[5],
+      phi61: phiK1[6],
+      phi71: phiK1[7],
+      r21: amplitudeRatios[2],
+      r31: amplitudeRatios[3],
+      r41: amplitudeRatios[4],
+      r51: amplitudeRatios[5],
+      r61: amplitudeRatios[6],
+      r71: amplitudeRatios[7],
       amplitude1: h1.amplitude,
       amplitude2: h2.amplitude,
       amplitude3: h3.amplitude,
+      amplitude4: h4?.amplitude ?? 0,
+      amplitude5: h5?.amplitude ?? 0,
+      amplitude6: h6?.amplitude ?? 0,
+      amplitude7: h7?.amplitude ?? 0,
+      phases,
+      phiK1,
+      amplitudes,
+      amplitudeRatios,
+      skewness: morphology.skewness,
+      acuteness: morphology.acuteness,
       coefficients
     };
   }

@@ -1302,6 +1302,21 @@
       font-size: 12px;
     }
 
+    .blazhko-status-icon {
+      display: inline-block;
+      width: 13px;
+      height: 13px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      background: currentColor;
+      box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+      flex: 0 0 auto;
+    }
+
+    .double-blazhko-panel {
+      flex-basis: 100%;
+    }
+
     .plot-tools {
       display: inline-flex;
       align-items: center;
@@ -2008,7 +2023,8 @@
       }
 
       #lightCanvas,
-      #velocityCanvas {
+      #velocityCanvas,
+      #doubleBlazhkoCanvas {
         height: 176px;
       }
 
@@ -2197,7 +2213,7 @@
         </div>
       </section>
 
-      <section class="plot-grid" id="plotGrid" data-pressure-visible="false" data-visible-plots="8">
+      <section class="plot-grid" id="plotGrid" data-pressure-visible="false" data-visible-plots="9">
         <div class="plot-panel" data-plot-panel="model">
           <div class="plot-title">
             <div class="plot-title-left" data-plot-control-home="model">
@@ -2266,6 +2282,16 @@
           <canvas id="velocityCanvas"></canvas>
         </div>
 
+        <div class="plot-panel double-blazhko-panel" id="doubleBlazhkoPanel" hidden>
+          <div class="plot-title">
+            <div class="plot-title-left">
+              <span class="blazhko-status-icon status-ok" id="doubleBlazhkoStatus" aria-label="Second Blazhko period detected"></span>
+              <h3>Double Blazhko LC</h3>
+            </div>
+          </div>
+          <canvas id="doubleBlazhkoCanvas" aria-label="double Blazhko lightcurve"></canvas>
+        </div>
+
         <div class="plot-panel" id="pressurePhasePanel" hidden>
           <div class="plot-title">
             <h3>Pressure</h3>
@@ -2305,6 +2331,19 @@
           </div>
           <canvas id="lumCanvas"></canvas>
           <div class="legend" id="lumLegend"></div>
+        </div>
+
+        <div class="plot-panel" data-plot-panel="tpOpacity">
+          <div class="plot-title">
+            <div class="plot-title-left" data-plot-control-home="tpOpacity">
+              <label class="plot-enable-control" data-plot-control="tpOpacity">
+                <input type="checkbox" data-plot-toggle="tpOpacity" checked aria-label="Hide T-P Opacity plot">
+                <span>T-P Opacity</span>
+              </label>
+              <h3>T-P Opacity</h3>
+            </div>
+          </div>
+          <canvas id="tpOpacityCanvas" aria-label="temperature pressure opacity plot"></canvas>
         </div>
 
         <div class="plot-panel reference-plot-panel" data-plot-panel="stability" data-reference-panel="stability">

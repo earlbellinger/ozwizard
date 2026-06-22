@@ -634,7 +634,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     slider.value = "1";
     slider.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await expect(visibleCanvases).toHaveCount(8);
+  await expect(visibleCanvases).toHaveCount(9);
   const modelBox = await page.locator("#modelCanvas").boundingBox();
   const modelPanelBox = await page.locator("[data-plot-panel='model']").boundingBox();
   const lightBox = await page.locator("#lightCanvas").boundingBox();
@@ -704,12 +704,13 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(plotLayout.flexWrap).toBe("wrap");
   const firstRow = plotLayout.panels.filter((panel) => panel.top === plotLayout.panels[0].top);
   const referencePanels = plotLayout.panels.filter((panel) => ["stability", "strip", "phasePortrait"].includes(panel.id));
-  expect(plotLayout.panels.map((panel) => panel.id)).toEqual(["model", "light", "velocity", "time", "lum", "stability", "strip", "phasePortrait"]);
+  expect(plotLayout.panels.map((panel) => panel.id)).toEqual(["model", "light", "velocity", "time", "lum", "tpOpacity", "stability", "strip", "phasePortrait"]);
   expect(firstRow.map((panel) => panel.id)).toEqual(["model", "light", "velocity"]);
   expect(firstRow.find((panel) => panel.id === "model")!.width).toBeLessThan(360);
   expect(firstRow.find((panel) => panel.id === "light")!.width).toBeGreaterThan(360);
   expect(firstRow.find((panel) => panel.id === "velocity")!.width).toBeGreaterThan(360);
   expect(plotLayout.panels.find((panel) => panel.id === "time")!.width).toBeGreaterThan(360);
+  expect(plotLayout.panels.find((panel) => panel.id === "tpOpacity")!.width).toBeGreaterThan(360);
   expect(referencePanels.every((panel) => panel.width >= 400)).toBe(true);
   expect(new Set(referencePanels.map((panel) => panel.top)).size).toBeLessThanOrEqual(2);
   const hasModelPaint = await page.locator("#modelCanvas").evaluate((canvas) => {
@@ -802,6 +803,20 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-current-phase", /\d+\.\d+/);
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-stellingwerf-labels", "R,H,U_c,current_phase");
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-axis-labels", "radius R,thermal-pressure state H and convective velocity U_c");
+  await expect(page.locator("#metrics")).toHaveAttribute("data-blazhko", /^(none|single|double)$/);
+  await expect(page.locator("#metrics")).toHaveAttribute("data-blazhko-reason", /^(ok|no_primary_period|not_enough_cycles|low_modulation|aperiodic)$/);
+  const defaultBlazhkoKind = await page.locator("#metrics").getAttribute("data-blazhko");
+  if (defaultBlazhkoKind === "double") {
+    await expect(page.locator("#doubleBlazhkoPanel")).toBeVisible();
+    await expect(page.locator("#doubleBlazhkoCanvas")).toHaveAttribute("data-blazhko-colorbar", "secondary");
+  } else {
+    await expect(page.locator("#doubleBlazhkoPanel")).toBeHidden();
+  }
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-tp-opacity-mode", "single");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-axis-labels", "log10(T/T0),log10(P/P0)");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-color-variable", "log10(kappa/kappa0)");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-colorbar", "log10(kappa/kappa0)");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-current-phase", /\d+\.\d+/);
   const zetaSlider = page.getByRole("slider", { name: "thermal response" });
   const zetacSlider = page.getByRole("slider", { name: "convective response" });
   const gammacSlider = page.getByRole("slider", { name: "convective flux fraction" });
@@ -850,17 +865,24 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
   });
   expect(phasePortraitHasPaint).toBe(true);
+  const tpOpacityHasPaint = await page.locator("#tpOpacityCanvas").evaluate((canvas) => {
+    const node = canvas as HTMLCanvasElement;
+    const ctx = node.getContext("2d");
+    if (!ctx) return false;
+    return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
+  });
+  expect(tpOpacityHasPaint).toBe(true);
   await page.locator("[data-plot-toggle='model']").uncheck();
   await expect(page.locator("[data-plot-panel='model']")).toBeHidden();
   await expect(page.locator("#hiddenPlotControls")).toBeVisible();
   await expect(page.locator("#hiddenPlotControls")).toContainText("Shell");
-  await expect(page.locator("#plotGrid")).toHaveAttribute("data-visible-plots", "7");
+  await expect(page.locator("#plotGrid")).toHaveAttribute("data-visible-plots", "8");
   await expect(page.locator("#plotGrid")).not.toHaveAttribute("data-plot-columns", /.+/);
-  await expect(page.locator("#plotGrid .plot-panel canvas:visible")).toHaveCount(7);
+  await expect(page.locator("#plotGrid .plot-panel canvas:visible")).toHaveCount(8);
   await page.locator("#hiddenPlotControls [data-plot-toggle='model']").check();
   await expect(page.locator("[data-plot-panel='model']")).toBeVisible();
   await expect(page.locator("#hiddenPlotControls")).toBeHidden();
-  await expect(page.locator("#plotGrid")).toHaveAttribute("data-visible-plots", "8");
+  await expect(page.locator("#plotGrid")).toHaveAttribute("data-visible-plots", "9");
   await expect(page.locator("#plotGrid")).not.toHaveAttribute("data-plot-columns", /.+/);
   const doubleTapRadiusControl = page.locator("[data-control-key='r0']");
   const doubleTapRadiusSlider = doubleTapRadiusControl.locator(".single-slider");
@@ -882,12 +904,14 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("[data-plot-panel='model']")).toBeHidden();
   await expect(page.locator("[data-plot-panel='time']")).toBeHidden();
   await expect(page.locator("[data-plot-panel='lum']")).toBeHidden();
+  await expect(page.locator("[data-plot-panel='tpOpacity']")).toBeVisible();
   await expect(page.locator("[data-plot-panel='stability']")).toBeVisible();
   await expect(page.locator("[data-plot-panel='strip']")).toBeVisible();
   await expect(page.locator("[data-plot-panel='phasePortrait']")).toBeVisible();
   await expect(page.locator("#hiddenPlotControls [data-plot-toggle='model']")).toBeDisabled();
   await expect(page.locator("#hiddenPlotControls [data-plot-toggle='time']")).toBeDisabled();
   await expect(page.locator("#hiddenPlotControls [data-plot-toggle='lum']")).toBeDisabled();
+  await expect(page.locator("[data-plot-toggle='tpOpacity']")).not.toBeDisabled();
   await expect(page.locator("[data-plot-toggle='stability']")).not.toBeDisabled();
   await expect(page.locator("[data-plot-toggle='strip']")).not.toBeDisabled();
   await expect(page.locator("[data-plot-toggle='phasePortrait']")).not.toBeDisabled();
@@ -963,6 +987,9 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-cepheid-mode", "grid");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-instability-mode", "grid");
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-phase-portrait-mode", "grid");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-tp-opacity-mode", "grid");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-tp-opacity-tracks", /[2-9]\d*/);
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-colorbar", "log10(kappa/kappa0)");
   const fourierHasPaint = await page.locator("#fourierCanvas").evaluate((canvas) => {
     const node = canvas as HTMLCanvasElement;
     const ctx = node.getContext("2d");
@@ -970,7 +997,10 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
   });
   expect(fourierHasPaint).toBe(true);
-  await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-axis-labels", String.raw`A_L,r_{21},\phi_{21},r_{31},\phi_{31}`);
+  await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-axis-labels", String.raw`A_L,r_{21},\phi_{21},r_{31},\phi_{31},\phi_{31}/\phi_{21},\phi_{k1}/S_k,\phi_{k1}/P,\phi_{k1}/A_c,\phi_{k1}/S_k`);
+  await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-phase-ticks", "pi-multiples");
+  await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-structural-panels", /phi31_vs_phi21.*phi_k1_vs_skewness.*phi_k1_vs_period.*phi_k1_vs_acuteness/);
+  await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-adiabatic-reference", /[1-9]\d*/);
   await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-path-count", /[2-9]\d*/);
 
   await page.locator("#lightCanvas").scrollIntoViewIfNeeded();
@@ -1002,6 +1032,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("[data-plot-panel='model']")).toBeVisible();
   await expect(page.locator("[data-plot-panel='time']")).toBeVisible();
   await expect(page.locator("[data-plot-panel='lum']")).toBeVisible();
+  await expect(page.locator("[data-plot-panel='tpOpacity']")).toBeVisible();
   await expect(page.locator("[data-plot-toggle='model']")).not.toBeDisabled();
   await expect(page.locator("[data-plot-toggle='time']")).not.toBeDisabled();
   await expect(page.locator("[data-plot-toggle='lum']")).not.toBeDisabled();
