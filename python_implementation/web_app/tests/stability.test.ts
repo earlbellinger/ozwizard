@@ -35,21 +35,41 @@ describe("linear stability helpers", () => {
     const stability = analyticStabilityConditions(base);
 
     expect(stability.m).toBeCloseTo(10, 12);
-    expect(stability.coefficients.P).toBeCloseTo(4, 12);
-    expect(stability.coefficients.Q).toBeCloseTo(5.6, 12);
-    expect(stability.coefficients.R).toBeCloseTo(7, 12);
-    expect(stability.coefficients.A).toBeCloseTo(45, 12);
-    expect(stability.coefficients.B).toBeCloseTo(50.2, 12);
-    expect(stability.coefficients.C).toBeCloseTo(12.9, 12);
-    expect(stability.coefficients.D).toBeCloseTo(6.6, 12);
-    expect(stability.convective.value).toBeCloseTo(45, 12);
-    expect(stability.convective.stable).toBe(true);
+    expect(stability.physicsMode).toBe("convective");
+    expect(stability.conditions.map((condition) => condition.kind)).toEqual(["convective", "secular", "dynamic", "pulsational"]);
+    expect(stability.eCoefficient).toBeCloseTo(4, 12);
+    expect(stability.terms.radiativeThermal).toBeCloseTo(5.6, 12);
+    expect(stability.terms.restoring).toBeCloseTo(7, 12);
+    expect(stability.terms.convectiveResponse).toBeCloseTo(45, 12);
+    expect(stability.terms.secularCoupling).toBeCloseTo(43.2, 12);
+    expect(stability.terms.dynamicCoupling).toBeCloseTo(12.9, 12);
+    expect(stability.terms.thermalResponse).toBeCloseTo(6.6, 12);
+    expect(stability.convective?.value).toBeCloseTo(45, 12);
+    expect(stability.convective?.stable).toBe(true);
     expect(stability.secular.value).toBeCloseTo(50.2, 12);
     expect(stability.secular.stable).toBe(true);
     expect(stability.dynamic.value).toBeCloseTo(350.58, 12);
     expect(stability.dynamic.stable).toBe(true);
     expect(stability.pulsational.value).toBeCloseTo(-206.212, 12);
     expect(stability.pulsational.stable).toBe(false);
+    expect(stability.kind).toBe("pulsational");
+    expect(stability.allStable).toBe(false);
+    expect(stability.conditions.map((condition) => condition.expression).join(" ")).not.toMatch(/\b[ABCD]\b/);
+  });
+
+  it("uses the reduced radiative stability criteria when convective response is zero", () => {
+    const base = PRESETS["Baker radiative pulsator"];
+    const stability = analyticStabilityConditions(base);
+
+    expect(stability.physicsMode).toBe("radiative");
+    expect(stability.convective).toBeUndefined();
+    expect(stability.conditions.map((condition) => condition.kind)).toEqual(["secular", "dynamic", "pulsational"]);
+    expect(stability.eCoefficient).toBeCloseTo(7, 12);
+    expect(stability.terms.radiativeThermal).toBeCloseTo(7, 12);
+    expect(stability.terms.restoring).toBeCloseTo(7, 12);
+    expect(stability.secular.value).toBeCloseTo(56, 12);
+    expect(stability.dynamic.value).toBeCloseTo(7, 12);
+    expect(stability.pulsational.value).toBeCloseTo(-7, 12);
     expect(stability.kind).toBe("pulsational");
     expect(stability.allStable).toBe(false);
   });
@@ -59,12 +79,12 @@ describe("linear stability helpers", () => {
     const stability = analyticStabilityConditions({ ...base, m: 15, n: 0, s: 8, gamma1: 1.5 });
 
     expect(stability.m).toBeCloseTo(15, 12);
-    expect(stability.coefficients.P).toBeCloseTo(-71.4, 12);
-    expect(stability.coefficients.A).toBeCloseTo(109.5, 12);
-    expect(stability.coefficients.B).toBeCloseTo(124.7, 12);
-    expect(stability.coefficients.C).toBeCloseTo(28.4, 12);
-    expect(stability.coefficients.D).toBeCloseTo(10.6, 12);
-    expect(stability.convective.stable).toBe(true);
+    expect(stability.eCoefficient).toBeCloseTo(-71.4, 12);
+    expect(stability.terms.convectiveResponse).toBeCloseTo(109.5, 12);
+    expect(stability.secular.value).toBeCloseTo(124.7, 12);
+    expect(stability.terms.dynamicCoupling).toBeCloseTo(28.4, 12);
+    expect(stability.terms.thermalResponse).toBeCloseTo(10.6, 12);
+    expect(stability.convective?.stable).toBe(true);
     expect(stability.dynamic.stable).toBe(true);
     expect(stability.secular.stable).toBe(true);
     expect(stability.pulsational.value).toBeCloseTo(9686.178, 9);
@@ -77,9 +97,9 @@ describe("linear stability helpers", () => {
     const base = PRESETS["Instability-strip convection"];
     const stability = analyticStabilityConditions({ ...base, m: 3, n: 0, s: 8, gamma1: 1.1 });
 
-    expect(stability.coefficients.A).toBeCloseTo(-6.9, 12);
-    expect(stability.coefficients.B).toBeCloseTo(-7.3, 12);
-    expect(stability.convective.stable).toBe(false);
+    expect(stability.terms.convectiveResponse).toBeCloseTo(-6.9, 12);
+    expect(stability.secular.value).toBeCloseTo(-7.3, 12);
+    expect(stability.convective?.stable).toBe(false);
     expect(stability.secular.value).toBeCloseTo(-7.3, 12);
     expect(stability.secular.stable).toBe(false);
     expect(stability.dynamic.stable).toBe(true);

@@ -2,6 +2,7 @@ import { derivedPowers, derivatives, mAt, type ModelParameters } from "./model";
 
 export type StabilityKind = "stable" | "convective" | "secular" | "dynamic" | "pulsational" | "neutral";
 export type AnalyticStabilityKind = "convective" | "secular" | "dynamic" | "pulsational";
+export type StabilityPhysicsMode = "convective" | "radiative";
 
 export interface ComplexRoot {
   re: number;
@@ -27,99 +28,146 @@ export interface AnalyticStabilityCondition {
 export interface AnalyticStabilityResult {
   m: number;
   b: number;
-  coefficients: {
-    A: number;
-    B: number;
-    C: number;
-    D: number;
-    P: number;
-    Q: number;
-    R: number;
+  physicsMode: StabilityPhysicsMode;
+  eCoefficient: number;
+  terms: {
+    radiativeThermal: number;
+    restoring: number;
+    secularCoupling: number;
+    convectiveCorrection: number;
+    convectiveResponse: number;
+    dynamicCoupling: number;
+    thermalResponse: number;
   };
-  convective: AnalyticStabilityCondition;
+  convective?: AnalyticStabilityCondition;
   dynamic: AnalyticStabilityCondition;
   secular: AnalyticStabilityCondition;
   pulsational: AnalyticStabilityCondition;
+  conditions: AnalyticStabilityCondition[];
   kind: StabilityKind;
   allStable: boolean;
 }
 
 const EQUILIBRIUM_STATE = [1, 0, 1, 1] as const;
 
+function condition(kind: AnalyticStabilityKind, value: number, expression: string): AnalyticStabilityCondition {
+  return {
+    kind,
+    stable: value > 0,
+    value,
+    threshold: 0,
+    margin: value,
+    expression
+  };
+}
+
+function firstStabilityKind(
+  conditions: readonly AnalyticStabilityCondition[],
+  additionalMargins: readonly number[] = []
+): StabilityKind {
+  const neutralTolerance = 1e-10;
+  if (
+    conditions.some((item) => Math.abs(item.value) <= neutralTolerance)
+    || additionalMargins.some((value) => Math.abs(value) <= neutralTolerance)
+  ) {
+    return "neutral";
+  }
+  const firstUnstable = conditions.find((item) => !item.stable);
+  return firstUnstable?.kind ?? "stable";
+}
+
 export function analyticStabilityConditions(parameters: ModelParameters): AnalyticStabilityResult {
   const radius = 1;
   const m = mAt(radius, parameters);
   const powers = derivedPowers(radius, parameters);
   const radiativeWeight = 1 - parameters.gammac;
-  const pCoefficient = radiativeWeight * powers.b - parameters.gammac * powers.c - parameters.sourceExp;
-  const qCoefficient = radiativeWeight * (parameters.s + 4);
-  const rCoefficient = powers.q - 2;
-  const A = parameters.zeta * parameters.zetac * (
-    pCoefficient
-    + rCoefficient * qCoefficient
-    + 3 * parameters.gammac * (rCoefficient / 2 - powers.d)
+  const eCoefficient = radiativeWeight * powers.b - parameters.gammac * powers.c - parameters.sourceExp;
+  const radiativeThermal = radiativeWeight * (parameters.s + 4);
+  const restoring = powers.q - 2;
+  const secularCoupling = eCoefficient + restoring * radiativeThermal;
+  const convectiveCorrection = 1.5 * parameters.gammac * (m - 4);
+  const convectiveResponse = parameters.zeta * parameters.zetac * (secularCoupling + convectiveCorrection);
+  const secularResponse = parameters.zetac * restoring + parameters.zeta * secularCoupling;
+  const dynamicCoupling = parameters.zeta * parameters.zetac * (radiativeThermal + 1.5 * parameters.gammac) + restoring;
+  const thermalResponse = parameters.zetac + parameters.zeta * radiativeThermal;
+  const terms = {
+    radiativeThermal,
+    restoring,
+    secularCoupling,
+    convectiveCorrection,
+    convectiveResponse,
+    dynamicCoupling,
+    thermalResponse
+  };
+
+  if (parameters.zetac <= 0) {
+    const thermalMargin = parameters.zeta * radiativeThermal;
+    const secular = condition(
+      "secular",
+      parameters.zeta * secularCoupling,
+      "zeta * (E + (chi0 * Gamma1 - 4) * (1 - gamma_c) * (s + 4)) > 0"
+    );
+    const dynamic = condition(
+      "dynamic",
+      restoring,
+      "chi0 * Gamma1 - 4 > 0"
+    );
+    const pulsational = condition(
+      "pulsational",
+      -eCoefficient,
+      "-E > 0"
+    );
+    const conditions = [secular, dynamic, pulsational];
+    return {
+      m,
+      b: powers.b,
+      physicsMode: "radiative",
+      eCoefficient,
+      terms,
+      dynamic,
+      secular,
+      pulsational,
+      conditions,
+      kind: thermalMargin < 0 ? "secular" : firstStabilityKind(conditions, [thermalMargin]),
+      allStable: thermalMargin > 0 && conditions.every((item) => item.stable)
+    };
+  }
+
+  const convective = condition(
+    "convective",
+    convectiveResponse,
+    "zeta * zeta_c * (E + (chi0 * Gamma1 - 4) * (1 - gamma_c) * (s + 4) + 3 * gamma_c * (chi0 - 4) / 2) > 0"
   );
-  const B = parameters.zetac * rCoefficient + parameters.zeta * (pCoefficient + rCoefficient * qCoefficient);
-  const C = parameters.zeta * parameters.zetac * (qCoefficient + 1.5 * parameters.gammac) + rCoefficient;
-  const D = parameters.zetac + parameters.zeta * qCoefficient;
-  const dynamicValue = B * C - A * D;
-  const pulsationalValue = D * dynamicValue - B ** 2;
-  const convective: AnalyticStabilityCondition = {
-    kind: "convective",
-    stable: A > 0,
-    value: A,
-    threshold: 0,
-    margin: A,
-    expression: "A > 0"
-  };
-  const secular: AnalyticStabilityCondition = {
-    kind: "secular",
-    stable: B > 0,
-    value: B,
-    threshold: 0,
-    margin: B,
-    expression: "B > 0"
-  };
-  const dynamic: AnalyticStabilityCondition = {
-    kind: "dynamic",
-    stable: dynamicValue > 0,
-    value: dynamicValue,
-    threshold: 0,
-    margin: dynamicValue,
-    expression: "B C - A D > 0"
-  };
-  const pulsational: AnalyticStabilityCondition = {
-    kind: "pulsational",
-    stable: pulsationalValue > 0,
-    value: pulsationalValue,
-    threshold: 0,
-    margin: pulsationalValue,
-    expression: "D(B C - A D) - B^2 > 0"
-  };
-  const orderedConditions = [convective, secular, dynamic, pulsational] as const;
-  const neutralTolerance = 1e-10;
-  const firstUnstable = orderedConditions.find((condition) => !condition.stable);
-  const kind: StabilityKind = orderedConditions.some((condition) => Math.abs(condition.value) <= neutralTolerance)
-    ? "neutral"
-    : firstUnstable?.kind ?? "stable";
+  const secular = condition(
+    "secular",
+    secularResponse,
+    "zeta_c * (chi0 * Gamma1 - 4) + zeta * (E + (chi0 * Gamma1 - 4) * (1 - gamma_c) * (s + 4)) > 0"
+  );
+  const dynamicValue = secularResponse * dynamicCoupling - convectiveResponse * thermalResponse;
+  const dynamic = condition(
+    "dynamic",
+    dynamicValue,
+    "[zeta_c * (chi0 * Gamma1 - 4) + zeta * (E + (chi0 * Gamma1 - 4) * (1 - gamma_c) * (s + 4))] * [zeta * zeta_c * ((1 - gamma_c) * (s + 4) + 3 * gamma_c / 2) + chi0 * Gamma1 - 4] - [zeta * zeta_c * (E + (chi0 * Gamma1 - 4) * (1 - gamma_c) * (s + 4) + 3 * gamma_c * (chi0 - 4) / 2)] * [zeta_c + zeta * (1 - gamma_c) * (s + 4)] > 0"
+  );
+  const pulsational = condition(
+    "pulsational",
+    thermalResponse * dynamicValue - secularResponse ** 2,
+    "[zeta_c + zeta * (1 - gamma_c) * (s + 4)] * dynamic_margin - [zeta_c * (chi0 * Gamma1 - 4) + zeta * (E + (chi0 * Gamma1 - 4) * (1 - gamma_c) * (s + 4))]^2 > 0"
+  );
+  const conditions = [convective, secular, dynamic, pulsational];
   return {
     m,
     b: powers.b,
-    coefficients: {
-      A,
-      B,
-      C,
-      D,
-      P: pCoefficient,
-      Q: qCoefficient,
-      R: rCoefficient
-    },
+    physicsMode: "convective",
+    eCoefficient,
+    terms,
     convective,
     dynamic,
     secular,
     pulsational,
-    kind,
-    allStable: orderedConditions.every((condition) => condition.stable)
+    conditions,
+    kind: firstStabilityKind(conditions),
+    allStable: conditions.every((item) => item.stable)
   };
 }
 

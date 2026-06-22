@@ -49,6 +49,18 @@ export function phaseWarmupTau(rows: readonly Row[], requested?: number): number
   return requested !== undefined && Number.isFinite(requested) ? requested : defaultWarmupTau(rows);
 }
 
+export function guidedMinSeparationFromPeriod(rows: readonly Row[], period: number | null | undefined): number | undefined {
+  if (period === null || period === undefined || !Number.isFinite(period) || period <= 0) return undefined;
+  const firstTau = rows[0]?.tau;
+  const finalTau = rows.at(-1)?.tau;
+  if (firstTau === undefined || finalTau === undefined) return undefined;
+  if (!Number.isFinite(firstTau) || !Number.isFinite(finalTau) || finalTau <= firstTau) return undefined;
+  const span = finalTau - firstTau;
+  const guided = period * 0.55;
+  const cap = Math.max(0.75, span / 5);
+  return Math.max(0.75, Math.min(guided, cap));
+}
+
 function refinedLuminosityExtremum(rows: readonly Row[], index: number, mode: "min" | "max"): Row {
   if (index <= 0 || index >= rows.length - 1) return rows[index];
   const previous = rows[index - 1];

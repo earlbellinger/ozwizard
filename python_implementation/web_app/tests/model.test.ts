@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CONTROL_GROUPS, DEFAULT_PRESET_NAME, PRESETS, compareRows, derivatives, sample, solveModel, solverOptionsFromParameters, type Row } from "../src/model";
+import { CONTROL_GROUPS, DEFAULT_PRESET_NAME, PRESETS, compareRows, derivatives, linearDynamicPeriod, sample, solveModel, solverOptionsFromParameters, type Row } from "../src/model";
 import { buildTwoCyclePhase, findLuminosityMaxima } from "../src/phase";
 import { integrate } from "../src/solvers";
 
@@ -56,6 +56,12 @@ describe("one-zone model", () => {
     expect(zetacControl?.[6]).toBe(1);
     expect(PRESETS[DEFAULT_PRESET_NAME].gammac).toBe(0.5);
     expect(gammacControl?.[6]).toBe(0.5);
+  });
+
+  it("computes the adiabatic dynamic linear period when the shell is dynamically stable", () => {
+    const period = linearDynamicPeriod(PRESETS[DEFAULT_PRESET_NAME]);
+    expect(period).toBeCloseTo((2 * Math.PI) / Math.sqrt(10 * 1.1 - 4), 12);
+    expect(linearDynamicPeriod({ ...PRESETS[DEFAULT_PRESET_NAME], m: 3, gamma1: 1.1 })).toBeNull();
   });
 
   it("stores weighted radiative and convective luminosity contributions", () => {

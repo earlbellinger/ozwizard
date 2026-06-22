@@ -10,8 +10,8 @@ import {
   type GridRangeSamples,
   type GridWorkerMessage
 } from "./grid";
-import { type ControlParameterKey, type ModelParameters, type Row, solveModel } from "./model";
-import { buildTwoCyclePhase } from "./phase";
+import { linearDynamicPeriod, type ControlParameterKey, type ModelParameters, type Row, solveModel } from "./model";
+import { buildTwoCyclePhase, guidedMinSeparationFromPeriod } from "./phase";
 import { isTimeWindowReason } from "./displayWindow";
 
 interface GridRunStats {
@@ -164,7 +164,10 @@ function addGridModel(
       stats.excludedNonPhase += 1;
       return;
     }
-    const phase = buildTwoCyclePhase(solved.rows, request.phase);
+    const phase = buildTwoCyclePhase(solved.rows, {
+      ...request.phase,
+      minSeparation: guidedMinSeparationFromPeriod(solved.rows, linearDynamicPeriod(parameters))
+    });
     if (phase.reason !== "ok" || !phase.period || phase.rows.length < 8) {
       stats.phaseUnavailable += 1;
       return;

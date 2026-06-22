@@ -1697,6 +1697,92 @@
       border-bottom-color: rgba(217, 231, 255, 0.62);
     }
 
+    .derivation-panel {
+      overflow-x: hidden;
+    }
+
+    .derivation-panel > summary {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      list-style: none;
+      color: var(--ink);
+    }
+
+    .derivation-panel > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .derivation-panel > summary::before {
+      content: ">";
+      color: var(--logo-gold);
+      font-size: 13px;
+      line-height: 1;
+      transform: rotate(0deg);
+      transform-origin: center;
+      transition: transform 120ms ease;
+    }
+
+    .derivation-panel[open] > summary::before {
+      transform: rotate(90deg);
+    }
+
+    .derivation-content {
+      display: grid;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .derivation-block {
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+      min-width: 0;
+    }
+
+    .derivation-block:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .derivation-block h4 {
+      margin: 0 0 6px;
+      color: var(--ink);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .derivation-block p {
+      font-size: 13px;
+      line-height: 1.45;
+      margin: 5px 0 8px;
+    }
+
+    .derivation-equations {
+      margin: 8px 0;
+    }
+
+    .derivation-condition-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 13px;
+    }
+
+    .derivation-condition-table td {
+      border-top: 1px solid var(--line);
+      padding: 7px 6px;
+      color: var(--muted);
+      vertical-align: top;
+    }
+
+    .derivation-condition-table td:first-child {
+      color: currentColor;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
     .variable-table {
       width: 100%;
       border-collapse: collapse;
@@ -2368,6 +2454,11 @@
             <a href="https://ui.adsabs.harvard.edu/abs/1987ApJ...313L..75S/abstract">Stellingwerf, Gautschy, and Dickens (1987)</a>.
           </p>
         </div>
+
+        <details class="content-panel derivation-panel" id="derivationPanel" open>
+          <summary><h3>Derivation</h3></summary>
+          <div class="derivation-content" id="derivationContent"></div>
+        </details>
       </section>
     </main>
   </div>

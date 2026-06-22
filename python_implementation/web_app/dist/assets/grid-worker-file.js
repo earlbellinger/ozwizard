@@ -520,6 +520,12 @@
     const eta = (1 - 3 / p.m) ** (1 / 3);
     return 3 / (1 - (eta / radius) ** 3);
   }
+  function linearDynamicPeriod(p) {
+    const chi = mAt(1, p);
+    const frequencySquared = chi * p.gamma1 - 4;
+    if (!Number.isFinite(frequencySquared) || frequencySquared <= 0) return null;
+    return 2 * Math.PI / Math.sqrt(frequencySquared);
+  }
   function derivedPowers(radius, p) {
     const m = mAt(radius, p);
     const gamma11 = p.gamma1 - 1;
@@ -809,6 +815,17 @@
   }
   function phaseWarmupTau(rows, requested) {
     return requested !== void 0 && Number.isFinite(requested) ? requested : defaultWarmupTau(rows);
+  }
+  function guidedMinSeparationFromPeriod(rows, period) {
+    if (period === null || period === void 0 || !Number.isFinite(period) || period <= 0) return void 0;
+    const firstTau = rows[0]?.tau;
+    const finalTau = rows.at(-1)?.tau;
+    if (firstTau === void 0 || finalTau === void 0) return void 0;
+    if (!Number.isFinite(firstTau) || !Number.isFinite(finalTau) || finalTau <= firstTau) return void 0;
+    const span = finalTau - firstTau;
+    const guided = period * 0.55;
+    const cap = Math.max(0.75, span / 5);
+    return Math.max(0.75, Math.min(guided, cap));
   }
   function refinedLuminosityExtremum(rows, index, mode) {
     if (index <= 0 || index >= rows.length - 1) return rows[index];
@@ -1187,7 +1204,10 @@
         stats.excludedNonPhase += 1;
         return;
       }
-      const phase = buildTwoCyclePhase(solved.rows, request.phase);
+      const phase = buildTwoCyclePhase(solved.rows, {
+        ...request.phase,
+        minSeparation: guidedMinSeparationFromPeriod(solved.rows, linearDynamicPeriod(parameters))
+      });
       if (phase.reason !== "ok" || !phase.period || phase.rows.length < 8) {
         stats.phaseUnavailable += 1;
         return;

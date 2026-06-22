@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PRESET_NAME, PRESETS, solveModel, type ModelParameters, type Row } from "../src/model";
-import { buildTwoCyclePhase } from "../src/phase";
+import { buildTwoCyclePhase, guidedMinSeparationFromPeriod } from "../src/phase";
 
 const STRIP_PRESET = "Instability-strip convection";
 
@@ -71,6 +71,12 @@ function rowsWithSpuriousMinimum(): Row[] {
 }
 
 describe("phase folding", () => {
+  it("derives a conservative extrema spacing from a linear period prior", () => {
+    expect(guidedMinSeparationFromPeriod(syntheticRows(), 1)).toBeCloseTo(0.75, 12);
+    expect(guidedMinSeparationFromPeriod(syntheticRows(), 3)).toBeCloseTo(1.2, 12);
+    expect(guidedMinSeparationFromPeriod(syntheticRows(), null)).toBeUndefined();
+  });
+
   it("anchors two-cycle phase at three consecutive luminosity minima", () => {
     const phase = buildTwoCyclePhase(syntheticRows(), { warmupTau: 0, minAmplitude: 0.1, minSeparation: 0.5 });
     expect(phase.reason).toBe("ok");

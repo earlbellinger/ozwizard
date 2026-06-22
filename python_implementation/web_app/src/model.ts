@@ -253,6 +253,13 @@ export function mAt(radius: number, p: ModelParameters): number {
   return 3 / (1 - (eta / radius) ** 3);
 }
 
+export function linearDynamicPeriod(p: ModelParameters): number | null {
+  const chi = mAt(1, p);
+  const frequencySquared = chi * p.gamma1 - 4;
+  if (!Number.isFinite(frequencySquared) || frequencySquared <= 0) return null;
+  return (2 * Math.PI) / Math.sqrt(frequencySquared);
+}
+
 export function derivedPowers(radius: number, p: ModelParameters): { m: number; b: number; q: number; c: number; d: number } {
   const m = mAt(radius, p);
   const gamma11 = p.gamma1 - 1;

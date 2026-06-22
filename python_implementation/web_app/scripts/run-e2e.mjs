@@ -270,6 +270,7 @@ async function runPlaywrightChecks() {
     const initialMetrics = await page.locator("#metrics").textContent();
     assertOk(initialMetrics?.includes("stop") && initialMetrics.includes("stable limit cycle"), "metrics did not include the stop result");
     assertOk(initialMetrics?.includes("models"), "metrics did not render");
+    assertOk(initialMetrics?.includes("P_lin") && initialMetrics.includes("P_nonlin"), "metrics did not include linear and nonlinear periods");
     assertOk(!initialMetrics?.includes("stop reason"), "metrics should not show the old stop reason label");
     assertOk(!initialMetrics?.includes("reference"), "metrics should not duplicate reference metadata");
     assertOk(!initialMetrics?.includes("driver"), "metrics should not duplicate driver controls");
@@ -280,7 +281,11 @@ async function runPlaywrightChecks() {
     assertOk(stoppedTimeXlim[1] > 0 && stoppedTimeXlim[1] < 300, "auto-stopped history plot should end at the final computed tau");
     const stoppedLumXlim = await page.locator("#lumCanvas").getAttribute("data-xlim");
     assertOk(stoppedLumXlim === stoppedTimeXlim.map((value) => value.toFixed(3)).join(","), "luminosity evolution should share the auto-stopped x limits");
+    assertOk((await page.locator("#metrics").getAttribute("data-linear-period-formula")) === "2pi/sqrt(chi*Gamma1-4)", "linear period formula should be exposed");
+    assertOk((await page.locator("#metrics").getAttribute("data-linear-period"))?.startsWith("2.37"), "linear period should be reported");
+    assertOk((await page.locator("#metrics").getAttribute("data-nonlinear-period")) !== "unavailable", "nonlinear period should be reported");
     await page.waitForFunction(() => !document.body.innerText.includes("\\("), null, { timeout: 15000 });
+    assertOk((await page.locator("#metrics").getAttribute("data-s72-physics-mode")) === "convective", "S72 status should start in convective mode");
     assertOk((await page.locator("#metrics").getAttribute("data-s72-convective")) === "stable", "convective/turbulent stability should be reported");
     assertOk((await page.locator("#metrics").getAttribute("data-s72-secular")) === "stable", "secular stability should be reported");
     assertOk((await page.locator("#metrics").getAttribute("data-s72-dynamic")) === "stable", "dynamic stability should be reported");
@@ -293,10 +298,15 @@ async function runPlaywrightChecks() {
     const dynamicDetail = await dynamicChip.getAttribute("data-stability-detail");
     const secularDetail = await secularChip.getAttribute("data-stability-detail");
     const pulsationalDetail = await pulsationalChip.getAttribute("data-stability-detail");
-    assertOk(convectiveDetail?.includes("A=30.5") && convectiveDetail.includes("convectively/turbulently stable"), "convective/turbulent stability chip should plug in current values");
-    assertOk(secularDetail?.includes("B=33") && secularDetail.includes("secularly stable"), "secular stability chip should plug in current values");
-    assertOk(dynamicDetail?.includes("B*C - A*D = 234") && dynamicDetail.includes("dynamically stable"), "dynamic stability chip should plug in current values");
-    assertOk(pulsationalDetail?.includes("D*(B*C - A*D) - B^2 = -36") && pulsationalDetail.includes("pulsationally unstable"), "pulsational stability chip should plug in current values with a slashed failed inequality");
+    assertOk(convectiveDetail?.includes("margin=30.5") && convectiveDetail.includes("convectively/turbulently stable"), "convective/turbulent stability chip should plug in current values");
+    assertOk(secularDetail?.includes("margin=33") && secularDetail.includes("secularly stable"), "secular stability chip should plug in current values");
+    assertOk(dynamicDetail?.includes("margin=234") && dynamicDetail.includes("dynamically stable"), "dynamic stability chip should plug in current values");
+    assertOk(pulsationalDetail?.includes("margin=-36") && pulsationalDetail.includes("pulsationally unstable"), "pulsational stability chip should plug in current values with a slashed failed inequality");
+    const stabilityDetails = await page.locator("#metrics [data-stability-kind]").evaluateAll((chips) =>
+      chips.map((chip) => chip.getAttribute("data-stability-detail") || "").join(" ")
+    );
+    assertOk(stabilityDetails.includes("E="), "stability chip details should define the E temporary");
+    assertOk(!/\b[ABCD]\b/.test(stabilityDetails), "stability chip details should not expose A/B/C/D coefficient notation");
     assertOk((await convectiveChip.getAttribute("title")) === null, "stability chips should not use a separate hover tooltip");
     assertOk((await convectiveChip.getAttribute("data-stability-expanded")) === null, "stability chips should not carry inline expanded formulas");
     assertOk((await convectiveChip.getAttribute("data-stability-view")) === null, "stability chips should not keep hover/toggle state");
@@ -350,6 +360,16 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "radius-dependent", "luminosity equations should start radius-dependent");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-layout")) === "stacked", "geometry equation should keep eta on its own line");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.89", "eta should match the default chi0 value");
+    assertOk(await page.locator("#derivationPanel").isVisible(), "derivation panel should be visible");
+    assertOk((await page.locator("#derivationPanel").getAttribute("data-physics-mode")) === "convective", "derivation should start in convective mode");
+    assertOk((await page.locator("#derivationPanel").getAttribute("data-geometry-mode")) === "radius-dependent", "derivation should start with radius-dependent geometry");
+    assertOk((await page.locator("#derivationPanel").getAttribute("data-driver-mode")) === "h", "derivation should start with pressure driver");
+    assertOk((await page.locator("#derivationPanel").getAttribute("data-convection-mode")) === "time-dependent", "derivation should start with time-dependent convection");
+    assertOk((await page.locator("#derivationContent [data-derivation-block]").count()) === 6, "derivation should render six separable blocks");
+    assertOk(await page.locator("[data-derivation-block='opacity']").isVisible(), "derivation should include opacity block");
+    assertOk(await page.locator("[data-derivation-block='equilibrium']").isVisible(), "derivation should include equilibrium block");
+    assertOk(await page.locator("[data-derivation-block='linear']").isVisible(), "derivation should include linear stability block");
+    assertOk((await page.locator("#derivationContent [data-stability-kind='convective']").count()) === 1, "convective derivation should include the convective/turbulent criterion");
     const sourceText = await page.evaluate(async () => (await fetch("/src/main.ts")).text());
     const modelText = await page.evaluate(async () => (await fetch("/src/model.ts")).text());
     const htmlText = await page.evaluate(async () => (await fetch("/wizard_of_oz.html")).text());
@@ -454,7 +474,7 @@ async function runPlaywrightChecks() {
     assertOk(parameterOverflow === "auto", `parameters panel should scroll vertically, saw ${parameterOverflow}`);
 
     await page.setViewportSize({ width: 1920, height: 1200 });
-    assertOk(await page.getByRole("heading", { name: "Shell" }).isVisible(), "Shell heading was not visible");
+    assertOk(await page.getByRole("heading", { name: "Shell", exact: true }).isVisible(), "Shell heading was not visible");
     const modelSpeed = page.getByRole("slider", { name: "shell speed" });
     assertOk(await page.locator("[data-plot-panel='model'] .plot-title .model-speed-control").isVisible(), "Shell speed control should live in the title row");
     assertOk((await modelSpeed.inputValue()) === "1", "Shell speed should start at 1x");
@@ -587,6 +607,9 @@ async function runPlaywrightChecks() {
     assertOk(phaseDelta(resumedPhase, releasePhase) > 0.04, "phase animation should resume from the released position");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "L_c,L,L_r", "model luminosity arc labels should be active");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-geometry-guides")) === "R=1,eta,minR,maxR", "model geometry guides should be active");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-boundary-luminosity-lines")) === "L_base,L", "model luminosity boundary lines should be active");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-velocity-arc-label")) === "V", "model velocity arc label should be active");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-radius-label")) === "R", "model radius label should be active");
     assertOk((await page.locator("#plotGrid").getAttribute("data-plot-columns")) === null, "plot grid should not force a column mode");
     assertOk(!(await page.locator("#hiddenPlotControls").isVisible()), "hidden plot controls should start hidden");
     assertOk((await page.locator("#plotGrid").evaluate((node) => getComputedStyle(node).display)) === "flex", "plot grid should use flex display");
@@ -773,10 +796,15 @@ async function runPlaywrightChecks() {
     const lumLegend = await page.locator("#lumLegend").textContent();
     assertOk(lumLegend?.includes("total"), "luminosity legend should show total luminosity");
     assertOk(lumLegend?.includes("radiative") && lumLegend.includes("convective"), "luminosity legend should expose radiative and convective entries by default");
+    assertOk(lumLegend?.includes("base"), "luminosity legend should expose base luminosity");
+    assertOk((await page.locator("#lumLegend [data-plot-series='Lb']").getAttribute("aria-pressed")) === "true", "base luminosity toggle should start visible");
     assertOk((await page.locator("input[aria-label='convective response']").inputValue()) === "0", "convective response slider coordinate should still be log10(1)");
     assertOk((await page.locator("[data-value-for='zetac']").textContent()) === "1", "convective response should still display one");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-convection-active")) === "true", "model arcs should start in convective mode");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "L_c,L,L_r", "model arcs should expose luminosity labels");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-boundary-luminosity-lines")) === "L_base,L", "model boundary luminosity lines should be active");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-velocity-arc-label")) === "V", "model velocity arc label should be active");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-radius-label")) === "R", "model radius label should be active");
     await page.locator("input[aria-label='convective response']").evaluate((input) => {
       const slider = input;
       slider.value = "-2";
@@ -786,8 +814,24 @@ async function runPlaywrightChecks() {
     assertOk(!((await page.locator("#timeLegend").textContent())?.includes("convective velocity")), "convective velocity should hide when convective response is zero");
     const zeroLumLegend = await page.locator("#lumLegend").textContent();
     assertOk(!zeroLumLegend?.includes("radiative") && !zeroLumLegend?.includes("convective"), "luminosity legend should show only total luminosity when convective response is zero");
+    assertOk(zeroLumLegend?.includes("base"), "base luminosity should remain visible when convective response is zero");
+    assertOk((await page.locator("#metrics").getAttribute("data-s72-physics-mode")) === "radiative", "S72 status should switch to radiative mode when convective response is zero");
+    assertOk((await page.locator("#metrics").getAttribute("data-s72-convective")) === null, "convective/turbulent status should hide in radiative mode");
+    await page.waitForFunction(() => !document.querySelector("#metrics [data-stability-kind='convective']"));
+    assertOk((await page.locator("#metrics [data-stability-kind='convective']").count()) === 0, "convective/turbulent chip should hide in radiative mode");
+    assertOk((await page.locator("#stabilityMapCanvas").getAttribute("data-stability-physics")) === "radiative", "stability map should switch to radiative criteria");
+    assertOk((await page.locator("#stabilityMapCanvas").getAttribute("data-stability-legend")) === "linear damping,secular instability,dynamic instability,pulsational instability", "stability map should omit convective/turbulent legend in radiative mode");
+    assertOk((await page.locator("#cepheidGuideCanvas").getAttribute("data-instability-physics")) === "radiative", "instability strip should switch to radiative criteria");
+    assertOk((await page.locator("#cepheidGuideCanvas").getAttribute("data-instability-legend")) === "linear damping,secular instability,dynamic instability,pulsational instability", "instability strip should omit convective/turbulent legend in radiative mode");
+    assertOk(/stable:\d+,secular:\d+,dynamic:\d+,pulsational:\d+,neutral:\d+/.test(await page.locator("#cepheidGuideCanvas").getAttribute("data-instability-counts") || ""), "radiative instability strip counts should omit convective/turbulent counts");
     await page.waitForFunction(() => document.querySelector("#modelCanvas")?.getAttribute("data-convection-active") === "false");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "", "model luminosity arc labels should hide when convection is off");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-boundary-luminosity-lines")) === "L_base,L", "model boundary luminosity lines should remain active when convection is off");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-velocity-arc-label")) === "V", "model velocity arc label should remain active when convection is off");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-radius-label")) === "R", "model radius label should remain active when convection is off");
+    assertOk((await page.locator("#derivationPanel").getAttribute("data-physics-mode")) === "radiative", "derivation should switch to radiative reduced criteria");
+    assertOk((await page.locator("#derivationPanel").getAttribute("data-convection-mode")) === "frozen", "derivation should mark convection as frozen");
+    assertOk((await page.locator("#derivationContent [data-stability-kind='convective']").count()) === 0, "radiative derivation should omit the convective/turbulent criterion");
     await page.locator("input[aria-label='convective response']").evaluate((input) => {
       const slider = input;
       slider.value = "0";
@@ -795,7 +839,15 @@ async function runPlaywrightChecks() {
     });
     await page.locator("#timeLegend [data-plot-series='Uc']").waitFor({ state: "attached", timeout: 15000 });
     await page.waitForFunction(() => document.querySelector("#modelCanvas")?.getAttribute("data-convection-active") === "true");
+    assertOk((await page.locator("#metrics").getAttribute("data-s72-physics-mode")) === "convective", "S72 status should return to convective mode");
+    assertOk((await page.locator("#metrics").getAttribute("data-s72-convective")) === "stable", "convective/turbulent status should return when convective response is on");
+    await page.waitForFunction(() => document.querySelectorAll("#metrics [data-stability-kind='convective']").length === 1);
+    assertOk((await page.locator("#metrics [data-stability-kind='convective']").count()) === 1, "convective/turbulent chip should return when convective response is on");
+    assertOk((await page.locator("#derivationPanel").getAttribute("data-physics-mode")) === "convective", "derivation should return to convective criteria");
+    assertOk((await page.locator("#derivationPanel").getAttribute("data-convection-mode")) === "time-dependent", "derivation should return to time-dependent convection");
+    assertOk((await page.locator("#derivationContent [data-stability-kind='convective']").count()) === 1, "convective derivation criterion should return");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "L_c,L,L_r", "model luminosity arc labels should return when convection is on");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-boundary-luminosity-lines")) === "L_base,L", "model boundary luminosity lines should return when convection is on");
     const radiusToggle = page.locator("#timeLegend [data-plot-series='R']");
     assertOk((await radiusToggle.getAttribute("aria-pressed")) === "true", "radius toggle should start visible");
     await radiusToggle.click();
@@ -804,8 +856,10 @@ async function runPlaywrightChecks() {
     assertOk((await radiusToggle.getAttribute("aria-pressed")) === "true", "radius toggle did not restore the radius series");
     await page.locator("#variableM").uncheck();
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "fixed", "luminosity equations did not switch back to fixed geometry");
+    assertOk((await page.locator("#derivationPanel").getAttribute("data-geometry-mode")) === "fixed", "derivation did not switch to fixed geometry");
     await page.locator("#variableM").check();
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "radius-dependent", "luminosity equations did not switch to radius-dependent geometry");
+    assertOk((await page.locator("#derivationPanel").getAttribute("data-geometry-mode")) === "radius-dependent", "derivation did not switch to radius-dependent geometry");
     const timeLegendHtmlBeforeMSlider = await page.locator("#timeLegend").innerHTML();
     await page.locator("input[aria-label='shell thinness']").evaluate((input) => {
       const slider = input;
@@ -826,8 +880,10 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.89", "eta did not reset with chi");
     await page.locator("[data-driver='abs-v']").click();
     assertOk((await page.locator("#odeEquations").getAttribute("data-driver-mode")) === "abs-v", "ODE driver did not switch to sqrt(abs(V))");
+    assertOk((await page.locator("#derivationPanel").getAttribute("data-driver-mode")) === "abs-v", "derivation did not switch to sqrt(abs(V))");
     await page.locator("[data-driver='h']").click();
     assertOk((await page.locator("#odeEquations").getAttribute("data-driver-mode")) === "h", "ODE driver did not switch back to sqrt(H)");
+    assertOk((await page.locator("#derivationPanel").getAttribute("data-driver-mode")) === "h", "derivation did not switch back to sqrt(H)");
 
     const timeCanvas = page.locator("#timeCanvas");
     await timeCanvas.scrollIntoViewIfNeeded();

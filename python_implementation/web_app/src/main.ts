@@ -14,6 +14,8 @@ import {
   type ControlDef,
   type ModelParameters,
   type Row,
+  derivedPowers,
+  linearDynamicPeriod,
   mAt,
   sample,
   solveModel
@@ -33,7 +35,7 @@ import {
   type GridWorkerMessage
 } from "./grid";
 import { computeGridWithMessages } from "./gridCompute";
-import { buildTwoCyclePhase, type PhaseAnchor, type PhaseResult } from "./phase";
+import { buildTwoCyclePhase, guidedMinSeparationFromPeriod, type PhaseAnchor, type PhaseResult } from "./phase";
 import {
   buildPhaseDisplayWindow,
   buildTimeDisplayWindow,
@@ -57,8 +59,10 @@ import {
 import {
   analyticStabilityConditions,
   cepheidStripCoordinate,
+  type AnalyticStabilityCondition,
   type AnalyticStabilityKind,
   type AnalyticStabilityResult,
+  type StabilityPhysicsMode,
   type StabilityKind
 } from "./stability";
 
@@ -85,6 +89,7 @@ let mathTypesetRunning = false;
 let mathTypesetPending = false;
 let mathTypesetWholeRoot = false;
 let mathRenderVersion = 0;
+let lastDerivationSignature = "";
 const mathTypesetTargets = new Set<HTMLElement>();
 const stagedMathUpdates = new Map<HTMLElement, StagedMathUpdate>();
 
@@ -202,7 +207,8 @@ const THEME = {
 type PlotBox = { left: number; top: number; width: number; height: number };
 type NumericRange = [number, number];
 type InteractivePlotId = "time" | "lum";
-type PlotSeriesKey = "R" | "V" | "H" | "Uc" | "L" | "Lr" | "Lc";
+type RowSeriesKey = "R" | "V" | "H" | "Uc" | "L" | "Lr" | "Lc";
+type PlotSeriesKey = RowSeriesKey | "Lb";
 type UserPlotId = "model" | "light" | "velocity" | "time" | "lum" | "stability" | "strip" | "phasePortrait";
 type SonificationSource = "luminosity" | "velocity" | "pressure";
 
@@ -410,7 +416,7 @@ const plotViews: Record<InteractivePlotId, PlotView> = {
 
 const plotVisibility: Record<InteractivePlotId, Record<string, boolean>> = {
   time: { R: true, V: true, H: true, Uc: true },
-  lum: { L: true, Lr: true, Lc: true }
+  lum: { L: true, Lr: true, Lc: true, Lb: true }
 };
 
 const PLOT_PANEL_LABELS: Record<UserPlotId, string> = {
@@ -511,49 +517,109 @@ function s72TextInequality(satisfied: boolean, symbol: ">" | "<"): string {
   return symbol === ">" ? "\u226F" : "\u226E";
 }
 
-function s72ConvectiveMetric(stability: AnalyticStabilityResult): string {
-  const symbol = s72LatexInequality(stability.convective.stable, ">");
-  return `\\(\\ozNeutral{A}=${fmt(stability.convective.value, 2)} ${symbol} 0\\)`;
+function s72ShortLabel(kind: AnalyticStabilityKind): string {
+  if (kind === "convective") return "conv";
+  if (kind === "dynamic") return "dyn";
+  if (kind === "secular") return "sec";
+  return "puls";
 }
 
-function s72SecularMetric(stability: AnalyticStabilityResult): string {
-  const symbol = s72LatexInequality(stability.secular.stable, ">");
-  return `\\(\\ozNeutral{B}=${fmt(stability.secular.value, 2)} ${symbol} 0\\)`;
+function s72E(): string {
+  return "\\ozNeutral{E}";
 }
 
-function s72DynamicMetric(stability: AnalyticStabilityResult): string {
-  const symbol = s72LatexInequality(stability.dynamic.stable, ">");
-  return `\\(\\ozNeutral{BC-AD}=${fmt(stability.dynamic.value, 2)} ${symbol} 0\\)`;
+function s72Restoring(): string {
+  return `(${TEX.m}${TEX.gamma1}-4)`;
 }
 
-function s72PulsationalMetric(stability: AnalyticStabilityResult): string {
-  const symbol = s72LatexInequality(stability.pulsational.stable, ">");
-  return `\\(\\ozNeutral{D(BC-AD)-B^2}=${fmt(stability.pulsational.value, 2)} ${symbol} 0\\)`;
+function s72RadiativeThermal(): string {
+  return `(1-${TEX.gammac})(${TEX.s}+4)`;
 }
 
-function s72CoefficientSummary(stability: AnalyticStabilityResult): string {
-  const { A, B, C, D } = stability.coefficients;
-  return `A=${fmt(A, 3)}, B=${fmt(B, 3)}, C=${fmt(C, 3)}, D=${fmt(D, 3)}`;
+function s72SecularCoupling(): string {
+  return `${s72E()}+${s72Restoring()}${s72RadiativeThermal()}`;
 }
 
-function s72ConvectiveTitle(stability: AnalyticStabilityResult): string {
-  const symbol = s72TextInequality(stability.convective.stable, ">");
-  return `Convective/turbulent stability: ${s72CoefficientSummary(stability)}; A=${fmt(stability.convective.value, 3)} ${symbol} 0 -> ${s72Verdict("convective", stability.convective.stable)}`;
+function s72ConvectiveCorrection(): string {
+  return `\\frac{3}{2}${TEX.gammac}(${TEX.m}-4)`;
 }
 
-function s72DynamicTitle(stability: AnalyticStabilityResult): string {
-  const symbol = s72TextInequality(stability.dynamic.stable, ">");
-  return `Dynamic stability: ${s72CoefficientSummary(stability)}; B*C - A*D = ${fmt(stability.dynamic.value, 3)} ${symbol} 0 -> ${s72Verdict("dynamic", stability.dynamic.stable)}`;
+function s72ConvectiveMargin(): string {
+  return `${TEX.zeta}${TEX.zetac}\\left[${s72SecularCoupling()}+${s72ConvectiveCorrection()}\\right]`;
 }
 
-function s72SecularTitle(stability: AnalyticStabilityResult): string {
-  const symbol = s72TextInequality(stability.secular.stable, ">");
-  return `Secular stability: ${s72CoefficientSummary(stability)}; B=${fmt(stability.secular.value, 3)} ${symbol} 0 -> ${s72Verdict("secular", stability.secular.stable)}`;
+function s72SecularMargin(stability: AnalyticStabilityResult): string {
+  if (stability.physicsMode === "radiative") return `${TEX.zeta}\\left[${s72SecularCoupling()}\\right]`;
+  return `${TEX.zetac}${s72Restoring()}+${TEX.zeta}\\left[${s72SecularCoupling()}\\right]`;
 }
 
-function s72PulsationalTitle(stability: AnalyticStabilityResult): string {
-  const symbol = s72TextInequality(stability.pulsational.stable, ">");
-  return `Pulsational stability: ${s72CoefficientSummary(stability)}; D*(B*C - A*D) - B^2 = ${fmt(stability.pulsational.value, 3)} ${symbol} 0 -> ${s72Verdict("pulsational", stability.pulsational.stable)}`;
+function s72DynamicCoupling(): string {
+  return `${TEX.zeta}${TEX.zetac}\\left[${s72RadiativeThermal()}+\\frac{3}{2}${TEX.gammac}\\right]+${s72Restoring()}`;
+}
+
+function s72ThermalResponse(): string {
+  return `${TEX.zetac}+${TEX.zeta}${s72RadiativeThermal()}`;
+}
+
+function s72DynamicMargin(stability: AnalyticStabilityResult): string {
+  if (stability.physicsMode === "radiative") return s72Restoring();
+  return `\\left[${s72SecularMargin(stability)}\\right]\\left[${s72DynamicCoupling()}\\right]-\\left[${s72ConvectiveMargin()}\\right]\\left[${s72ThermalResponse()}\\right]`;
+}
+
+function s72PulsationalMargin(stability: AnalyticStabilityResult): string {
+  if (stability.physicsMode === "radiative") return `-${s72E()}`;
+  return `\\left[${s72ThermalResponse()}\\right]\\ozNeutral{\\Delta_{\\rm dyn}}-\\left[${s72SecularMargin(stability)}\\right]^2`;
+}
+
+function s72ConditionMetric(stability: AnalyticStabilityResult, condition: AnalyticStabilityCondition): string {
+  const symbol = s72LatexInequality(condition.stable, ">");
+  const formula = condition.kind === "convective"
+    ? s72ConvectiveMargin()
+    : condition.kind === "secular"
+      ? s72SecularMargin(stability)
+      : condition.kind === "dynamic"
+        ? s72DynamicMargin(stability)
+        : s72PulsationalMargin(stability);
+  return `\\(${formula}=${fmt(condition.value, 2)} ${symbol} 0\\)`;
+}
+
+function s72TermSummary(stability: AnalyticStabilityResult): string {
+  const { radiativeThermal, restoring, secularCoupling, convectiveCorrection, thermalResponse, dynamicCoupling } = stability.terms;
+  return `E=${fmt(stability.eCoefficient, 3)}, (chi0*Gamma1 - 4)=${fmt(restoring, 3)}, (1-gamma_c)*(s+4)=${fmt(radiativeThermal, 3)}, E+(chi0*Gamma1 - 4)*(1-gamma_c)*(s+4)=${fmt(secularCoupling, 3)}, 3*gamma_c*(chi0 - 4)/2=${fmt(convectiveCorrection, 3)}, zeta_c+zeta*(1-gamma_c)*(s+4)=${fmt(thermalResponse, 3)}, zeta*zeta_c*((1-gamma_c)*(s+4)+3*gamma_c/2)+chi0*Gamma1-4=${fmt(dynamicCoupling, 3)}`;
+}
+
+function s72ConditionTitle(stability: AnalyticStabilityResult, condition: AnalyticStabilityCondition): string {
+  const symbol = s72TextInequality(condition.stable, ">");
+  const prefix = condition.kind === "convective"
+    ? "Convective/turbulent stability"
+    : condition.kind === "dynamic"
+      ? "Dynamic stability"
+      : condition.kind === "secular"
+        ? "Secular stability"
+        : "Pulsational stability";
+  return `${prefix}: ${s72TermSummary(stability)}; margin=${fmt(condition.value, 3)} ${symbol} 0 -> ${s72Verdict(condition.kind, condition.stable)}`;
+}
+
+function linearPeriodMetric(parameters: ModelParameters, period: number | null): string {
+  const chi = mAt(1, parameters);
+  const frequencySquared = chi * parameters.gamma1 - 4;
+  const value = period ? fmt(period, 3) : "\\ozNeutral{n/a}";
+  return `\\(2\\pi/\\sqrt{\\ozChi{\\chi}\\ozGamma{\\Gamma_1}-4}=${value}\\)`;
+}
+
+function linearPeriodTitle(parameters: ModelParameters, period: number | null): string {
+  const chi = mAt(1, parameters);
+  const frequencySquared = chi * parameters.gamma1 - 4;
+  if (!period) {
+    return `Linear dynamic period unavailable because chi*Gamma_1 - 4 = ${fmt(frequencySquared, 4)} is not positive.`;
+  }
+  return `Linear dynamic period from 2*pi/sqrt(chi*Gamma_1 - 4): chi=${fmt(chi, 4)}, Gamma_1=${fmt(parameters.gamma1, 4)}, P_lin=${fmt(period, 4)}.`;
+}
+
+function nonlinearPeriodTitle(period: number | null): string {
+  return period
+    ? `Nonlinear period measured from the selected luminosity extrema in the integration: P_nonlin=${fmt(period, 4)}.`
+    : "Nonlinear period unavailable because the integration did not produce a usable phase window.";
 }
 
 function fmtFixed(value: number, digits: number): string {
@@ -2984,6 +3050,7 @@ function buildSliderGroup(containerId: string, controls: ControlDef[]): void {
       syncGridRangeCenter(key);
       updateSliderLabel(key);
       if (key === "m") updateEquationBlocks();
+      else updateDerivationPanel();
       refreshActivePreset();
       scheduleSolve();
     });
@@ -3089,8 +3156,219 @@ function buildParameterTable(): void {
   numericalTable.innerHTML = controlRows(CONTROL_GROUPS.integration) + `
       <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">solver</td><td>${meaning("Numerical method: RK45 default, DOP853 reference, or historical midpoint.")}</td></tr>
       <tr><td class="symbol-cell" style="--color:${THEME.neutralSymbol}">phase window</td><td>${meaning("Reference cycles use the first valid luminosity window; final cycles use the latest valid window; the lightcurve control chooses min- or max-light phase zero.")}</td></tr>
-    `;
+  `;
   queueMathTypeset();
+}
+
+function derivationBlock(key: string, title: string, body: string): string {
+  return `
+    <section class="derivation-block" data-derivation-block="${key}">
+      <h4>${title}</h4>
+      ${body}
+    </section>
+  `;
+}
+
+function derivationEquation(lines: readonly string[]): string {
+  return `
+    <div class="equation-block derivation-equations">
+      \\[
+      \\begin{aligned}
+      ${lines.join("\\\\[0.35em]\n")}
+      \\end{aligned}
+      \\]
+    </div>
+  `;
+}
+
+function derivationConditionFormula(stability: AnalyticStabilityResult, condition: AnalyticStabilityCondition): string {
+  if (condition.kind === "convective") return s72ConvectiveMargin();
+  if (condition.kind === "secular") return s72SecularMargin(stability);
+  if (condition.kind === "dynamic") return s72DynamicMargin(stability);
+  return s72PulsationalMargin(stability);
+}
+
+function derivationConditionRows(stability: AnalyticStabilityResult): string {
+  return stability.conditions
+    .map((condition) => {
+      const symbol = s72LatexInequality(condition.stable, ">");
+      const className = s72MetricClass(condition.stable);
+      return `
+        <tr data-stability-kind="${condition.kind}" class="${className}">
+          <td>${s72Verdict(condition.kind, condition.stable)}</td>
+          <td>\\(\\Delta_{\\rm ${s72ShortLabel(condition.kind)}}=${fmt(condition.value, 3)}\\ ${symbol}\\ 0\\)</td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+function buildGeometryDerivation(parameters: ModelParameters): string {
+  const eta = Math.cbrt(Math.max(0, 1 - 3 / parameters.m));
+  const etaDisplay = fmtFixed(eta, 3);
+  const chiDisplay = fmt(parameters.m, 3);
+  const lines = parameters.variableM
+    ? [
+        `\\ozEta{\\eta} &= \\left(1-\\frac{3}{${TEX.m}}\\right)^{1/3}=\\ozEta{${etaDisplay}}`,
+        `\\ozChi{\\chi}(${TEX.R}) &= \\frac{3}{1-(\\ozEta{\\eta}/${TEX.R})^3}`,
+        `\\ozChi{\\chi}(1) &= ${TEX.m}=\\ozChiZero{${chiDisplay}}`,
+        `\\frac{\\ozNeutral{\\rho}}{\\ozNeutral{\\rho}_0} &= ${TEX.R}^{-\\ozChi{\\chi}(${TEX.R})}`
+      ]
+    : [
+        `\\ozChi{\\chi} &= ${TEX.m}=\\ozChiZero{${chiDisplay}}`,
+        `\\frac{\\ozNeutral{\\rho}}{\\ozNeutral{\\rho}_0} &= ${TEX.R}^{-${TEX.m}}`
+      ];
+  return derivationBlock(
+    "geometry",
+    "Geometry and Shell Thinness",
+    `<p>${parameters.variableM
+      ? "Radius-dependent shell geometry is active, so the local thin shell factor changes with radius."
+      : "Fixed shell geometry is active, so the thin shell factor stays at the slider value."}</p>${derivationEquation(lines)}`
+  );
+}
+
+function buildOpacityDerivation(parameters: ModelParameters): string {
+  const powers = derivedPowers(1, parameters);
+  return derivationBlock(
+    "opacity",
+    "Opacity and Radiative Scaling",
+    derivationEquation([
+      `\\frac{\\ozNeutral{T}}{\\ozNeutral{T}_0} &= ${TEX.R}^{-\\ozChi{\\chi}(${TEX.gamma1}-1)}${TEX.H}`,
+      `\\frac{\\ozNeutral{\\kappa}}{\\ozNeutral{\\kappa}_0} &= \\left(\\frac{\\ozNeutral{\\rho}}{\\ozNeutral{\\rho}_0}\\right)^{${TEX.n}}\\left(\\frac{\\ozNeutral{T}}{\\ozNeutral{T}_0}\\right)^{-${TEX.s}}`,
+      `&= ${TEX.R}^{-\\ozChi{\\chi}${TEX.n}+\\ozChi{\\chi}${TEX.s}(${TEX.gamma1}-1)}${TEX.H}^{-${TEX.s}}`,
+      `\\ozNeutral{b} &= 4+\\ozChi{\\chi}\\left[${TEX.n}-(${TEX.s}+4)(${TEX.gamma1}-1)\\right]=\\ozNeutral{${fmt(powers.b, 3)}}`
+    ])
+  );
+}
+
+function buildEquilibriumDerivation(parameters: ModelParameters): string {
+  const powers = derivedPowers(1, parameters);
+  const base = 1 ** parameters.sourceExp;
+  return derivationBlock(
+    "equilibrium",
+    "Equilibrium Quantities",
+    derivationEquation([
+      `${TEX.R}_0 &= 1,\\quad ${TEX.V}_0=0,\\quad ${TEX.H}_0=1,\\quad ${TEX.Uc}_0=1`,
+      `\\left.\\frac{\\ozNeutral{\\rho}}{\\ozNeutral{\\rho}_0}\\right|_0 &= 1,\\quad \\left.\\frac{\\ozNeutral{P}}{\\ozNeutral{P}_0}\\right|_0 = 1,\\quad \\left.\\frac{\\ozNeutral{T}}{\\ozNeutral{T}_0}\\right|_0=1`,
+      `\\left.\\frac{\\ozNeutral{\\kappa}}{\\ozNeutral{\\kappa}_0}\\right|_0 &= 1,\\quad \\ozNeutral{b}=\\ozNeutral{${fmt(powers.b, 3)}},\\quad \\ozNeutral{c}=\\ozChi{\\chi}-2=\\ozNeutral{${fmt(powers.c, 3)}}`,
+      `\\ozRadiative{L_{r,0}} &= 1-${TEX.gammac}=\\ozRadiative{${fmt(1 - parameters.gammac, 3)}}`,
+      `\\ozConvLum{L_{c,0}} &= ${TEX.gammac}=\\ozConvLum{${fmt(parameters.gammac, 3)}}`,
+      `\\ozLuminosity{L_0} &= \\ozRadiative{L_{r,0}}+\\ozConvLum{L_{c,0}}=1,\\quad \\ozNeutral{L_{b,0}}=${fmt(base, 3)}`
+    ])
+  );
+}
+
+function buildLuminosityDerivation(parameters: ModelParameters): string {
+  const convectionFrozen = parameters.zetac <= 0;
+  const note = convectionFrozen
+    ? "<p>With \\(\\zeta_c=0\\), the convective velocity is frozen. The nonlinear luminosity can still include the weighted frozen convective channel, while the linear stability system removes the convective lag variable.</p>"
+    : "<p>Time-dependent convection is active, so radiative and convective luminosities both respond to the perturbation.</p>";
+  return derivationBlock(
+    "luminosity",
+    "Luminosity and Source",
+    `${note}${derivationEquation([
+      `\\ozNeutral{L_b} &= ${TEX.R}^{${TEX.sourceExp}}`,
+      `${TEX.Lr} &= (1-${TEX.gammac})\\,${TEX.R}^{\\ozNeutral{b}}${TEX.H}^{${TEX.s}+4}`,
+      `${TEX.Lc} &= ${TEX.gammac}\\,${TEX.R}^{-(\\ozNeutral{c})}${TEX.Uc}^{3}`,
+      `${TEX.L} &= ${TEX.Lr}+${TEX.Lc}`,
+      `\\frac{d${TEX.H}}{d${TEX.tau}} &= ${TEX.zeta}\\,${TEX.R}^{\\ozChi{\\chi}(${TEX.gamma1}-1)}\\left(${TEX.R}^{${TEX.sourceExp}}-${TEX.L}\\right)`
+    ])}`
+  );
+}
+
+function buildConvectionDerivation(parameters: ModelParameters): string {
+  const driver = parameters.driver === "abs-v" ? `\\sqrt{|${TEX.V}|}` : `\\sqrt{${TEX.H}}`;
+  const powers = derivedPowers(1, parameters);
+  const intro = parameters.zetac <= 0
+    ? "<p>Time-dependent convection is off in the active physics because \\(\\zeta_c=0\\).</p>"
+    : `<p>The active convective driver is \\(${driver}\\).</p>`;
+  const evolution = parameters.zetac <= 0
+    ? `\\frac{d${TEX.Uc}}{d${TEX.tau}} = 0`
+    : `\\frac{d${TEX.Uc}}{d${TEX.tau}} = ${TEX.zetac}\\left[${TEX.R}^{-\\ozNeutral{d}}${driver}-${TEX.Uc}\\right]`;
+  return derivationBlock(
+    "convection",
+    "Convection Assumption",
+    `${intro}${derivationEquation([
+      `\\ozNeutral{d} &= \\frac{\\ozChi{\\chi}(${TEX.gamma1}-1)}{2}=\\ozNeutral{${fmt(powers.d, 3)}}`,
+      evolution,
+      `\\ozNeutral{c} &= \\ozChi{\\chi}-2=\\ozNeutral{${fmt(powers.c, 3)}}`
+    ])}`
+  );
+}
+
+function buildLinearDerivation(parameters: ModelParameters, stability: AnalyticStabilityResult): string {
+  const modeLabel = stability.physicsMode === "convective" ? "time-dependent convective" : "reduced frozen-convection/radiative";
+  const definitions = derivationEquation([
+    `\\ozNeutral{E} &= (1-${TEX.gammac})\\ozNeutral{b}-${TEX.gammac}\\ozNeutral{c}-${TEX.sourceExp}=\\ozNeutral{${fmt(stability.eCoefficient, 3)}}`,
+    `\\ozNeutral{Q} &= (1-${TEX.gammac})(${TEX.s}+4)=\\ozNeutral{${fmt(stability.terms.radiativeThermal, 3)}}`,
+    `\\ozNeutral{S} &= ${TEX.m}${TEX.gamma1}-4=\\ozNeutral{${fmt(stability.terms.restoring, 3)}}`
+  ]);
+  const conditions = stability.conditions.map((condition) => {
+    const formula = derivationConditionFormula(stability, condition);
+    return `\\Delta_{\\rm ${s72ShortLabel(condition.kind)}} &= ${formula}`;
+  });
+  const reducedNote = stability.physicsMode === "radiative"
+    ? "<p>The \\(u_c\\) perturbation is removed when \\(\\zeta_c=0\\), so the convective/turbulent criterion drops out and the remaining Hurwitz margins reduce.</p>"
+    : "<p>The active four-variable linear system keeps the convective lag perturbation \\(u_c\\), producing the four Stellingwerf margins.</p>";
+  return derivationBlock(
+    "linear",
+    "Linear Analysis and Stability Criteria",
+    `
+      <p>Linearized about \\(R=H=U_c=1\\) with active ${modeLabel} physics.</p>
+      ${definitions}
+      ${reducedNote}
+      ${derivationEquation(conditions)}
+      <table class="derivation-condition-table" aria-label="Current stability criteria">
+        <tbody>${derivationConditionRows(stability)}</tbody>
+      </table>
+    `
+  );
+}
+
+function buildDerivationHtml(parameters: ModelParameters, stability: AnalyticStabilityResult): string {
+  return [
+    buildGeometryDerivation(parameters),
+    buildOpacityDerivation(parameters),
+    buildEquilibriumDerivation(parameters),
+    buildLuminosityDerivation(parameters),
+    buildConvectionDerivation(parameters),
+    buildLinearDerivation(parameters, stability)
+  ].join("");
+}
+
+function derivationSignature(parameters: ModelParameters, stability: AnalyticStabilityResult): string {
+  return [
+    parameters.variableM ? "variable" : "fixed",
+    parameters.driver,
+    stability.physicsMode,
+    parameters.zeta,
+    parameters.zetac,
+    parameters.gammac,
+    parameters.m,
+    parameters.gamma1,
+    parameters.n,
+    parameters.s,
+    parameters.sourceExp,
+    parameters.cq,
+    ...stability.conditions.map((condition) => `${condition.kind}:${condition.value}`)
+  ].map((value) => String(value)).join("|");
+}
+
+function updateDerivationPanel(parameters: ModelParameters = state, stability = analyticStabilityConditions(parameters)): void {
+  const node = document.getElementById("derivationContent");
+  if (!(node instanceof HTMLElement)) return;
+  const signature = derivationSignature(parameters, stability);
+  if (signature === lastDerivationSignature) return;
+  lastDerivationSignature = signature;
+  const details = document.getElementById("derivationPanel") as HTMLDetailsElement | null;
+  if (details) {
+    details.dataset.physicsMode = stability.physicsMode;
+    details.dataset.geometryMode = parameters.variableM ? "radius-dependent" : "fixed";
+    details.dataset.driverMode = parameters.driver;
+    details.dataset.convectionMode = parameters.zetac <= 0 ? "frozen" : "time-dependent";
+  }
+  stageMathHtml(node, buildDerivationHtml(parameters, stability));
+  queueMathTypeset([node]);
 }
 
 function updateEquationBlocks(): void {
@@ -3154,6 +3432,7 @@ function updateEquationBlocks(): void {
   stageMathHtml(odeNode, odeHtml);
   stageMathHtml(luminosityNode, luminosityHtml);
   queueMathTypeset([odeNode, luminosityNode]);
+  updateDerivationPanel();
 }
 
 function updateVariableInitials(): void {
@@ -3203,6 +3482,7 @@ function restoreParameterDefault(key: ControlParameterKey): void {
   syncGridRangeCenter(key);
   updateSliderLabel(key);
   if (key === "m") updateEquationBlocks();
+  else updateDerivationPanel();
   refreshActivePreset();
   scheduleSolve();
 }
@@ -3286,9 +3566,19 @@ function strideDownsample<T>(rows: T[], maxPoints: number): T[] {
   return sampled;
 }
 
+function rowSeriesKey(key: PlotSeriesKey): key is RowSeriesKey {
+  return key !== "Lb";
+}
+
+function baseLuminosity(row: Row, parameters: ModelParameters = state): number {
+  if (!Number.isFinite(row.R) || row.R <= 0) return NaN;
+  const value = row.R ** parameters.sourceExp;
+  return Number.isFinite(value) ? value : NaN;
+}
+
 function downsample(rows: Row[], maxPoints = 2200, keys: readonly PlotSeriesKey[] = []): Row[] {
   if (rows.length <= maxPoints) return rows;
-  const uniqueKeys = [...new Set(keys)];
+  const uniqueKeys = [...new Set(keys.filter(rowSeriesKey))];
   if (!uniqueKeys.length) return strideDownsample(rows, maxPoints);
 
   const maxPointsPerBucket = 2 + uniqueKeys.length * 2;
@@ -3349,7 +3639,7 @@ function convectiveResponseDisabled(): boolean {
 function plotSeriesIsAvailable(plotId: InteractivePlotId, key: PlotSeriesKey): boolean {
   if (!convectiveResponseDisabled()) return true;
   if (plotId === "time" && key === "Uc") return false;
-  if (plotId === "lum" && key !== "L") return false;
+  if (plotId === "lum" && key !== "L" && key !== "Lb") return false;
   return true;
 }
 
@@ -4188,6 +4478,7 @@ function stabilityCacheKey(parameters: ModelParameters): string {
   return [
     RESPONSE_LOG_MIN,
     RESPONSE_LOG_MAX,
+    parameters.zetac <= 0 ? "radiative" : "convective",
     parameters.gammac.toFixed(3),
     parameters.n.toFixed(3),
     parameters.s.toFixed(3),
@@ -4205,10 +4496,11 @@ function stabilityKindsForMap(parameters: ModelParameters): StabilityKind[] {
   if (cached) return cached;
   const kinds: StabilityKind[] = [];
   const span = RESPONSE_LOG_MAX - RESPONSE_LOG_MIN;
+  const radiativeMode = parameters.zetac <= 0;
   for (let row = 0; row < STABILITY_MAP_RESOLUTION; row += 1) {
     const zeta = 10 ** (RESPONSE_LOG_MIN + ((row + 0.5) / STABILITY_MAP_RESOLUTION) * span);
     for (let column = 0; column < STABILITY_MAP_RESOLUTION; column += 1) {
-      const zetac = 10 ** (RESPONSE_LOG_MIN + ((column + 0.5) / STABILITY_MAP_RESOLUTION) * span);
+      const zetac = radiativeMode ? 0 : 10 ** (RESPONSE_LOG_MIN + ((column + 0.5) / STABILITY_MAP_RESOLUTION) * span);
       kinds.push(analyticStabilityConditions({ ...parameters, zeta, zetac }).kind);
     }
   }
@@ -4221,6 +4513,7 @@ function instabilityStripCacheKey(parameters: ModelParameters): string {
   return [
     INSTABILITY_STRIP_X_RESOLUTION,
     INSTABILITY_STRIP_Y_RESOLUTION,
+    parameters.zetac <= 0 ? "radiative" : "convective",
     parameters.zeta.toFixed(4),
     parameters.n.toFixed(3),
     parameters.s.toFixed(3),
@@ -4250,12 +4543,13 @@ function instabilityKindsForStrip(parameters: ModelParameters): { kinds: Stabili
   const kinds: StabilityKind[] = [];
   const counts = emptyStabilityCounts();
   const zeta = Math.max(1e-6, parameters.zeta);
+  const radiativeMode = parameters.zetac <= 0;
   for (let row = 0; row < INSTABILITY_STRIP_Y_RESOLUTION; row += 1) {
     const gammac = (row + 0.5) / INSTABILITY_STRIP_Y_RESOLUTION;
     for (let column = 0; column < INSTABILITY_STRIP_X_RESOLUTION; column += 1) {
       const x = (column + 0.5) / INSTABILITY_STRIP_X_RESOLUTION;
       const logRatio = STRIP_LOG_RATIO_MIN + x * (STRIP_LOG_RATIO_MAX - STRIP_LOG_RATIO_MIN);
-      const zetac = zeta * 10 ** logRatio;
+      const zetac = radiativeMode ? 0 : zeta * 10 ** logRatio;
       const kind = analyticStabilityConditions({ ...parameters, zeta, zetac, gammac }).kind;
       counts[kind] += 1;
       kinds.push(kind);
@@ -4295,14 +4589,36 @@ function stabilityKindAlpha(kind: StabilityKind): number {
   return 0.6;
 }
 
-function linearStabilityLegendItems(): Array<{ label: string; color: string }> {
-  return [
+function linearStabilityLegendItems(physicsMode: StabilityPhysicsMode): Array<{ label: string; color: string }> {
+  const items = [
     { label: "damping", color: stabilityKindColor("stable", 0.75) },
-    { label: "conv/turb", color: stabilityKindColor("convective", 0.82) },
     { label: "secular", color: stabilityKindColor("secular", 0.82) },
     { label: "dynamic", color: stabilityKindColor("dynamic", 0.82) },
     { label: "pulsational", color: stabilityKindColor("pulsational", 0.82) }
   ];
+  if (physicsMode === "convective") {
+    items.splice(1, 0, { label: "conv/turb", color: stabilityKindColor("convective", 0.82) });
+  }
+  return items;
+}
+
+function linearStabilityLegendLabel(physicsMode: StabilityPhysicsMode): string {
+  const labels = ["linear damping"];
+  if (physicsMode === "convective") labels.push("convective/turbulent instability");
+  labels.push("secular instability", "dynamic instability", "pulsational instability");
+  return labels.join(",");
+}
+
+function stabilityCountsLabel(counts: Record<StabilityKind, number>, physicsMode: StabilityPhysicsMode): string {
+  const parts = [`stable:${counts.stable}`];
+  if (physicsMode === "convective") parts.push(`convective:${counts.convective}`);
+  parts.push(
+    `secular:${counts.secular}`,
+    `dynamic:${counts.dynamic}`,
+    `pulsational:${counts.pulsational}`,
+    `neutral:${counts.neutral}`
+  );
+  return parts.join(",");
 }
 
 function drawReferenceMarker(
@@ -4443,6 +4759,7 @@ function drawStabilityMap(): void {
 
   const parameters = stabilityDisplayParameters();
   const overlays = stabilityOverlayResults();
+  const stabilityPhysics = analyticStabilityConditions(parameters).physicsMode;
   const kinds = stabilityKindsForMap(parameters);
   const plot = { left: 58, top: 34, width: width - 78, height: height - 88 };
   const cellWidth = plot.width / STABILITY_MAP_RESOLUTION;
@@ -4457,9 +4774,10 @@ function drawStabilityMap(): void {
 
   canvas.dataset.stabilityMode = gridState.enabled ? "grid" : "single";
   canvas.dataset.stabilityGamma = fmtFixed(parameters.gammac, 3);
+  canvas.dataset.stabilityPhysics = stabilityPhysics;
   canvas.dataset.stabilityScale = "log10";
   canvas.dataset.stabilityRange = `${controlValueLabel("zeta", 10 ** RESPONSE_LOG_MIN)},${controlValueLabel("zeta", 10 ** RESPONSE_LOG_MAX)}`;
-  canvas.dataset.stabilityLegend = "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability";
+  canvas.dataset.stabilityLegend = linearStabilityLegendLabel(stabilityPhysics);
   canvas.dataset.editableParameters = "zetac,zeta";
   canvas.dataset.stellingwerfLabels = "zeta,zeta_c,gamma_c";
   canvas.dataset.axisLabels = "log10 convective response zeta_c,log10 thermal response zeta";
@@ -4496,7 +4814,7 @@ function drawStabilityMap(): void {
     { rotate: -Math.PI / 2, fontSize: 11 }
   );
   drawStabilityLinearizedLabel(ctx, plot.left, 16, parameters.gammac);
-  drawReferenceLegend(ctx, plot.left + 150, 15, linearStabilityLegendItems(), { maxX: plot.left + plot.width - 4 });
+  drawReferenceLegend(ctx, plot.left + 150, 15, linearStabilityLegendItems(stabilityPhysics), { maxX: plot.left + plot.width - 4 });
   drawStabilityOverlays(ctx, plot, parameters, overlays);
 }
 
@@ -4636,21 +4954,16 @@ function drawCepheidGuide(): void {
   canvas.dataset.editableParameters = "zetac,gammac";
   canvas.dataset.stellingwerfLabels = "gamma_c,log10_zeta_c_over_zeta,Teff_proxy";
   canvas.dataset.axisLabels = "log10(zeta_c/zeta) convective/thermal response,convective flux fraction gamma_c";
-  canvas.dataset.instabilityLabels = "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability";
-  canvas.dataset.instabilityLegend = "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability";
 
   const current = currentGridResult();
   const parameters = current?.parameters || state;
+  const stripPhysics = analyticStabilityConditions(parameters).physicsMode;
+  canvas.dataset.instabilityPhysics = stripPhysics;
+  canvas.dataset.instabilityLabels = linearStabilityLegendLabel(stripPhysics);
+  canvas.dataset.instabilityLegend = linearStabilityLegendLabel(stripPhysics);
   const stripStability = instabilityKindsForStrip(parameters);
   canvas.dataset.instabilitySignature = stripStability.signature;
-  canvas.dataset.instabilityCounts = [
-    `stable:${stripStability.counts.stable}`,
-    `convective:${stripStability.counts.convective}`,
-    `secular:${stripStability.counts.secular}`,
-    `dynamic:${stripStability.counts.dynamic}`,
-    `pulsational:${stripStability.counts.pulsational}`,
-    `neutral:${stripStability.counts.neutral}`
-  ].join(",");
+  canvas.dataset.instabilityCounts = stabilityCountsLabel(stripStability.counts, stripPhysics);
 
   const stripCellWidth = plot.width / INSTABILITY_STRIP_X_RESOLUTION;
   const stripCellHeight = plot.height / INSTABILITY_STRIP_Y_RESOLUTION;
@@ -4667,7 +4980,7 @@ function drawCepheidGuide(): void {
   });
 
   drawAxes(ctx, plot, [STRIP_LOG_RATIO_MIN, STRIP_LOG_RATIO_MAX], [0, 1], "", "", THEME.axisText, THEME.axisText, 22);
-  drawReferenceLegend(ctx, plot.left + 8, 15, linearStabilityLegendItems(), { maxX: plot.left + plot.width - 4 });
+  drawReferenceLegend(ctx, plot.left + 8, 15, linearStabilityLegendItems(stripPhysics), { maxX: plot.left + plot.width - 4 });
   drawCanvasMathFragments(
     ctx,
     [
@@ -5114,6 +5427,7 @@ function phaseForRows(rows: Row[]): PhaseResult {
   return buildTwoCyclePhase(rows, {
     warmupTau: state.phaseWarmupTau,
     minAmplitude: state.phaseMinAmplitude,
+    minSeparation: guidedMinSeparationFromPeriod(rows, linearDynamicPeriod(state)),
     selection: state.phaseMode === "final" ? "last" : "first",
     anchor: phaseAnchor
   });
@@ -5612,6 +5926,26 @@ function drawLuminosityArcLabel(
   ctx.restore();
 }
 
+function drawModelPlainLabel(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  color: string
+): void {
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "700 13px Inter, sans-serif";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(6, 11, 24, 0.92)";
+  ctx.lineWidth = 4;
+  ctx.fillStyle = colorWithAlpha(color, 0.98);
+  ctx.strokeText(text, x, y);
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
 function drawConvectionArcs(
   ctx: CanvasRenderingContext2D,
   row: Row,
@@ -5666,6 +6000,52 @@ function drawConvectionArcs(
   ctx.restore();
 }
 
+function maximumAbsVelocity(rows: readonly Row[]): number {
+  return Math.max(0, ...rows.map((row) => Math.abs(row.V)).filter(Number.isFinite));
+}
+
+function drawVelocityArc(
+  ctx: CanvasRenderingContext2D,
+  row: Row,
+  centerX: number,
+  centerY: number,
+  radiusScale: number
+): void {
+  const equilibriumGeometry = shellGeometryFor(1, mAt(1, state));
+  const equilibriumThickness = Math.max(3, equilibriumGeometry.thickness * radiusScale);
+  const maxVelocity = maximumAbsVelocity(latestPhaseRows);
+  const velocityLevel = maxVelocity > 0 ? clamp(Math.abs(row.V) / maxVelocity, 0, 1) : 0;
+  const color = radialVelocityCurveColor(row.V, maxVelocity);
+  const segment = (Math.PI / 2) / 3;
+  const startAngle = Math.PI / 2 + segment + 0.018;
+  const endAngle = Math.PI / 2 + 2 * segment - 0.018;
+  const labelAngle = Math.PI / 2 + 1.5 * segment;
+  const fixedLabelOffset = Math.max(18, equilibriumThickness * 0.75 + 10);
+  const labelRadius = Math.min(
+    radiusScale + fixedLabelOffset,
+    Math.max(0, Math.min(centerX, centerY) - 28)
+  );
+
+  ctx.save();
+  ctx.lineCap = "butt";
+  ctx.shadowColor = colorWithAlpha(color, 0.55 + 0.35 * velocityLevel);
+  ctx.shadowBlur = 2 + 14 * velocityLevel;
+  ctx.strokeStyle = colorWithAlpha(color, 0.36 + 0.62 * velocityLevel);
+  ctx.lineWidth = clamp(2 + equilibriumThickness * 2.2 * velocityLevel, 2, equilibriumThickness * 3);
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radiusScale, startAngle, endAngle);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  drawModelPlainLabel(
+    ctx,
+    "V",
+    centerX + Math.cos(labelAngle) * labelRadius,
+    centerY + Math.sin(labelAngle) * labelRadius,
+    color
+  );
+  ctx.restore();
+}
+
 function drawModelVisualization(): void {
   const canvas = el<HTMLCanvasElement>("modelCanvas");
   const panel = canvas.closest<HTMLElement>(".plot-panel");
@@ -5688,6 +6068,9 @@ function drawModelVisualization(): void {
     canvas.dataset.convectionActive = "false";
     canvas.dataset.luminosityArcLabels = "";
     canvas.dataset.geometryGuides = "";
+    delete canvas.dataset.boundaryLuminosityLines;
+    delete canvas.dataset.velocityArcLabel;
+    delete canvas.dataset.radiusLabel;
     delete canvas.dataset.currentPhase;
     delete canvas.dataset.currentTime;
     drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
@@ -5701,6 +6084,9 @@ function drawModelVisualization(): void {
   const radiusScale = (size * 0.36) / maxRadius;
   const geometry = shellGeometryFromModel(row, state);
   const luminosityLevel = normalizedInRange(row.L, latestPhaseLuminosityRange);
+  const baseLuminosityValue = baseLuminosity(row, latestPhaseParameters);
+  const baseLuminosityRange = rawRange(latestPhaseRows.map((phaseRow) => baseLuminosity(phaseRow, latestPhaseParameters)));
+  const baseLuminosityLevel = normalizedInRange(baseLuminosityValue, baseLuminosityRange);
   const temperature = inferEffectiveTemperature(row.L, row.R);
   const blackbody = blackbodyRgbForTemperature(temperature);
   const shellColor = scaledRgb(blackbody, 0.58 + luminosityLevel * 0.52);
@@ -5719,6 +6105,9 @@ function drawModelVisualization(): void {
   }
   canvas.dataset.luminosityArcLabels = convectionActive ? "L_c,L,L_r" : "";
   canvas.dataset.geometryGuides = "R=1,eta,minR,maxR";
+  canvas.dataset.boundaryLuminosityLines = "L_base,L";
+  canvas.dataset.velocityArcLabel = "V";
+  canvas.dataset.radiusLabel = "R";
 
   ctx.save();
   drawModelReferenceGuides(ctx, latestPhaseRows, centerX, centerY, radiusScale);
@@ -5737,19 +6126,36 @@ function drawModelVisualization(): void {
   );
   ctx.shadowBlur = 0;
 
-  ctx.strokeStyle = rgbCss(blackbody, 0.84);
-  ctx.lineWidth = 1.2;
+  ctx.shadowColor = colorWithAlpha(COLORS.L, 0.48 + 0.36 * luminosityLevel);
+  ctx.shadowBlur = 2 + 12 * luminosityLevel;
+  ctx.strokeStyle = colorWithAlpha(COLORS.L, 0.36 + 0.54 * luminosityLevel);
+  ctx.lineWidth = 1.1 + 4.4 * luminosityLevel;
   ctx.beginPath();
   ctx.arc(centerX, centerY, outerRadius, convectionActive ? Math.PI / 2 : 0, Math.PI * 2);
   ctx.stroke();
+  ctx.shadowBlur = 0;
   if (innerRadius > 1) {
-    ctx.strokeStyle = rgbCss(blackbody, 0.34);
+    ctx.shadowColor = colorWithAlpha(COLORS.sourceExp, 0.42 + 0.34 * baseLuminosityLevel);
+    ctx.shadowBlur = 2 + 12 * baseLuminosityLevel;
+    ctx.strokeStyle = colorWithAlpha(COLORS.sourceExp, 0.28 + 0.58 * baseLuminosityLevel);
+    ctx.lineWidth = 1 + 4.2 * baseLuminosityLevel;
     ctx.beginPath();
     ctx.arc(centerX, centerY, innerRadius, convectionActive ? Math.PI / 2 : 0, Math.PI * 2);
     ctx.stroke();
+    ctx.shadowBlur = 0;
   }
 
+  drawVelocityArc(ctx, row, centerX, centerY, radiusScale);
   if (convectionActive) drawConvectionArcs(ctx, row, centerX, centerY, radiusScale);
+  const radiusLabelAngle = -Math.PI / 4;
+  const radiusLabelRadius = Math.min(outerRadius + 18, Math.max(0, Math.min(centerX, centerY) - 16));
+  drawModelPlainLabel(
+    ctx,
+    "R",
+    centerX + Math.cos(radiusLabelAngle) * radiusLabelRadius,
+    centerY + Math.sin(radiusLabelAngle) * radiusLabelRadius,
+    COLORS.R
+  );
   ctx.restore();
 }
 
@@ -5802,16 +6208,31 @@ function drawAll(): void {
   const displayWindow = buildCurrentDisplayWindow(rows, phase, gridResult, phaseMessage);
   const stabilityParameters = stabilityDisplayParameters();
   const s72Stability = analyticStabilityConditions(stabilityParameters);
+  const linearPeriod = linearDynamicPeriod(stabilityParameters);
+  const nonlinearPeriod = displayWindow.period;
   updateGridLoopSliderMarkers();
   updateSonificationSourceControls();
+  updateDerivationPanel(stabilityParameters, s72Stability);
   const metricsNode = el<HTMLDivElement>("metrics");
-  metricsNode.dataset.s72Convective = s72State(s72Stability.convective.stable);
+  if (s72Stability.convective) metricsNode.dataset.s72Convective = s72State(s72Stability.convective.stable);
+  else delete metricsNode.dataset.s72Convective;
   metricsNode.dataset.s72Dynamic = s72State(s72Stability.dynamic.stable);
   metricsNode.dataset.s72Secular = s72State(s72Stability.secular.stable);
   metricsNode.dataset.s72Pulsational = s72State(s72Stability.pulsational.stable);
   metricsNode.dataset.s72All = s72State(s72Stability.allStable);
   metricsNode.dataset.s72M = fmt(s72Stability.m, 6);
   metricsNode.dataset.s72B = fmt(s72Stability.b, 6);
+  metricsNode.dataset.s72PhysicsMode = s72Stability.physicsMode;
+  metricsNode.dataset.linearPeriodFormula = "2pi/sqrt(chi*Gamma1-4)";
+  metricsNode.dataset.linearPeriod = linearPeriod ? fmt(linearPeriod, 6) : "unavailable";
+  metricsNode.dataset.nonlinearPeriod = nonlinearPeriod ? fmt(nonlinearPeriod, 6) : "unavailable";
+  const stabilityMetricItems: StatusMetricItem[] = s72Stability.conditions.map((condition) => ({
+    label: s72ShortLabel(condition.kind),
+    value: s72ConditionMetric(s72Stability, condition),
+    detail: s72ConditionTitle(s72Stability, condition),
+    className: s72MetricClass(condition.stable),
+    stabilityKind: condition.kind
+  }));
   const metricItems: StatusMetricItem[] = [
     { label: "stop", value: stopReason, className: okStatus ? "status-ok" : "status-warn" },
     { label: `final \\(${TEX.tau}\\)`, value: final ? fmt(final.tau || 0, 4) : "n/a" },
@@ -5819,36 +6240,20 @@ function drawAll(): void {
     { label: "accepted", value: latestResult.stats.acceptedSteps },
     { label: "rejected", value: latestResult.stats.rejectedSteps },
     { label: "max err", value: fmt(latestResult.stats.maxNormalizedError, 3) },
-    { label: "period", value: displayWindow.period ? fmt(displayWindow.period, 3) : "n/a" },
+    {
+      label: "P_lin =",
+      value: linearPeriodMetric(stabilityParameters, linearPeriod),
+      detail: linearPeriodTitle(stabilityParameters, linearPeriod),
+      className: linearPeriod ? "status-ok" : "status-warn"
+    },
+    {
+      label: "P_nonlin =",
+      value: nonlinearPeriod ? fmt(nonlinearPeriod, 3) : "n/a",
+      detail: nonlinearPeriodTitle(nonlinearPeriod),
+      className: nonlinearPeriod ? "status-ok" : "status-warn"
+    },
     { label: "phase", value: displayWindow.mode === "time" ? "time window" : phase.reason === "ok" ? "available" : "unavailable" },
-    {
-      label: "conv",
-      value: s72ConvectiveMetric(s72Stability),
-      detail: s72ConvectiveTitle(s72Stability),
-      className: s72MetricClass(s72Stability.convective.stable),
-      stabilityKind: "convective"
-    },
-    {
-      label: "sec",
-      value: s72SecularMetric(s72Stability),
-      detail: s72SecularTitle(s72Stability),
-      className: s72MetricClass(s72Stability.secular.stable),
-      stabilityKind: "secular"
-    },
-    {
-      label: "dyn",
-      value: s72DynamicMetric(s72Stability),
-      detail: s72DynamicTitle(s72Stability),
-      className: s72MetricClass(s72Stability.dynamic.stable),
-      stabilityKind: "dynamic"
-    },
-    {
-      label: "puls",
-      value: s72PulsationalMetric(s72Stability),
-      detail: s72PulsationalTitle(s72Stability),
-      className: s72MetricClass(s72Stability.pulsational.stable),
-      stabilityKind: "pulsational"
-    }
+    ...stabilityMetricItems
   ];
   const metricsHtml = metricItems
     .map(({ label, value, className, stabilityKind, detail }) => {
@@ -5879,7 +6284,7 @@ function drawAll(): void {
   const timeXlim = integrationTimeRange(rows);
   const convectionOff = convectiveResponseDisabled();
   const timeKeys: PlotSeriesKey[] = convectionOff ? ["R", "V", "H"] : ["R", "V", "H", "Uc"];
-  const lumKeys: PlotSeriesKey[] = convectionOff ? ["L"] : ["L", "Lr", "Lc"];
+  const lumKeys: PlotSeriesKey[] = convectionOff ? ["L", "Lb"] : ["L", "Lr", "Lc", "Lb"];
   const sampledTimeRows = rowsForInteractivePlot("time", rows, timeKeys);
   const sampledLumRows = rowsForInteractivePlot("lum", rows, lumKeys);
   const timeSeries: Series[] = [
@@ -5911,7 +6316,8 @@ function drawAll(): void {
   drawLegend("timeLegend", timeLegendItems, { plotId: "time" });
 
   const lumSeries: Series[] = [
-    { label: "L", color: COLORS.L, rows: visibleRows("lum", "L", sampledLumRows), x: (row) => row.tau, y: (row) => row.L }
+    { label: "L", color: COLORS.L, rows: visibleRows("lum", "L", sampledLumRows), x: (row) => row.tau, y: (row) => row.L },
+    { label: "Lb", color: COLORS.sourceExp, rows: visibleRows("lum", "Lb", sampledLumRows), x: (row) => row.tau, y: (row) => baseLuminosity(row, state), dash: [7, 5] }
   ];
   if (!convectionOff) {
     lumSeries.push(
@@ -5930,13 +6336,17 @@ function drawAll(): void {
     message: "all luminosity variables hidden"
   });
   const lumLegendItems: LegendItem[] = convectionOff
-    ? [{ label: `\\(${TEX.L}\\) total`, color: COLORS.L }]
+    ? [
+        { key: "L", label: `\\(${TEX.L}\\) total`, color: COLORS.L, toggleLabel: "total luminosity" },
+        { key: "Lb", label: `\\(L_{\\rm base}\\) base`, color: COLORS.sourceExp, toggleLabel: "base luminosity" }
+      ]
     : [
         { key: "L", label: `\\(${TEX.L}\\) total`, color: COLORS.L, toggleLabel: "total luminosity" },
         { key: "Lr", label: `\\(${TEX.Lr}\\) radiative`, color: COLORS.Lr, toggleLabel: "radiative luminosity" },
-        { key: "Lc", label: `\\(${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" }
+        { key: "Lc", label: `\\(${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" },
+        { key: "Lb", label: `\\(L_{\\rm base}\\) base`, color: COLORS.sourceExp, toggleLabel: "base luminosity" }
       ];
-  drawLegend("lumLegend", lumLegendItems, convectionOff ? {} : { plotId: "lum" });
+  drawLegend("lumLegend", lumLegendItems, { plotId: "lum" });
   drawFourierPanel();
   drawStellingwerfReferencePanel();
 }
