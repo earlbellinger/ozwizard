@@ -3689,6 +3689,14 @@ function baseLuminosity(row: Row, parameters: ModelParameters = state): number {
   return Number.isFinite(value) ? value : NaN;
 }
 
+function sourceLuminosityColor(): string {
+  return COLORS.sourceExp;
+}
+
+function sourceLuminosityLegendLabel(): string {
+  return `\\(${TEX.R}^{${TEX.sourceExp}}\\) source`;
+}
+
 interface ThermodynamicPoint {
   row: Row;
   logT: number;
@@ -4361,18 +4369,18 @@ function drawFourierPanel(): void {
   const allPoints = [...gridPoints, ...path];
   const panels: FourierPanelSpec[] = [
     {
-      latex: "A_L",
-      xLabel: "period/τ",
-      yLabel: { base: "A", subscript: "L" },
-      xValue: (result) => result.period,
-      yValue: (result) => result.fourier!.luminosityAmplitude
-    },
-    {
       latex: "r_{21}",
       xLabel: "period/τ",
       yLabel: { base: "r", subscript: "21" },
       xValue: (result) => result.period,
       yValue: (result) => result.fourier!.r21
+    },
+    {
+      latex: "r_{31}",
+      xLabel: "period/τ",
+      yLabel: { base: "r", subscript: "31" },
+      xValue: (result) => result.period,
+      yValue: (result) => result.fourier!.r31
     },
     {
       latex: "\\phi_{21}",
@@ -4383,66 +4391,11 @@ function drawFourierPanel(): void {
       yPhase: true
     },
     {
-      latex: "r_{31}",
-      xLabel: "period/τ",
-      yLabel: { base: "r", subscript: "31" },
-      xValue: (result) => result.period,
-      yValue: (result) => result.fourier!.r31
-    },
-    {
       latex: "\\phi_{31}",
       xLabel: "period/τ",
       yLabel: { base: "phi", subscript: "31" },
       xValue: (result) => result.period,
       yValue: (result) => result.fourier!.phi31,
-      yPhase: true
-    },
-    {
-      latex: "\\phi_{31}/\\phi_{21}",
-      xLabel: "φ21",
-      yLabel: { base: "phi", subscript: "31" },
-      xValue: (result) => fourierPhiK1(result, 2),
-      yValue: (result) => fourierPhiK1(result, 3),
-      xPhase: true,
-      yPhase: true,
-      identityLine: true,
-      adiabaticReference: true
-    },
-    {
-      latex: "\\phi_{k1}/S_k",
-      xLabel: "S_k",
-      yLabel: { base: "phi", subscript: "k1" },
-      xValue: (result) => result.fourier!.skewness,
-      harmonicValues: fourierPhiK1,
-      harmonics: [...FOURIER_PHASE_HARMONICS],
-      yPhase: true
-    },
-    {
-      latex: "\\phi_{k1}/P",
-      xLabel: "period/τ",
-      yLabel: { base: "phi", subscript: "k1" },
-      xValue: (result) => result.period,
-      harmonicValues: fourierPhiK1,
-      harmonics: [...FOURIER_PHASE_HARMONICS],
-      yPhase: true,
-      upperSkewnessAxis: true
-    },
-    {
-      latex: "\\phi_{k1}/A_c",
-      xLabel: "A_c",
-      yLabel: { base: "phi", subscript: "k1" },
-      xValue: (result) => result.fourier!.acuteness,
-      harmonicValues: fourierPhiK1,
-      harmonics: [...FOURIER_PHASE_DIFF_HARMONICS],
-      yPhase: true
-    },
-    {
-      latex: "\\phi_{k1}/S_k",
-      xLabel: "S_k",
-      yLabel: { base: "phi", subscript: "k1" },
-      xValue: (result) => result.fourier!.skewness,
-      harmonicValues: fourierPhiK1,
-      harmonics: [...FOURIER_PHASE_DIFF_HARMONICS],
       yPhase: true
     }
   ];
@@ -4475,9 +4428,9 @@ function drawFourierPanel(): void {
   canvas.dataset.fourierAxisLabels = panels.map((item) => item.latex).join(",");
   canvas.dataset.fourierPathCount = String(path.length);
   canvas.dataset.fourierPhaseTicks = "pi-multiples";
-  canvas.dataset.fourierStructuralPanels = "phi31_vs_phi21,phi_k1_vs_skewness,phi_k1_vs_period,phi_k1_vs_acuteness";
-  const adiabaticReference = buildAdiabaticFourierReference(current?.parameters || state);
-  canvas.dataset.fourierAdiabaticReference = String(adiabaticReference.length);
+  delete canvas.dataset.fourierStructuralPanels;
+  delete canvas.dataset.fourierAdiabaticReference;
+  const adiabaticReference: FourierSeriesPoint[] = [];
   const gap = 16;
   const pad = { left: 78, right: 22, top: 42, bottom: 60 };
   const panelWidth = (rect.width - gap * (columns - 1)) / columns;
@@ -5395,94 +5348,6 @@ function effectiveTemperatureProxy(row: Row): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-function stripTeffTrack(
-  rows: readonly Row[],
-  phase: number,
-  centerX: number,
-  mode: DisplayWindowMode = "phase"
-): { left: number; right: number; current: number; logRange: number; valueRange: NumericRange } | null {
-  const values = rows
-    .map(effectiveTemperatureProxy)
-    .filter((value): value is number => value !== null);
-  if (values.length < 2) return null;
-  const logs = values.map((value) => Math.log10(value));
-  const minLog = Math.min(...logs);
-  const maxLog = Math.max(...logs);
-  const logRange = maxLog - minLog;
-  if (!Number.isFinite(logRange) || logRange < 1e-5) return null;
-  const span = clamp(logRange * 5, 0.045, 0.22);
-  const left = clamp(centerX - span / 2, 0.02, 0.98 - span);
-  const right = left + span;
-  const phaseRow = mode === "time"
-    ? rowAtTime(rows, displayMarkerX(displayWindowForRows(rows), phase))
-    : rowAtDisplayPosition(foldedPhaseWindowForRows(rows), phase);
-  const currentTeff = phaseRow ? effectiveTemperatureProxy(phaseRow) : null;
-  const currentLog = currentTeff === null ? (minLog + maxLog) / 2 : Math.log10(currentTeff);
-  const current = left + clamp((currentLog - minLog) / logRange, 0, 1) * span;
-  return {
-    left,
-    right,
-    current,
-    logRange,
-    valueRange: [Math.min(...values), Math.max(...values)]
-  };
-}
-
-function drawStripTeffTrack(
-  ctx: CanvasRenderingContext2D,
-  plot: PlotBox,
-  sx: (x: number) => number,
-  sy: (gamma: number) => number,
-  parameters: Pick<ModelParameters, "zeta" | "zetac" | "gammac">,
-  rows: readonly Row[],
-  options: { color: string; alpha: number; marker: boolean; label: boolean; phase?: number; mode?: DisplayWindowMode }
-): boolean {
-  const centerX = cepheidStripCoordinate(parameters);
-  const mode = options.mode || "phase";
-  const track = stripTeffTrack(rows, options.phase ?? currentAnimationPhase, centerX, mode);
-  if (!track) return false;
-  const y = sy(parameters.gammac);
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(plot.left, plot.top, plot.width, plot.height);
-  ctx.clip();
-  ctx.lineCap = "round";
-  ctx.strokeStyle = colorWithAlpha(options.color, options.alpha);
-  ctx.lineWidth = options.marker ? 2.6 : 1.4;
-  ctx.beginPath();
-  ctx.moveTo(sx(track.left), y);
-  ctx.lineTo(sx(track.right), y);
-  ctx.stroke();
-  ctx.lineWidth = 1.1;
-  ctx.strokeStyle = colorWithAlpha(options.color, Math.min(1, options.alpha + 0.18));
-  [track.left, track.right].forEach((x) => {
-    ctx.beginPath();
-    ctx.moveTo(sx(x), y - 5);
-    ctx.lineTo(sx(x), y + 5);
-    ctx.stroke();
-  });
-  if (options.marker) {
-    drawReferenceMarker(ctx, sx(track.current), y, PHASE_MARKER_COLOR, 4.8);
-  }
-  ctx.restore();
-
-  if (options.label) {
-    const labelX = clamp(sx(track.left), plot.left + 8, plot.left + plot.width - 100);
-    const labelY = clamp(y - 14, plot.top + 14, plot.top + plot.height - 8);
-    drawCanvasMathFragments(
-      ctx,
-      [
-        { text: `${mode === "time" ? "time " : "phase "}`, color: PHASE_MARKER_COLOR, weight: 600 },
-        { text: "T", subscript: "eff", color: PHASE_MARKER_COLOR, weight: 600 }
-      ],
-      labelX,
-      labelY,
-      { align: "left" }
-    );
-  }
-  return true;
-}
-
 function drawCepheidGuide(): void {
   const canvas = document.getElementById("cepheidGuideCanvas");
   if (!(canvas instanceof HTMLCanvasElement)) return;
@@ -5506,7 +5371,7 @@ function drawCepheidGuide(): void {
   canvas.dataset.xAxisLabel = "log10(zetac/zeta) convective/thermal response";
   canvas.dataset.xAxisDirection = "redward-right";
   canvas.dataset.editableParameters = "zetac,gammac";
-  canvas.dataset.stellingwerfLabels = "gamma_c,log10_zeta_c_over_zeta,Teff_proxy";
+  canvas.dataset.stellingwerfLabels = "gamma_c,log10_zeta_c_over_zeta";
   canvas.dataset.axisLabels = "log10(zeta_c/zeta) convective/thermal response,convective flux fraction gamma_c";
 
   const current = currentGridResult();
@@ -5593,12 +5458,6 @@ function drawCepheidGuide(): void {
 
   const overlays = stabilityOverlayResults();
   overlays.forEach((result) => {
-    drawStripTeffTrack(ctx, plot, sx, sy, result.parameters, result.phaseRows, {
-      color: THEME.axisText,
-      alpha: 0.18,
-      marker: false,
-      label: false
-    });
     drawReferenceMarker(
       ctx,
       sx(cepheidStripCoordinate(result.parameters)),
@@ -5617,34 +5476,15 @@ function drawCepheidGuide(): void {
       ctx.lineTo(sx(cepheidStripCoordinate(path[i].parameters)), sy(path[i].parameters.gammac));
       ctx.stroke();
     }
-    path.forEach((result) => {
-      drawStripTeffTrack(ctx, plot, sx, sy, result.parameters, result.phaseRows, {
-        color: gridResultColor(result, 0.44),
-        alpha: 1,
-        marker: false,
-        label: false
-      });
-    });
   }
-  const currentRows = current?.phaseRows ?? latestPhaseRows;
   const currentMode: DisplayWindowMode = current ? "phase" : latestDisplayWindow.mode;
-  const hasTeffTrack = drawStripTeffTrack(ctx, plot, sx, sy, parameters, currentRows, {
-    color: current ? gridResultColor(current, 0.86) : COLORS.L,
-    alpha: current ? 1 : 0.86,
-    marker: true,
-    label: true,
-    mode: currentMode
-  });
-  canvas.dataset.teffPhaseTrack = hasTeffTrack ? "available" : "unavailable";
-  if (hasTeffTrack && currentMode === "phase") {
+  delete canvas.dataset.teffPhaseTrack;
+  if (currentMode === "phase") {
     canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
     delete canvas.dataset.currentTime;
-  } else if (hasTeffTrack) {
+  } else {
     canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
     delete canvas.dataset.currentPhase;
-  } else {
-    delete canvas.dataset.currentPhase;
-    delete canvas.dataset.currentTime;
   }
   drawReferenceMarker(
     ctx,
@@ -7076,7 +6916,7 @@ function drawAll(): void {
 
   const lumSeries: Series[] = [
     { label: "L", color: COLORS.L, rows: visibleRows("lum", "L", sampledLumRows), x: (row) => row.tau, y: (row) => row.L },
-    { label: "Lb", color: COLORS.sourceExp, rows: visibleRows("lum", "Lb", sampledLumRows), x: (row) => row.tau, y: (row) => baseLuminosity(row, state), dash: [7, 5] }
+    { label: "Lb", color: sourceLuminosityColor(), rows: visibleRows("lum", "Lb", sampledLumRows), x: (row) => row.tau, y: (row) => baseLuminosity(row, state), dash: [7, 5] }
   ];
   if (!convectionOff) {
     lumSeries.push(
@@ -7097,13 +6937,13 @@ function drawAll(): void {
   const lumLegendItems: LegendItem[] = convectionOff
     ? [
         { key: "L", label: `\\(${TEX.L}\\) total`, color: COLORS.L, toggleLabel: "total luminosity" },
-        { key: "Lb", label: `\\(L_{\\rm base}\\) base`, color: COLORS.sourceExp, toggleLabel: "base luminosity" }
+        { key: "Lb", label: sourceLuminosityLegendLabel(), color: sourceLuminosityColor(), toggleLabel: "source luminosity" }
       ]
     : [
         { key: "L", label: `\\(${TEX.L}\\) total`, color: COLORS.L, toggleLabel: "total luminosity" },
         { key: "Lr", label: `\\(${TEX.Lr}\\) radiative`, color: COLORS.Lr, toggleLabel: "radiative luminosity" },
         { key: "Lc", label: `\\(${TEX.Lc}\\) convective`, color: COLORS.Lc, toggleLabel: "convective luminosity" },
-        { key: "Lb", label: `\\(L_{\\rm base}\\) base`, color: COLORS.sourceExp, toggleLabel: "base luminosity" }
+        { key: "Lb", label: sourceLuminosityLegendLabel(), color: sourceLuminosityColor(), toggleLabel: "source luminosity" }
       ];
   drawLegend("lumLegend", lumLegendItems, { plotId: "lum" });
   drawFourierPanel();

@@ -812,9 +812,9 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-x-axis-label", "log10(zetac/zeta) convective/thermal response");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-x-axis-direction", "redward-right");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-editable-parameters", "zetac,gammac");
-  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-stellingwerf-labels", "gamma_c,log10_zeta_c_over_zeta,Teff_proxy");
+  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-stellingwerf-labels", "gamma_c,log10_zeta_c_over_zeta");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-axis-labels", "log10(zeta_c/zeta) convective/thermal response,convective flux fraction gamma_c");
-  await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-teff-phase-track", "available");
+  await expect(page.locator("#cepheidGuideCanvas")).not.toHaveAttribute("data-teff-phase-track");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-current-phase", /\d+\.\d+/);
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-phase-portrait-mode", "single");
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-phase-portrait-rows", /[1-9]\d*/);
@@ -1006,10 +1006,10 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
   });
   expect(fourierHasPaint).toBe(true);
-  await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-axis-labels", String.raw`A_L,r_{21},\phi_{21},r_{31},\phi_{31},\phi_{31}/\phi_{21},\phi_{k1}/S_k,\phi_{k1}/P,\phi_{k1}/A_c,\phi_{k1}/S_k`);
+  await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-axis-labels", String.raw`r_{21},r_{31},\phi_{21},\phi_{31}`);
   await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-phase-ticks", "pi-multiples");
-  await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-structural-panels", /phi31_vs_phi21.*phi_k1_vs_skewness.*phi_k1_vs_period.*phi_k1_vs_acuteness/);
-  await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-adiabatic-reference", /[1-9]\d*/);
+  await expect(page.locator("#fourierCanvas")).not.toHaveAttribute("data-fourier-structural-panels");
+  await expect(page.locator("#fourierCanvas")).not.toHaveAttribute("data-fourier-adiabatic-reference");
   await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-path-count", /[2-9]\d*/);
 
   await page.locator("#lightCanvas").scrollIntoViewIfNeeded();
@@ -1186,8 +1186,10 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#lumLegend")).toContainText("total");
   await expect(page.locator("#lumLegend")).toContainText("radiative");
   await expect(page.locator("#lumLegend")).toContainText("convective");
-  await expect(page.locator("#lumLegend")).toContainText("base");
+  await expect(page.locator("#lumLegend")).toContainText("source");
+  await expect(page.locator("#lumLegend")).not.toContainText("base");
   await expect(page.locator("#lumLegend [data-plot-series='Lb']")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#lumLegend [data-plot-series='Lb']")).toHaveAttribute("aria-label", "Toggle source luminosity visibility");
   await expect(page.locator("#modelCanvas")).toHaveAttribute("data-convection-active", "true");
   await expect(page.locator("#modelCanvas")).toHaveAttribute("data-luminosity-arc-labels", "L_c,L,L_r");
   await expect(page.locator("#modelCanvas")).not.toHaveAttribute("data-boundary-luminosity-lines");
@@ -1203,7 +1205,8 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#timeLegend")).not.toContainText("convective velocity");
   await expect(page.locator("#lumLegend")).not.toContainText("radiative");
   await expect(page.locator("#lumLegend")).not.toContainText("convective");
-  await expect(page.locator("#lumLegend")).toContainText("base");
+  await expect(page.locator("#lumLegend")).toContainText("source");
+  await expect(page.locator("#lumLegend")).not.toContainText("base");
   await expect(page.locator("#metrics")).toHaveAttribute("data-s72-physics-mode", "radiative");
   await expect(page.locator("#metrics")).not.toHaveAttribute("data-s72-convective");
   await expect(page.locator("#metrics [data-stability-kind='convective']")).toHaveCount(0);
