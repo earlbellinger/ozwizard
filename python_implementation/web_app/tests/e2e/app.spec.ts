@@ -558,7 +558,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(convectiveChip).toHaveAttribute("aria-expanded", "false");
   await expect(convectiveChip).toHaveAttribute("data-stability-formula", /\\\(.*=30\.5 > 0\\\)/);
   await expect(convectiveChip).not.toHaveAttribute("data-stability-view");
-  await expect(convectiveChip.locator(".stability-summary")).toContainText("convectively stable");
+  await expect(convectiveChip.locator(".stability-summary")).toContainText("turb-response stable");
   await expect(convectiveChip.locator(".stability-summary")).toContainText("(30.5 > 0)");
   await expect(secularChip.locator(".stability-summary")).toContainText("secularly stable");
   await expect(dynamicChip.locator(".stability-summary")).toContainText("dynamically stable");

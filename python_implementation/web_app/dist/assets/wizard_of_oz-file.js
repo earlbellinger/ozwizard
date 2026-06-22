@@ -2069,7 +2069,7 @@
   }
   function s72ConciseVerdict(kind, stable) {
     const stateText = stable ? "stable" : "unstable";
-    if (kind === "convective") return `convectively ${stateText}`;
+    if (kind === "convective") return `turb-response ${stateText}`;
     if (kind === "dynamic") return `dynamically ${stateText}`;
     if (kind === "secular") return `secularly ${stateText}`;
     return `pulsationally ${stateText}`;
