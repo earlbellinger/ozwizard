@@ -1,4 +1,17 @@
-import { CONTROL_GROUPS, type ControlDef, type ControlParameterKey, type ModelParameters, type Row } from "./model";
+import {
+  CHI_PARAMETER_BREAK,
+  CHI_PARAMETER_MAX,
+  CHI_PARAMETER_MIN,
+  CHI_SLIDER_BREAK,
+  CHI_SLIDER_MAX,
+  CHI_SLIDER_MIN,
+  CONTROL_GROUPS,
+  RESPONSE_LOG_MIN,
+  type ControlDef,
+  type ControlParameterKey,
+  type ModelParameters,
+  type Row
+} from "./model";
 import { type FourierParameters } from "./fourier";
 import { type PhaseAnchor } from "./phase";
 
@@ -127,12 +140,29 @@ export function roundToNativeStep(value: number, step: number): number {
 }
 
 export function sliderValueFromParameter(key: ControlParameterKey, parameters: ModelParameters): number {
-  return key === "tEnd" ? Math.log10(parameters.tEnd) : Number(parameters[key]);
+  return sliderValueFromNumericValue(key, Number(parameters[key]));
 }
 
 export function parameterValueFromSlider(key: ControlParameterKey, sliderValue: number): number {
-  if (key !== "tEnd") return sliderValue;
-  return Math.min(1000, Math.max(1, 10 ** sliderValue));
+  const meta = sliderMeta(key);
+  const value = clampToMeta(sliderValue, meta);
+  if (key === "tEnd") return Math.min(1000, Math.max(1, 10 ** value));
+  if (key === "zeta") return 10 ** value;
+  if (key === "zetac") return value <= RESPONSE_LOG_MIN + 1e-12 ? 0 : 10 ** value;
+  if (key === "m") return chiFromSliderValue(value);
+  return value;
+}
+
+export function sliderValueFromNumericValue(key: ControlParameterKey, value: number): number {
+  const meta = sliderMeta(key);
+  if (key === "tEnd") return clampToMeta(Math.log10(Math.max(1, value)), meta);
+  if (key === "zeta") return clampToMeta(Math.log10(Math.max(10 ** RESPONSE_LOG_MIN, value)), meta);
+  if (key === "zetac") {
+    if (value <= 0 || !Number.isFinite(value)) return RESPONSE_LOG_MIN;
+    return clampToMeta(Math.log10(value), meta);
+  }
+  if (key === "m") return clampToMeta(sliderValueFromChi(value), meta);
+  return clampToMeta(value, meta);
 }
 
 export function normalizeGridRange(range: GridRange): GridRange {
@@ -261,6 +291,28 @@ export function gridTotal(samples: readonly GridRangeSamples[]): number {
 
 function clampToMeta(value: number, meta: SliderMeta): number {
   return Math.min(meta.max, Math.max(meta.min, value));
+}
+
+function sliderValueFromChi(value: number): number {
+  const chi = Math.min(CHI_PARAMETER_MAX, Math.max(CHI_PARAMETER_MIN, value));
+  if (chi <= CHI_PARAMETER_BREAK) {
+    const fraction = (chi - CHI_PARAMETER_MIN) / (CHI_PARAMETER_BREAK - CHI_PARAMETER_MIN);
+    return CHI_SLIDER_MIN + fraction * (CHI_SLIDER_BREAK - CHI_SLIDER_MIN);
+  }
+  const logMin = Math.log(CHI_PARAMETER_BREAK);
+  const logMax = Math.log(CHI_PARAMETER_MAX);
+  const fraction = (Math.log(chi) - logMin) / (logMax - logMin);
+  return CHI_SLIDER_BREAK + fraction * (CHI_SLIDER_MAX - CHI_SLIDER_BREAK);
+}
+
+function chiFromSliderValue(value: number): number {
+  const slider = Math.min(CHI_SLIDER_MAX, Math.max(CHI_SLIDER_MIN, value));
+  if (slider <= CHI_SLIDER_BREAK) {
+    const fraction = (slider - CHI_SLIDER_MIN) / (CHI_SLIDER_BREAK - CHI_SLIDER_MIN);
+    return CHI_PARAMETER_MIN + fraction * (CHI_PARAMETER_BREAK - CHI_PARAMETER_MIN);
+  }
+  const fraction = (slider - CHI_SLIDER_BREAK) / (CHI_SLIDER_MAX - CHI_SLIDER_BREAK);
+  return CHI_PARAMETER_BREAK * (CHI_PARAMETER_MAX / CHI_PARAMETER_BREAK) ** fraction;
 }
 
 function addCenterSample(samples: number[], range: GridRange): number[] {

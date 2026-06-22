@@ -1,9 +1,14 @@
 import {
   COLORS,
+  CHI_PARAMETER_BREAK,
+  CHI_PARAMETER_MAX,
+  CHI_PARAMETER_MIN,
   CONTROL_GROUPS,
   DEFAULT_PRESET_NAME,
   PARAMETER_DESCRIPTIONS,
   PRESETS,
+  RESPONSE_LOG_MAX,
+  RESPONSE_LOG_MIN,
   TEX,
   type ControlParameterKey,
   type ControlDef,
@@ -20,6 +25,7 @@ import {
   parameterValueFromSlider,
   roundToNativeStep,
   sliderMeta,
+  sliderValueFromNumericValue,
   sliderValueFromParameter,
   type GridCompleteMessage,
   type GridModelResult,
@@ -2282,7 +2288,7 @@ function controlCanvasSymbol(key: ControlParameterKey): string {
 function parameterColorAt(value: number, range: GridRange | null, alpha = 1): string {
   if (!range) return colorWithAlpha("#FFD166", alpha);
   const span = range.upperSliderValue - range.lowerSliderValue || 1;
-  const sliderValue = range.key === "tEnd" ? Math.log10(value) : value;
+  const sliderValue = sliderValueFromNumericValue(range.key, value);
   const t = clamp((sliderValue - range.lowerSliderValue) / span, 0, 1);
   const a = { r: 96, g: 128, b: 208 };
   const b = { r: 255, g: 209, b: 102 };
@@ -2453,7 +2459,7 @@ function referenceCanvasPoint(canvas: HTMLCanvasElement, event: PointerEvent, re
 
 function snapParameterValue(key: ControlParameterKey, value: number): number {
   const meta = sliderMeta(key);
-  const rawSliderValue = key === "tEnd" ? Math.log10(value) : value;
+  const rawSliderValue = sliderValueFromNumericValue(key, value);
   const clampedSliderValue = clamp(rawSliderValue, meta.min, meta.max);
   const snappedSliderValue = roundToNativeStep(
     meta.min + Math.round((clampedSliderValue - meta.min) / meta.step) * meta.step,
@@ -2502,8 +2508,8 @@ function updateStabilityMapParameters(canvas: HTMLCanvasElement, event: PointerE
   const point = referenceCanvasPoint(canvas, event, render);
   const coordinate = referenceCoordinate(render, point);
   return commitReferencePlotParameters({
-    zetac: coordinate.x,
-    zeta: coordinate.y
+    zetac: 10 ** coordinate.x,
+    zeta: 10 ** coordinate.y
   });
 }
 
@@ -2965,7 +2971,7 @@ function buildSliderGroup(containerId: string, controls: ControlDef[]): void {
             <input class="grid-bound grid-bound-high" data-grid-bound="upper" type="range" min="${min}" max="${max}" step="${step}" value="${String(sliderInputValue(key))}" aria-label="${name} grid upper bound">
           </div>
         </div>
-        ${key === "tEnd" ? tauScaleMarkup() : ""}
+        ${sliderScaleMarkup(key)}
         </div>
       <button class="parameter-reset" type="button" data-reset-key="${key}" title="Restore ${name} to the ${selectedPreset} preset value" aria-label="Restore ${name} to the preset value">↺</button>
     `;
@@ -3012,6 +3018,27 @@ function tauScaleMarkup(): string {
   }).join("")}</div>`;
 }
 
+function sliderScaleMarkup(key: ControlParameterKey): string {
+  if (key === "tEnd") return tauScaleMarkup();
+  if (key === "zeta") return keyedScaleMarkup(key, [0.01, 0.1, 1, 10, 100]);
+  if (key === "zetac") return keyedScaleMarkup(key, [0, 0.1, 1, 10, 100]);
+  if (key === "m") return keyedScaleMarkup(key, [CHI_PARAMETER_MIN, 10, CHI_PARAMETER_BREAK, CHI_PARAMETER_MAX]);
+  return "";
+}
+
+function keyedScaleMarkup(key: ControlParameterKey, ticks: readonly number[]): string {
+  const meta = sliderMeta(key);
+  const span = meta.max - meta.min || 1;
+  return `<div class="slider-scale">${ticks.map((tick) => {
+    const sliderValue = sliderValueFromNumericValue(key, tick);
+    const position = ((sliderValue - meta.min) / span) * 100;
+    const edge = Math.abs(position) < 1e-8
+      ? ` data-scale-edge="start"`
+      : Math.abs(position - 100) < 1e-8 ? ` data-scale-edge="end"` : "";
+    return `<span${edge} style="--tick-position:${position.toFixed(4)}%">${controlValueLabel(key, tick)}</span>`;
+  }).join("")}</div>`;
+}
+
 function sliderInputValue(key: ControlParameterKey): number {
   return sliderValueFromParameter(key, state);
 }
@@ -3021,6 +3048,14 @@ function valueFromSlider(key: ControlParameterKey, value: number): number {
 }
 
 function controlValueLabel(key: ControlParameterKey, value: number): string {
+  if (key === "zeta" || key === "zetac") {
+    if (Math.abs(value) < 1e-12) return "0";
+    if (Math.abs(value) >= 10) return fmt(value, 1);
+    if (Math.abs(value) >= 1) return fmt(value, 2);
+    if (Math.abs(value) >= 0.1) return fmt(value, 3);
+    return fmt(value, 4);
+  }
+  if (key === "m") return fmt(value, value >= 20 ? 1 : 2);
   if (key !== "tEnd") return fmt(value, 5);
   return fmt(value, value >= 100 ? 0 : 1);
 }
@@ -3176,7 +3211,7 @@ function updateResetButtons(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-reset-key]").forEach((button) => {
     const key = button.dataset.resetKey as ControlParameterKey;
     button.disabled = valuesMatch(state[key], PRESETS[selectedPreset][key]);
-    button.title = `Restore to ${selectedPreset} preset value: ${fmt(Number(PRESETS[selectedPreset][key]), 5)}`;
+    button.title = `Restore to ${selectedPreset} preset value: ${controlValueLabel(key, Number(PRESETS[selectedPreset][key]))}`;
   });
 }
 
@@ -4144,15 +4179,15 @@ function stabilityOverlayResults(): GridModelResult[] {
   );
 }
 
-function stabilityMapExtent(parameters: ModelParameters, overlays: readonly GridModelResult[]): number {
-  const values = [parameters.zeta, parameters.zetac, 4];
-  overlays.forEach((result) => values.push(result.parameters.zeta, result.parameters.zetac));
-  return Math.min(12, Math.max(4, Math.ceil(Math.max(...values.filter(Number.isFinite)) / 2) * 2));
+function responseLogValue(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return RESPONSE_LOG_MIN;
+  return clamp(Math.log10(value), RESPONSE_LOG_MIN, RESPONSE_LOG_MAX);
 }
 
-function stabilityCacheKey(parameters: ModelParameters, extent: number): string {
+function stabilityCacheKey(parameters: ModelParameters): string {
   return [
-    extent,
+    RESPONSE_LOG_MIN,
+    RESPONSE_LOG_MAX,
     parameters.gammac.toFixed(3),
     parameters.n.toFixed(3),
     parameters.s.toFixed(3),
@@ -4164,15 +4199,16 @@ function stabilityCacheKey(parameters: ModelParameters, extent: number): string 
   ].join("|");
 }
 
-function stabilityKindsForMap(parameters: ModelParameters, extent: number): StabilityKind[] {
-  const key = stabilityCacheKey(parameters, extent);
+function stabilityKindsForMap(parameters: ModelParameters): StabilityKind[] {
+  const key = stabilityCacheKey(parameters);
   const cached = stabilityMapCache.get(key);
   if (cached) return cached;
   const kinds: StabilityKind[] = [];
+  const span = RESPONSE_LOG_MAX - RESPONSE_LOG_MIN;
   for (let row = 0; row < STABILITY_MAP_RESOLUTION; row += 1) {
-    const zeta = Math.max(1e-4, ((row + 0.5) / STABILITY_MAP_RESOLUTION) * extent);
+    const zeta = 10 ** (RESPONSE_LOG_MIN + ((row + 0.5) / STABILITY_MAP_RESOLUTION) * span);
     for (let column = 0; column < STABILITY_MAP_RESOLUTION; column += 1) {
-      const zetac = Math.max(1e-4, ((column + 0.5) / STABILITY_MAP_RESOLUTION) * extent);
+      const zetac = 10 ** (RESPONSE_LOG_MIN + ((column + 0.5) / STABILITY_MAP_RESOLUTION) * span);
       kinds.push(analyticStabilityConditions({ ...parameters, zeta, zetac }).kind);
     }
   }
@@ -4290,12 +4326,12 @@ function drawReferenceMarker(
 function drawStabilityOverlays(
   ctx: CanvasRenderingContext2D,
   plot: PlotBox,
-  extent: number,
   current: ModelParameters,
   overlays: readonly GridModelResult[]
 ): void {
-  const sx = (zetac: number) => plot.left + clamp(zetac / extent, 0, 1) * plot.width;
-  const sy = (zeta: number) => plot.top + plot.height - clamp(zeta / extent, 0, 1) * plot.height;
+  const span = RESPONSE_LOG_MAX - RESPONSE_LOG_MIN;
+  const sx = (zetac: number) => plot.left + ((responseLogValue(zetac) - RESPONSE_LOG_MIN) / span) * plot.width;
+  const sy = (zeta: number) => plot.top + plot.height - ((responseLogValue(zeta) - RESPONSE_LOG_MIN) / span) * plot.height;
   const path = gridPathResults();
   ctx.save();
   ctx.beginPath();
@@ -4320,6 +4356,45 @@ function drawStabilityOverlays(
   const highlighted = gridState.heldResult || gridState.hoverResult || currentGridResult();
   if (highlighted) drawReferenceMarker(ctx, sx(highlighted.parameters.zetac), sy(highlighted.parameters.zeta), gridResultColor(highlighted, 1), 6);
   else drawReferenceMarker(ctx, sx(current.zetac), sy(current.zeta), COLORS.gammac, 6);
+}
+
+function responseTickLabel(logValue: number): string {
+  return controlValueLabel("zeta", 10 ** logValue);
+}
+
+function drawLogResponseAxes(
+  ctx: CanvasRenderingContext2D,
+  plot: { left: number; top: number; width: number; height: number }
+): void {
+  const span = RESPONSE_LOG_MAX - RESPONSE_LOG_MIN;
+  const position = (logValue: number) => (logValue - RESPONSE_LOG_MIN) / span;
+  ctx.strokeStyle = THEME.axisGrid;
+  ctx.lineWidth = 1;
+  ctx.fillStyle = THEME.axisText;
+  ctx.font = "12px Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  for (let logValue = RESPONSE_LOG_MIN; logValue <= RESPONSE_LOG_MAX + 1e-9; logValue += 1) {
+    const x = plot.left + position(logValue) * plot.width;
+    ctx.beginPath();
+    ctx.moveTo(x, plot.top);
+    ctx.lineTo(x, plot.top + plot.height);
+    ctx.stroke();
+    ctx.fillText(responseTickLabel(logValue), x, plot.top + plot.height + 8);
+  }
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let logValue = RESPONSE_LOG_MIN; logValue <= RESPONSE_LOG_MAX + 1e-9; logValue += 1) {
+    const y = plot.top + plot.height - position(logValue) * plot.height;
+    ctx.beginPath();
+    ctx.moveTo(plot.left, y);
+    ctx.lineTo(plot.left + plot.width, y);
+    ctx.stroke();
+    ctx.fillText(responseTickLabel(logValue), plot.left - PLOT_LAYOUT.yTickGap, y);
+  }
+  ctx.strokeStyle = THEME.axisBorder;
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
 }
 
 function drawReferenceLegend(
@@ -4368,20 +4443,26 @@ function drawStabilityMap(): void {
 
   const parameters = stabilityDisplayParameters();
   const overlays = stabilityOverlayResults();
-  const extent = stabilityMapExtent(parameters, overlays);
-  const kinds = stabilityKindsForMap(parameters, extent);
+  const kinds = stabilityKindsForMap(parameters);
   const plot = { left: 58, top: 34, width: width - 78, height: height - 88 };
   const cellWidth = plot.width / STABILITY_MAP_RESOLUTION;
   const cellHeight = plot.height / STABILITY_MAP_RESOLUTION;
-  referencePlotRenderStates.set("stabilityMapCanvas", { plot, xlim: [0, extent], ylim: [0, extent], width, height });
+  referencePlotRenderStates.set("stabilityMapCanvas", {
+    plot,
+    xlim: [RESPONSE_LOG_MIN, RESPONSE_LOG_MAX],
+    ylim: [RESPONSE_LOG_MIN, RESPONSE_LOG_MAX],
+    width,
+    height
+  });
 
   canvas.dataset.stabilityMode = gridState.enabled ? "grid" : "single";
   canvas.dataset.stabilityGamma = fmtFixed(parameters.gammac, 3);
-  canvas.dataset.stabilityExtent = fmtFixed(extent, 1);
+  canvas.dataset.stabilityScale = "log10";
+  canvas.dataset.stabilityRange = `${controlValueLabel("zeta", 10 ** RESPONSE_LOG_MIN)},${controlValueLabel("zeta", 10 ** RESPONSE_LOG_MAX)}`;
   canvas.dataset.stabilityLegend = "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability";
   canvas.dataset.editableParameters = "zetac,zeta";
   canvas.dataset.stellingwerfLabels = "zeta,zeta_c,gamma_c";
-  canvas.dataset.axisLabels = "convective response zeta_c,thermal response zeta";
+  canvas.dataset.axisLabels = "log10 convective response zeta_c,log10 thermal response zeta";
 
   kinds.forEach((kind, index) => {
     const row = Math.floor(index / STABILITY_MAP_RESOLUTION);
@@ -4390,10 +4471,12 @@ function drawStabilityMap(): void {
     ctx.fillRect(plot.left + column * cellWidth, plot.top + plot.height - (row + 1) * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
   });
 
-  drawAxes(ctx, plot, [0, extent], [0, extent], "", "", THEME.axisText, THEME.axisText, 20);
+  drawLogResponseAxes(ctx, plot);
   drawCanvasMathFragments(
     ctx,
     [
+      { text: "log", subscript: "10", color: THEME.axisText, weight: 600 },
+      { text: " " },
       { text: "convective response ", color: COLORS.zetac, weight: 600 },
       { text: "ζ", subscript: "c", color: COLORS.zetac, weight: 600 }
     ],
@@ -4403,6 +4486,8 @@ function drawStabilityMap(): void {
   drawCanvasMathFragments(
     ctx,
     [
+      { text: "log", subscript: "10", color: THEME.axisText, weight: 600 },
+      { text: " " },
       { text: "thermal response ", color: COLORS.zeta, weight: 600 },
       { text: "ζ", color: COLORS.zeta, weight: 600 }
     ],
@@ -4412,7 +4497,7 @@ function drawStabilityMap(): void {
   );
   drawStabilityLinearizedLabel(ctx, plot.left, 16, parameters.gammac);
   drawReferenceLegend(ctx, plot.left + 150, 15, linearStabilityLegendItems(), { maxX: plot.left + plot.width - 4 });
-  drawStabilityOverlays(ctx, plot, extent, parameters, overlays);
+  drawStabilityOverlays(ctx, plot, parameters, overlays);
 }
 
 function drawDashedCurve(

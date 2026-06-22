@@ -6,6 +6,7 @@ import {
   estimateGridCoarseness,
   generateSliderSamples,
   parameterValueFromSlider,
+  sliderValueFromNumericValue,
   type GridRange,
   type GridWorkerMessage
 } from "../src/grid";
@@ -35,9 +36,10 @@ describe("grid range helpers", () => {
     expect(high.lowerSliderValue).toBeCloseTo(1.275);
     expect(high.upperSliderValue).toBeCloseTo(1.8);
 
-    const middle = defaultGridRange("m", 11.5);
-    expect(middle.lowerSliderValue).toBeCloseTo(11.5);
-    expect(middle.upperSliderValue).toBeCloseTo(15.75);
+    const middle = defaultGridRange("m", sliderValueFromNumericValue("m", 11.5));
+    expect(parameterValueFromSlider("m", middle.lowerSliderValue)).toBeCloseTo(11.5);
+    expect(parameterValueFromSlider("m", middle.upperSliderValue)).toBeGreaterThan(15);
+    expect(parameterValueFromSlider("m", middle.upperSliderValue)).toBeLessThan(20);
   });
 
   it("samples native slider steps, including logarithmic tau max coordinates", () => {
@@ -50,6 +52,16 @@ describe("grid range helpers", () => {
     };
     expect(generateSliderSamples(tauRange)).toEqual([1, 1.01, 1.02, 1.03]);
     expect(parameterValueFromSlider("tEnd", 2)).toBeCloseTo(100);
+    expect(parameterValueFromSlider("zeta", 0)).toBeCloseTo(1);
+    expect(parameterValueFromSlider("zeta", 2)).toBeCloseTo(100);
+    expect(sliderValueFromNumericValue("zeta", 0.1)).toBeCloseTo(-1);
+    expect(parameterValueFromSlider("zetac", -2)).toBe(0);
+    expect(parameterValueFromSlider("zetac", -1)).toBeCloseTo(0.1);
+    expect(sliderValueFromNumericValue("zetac", 0)).toBeCloseTo(-2);
+    expect(parameterValueFromSlider("m", 0)).toBeCloseTo(3);
+    expect(parameterValueFromSlider("m", 0.82)).toBeCloseTo(20);
+    expect(parameterValueFromSlider("m", 1)).toBeCloseTo(100);
+    expect(sliderValueFromNumericValue("m", 10)).toBeLessThan(0.5);
 
     const linearRange: GridRange = {
       key: "gammac",
@@ -72,15 +84,17 @@ describe("grid range helpers", () => {
       },
       {
         key: "m",
-        lowerSliderValue: 8,
-        upperSliderValue: 12,
-        centerSliderValue: 9,
-        nativeStep: 0.1
+        lowerSliderValue: sliderValueFromNumericValue("m", 8),
+        upperSliderValue: sliderValueFromNumericValue("m", 12),
+        centerSliderValue: sliderValueFromNumericValue("m", 9),
+        nativeStep: 0.005
       }
     ];
     const samples = buildLoopPathSamples(ranges, "gammac");
     expect(samples.find((item) => item.key === "gammac")?.samples).toEqual([0.58, 0.59, 0.6, 0.61, 0.62]);
-    expect(samples.find((item) => item.key === "m")?.samples).toEqual([10]);
+    const shellSamples = samples.find((item) => item.key === "m")?.samples ?? [];
+    expect(shellSamples).toHaveLength(1);
+    expect(parameterValueFromSlider("m", shellSamples[0])).toBeCloseTo(10);
   });
 
   it("estimates uniform coarsening from partial completion and falls back for zero completions", () => {

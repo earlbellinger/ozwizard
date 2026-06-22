@@ -115,12 +115,23 @@ export type ControlParameterKey = Exclude<NumericParameterKey, "phaseWarmupTau" 
 
 export type ControlDef = [ControlParameterKey, string, string, number, number, number, number, string];
 
+export const RESPONSE_LOG_MIN = -2;
+export const RESPONSE_LOG_MAX = 2;
+export const RESPONSE_LOG_STEP = 0.02;
+export const CHI_SLIDER_MIN = 0;
+export const CHI_SLIDER_MAX = 1;
+export const CHI_SLIDER_STEP = 0.005;
+export const CHI_PARAMETER_MIN = 3;
+export const CHI_PARAMETER_BREAK = 20;
+export const CHI_PARAMETER_MAX = 100;
+export const CHI_SLIDER_BREAK = 0.82;
+
 export const CONTROL_GROUPS: Record<"physical" | "initial" | "integration", ControlDef[]> = {
   physical: [
-    ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", 0.05, 12, 0.05, 1, COLORS.zeta],
-    ["zetac", `\\(${TEX.zetac}\\)`, "convective response", 0, 12, 0.05, 1, COLORS.zetac],
+    ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", RESPONSE_LOG_MIN, RESPONSE_LOG_MAX, RESPONSE_LOG_STEP, 1, COLORS.zeta],
+    ["zetac", `\\(${TEX.zetac}\\)`, "convective response", RESPONSE_LOG_MIN, RESPONSE_LOG_MAX, RESPONSE_LOG_STEP, 1, COLORS.zetac],
     ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.5, COLORS.gammac],
-    ["m", `\\(${TEX.m}\\)`, "shell thinness", 3, 20, 0.1, 10, COLORS.m],
+    ["m", `\\(${TEX.m}\\)`, "shell thinness", CHI_SLIDER_MIN, CHI_SLIDER_MAX, CHI_SLIDER_STEP, 10, COLORS.m],
     ["gamma1", `\\(${TEX.gamma1}\\)`, "adiabatic exponent", 1.01, 1.67, 0.01, 1.1, COLORS.gamma1],
     ["n", `\\(${TEX.n}\\)`, "κ-ρ exponent", 0, 3, 0.05, 1, COLORS.n],
     ["s", `\\(${TEX.s}\\)`, "κ-T exponent", 0, 8, 0.1, 3, COLORS.s],
@@ -146,10 +157,10 @@ export const CONTROL_GROUPS: Record<"physical" | "initial" | "integration", Cont
 };
 
 export const PARAMETER_DESCRIPTIONS: Partial<Record<keyof ModelParameters, string>> = {
-  zeta: `Ratio of the model dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\).`,
-  zetac: `Ratio of the model dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\).`,
+  zeta: `Ratio of the model dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\). The slider is logarithmic over \\(10^{-2}\\) to \\(10^2\\).`,
+  zetac: `Ratio of the model dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\). The nonzero slider range is logarithmic over \\(10^{-2}\\) to \\(10^2\\).`,
   gammac: `Equilibrium convective luminosity fraction used to weight \\(${TEX.Lc}\\); \\(${TEX.Lr}\\) carries the complementary radiative weight \\(1-${TEX.gammac}\\).`,
-  m: `Thin shell form factor that sets \\(${TEX_EXTRA.eta}\\), the shell's inner boundary radius as a fraction of the reference outer radius. Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\).`,
+  m: `Thin shell form factor that sets \\(${TEX_EXTRA.eta}\\), the shell's inner boundary radius as a fraction of the reference outer radius. Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\). The slider covers 3 to 100, with most of its travel devoted to 3 to 20.`,
   gamma1: `First adiabatic exponent used in the \\(${TEX.H}\\) response.`,
   n: `Density exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
   s: `Temperature exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,

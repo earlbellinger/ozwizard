@@ -307,12 +307,22 @@
     rho: "\\ozNeutral{\\rho}",
     temp: "\\ozNeutral{T}"
   };
+  var RESPONSE_LOG_MIN = -2;
+  var RESPONSE_LOG_MAX = 2;
+  var RESPONSE_LOG_STEP = 0.02;
+  var CHI_SLIDER_MIN = 0;
+  var CHI_SLIDER_MAX = 1;
+  var CHI_SLIDER_STEP = 5e-3;
+  var CHI_PARAMETER_MIN = 3;
+  var CHI_PARAMETER_BREAK = 20;
+  var CHI_PARAMETER_MAX = 100;
+  var CHI_SLIDER_BREAK = 0.82;
   var CONTROL_GROUPS = {
     physical: [
-      ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", 0.05, 12, 0.05, 1, COLORS.zeta],
-      ["zetac", `\\(${TEX.zetac}\\)`, "convective response", 0, 12, 0.05, 1, COLORS.zetac],
+      ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", RESPONSE_LOG_MIN, RESPONSE_LOG_MAX, RESPONSE_LOG_STEP, 1, COLORS.zeta],
+      ["zetac", `\\(${TEX.zetac}\\)`, "convective response", RESPONSE_LOG_MIN, RESPONSE_LOG_MAX, RESPONSE_LOG_STEP, 1, COLORS.zetac],
       ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.5, COLORS.gammac],
-      ["m", `\\(${TEX.m}\\)`, "shell thinness", 3, 20, 0.1, 10, COLORS.m],
+      ["m", `\\(${TEX.m}\\)`, "shell thinness", CHI_SLIDER_MIN, CHI_SLIDER_MAX, CHI_SLIDER_STEP, 10, COLORS.m],
       ["gamma1", `\\(${TEX.gamma1}\\)`, "adiabatic exponent", 1.01, 1.67, 0.01, 1.1, COLORS.gamma1],
       ["n", `\\(${TEX.n}\\)`, "\u03BA-\u03C1 exponent", 0, 3, 0.05, 1, COLORS.n],
       ["s", `\\(${TEX.s}\\)`, "\u03BA-T exponent", 0, 8, 0.1, 3, COLORS.s],
@@ -337,10 +347,10 @@
     ]
   };
   var PARAMETER_DESCRIPTIONS = {
-    zeta: `Ratio of the model dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\).`,
-    zetac: `Ratio of the model dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\).`,
+    zeta: `Ratio of the model dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\). The slider is logarithmic over \\(10^{-2}\\) to \\(10^2\\).`,
+    zetac: `Ratio of the model dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\). The nonzero slider range is logarithmic over \\(10^{-2}\\) to \\(10^2\\).`,
     gammac: `Equilibrium convective luminosity fraction used to weight \\(${TEX.Lc}\\); \\(${TEX.Lr}\\) carries the complementary radiative weight \\(1-${TEX.gammac}\\).`,
-    m: `Thin shell form factor that sets \\(${TEX_EXTRA.eta}\\), the shell's inner boundary radius as a fraction of the reference outer radius. Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\).`,
+    m: `Thin shell form factor that sets \\(${TEX_EXTRA.eta}\\), the shell's inner boundary radius as a fraction of the reference outer radius. Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\). The slider covers 3 to 100, with most of its travel devoted to 3 to 20.`,
     gamma1: `First adiabatic exponent used in the \\(${TEX.H}\\) response.`,
     n: `Density exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
     s: `Temperature exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
@@ -596,11 +606,27 @@
     return Number(value.toFixed(digits));
   }
   function sliderValueFromParameter(key, parameters) {
-    return key === "tEnd" ? Math.log10(parameters.tEnd) : Number(parameters[key]);
+    return sliderValueFromNumericValue(key, Number(parameters[key]));
   }
   function parameterValueFromSlider(key, sliderValue) {
-    if (key !== "tEnd") return sliderValue;
-    return Math.min(1e3, Math.max(1, 10 ** sliderValue));
+    const meta = sliderMeta(key);
+    const value = clampToMeta(sliderValue, meta);
+    if (key === "tEnd") return Math.min(1e3, Math.max(1, 10 ** value));
+    if (key === "zeta") return 10 ** value;
+    if (key === "zetac") return value <= RESPONSE_LOG_MIN + 1e-12 ? 0 : 10 ** value;
+    if (key === "m") return chiFromSliderValue(value);
+    return value;
+  }
+  function sliderValueFromNumericValue(key, value) {
+    const meta = sliderMeta(key);
+    if (key === "tEnd") return clampToMeta(Math.log10(Math.max(1, value)), meta);
+    if (key === "zeta") return clampToMeta(Math.log10(Math.max(10 ** RESPONSE_LOG_MIN, value)), meta);
+    if (key === "zetac") {
+      if (value <= 0 || !Number.isFinite(value)) return RESPONSE_LOG_MIN;
+      return clampToMeta(Math.log10(value), meta);
+    }
+    if (key === "m") return clampToMeta(sliderValueFromChi(value), meta);
+    return clampToMeta(value, meta);
   }
   function normalizeGridRange(range2) {
     const meta = sliderMeta(range2.key);
@@ -704,6 +730,26 @@
   }
   function clampToMeta(value, meta) {
     return Math.min(meta.max, Math.max(meta.min, value));
+  }
+  function sliderValueFromChi(value) {
+    const chi = Math.min(CHI_PARAMETER_MAX, Math.max(CHI_PARAMETER_MIN, value));
+    if (chi <= CHI_PARAMETER_BREAK) {
+      const fraction2 = (chi - CHI_PARAMETER_MIN) / (CHI_PARAMETER_BREAK - CHI_PARAMETER_MIN);
+      return CHI_SLIDER_MIN + fraction2 * (CHI_SLIDER_BREAK - CHI_SLIDER_MIN);
+    }
+    const logMin = Math.log(CHI_PARAMETER_BREAK);
+    const logMax = Math.log(CHI_PARAMETER_MAX);
+    const fraction = (Math.log(chi) - logMin) / (logMax - logMin);
+    return CHI_SLIDER_BREAK + fraction * (CHI_SLIDER_MAX - CHI_SLIDER_BREAK);
+  }
+  function chiFromSliderValue(value) {
+    const slider = Math.min(CHI_SLIDER_MAX, Math.max(CHI_SLIDER_MIN, value));
+    if (slider <= CHI_SLIDER_BREAK) {
+      const fraction2 = (slider - CHI_SLIDER_MIN) / (CHI_SLIDER_BREAK - CHI_SLIDER_MIN);
+      return CHI_PARAMETER_MIN + fraction2 * (CHI_PARAMETER_BREAK - CHI_PARAMETER_MIN);
+    }
+    const fraction = (slider - CHI_SLIDER_BREAK) / (CHI_SLIDER_MAX - CHI_SLIDER_BREAK);
+    return CHI_PARAMETER_BREAK * (CHI_PARAMETER_MAX / CHI_PARAMETER_BREAK) ** fraction;
   }
   function addCenterSample(samples, range2) {
     const center = centerSliderSample(range2);
@@ -3377,7 +3423,7 @@
   function parameterColorAt(value, range2, alpha = 1) {
     if (!range2) return colorWithAlpha("#FFD166", alpha);
     const span = range2.upperSliderValue - range2.lowerSliderValue || 1;
-    const sliderValue = range2.key === "tEnd" ? Math.log10(value) : value;
+    const sliderValue = sliderValueFromNumericValue(range2.key, value);
     const t = clamp4((sliderValue - range2.lowerSliderValue) / span, 0, 1);
     const a = { r: 96, g: 128, b: 208 };
     const b = { r: 255, g: 209, b: 102 };
@@ -3532,7 +3578,7 @@
   }
   function snapParameterValue(key, value) {
     const meta = sliderMeta(key);
-    const rawSliderValue = key === "tEnd" ? Math.log10(value) : value;
+    const rawSliderValue = sliderValueFromNumericValue(key, value);
     const clampedSliderValue = clamp4(rawSliderValue, meta.min, meta.max);
     const snappedSliderValue = roundToNativeStep(
       meta.min + Math.round((clampedSliderValue - meta.min) / meta.step) * meta.step,
@@ -3577,8 +3623,8 @@
     const point = referenceCanvasPoint(canvas, event, render);
     const coordinate = referenceCoordinate(render, point);
     return commitReferencePlotParameters({
-      zetac: coordinate.x,
-      zeta: coordinate.y
+      zetac: 10 ** coordinate.x,
+      zeta: 10 ** coordinate.y
     });
   }
   function updateInstabilityStripParameters(canvas, event) {
@@ -3995,7 +4041,7 @@
             <input class="grid-bound grid-bound-high" data-grid-bound="upper" type="range" min="${min}" max="${max}" step="${step2}" value="${String(sliderInputValue(key))}" aria-label="${name} grid upper bound">
           </div>
         </div>
-        ${key === "tEnd" ? tauScaleMarkup() : ""}
+        ${sliderScaleMarkup(key)}
         </div>
       <button class="parameter-reset" type="button" data-reset-key="${key}" title="Restore ${name} to the ${selectedPreset} preset value" aria-label="Restore ${name} to the preset value">\u21BA</button>
     `;
@@ -4040,6 +4086,23 @@
       return `<span${edge} style="--tick-position:${position.toFixed(4)}%">${tick}</span>`;
     }).join("")}</div>`;
   }
+  function sliderScaleMarkup(key) {
+    if (key === "tEnd") return tauScaleMarkup();
+    if (key === "zeta") return keyedScaleMarkup(key, [0.01, 0.1, 1, 10, 100]);
+    if (key === "zetac") return keyedScaleMarkup(key, [0, 0.1, 1, 10, 100]);
+    if (key === "m") return keyedScaleMarkup(key, [CHI_PARAMETER_MIN, 10, CHI_PARAMETER_BREAK, CHI_PARAMETER_MAX]);
+    return "";
+  }
+  function keyedScaleMarkup(key, ticks) {
+    const meta = sliderMeta(key);
+    const span = meta.max - meta.min || 1;
+    return `<div class="slider-scale">${ticks.map((tick) => {
+      const sliderValue = sliderValueFromNumericValue(key, tick);
+      const position = (sliderValue - meta.min) / span * 100;
+      const edge = Math.abs(position) < 1e-8 ? ` data-scale-edge="start"` : Math.abs(position - 100) < 1e-8 ? ` data-scale-edge="end"` : "";
+      return `<span${edge} style="--tick-position:${position.toFixed(4)}%">${controlValueLabel(key, tick)}</span>`;
+    }).join("")}</div>`;
+  }
   function sliderInputValue(key) {
     return sliderValueFromParameter(key, state);
   }
@@ -4047,6 +4110,14 @@
     return parameterValueFromSlider(key, value);
   }
   function controlValueLabel(key, value) {
+    if (key === "zeta" || key === "zetac") {
+      if (Math.abs(value) < 1e-12) return "0";
+      if (Math.abs(value) >= 10) return fmt(value, 1);
+      if (Math.abs(value) >= 1) return fmt(value, 2);
+      if (Math.abs(value) >= 0.1) return fmt(value, 3);
+      return fmt(value, 4);
+    }
+    if (key === "m") return fmt(value, value >= 20 ? 1 : 2);
     if (key !== "tEnd") return fmt(value, 5);
     return fmt(value, value >= 100 ? 0 : 1);
   }
@@ -4187,7 +4258,7 @@
     document.querySelectorAll("[data-reset-key]").forEach((button) => {
       const key = button.dataset.resetKey;
       button.disabled = valuesMatch(state[key], PRESETS[selectedPreset][key]);
-      button.title = `Restore to ${selectedPreset} preset value: ${fmt(Number(PRESETS[selectedPreset][key]), 5)}`;
+      button.title = `Restore to ${selectedPreset} preset value: ${controlValueLabel(key, Number(PRESETS[selectedPreset][key]))}`;
     });
   }
   function updatePresetButtons() {
@@ -4980,14 +5051,14 @@
       (result) => Number.isFinite(result.parameters.zeta) && Number.isFinite(result.parameters.zetac) && Number.isFinite(result.parameters.gammac)
     );
   }
-  function stabilityMapExtent(parameters, overlays) {
-    const values = [parameters.zeta, parameters.zetac, 4];
-    overlays.forEach((result) => values.push(result.parameters.zeta, result.parameters.zetac));
-    return Math.min(12, Math.max(4, Math.ceil(Math.max(...values.filter(Number.isFinite)) / 2) * 2));
+  function responseLogValue(value) {
+    if (!Number.isFinite(value) || value <= 0) return RESPONSE_LOG_MIN;
+    return clamp4(Math.log10(value), RESPONSE_LOG_MIN, RESPONSE_LOG_MAX);
   }
-  function stabilityCacheKey(parameters, extent) {
+  function stabilityCacheKey(parameters) {
     return [
-      extent,
+      RESPONSE_LOG_MIN,
+      RESPONSE_LOG_MAX,
       parameters.gammac.toFixed(3),
       parameters.n.toFixed(3),
       parameters.s.toFixed(3),
@@ -4998,15 +5069,16 @@
       String(parameters.variableM)
     ].join("|");
   }
-  function stabilityKindsForMap(parameters, extent) {
-    const key = stabilityCacheKey(parameters, extent);
+  function stabilityKindsForMap(parameters) {
+    const key = stabilityCacheKey(parameters);
     const cached = stabilityMapCache.get(key);
     if (cached) return cached;
     const kinds = [];
+    const span = RESPONSE_LOG_MAX - RESPONSE_LOG_MIN;
     for (let row = 0; row < STABILITY_MAP_RESOLUTION; row += 1) {
-      const zeta = Math.max(1e-4, (row + 0.5) / STABILITY_MAP_RESOLUTION * extent);
+      const zeta = 10 ** (RESPONSE_LOG_MIN + (row + 0.5) / STABILITY_MAP_RESOLUTION * span);
       for (let column = 0; column < STABILITY_MAP_RESOLUTION; column += 1) {
-        const zetac = Math.max(1e-4, (column + 0.5) / STABILITY_MAP_RESOLUTION * extent);
+        const zetac = 10 ** (RESPONSE_LOG_MIN + (column + 0.5) / STABILITY_MAP_RESOLUTION * span);
         kinds.push(analyticStabilityConditions({ ...parameters, zeta, zetac }).kind);
       }
     }
@@ -5107,9 +5179,10 @@
     ctx.stroke();
     ctx.restore();
   }
-  function drawStabilityOverlays(ctx, plot, extent, current, overlays) {
-    const sx = (zetac) => plot.left + clamp4(zetac / extent, 0, 1) * plot.width;
-    const sy = (zeta) => plot.top + plot.height - clamp4(zeta / extent, 0, 1) * plot.height;
+  function drawStabilityOverlays(ctx, plot, current, overlays) {
+    const span = RESPONSE_LOG_MAX - RESPONSE_LOG_MIN;
+    const sx = (zetac) => plot.left + (responseLogValue(zetac) - RESPONSE_LOG_MIN) / span * plot.width;
+    const sy = (zeta) => plot.top + plot.height - (responseLogValue(zeta) - RESPONSE_LOG_MIN) / span * plot.height;
     const path = gridPathResults();
     ctx.save();
     ctx.beginPath();
@@ -5134,6 +5207,40 @@
     const highlighted = gridState.heldResult || gridState.hoverResult || currentGridResult();
     if (highlighted) drawReferenceMarker(ctx, sx(highlighted.parameters.zetac), sy(highlighted.parameters.zeta), gridResultColor(highlighted, 1), 6);
     else drawReferenceMarker(ctx, sx(current.zetac), sy(current.zeta), COLORS.gammac, 6);
+  }
+  function responseTickLabel(logValue) {
+    return controlValueLabel("zeta", 10 ** logValue);
+  }
+  function drawLogResponseAxes(ctx, plot) {
+    const span = RESPONSE_LOG_MAX - RESPONSE_LOG_MIN;
+    const position = (logValue) => (logValue - RESPONSE_LOG_MIN) / span;
+    ctx.strokeStyle = THEME.axisGrid;
+    ctx.lineWidth = 1;
+    ctx.fillStyle = THEME.axisText;
+    ctx.font = "12px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    for (let logValue = RESPONSE_LOG_MIN; logValue <= RESPONSE_LOG_MAX + 1e-9; logValue += 1) {
+      const x = plot.left + position(logValue) * plot.width;
+      ctx.beginPath();
+      ctx.moveTo(x, plot.top);
+      ctx.lineTo(x, plot.top + plot.height);
+      ctx.stroke();
+      ctx.fillText(responseTickLabel(logValue), x, plot.top + plot.height + 8);
+    }
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    for (let logValue = RESPONSE_LOG_MIN; logValue <= RESPONSE_LOG_MAX + 1e-9; logValue += 1) {
+      const y = plot.top + plot.height - position(logValue) * plot.height;
+      ctx.beginPath();
+      ctx.moveTo(plot.left, y);
+      ctx.lineTo(plot.left + plot.width, y);
+      ctx.stroke();
+      ctx.fillText(responseTickLabel(logValue), plot.left - PLOT_LAYOUT.yTickGap, y);
+    }
+    ctx.strokeStyle = THEME.axisBorder;
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
   }
   function drawReferenceLegend(ctx, x, y, items, options = {}) {
     ctx.save();
@@ -5173,29 +5280,37 @@
     ctx.clearRect(0, 0, width, height);
     const parameters = stabilityDisplayParameters();
     const overlays = stabilityOverlayResults();
-    const extent = stabilityMapExtent(parameters, overlays);
-    const kinds = stabilityKindsForMap(parameters, extent);
+    const kinds = stabilityKindsForMap(parameters);
     const plot = { left: 58, top: 34, width: width - 78, height: height - 88 };
     const cellWidth = plot.width / STABILITY_MAP_RESOLUTION;
     const cellHeight = plot.height / STABILITY_MAP_RESOLUTION;
-    referencePlotRenderStates.set("stabilityMapCanvas", { plot, xlim: [0, extent], ylim: [0, extent], width, height });
+    referencePlotRenderStates.set("stabilityMapCanvas", {
+      plot,
+      xlim: [RESPONSE_LOG_MIN, RESPONSE_LOG_MAX],
+      ylim: [RESPONSE_LOG_MIN, RESPONSE_LOG_MAX],
+      width,
+      height
+    });
     canvas.dataset.stabilityMode = gridState.enabled ? "grid" : "single";
     canvas.dataset.stabilityGamma = fmtFixed(parameters.gammac, 3);
-    canvas.dataset.stabilityExtent = fmtFixed(extent, 1);
+    canvas.dataset.stabilityScale = "log10";
+    canvas.dataset.stabilityRange = `${controlValueLabel("zeta", 10 ** RESPONSE_LOG_MIN)},${controlValueLabel("zeta", 10 ** RESPONSE_LOG_MAX)}`;
     canvas.dataset.stabilityLegend = "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability";
     canvas.dataset.editableParameters = "zetac,zeta";
     canvas.dataset.stellingwerfLabels = "zeta,zeta_c,gamma_c";
-    canvas.dataset.axisLabels = "convective response zeta_c,thermal response zeta";
+    canvas.dataset.axisLabels = "log10 convective response zeta_c,log10 thermal response zeta";
     kinds.forEach((kind, index) => {
       const row = Math.floor(index / STABILITY_MAP_RESOLUTION);
       const column = index % STABILITY_MAP_RESOLUTION;
       ctx.fillStyle = stabilityKindColor(kind, stabilityKindAlpha(kind));
       ctx.fillRect(plot.left + column * cellWidth, plot.top + plot.height - (row + 1) * cellHeight, cellWidth + 0.5, cellHeight + 0.5);
     });
-    drawAxes(ctx, plot, [0, extent], [0, extent], "", "", THEME.axisText, THEME.axisText, 20);
+    drawLogResponseAxes(ctx, plot);
     drawCanvasMathFragments(
       ctx,
       [
+        { text: "log", subscript: "10", color: THEME.axisText, weight: 600 },
+        { text: " " },
         { text: "convective response ", color: COLORS.zetac, weight: 600 },
         { text: "\u03B6", subscript: "c", color: COLORS.zetac, weight: 600 }
       ],
@@ -5205,6 +5320,8 @@
     drawCanvasMathFragments(
       ctx,
       [
+        { text: "log", subscript: "10", color: THEME.axisText, weight: 600 },
+        { text: " " },
         { text: "thermal response ", color: COLORS.zeta, weight: 600 },
         { text: "\u03B6", color: COLORS.zeta, weight: 600 }
       ],
@@ -5214,7 +5331,7 @@
     );
     drawStabilityLinearizedLabel(ctx, plot.left, 16, parameters.gammac);
     drawReferenceLegend(ctx, plot.left + 150, 15, linearStabilityLegendItems(), { maxX: plot.left + plot.width - 4 });
-    drawStabilityOverlays(ctx, plot, extent, parameters, overlays);
+    drawStabilityOverlays(ctx, plot, parameters, overlays);
   }
   function drawDashedCurve(ctx, points) {
     ctx.save();

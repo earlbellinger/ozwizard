@@ -432,7 +432,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#initialControls")).toBeHidden();
   await expect(page.locator("#presetButtons")).not.toBeVisible();
   await expect(page.locator("#presetSummaryLabel")).toContainText("RR Lyrae low-amplitude fundamental, damped");
-  await expect(page.locator("input[aria-label='convective response']")).toHaveValue("1");
+  await expect(page.locator("input[aria-label='convective response']")).toHaveValue("0");
   await page.locator("#presetPanel summary").click();
   await expect(page.locator("#presetButtons")).toBeVisible();
   await expect(page.locator("#presetPanel #resetPreset")).toBeVisible();
@@ -498,6 +498,10 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     .evaluate((node) => node.scrollWidth <= node.clientWidth + 1);
   expect(convectiveFluxLabelFit).toBe(true);
   await expect(page.getByRole("slider", { name: "convective flux fraction" })).toHaveValue("0.5");
+  await expect(page.getByRole("slider", { name: "thermal response" })).toHaveValue("0");
+  await expect(page.locator("[data-value-for='zeta']")).toHaveText("1");
+  const thinnessSliderValue = await page.getByRole("slider", { name: "shell thinness" }).evaluate((input) => Number((input as HTMLInputElement).value));
+  expect(thinnessSliderValue).toBeCloseTo(0.34, 6);
   const physicalControlsBox = await page.locator("#physicalControls").boundingBox();
   const geometryBox = await page.locator("#variableM").boundingBox();
   const driverBox = await page.locator("[data-driver='h']").boundingBox();
@@ -762,7 +766,9 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-stability-legend", "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability");
   await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-stellingwerf-labels", "zeta,zeta_c,gamma_c");
   await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-editable-parameters", "zetac,zeta");
-  await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-axis-labels", "convective response zeta_c,thermal response zeta");
+  await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-stability-scale", "log10");
+  await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-stability-range", "0.01,100");
+  await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-axis-labels", "log10 convective response zeta_c,log10 thermal response zeta");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-cepheid-mode", "single");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-instability-mode", "single");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-instability-labels", "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability");
@@ -791,8 +797,10 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     stabilityMapBox!.x + 58 + (stabilityMapBox!.width - 78) * 0.5,
     stabilityMapBox!.y + 34 + (stabilityMapBox!.height - 88) * 0.25
   );
-  await expect(zetacSlider).toHaveValue("2");
-  await expect(zetaSlider).toHaveValue("3");
+  await expect(zetacSlider).toHaveValue("0");
+  await expect(zetaSlider).toHaveValue("1");
+  await expect(page.locator("[data-value-for='zetac']")).toHaveText("1");
+  await expect(page.locator("[data-value-for='zeta']")).toHaveText("10");
   await expect.poll(async () => page.locator("#cepheidGuideCanvas").getAttribute("data-instability-signature"))
     .not.toBe(initialStripSignature);
   const stripBox = await page.locator("#cepheidGuideCanvas").boundingBox();
@@ -803,13 +811,16 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await page.mouse.move(stripBox!.x + 64 + (stripBox!.width - 90) * 0.5, stripBox!.y + 28 + (stripBox!.height - 88) * 0.8);
   await page.mouse.up();
   await expect(page.locator("#cepheidGuideCanvas")).not.toHaveAttribute("data-reference-interaction");
-  await expect(zetacSlider).toHaveValue("3");
+  await expect(zetacSlider).toHaveValue("1");
+  await expect(page.locator("[data-value-for='zetac']")).toHaveText("10");
   await expect(gammacSlider).toHaveValue("0.2");
   await page.locator("[data-reset-key='zeta']").click();
   await page.locator("[data-reset-key='zetac']").click();
   await page.locator("[data-reset-key='gammac']").click();
-  await expect(zetaSlider).toHaveValue("1");
-  await expect(zetacSlider).toHaveValue("1");
+  await expect(zetaSlider).toHaveValue("0");
+  await expect(zetacSlider).toHaveValue("0");
+  await expect(page.locator("[data-value-for='zeta']")).toHaveText("1");
+  await expect(page.locator("[data-value-for='zetac']")).toHaveText("1");
   await expect(gammacSlider).toHaveValue("0.5");
   const stabilityHasPaint = await page.locator("#stabilityMapCanvas").evaluate((canvas) => {
     const node = canvas as HTMLCanvasElement;
@@ -1114,10 +1125,10 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#lumLegend")).toContainText("convective");
   await expect(page.locator("#modelCanvas")).toHaveAttribute("data-convection-active", "true");
   await expect(page.locator("#modelCanvas")).toHaveAttribute("data-luminosity-arc-labels", "L_c,L,L_r");
-  await expect(page.locator("input[aria-label='convective response']")).toHaveValue("1");
+  await expect(page.locator("input[aria-label='convective response']")).toHaveValue("0");
   await page.locator("input[aria-label='convective response']").evaluate((input) => {
     const slider = input as HTMLInputElement;
-    slider.value = "0";
+    slider.value = "-2";
     slider.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await expect(page.locator("#timeLegend [data-plot-series='Uc']")).toHaveCount(0);
@@ -1128,7 +1139,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#modelCanvas")).toHaveAttribute("data-luminosity-arc-labels", "");
   await page.locator("input[aria-label='convective response']").evaluate((input) => {
     const slider = input as HTMLInputElement;
-    slider.value = "1";
+    slider.value = "0";
     slider.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await expect(page.locator("#timeLegend [data-plot-series='Uc']")).toHaveCount(1);
@@ -1158,7 +1169,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   const timeLegendHtmlBeforeMSlider = await page.locator("#timeLegend").innerHTML();
   await page.locator("input[aria-label='shell thinness']").evaluate((input) => {
     const slider = input as HTMLInputElement;
-    slider.value = "15";
+    slider.value = String(((15 - 3) / (20 - 3)) * 0.82);
     slider.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await expect(page.locator("#luminosityEquations mjx-container")).not.toHaveCount(0);
@@ -1167,7 +1178,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-eta-value", "0.93");
   await page.locator("input[aria-label='shell thinness']").evaluate((input) => {
     const slider = input as HTMLInputElement;
-    slider.value = "3";
+    slider.value = "0";
     slider.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-eta-value", "0.00");

@@ -215,7 +215,8 @@ async function runPlaywrightChecks() {
     assertOk(!(await page.locator("#initialControlSection").evaluate((node) => node.open)), "initial conditions should start collapsed");
     assertOk(!(await page.locator("#initialControls").isVisible()), "initial condition sliders should start hidden");
     assertOk(!(await page.locator("#presetButtons").isVisible()), "preset buttons should start hidden");
-    assertOk((await page.locator("input[aria-label='convective response']").inputValue()) === "1", "convective response should default to one");
+    assertOk((await page.locator("input[aria-label='convective response']").inputValue()) === "0", "convective response slider coordinate should default to log10(1)");
+    assertOk((await page.locator("[data-value-for='zetac']").textContent()) === "1", "convective response should display one");
     await page.locator("#presetPanel summary").click();
     assertOk(await page.locator("#presetButtons").isVisible(), "preset buttons should show inside the presets menu");
     assertOk(await page.locator("#presetPanel #resetPreset").isVisible(), "reset preset should live inside the presets menu");
@@ -760,7 +761,7 @@ async function runPlaywrightChecks() {
     });
     assertOk(hasVelocityPaint, "radial velocity canvas was blank");
 
-    await page.waitForFunction(() => document.querySelector("input[aria-label='convective response']")?.value === "1");
+    await page.waitForFunction(() => document.querySelector("input[aria-label='convective response']")?.value === "0");
     await page.waitForFunction(() => document.querySelector("#timeLegend")?.textContent?.includes("convective velocity"), null, { timeout: 15000 });
     const timeLegend = await page.locator("#timeLegend").textContent();
     assertOk(
@@ -772,12 +773,13 @@ async function runPlaywrightChecks() {
     const lumLegend = await page.locator("#lumLegend").textContent();
     assertOk(lumLegend?.includes("total"), "luminosity legend should show total luminosity");
     assertOk(lumLegend?.includes("radiative") && lumLegend.includes("convective"), "luminosity legend should expose radiative and convective entries by default");
-    assertOk((await page.locator("input[aria-label='convective response']").inputValue()) === "1", "convective response should still be one");
+    assertOk((await page.locator("input[aria-label='convective response']").inputValue()) === "0", "convective response slider coordinate should still be log10(1)");
+    assertOk((await page.locator("[data-value-for='zetac']").textContent()) === "1", "convective response should still display one");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-convection-active")) === "true", "model arcs should start in convective mode");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "L_c,L,L_r", "model arcs should expose luminosity labels");
     await page.locator("input[aria-label='convective response']").evaluate((input) => {
       const slider = input;
-      slider.value = "0";
+      slider.value = "-2";
       slider.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await page.waitForFunction(() => !document.querySelector("#timeLegend [data-plot-series='Uc']"));
@@ -788,7 +790,7 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "", "model luminosity arc labels should hide when convection is off");
     await page.locator("input[aria-label='convective response']").evaluate((input) => {
       const slider = input;
-      slider.value = "1";
+      slider.value = "0";
       slider.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await page.locator("#timeLegend [data-plot-series='Uc']").waitFor({ state: "attached", timeout: 15000 });
@@ -807,7 +809,7 @@ async function runPlaywrightChecks() {
     const timeLegendHtmlBeforeMSlider = await page.locator("#timeLegend").innerHTML();
     await page.locator("input[aria-label='shell thinness']").evaluate((input) => {
       const slider = input;
-      slider.value = "15";
+      slider.value = String(((15 - 3) / (20 - 3)) * 0.82);
       slider.dispatchEvent(new Event("input", { bubbles: true }));
     });
     assertOk(await page.locator("#luminosityEquations mjx-container").count() > 0, "rendered equations should remain visible while chi changes");
@@ -816,7 +818,7 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.93", "eta did not update when chi changed");
     await page.locator("input[aria-label='shell thinness']").evaluate((input) => {
       const slider = input;
-      slider.value = "3";
+      slider.value = "0";
       slider.dispatchEvent(new Event("input", { bubbles: true }));
     });
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.00", "eta should keep two decimal places at the Baker limit");

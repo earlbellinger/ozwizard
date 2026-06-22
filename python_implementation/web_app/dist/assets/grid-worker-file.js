@@ -393,12 +393,22 @@
     rho: "\\ozNeutral{\\rho}",
     temp: "\\ozNeutral{T}"
   };
+  var RESPONSE_LOG_MIN = -2;
+  var RESPONSE_LOG_MAX = 2;
+  var RESPONSE_LOG_STEP = 0.02;
+  var CHI_SLIDER_MIN = 0;
+  var CHI_SLIDER_MAX = 1;
+  var CHI_SLIDER_STEP = 5e-3;
+  var CHI_PARAMETER_MIN = 3;
+  var CHI_PARAMETER_BREAK = 20;
+  var CHI_PARAMETER_MAX = 100;
+  var CHI_SLIDER_BREAK = 0.82;
   var CONTROL_GROUPS = {
     physical: [
-      ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", 0.05, 12, 0.05, 1, COLORS.zeta],
-      ["zetac", `\\(${TEX.zetac}\\)`, "convective response", 0, 12, 0.05, 1, COLORS.zetac],
+      ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", RESPONSE_LOG_MIN, RESPONSE_LOG_MAX, RESPONSE_LOG_STEP, 1, COLORS.zeta],
+      ["zetac", `\\(${TEX.zetac}\\)`, "convective response", RESPONSE_LOG_MIN, RESPONSE_LOG_MAX, RESPONSE_LOG_STEP, 1, COLORS.zetac],
       ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.5, COLORS.gammac],
-      ["m", `\\(${TEX.m}\\)`, "shell thinness", 3, 20, 0.1, 10, COLORS.m],
+      ["m", `\\(${TEX.m}\\)`, "shell thinness", CHI_SLIDER_MIN, CHI_SLIDER_MAX, CHI_SLIDER_STEP, 10, COLORS.m],
       ["gamma1", `\\(${TEX.gamma1}\\)`, "adiabatic exponent", 1.01, 1.67, 0.01, 1.1, COLORS.gamma1],
       ["n", `\\(${TEX.n}\\)`, "\u03BA-\u03C1 exponent", 0, 3, 0.05, 1, COLORS.n],
       ["s", `\\(${TEX.s}\\)`, "\u03BA-T exponent", 0, 8, 0.1, 3, COLORS.s],
@@ -423,10 +433,10 @@
     ]
   };
   var PARAMETER_DESCRIPTIONS = {
-    zeta: `Ratio of the model dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\).`,
-    zetac: `Ratio of the model dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\).`,
+    zeta: `Ratio of the model dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\). The slider is logarithmic over \\(10^{-2}\\) to \\(10^2\\).`,
+    zetac: `Ratio of the model dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\). The nonzero slider range is logarithmic over \\(10^{-2}\\) to \\(10^2\\).`,
     gammac: `Equilibrium convective luminosity fraction used to weight \\(${TEX.Lc}\\); \\(${TEX.Lr}\\) carries the complementary radiative weight \\(1-${TEX.gammac}\\).`,
-    m: `Thin shell form factor that sets \\(${TEX_EXTRA.eta}\\), the shell's inner boundary radius as a fraction of the reference outer radius. Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\).`,
+    m: `Thin shell form factor that sets \\(${TEX_EXTRA.eta}\\), the shell's inner boundary radius as a fraction of the reference outer radius. Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\). The slider covers 3 to 100, with most of its travel devoted to 3 to 20.`,
     gamma1: `First adiabatic exponent used in the \\(${TEX.H}\\) response.`,
     n: `Density exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
     s: `Temperature exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
@@ -681,8 +691,13 @@
     return Number(value.toFixed(digits));
   }
   function parameterValueFromSlider(key, sliderValue) {
-    if (key !== "tEnd") return sliderValue;
-    return Math.min(1e3, Math.max(1, 10 ** sliderValue));
+    const meta = sliderMeta(key);
+    const value = clampToMeta(sliderValue, meta);
+    if (key === "tEnd") return Math.min(1e3, Math.max(1, 10 ** value));
+    if (key === "zeta") return 10 ** value;
+    if (key === "zetac") return value <= RESPONSE_LOG_MIN + 1e-12 ? 0 : 10 ** value;
+    if (key === "m") return chiFromSliderValue(value);
+    return value;
   }
   function normalizeGridRange(range) {
     const meta = sliderMeta(range.key);
@@ -771,6 +786,15 @@
   }
   function clampToMeta(value, meta) {
     return Math.min(meta.max, Math.max(meta.min, value));
+  }
+  function chiFromSliderValue(value) {
+    const slider = Math.min(CHI_SLIDER_MAX, Math.max(CHI_SLIDER_MIN, value));
+    if (slider <= CHI_SLIDER_BREAK) {
+      const fraction2 = (slider - CHI_SLIDER_MIN) / (CHI_SLIDER_BREAK - CHI_SLIDER_MIN);
+      return CHI_PARAMETER_MIN + fraction2 * (CHI_PARAMETER_BREAK - CHI_PARAMETER_MIN);
+    }
+    const fraction = (slider - CHI_SLIDER_BREAK) / (CHI_SLIDER_MAX - CHI_SLIDER_BREAK);
+    return CHI_PARAMETER_BREAK * (CHI_PARAMETER_MAX / CHI_PARAMETER_BREAK) ** fraction;
   }
   function addCenterSample(samples, range) {
     const center = centerSliderSample(range);
