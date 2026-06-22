@@ -1082,6 +1082,26 @@
       pointer-events: none;
     }
 
+    .metric .stability-margin {
+      white-space: nowrap;
+    }
+
+    .metric .stability-formula {
+      display: none;
+    }
+
+    .metric[data-stability-expanded]:hover .stability-summary,
+    .metric[data-stability-expanded]:focus-visible .stability-summary,
+    .metric[data-stability-expanded][aria-expanded="true"] .stability-summary {
+      display: none;
+    }
+
+    .metric[data-stability-expanded]:hover .stability-formula,
+    .metric[data-stability-expanded]:focus-visible .stability-formula,
+    .metric[data-stability-expanded][aria-expanded="true"] .stability-formula {
+      display: inline;
+    }
+
     .metric[data-stability-expanded]:focus-visible,
     .metric[data-stability-expanded][aria-expanded="true"] {
       border-color: rgba(255, 209, 102, 0.7);

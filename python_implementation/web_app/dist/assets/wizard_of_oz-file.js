@@ -2159,8 +2159,12 @@
   var INSTABILITY_STRIP_Y_RESOLUTION = 44;
   var STRIP_LOG_RATIO_MIN = -2;
   var STRIP_LOG_RATIO_MAX = 2;
+  var STABILITY_CHIP_LONG_PRESS_MS = 480;
   var stabilityMapCache = /* @__PURE__ */ new Map();
   var instabilityStripCache = /* @__PURE__ */ new Map();
+  var stabilityChipLongPressTimer = null;
+  var stabilityChipLongPressTarget = null;
+  var stabilityChipSuppressClickTarget = null;
   var PLOT_LAYOUT = {
     left: 84,
     top: 18,
@@ -2245,6 +2249,17 @@
     const symbol = s72LatexInequality(condition2.stable, ">");
     const formula = condition2.kind === "convective" ? s72ConvectiveMargin() : condition2.kind === "secular" ? s72SecularMargin(stability) : condition2.kind === "dynamic" ? s72DynamicMargin(stability) : s72PulsationalMargin(stability);
     return `\\(${formula}=${fmt(condition2.value, 2)} ${symbol} 0\\)`;
+  }
+  function s72ConciseVerdict(kind, stable) {
+    const stateText = stable ? "stable" : "unstable";
+    if (kind === "convective") return `conv/turb ${stateText}`;
+    if (kind === "dynamic") return `dynamically ${stateText}`;
+    if (kind === "secular") return `secularly ${stateText}`;
+    return `pulsationally ${stateText}`;
+  }
+  function s72ConditionSummary(condition2) {
+    const symbol = s72TextInequality(condition2.stable, ">");
+    return `${s72ConciseVerdict(condition2.kind, condition2.stable)} <span class="stability-margin">(${fmt(condition2.value, 2)} ${symbol} 0)</span>`;
   }
   function s72TermSummary(stability) {
     const { radiativeThermal, restoring, secularCoupling, convectiveCorrection, thermalResponse, dynamicCoupling } = stability.terms;
@@ -3141,9 +3156,62 @@
     else samples.push({ phase: 1, value: first.value });
     return samples;
   }
+  function stabilityChipFromEvent(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return null;
+    return target.closest("#metrics [data-stability-expanded]");
+  }
+  function setStabilityChipExpanded(chip, expanded) {
+    chip.setAttribute("aria-expanded", expanded ? "true" : "false");
+    if (expanded) chip.dataset.stabilityView = "formula";
+    else delete chip.dataset.stabilityView;
+  }
+  function toggleStabilityChip(chip) {
+    setStabilityChipExpanded(chip, chip.getAttribute("aria-expanded") !== "true");
+  }
+  function clearStabilityChipLongPress() {
+    if (stabilityChipLongPressTimer !== null) window.clearTimeout(stabilityChipLongPressTimer);
+    stabilityChipLongPressTimer = null;
+    stabilityChipLongPressTarget = null;
+  }
+  function setupStabilityChipInteractions() {
+    const metrics = el("metrics");
+    metrics.addEventListener("click", (event) => {
+      const chip = stabilityChipFromEvent(event);
+      if (!chip) return;
+      event.preventDefault();
+      if (stabilityChipSuppressClickTarget === chip) {
+        stabilityChipSuppressClickTarget = null;
+        return;
+      }
+      toggleStabilityChip(chip);
+    });
+    metrics.addEventListener("keydown", (event) => {
+      const chip = stabilityChipFromEvent(event);
+      if (!chip || event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      toggleStabilityChip(chip);
+    });
+    metrics.addEventListener("pointerdown", (event) => {
+      const chip = stabilityChipFromEvent(event);
+      if (!chip || event.pointerType !== "touch" && event.pointerType !== "pen") return;
+      clearStabilityChipLongPress();
+      stabilityChipLongPressTarget = chip;
+      stabilityChipLongPressTimer = window.setTimeout(() => {
+        if (!stabilityChipLongPressTarget) return;
+        setStabilityChipExpanded(stabilityChipLongPressTarget, true);
+        stabilityChipSuppressClickTarget = stabilityChipLongPressTarget;
+        clearStabilityChipLongPress();
+      }, STABILITY_CHIP_LONG_PRESS_MS);
+    });
+    metrics.addEventListener("pointerup", clearStabilityChipLongPress);
+    metrics.addEventListener("pointercancel", clearStabilityChipLongPress);
+    metrics.addEventListener("pointerleave", clearStabilityChipLongPress);
+  }
   function buildControls() {
     setupResponsiveSidebarControls();
     setupSonificationControls();
+    setupStabilityChipInteractions();
     setupModelSpeedControl();
     setupPhaseAnnotationControls();
     buildPresetButtons();
@@ -7684,19 +7752,6 @@
     });
     ctx.restore();
   }
-  function drawModelPlainLabel(ctx, text, x, y, color) {
-    ctx.save();
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = "700 13px Inter, sans-serif";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(6, 11, 24, 0.92)";
-    ctx.lineWidth = 4;
-    ctx.fillStyle = colorWithAlpha(color, 0.98);
-    ctx.strokeText(text, x, y);
-    ctx.fillText(text, x, y);
-    ctx.restore();
-  }
   function drawConvectionArcs(ctx, row, centerX, centerY, radiusScale) {
     const equilibriumGeometry = shellGeometryFor(1, mAt(1, state));
     const equilibriumThickness = Math.max(3, equilibriumGeometry.thickness * radiusScale);
@@ -7738,43 +7793,6 @@
     });
     ctx.restore();
   }
-  function maximumAbsVelocity(rows) {
-    return Math.max(0, ...rows.map((row) => Math.abs(row.V)).filter(Number.isFinite));
-  }
-  function drawVelocityArc(ctx, row, centerX, centerY, radiusScale) {
-    const equilibriumGeometry = shellGeometryFor(1, mAt(1, state));
-    const equilibriumThickness = Math.max(3, equilibriumGeometry.thickness * radiusScale);
-    const maxVelocity = maximumAbsVelocity(latestPhaseRows);
-    const velocityLevel = maxVelocity > 0 ? clamp4(Math.abs(row.V) / maxVelocity, 0, 1) : 0;
-    const color = radialVelocityCurveColor(row.V, maxVelocity);
-    const segment = Math.PI / 2 / 3;
-    const startAngle = Math.PI / 2 + segment + 0.018;
-    const endAngle = Math.PI / 2 + 2 * segment - 0.018;
-    const labelAngle = Math.PI / 2 + 1.5 * segment;
-    const fixedLabelOffset = Math.max(18, equilibriumThickness * 0.75 + 10);
-    const labelRadius = Math.min(
-      radiusScale + fixedLabelOffset,
-      Math.max(0, Math.min(centerX, centerY) - 28)
-    );
-    ctx.save();
-    ctx.lineCap = "butt";
-    ctx.shadowColor = colorWithAlpha(color, 0.55 + 0.35 * velocityLevel);
-    ctx.shadowBlur = 2 + 14 * velocityLevel;
-    ctx.strokeStyle = colorWithAlpha(color, 0.36 + 0.62 * velocityLevel);
-    ctx.lineWidth = clamp4(2 + equilibriumThickness * 2.2 * velocityLevel, 2, equilibriumThickness * 3);
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radiusScale, startAngle, endAngle);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    drawModelPlainLabel(
-      ctx,
-      "V",
-      centerX + Math.cos(labelAngle) * labelRadius,
-      centerY + Math.sin(labelAngle) * labelRadius,
-      color
-    );
-    ctx.restore();
-  }
   function drawModelVisualization() {
     const canvas = el("modelCanvas");
     const panel = canvas.closest(".plot-panel");
@@ -7810,9 +7828,6 @@
     const radiusScale = size * 0.36 / maxRadius;
     const geometry = shellGeometryFromModel(row, state);
     const luminosityLevel = normalizedInRange(row.L, latestPhaseLuminosityRange);
-    const baseLuminosityValue = baseLuminosity(row, latestPhaseParameters);
-    const baseLuminosityRange = rawRange(latestPhaseRows.map((phaseRow) => baseLuminosity(phaseRow, latestPhaseParameters)));
-    const baseLuminosityLevel = normalizedInRange(baseLuminosityValue, baseLuminosityRange);
     const temperature = inferEffectiveTemperature(row.L, row.R);
     const blackbody = blackbodyRgbForTemperature(temperature);
     const shellColor = scaledRgb(blackbody, 0.58 + luminosityLevel * 0.52);
@@ -7830,9 +7845,9 @@
     }
     canvas.dataset.luminosityArcLabels = convectionActive ? "L_c,L,L_r" : "";
     canvas.dataset.geometryGuides = "R=1,eta,minR,maxR";
-    canvas.dataset.boundaryLuminosityLines = "L_base,L";
-    canvas.dataset.velocityArcLabel = "V";
-    canvas.dataset.radiusLabel = "R";
+    delete canvas.dataset.boundaryLuminosityLines;
+    delete canvas.dataset.velocityArcLabel;
+    delete canvas.dataset.radiusLabel;
     ctx.save();
     drawModelReferenceGuides(ctx, latestPhaseRows, centerX, centerY, radiusScale);
     ctx.shadowColor = rgbCss(blackbody, 0.65);
@@ -7848,35 +7863,7 @@
       rgbCss(shellColor, shellAlpha)
     );
     ctx.shadowBlur = 0;
-    ctx.shadowColor = colorWithAlpha(COLORS.L, 0.48 + 0.36 * luminosityLevel);
-    ctx.shadowBlur = 2 + 12 * luminosityLevel;
-    ctx.strokeStyle = colorWithAlpha(COLORS.L, 0.36 + 0.54 * luminosityLevel);
-    ctx.lineWidth = 1.1 + 4.4 * luminosityLevel;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, outerRadius, convectionActive ? Math.PI / 2 : 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    if (innerRadius > 1) {
-      ctx.shadowColor = colorWithAlpha(COLORS.sourceExp, 0.42 + 0.34 * baseLuminosityLevel);
-      ctx.shadowBlur = 2 + 12 * baseLuminosityLevel;
-      ctx.strokeStyle = colorWithAlpha(COLORS.sourceExp, 0.28 + 0.58 * baseLuminosityLevel);
-      ctx.lineWidth = 1 + 4.2 * baseLuminosityLevel;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, innerRadius, convectionActive ? Math.PI / 2 : 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-    }
-    drawVelocityArc(ctx, row, centerX, centerY, radiusScale);
     if (convectionActive) drawConvectionArcs(ctx, row, centerX, centerY, radiusScale);
-    const radiusLabelAngle = -Math.PI / 4;
-    const radiusLabelRadius = Math.min(outerRadius + 18, Math.max(0, Math.min(centerX, centerY) - 16));
-    drawModelPlainLabel(
-      ctx,
-      "R",
-      centerX + Math.cos(radiusLabelAngle) * radiusLabelRadius,
-      centerY + Math.sin(radiusLabelAngle) * radiusLabelRadius,
-      COLORS.R
-    );
     ctx.restore();
   }
   function drawAnimatedPhaseViews() {
@@ -7960,13 +7947,17 @@
     metricsNode.dataset.linearPeriodFormula = "2pi/sqrt(chi*Gamma1-4)";
     metricsNode.dataset.linearPeriod = linearPeriod ? fmt(linearPeriod, 6) : "unavailable";
     metricsNode.dataset.nonlinearPeriod = nonlinearPeriod ? fmt(nonlinearPeriod, 6) : "unavailable";
-    const stabilityMetricItems = s72Stability.conditions.map((condition2) => ({
-      label: s72ShortLabel(condition2.kind),
-      value: s72ConditionMetric(s72Stability, condition2),
-      detail: s72ConditionTitle(s72Stability, condition2),
-      className: s72MetricClass(condition2.stable),
-      stabilityKind: condition2.kind
-    }));
+    const stabilityMetricItems = s72Stability.conditions.map((condition2) => {
+      const formula = s72ConditionMetric(s72Stability, condition2);
+      return {
+        label: "",
+        value: `<span class="stability-summary">${s72ConditionSummary(condition2)}</span><span class="stability-formula">${formula}</span>`,
+        detail: s72ConditionTitle(s72Stability, condition2),
+        formula,
+        className: s72MetricClass(condition2.stable),
+        stabilityKind: condition2.kind
+      };
+    });
     const metricItems = [
       { label: "stop", value: displayStopReason, className: okStatus ? "status-ok" : "status-warn" },
       { label: `final \\(${TEX.tau}\\)`, value: final ? fmt(final.tau || 0, 4) : "n/a" },
@@ -7989,9 +7980,10 @@
       { label: "phase", value: displayWindow.mode === "time" ? "time window" : phase.reason === "ok" ? "available" : "unavailable" },
       ...stabilityMetricItems
     ];
-    const metricsHtml = metricItems.map(({ label, value, className, stabilityKind, detail }) => {
-      const stabilityAttribute = stabilityKind ? ` data-stability-kind="${stabilityKind}"` : "";
-      const detailAttribute = detail ? ` data-stability-detail="${escapeAttribute(detail)}" aria-label="${escapeAttribute(`${label}: ${detail}`)}"` : "";
+    const metricsHtml = metricItems.map(({ label, value, className, stabilityKind, detail, formula }) => {
+      const stabilityAttribute = stabilityKind ? ` data-stability-kind="${stabilityKind}" data-stability-expanded role="button" tabindex="0" aria-expanded="false"${formula ? ` data-stability-formula="${escapeAttribute(formula)}"` : ""}` : "";
+      const ariaLabelPrefix = label || (stabilityKind ? s72ShortLabel(stabilityKind) : "");
+      const detailAttribute = detail ? ` data-stability-detail="${escapeAttribute(detail)}" aria-label="${escapeAttribute(`${ariaLabelPrefix}: ${detail}`)}"` : "";
       return `<span class="metric${className ? ` ${className}` : ""}"${stabilityAttribute}${detailAttribute}>${label}<b>${value}</b></span>`;
     }).join("");
     stageMathHtml(metricsNode, metricsHtml);

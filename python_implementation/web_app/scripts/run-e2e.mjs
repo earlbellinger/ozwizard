@@ -308,21 +308,35 @@ async function runPlaywrightChecks() {
     assertOk(stabilityDetails.includes("E="), "stability chip details should define the E temporary");
     assertOk(!/\b[ABCD]\b/.test(stabilityDetails), "stability chip details should not expose A/B/C/D coefficient notation");
     assertOk((await convectiveChip.getAttribute("title")) === null, "stability chips should not use a separate hover tooltip");
-    assertOk((await convectiveChip.getAttribute("data-stability-expanded")) === null, "stability chips should not carry inline expanded formulas");
-    assertOk((await convectiveChip.getAttribute("data-stability-view")) === null, "stability chips should not keep hover/toggle state");
-    assertOk((await convectiveChip.getAttribute("role")) === null, "stability chips should not be clickable controls");
+    assertOk((await convectiveChip.getAttribute("data-stability-expanded")) === "", "stability chips should expose inline expanded formulas");
+    assertOk((await convectiveChip.getAttribute("data-stability-view")) === null, "stability chips should start in summary mode");
+    assertOk((await convectiveChip.getAttribute("role")) === "button", "stability chips should be clickable controls");
+    assertOk((await convectiveChip.getAttribute("aria-expanded")) === "false", "stability chips should start collapsed");
+    assertOk(/\\\(.*=30\.5 > 0\\\)/.test(await convectiveChip.getAttribute("data-stability-formula") || ""), "stability chips should expose the full formula");
     const convectiveBox = await convectiveChip.boundingBox();
     assertOk(Boolean(convectiveBox), "convective/turbulent stability chip bounds should be available");
     const normalizeChipText = (value) => value?.replace(/\s+/g, " ").trim();
-    const convectiveInitialText = normalizeChipText(await convectiveChip.textContent());
+    const convectiveInitialText = normalizeChipText(await convectiveChip.locator(".stability-summary").innerText());
+    assertOk(convectiveInitialText?.includes("conv/turb stable") && convectiveInitialText.includes("(30.5 > 0)"), "convective chip should use concise summary text");
+    assertOk(normalizeChipText(await secularChip.locator(".stability-summary").innerText())?.includes("secularly stable"), "secular chip should use concise summary text");
+    assertOk(normalizeChipText(await dynamicChip.locator(".stability-summary").innerText())?.includes("dynamically stable"), "dynamic chip should use concise summary text");
+    assertOk(normalizeChipText(await pulsationalChip.locator(".stability-summary").innerText())?.includes("pulsationally unstable (-36 ≯ 0)"), "pulsational chip should use concise summary text with a slashed failed inequality");
+    assertOk(await convectiveChip.locator(".stability-summary").isVisible(), "stability chip summary should be visible initially");
+    assertOk(!(await convectiveChip.locator(".stability-formula").isVisible()), "stability chip formula should be hidden initially");
     await convectiveChip.hover();
-    assertOk(normalizeChipText(await convectiveChip.textContent()) === convectiveInitialText, "hovering a stability chip should leave the formula unchanged");
-    assertOk((await convectiveChip.getAttribute("data-stability-view")) === null, "hovering a stability chip should not create hover state");
+    assertOk(!(await convectiveChip.locator(".stability-summary").isVisible()), "hovering a stability chip should hide the summary");
+    assertOk(await convectiveChip.locator(".stability-formula").isVisible(), "hovering a stability chip should reveal the formula");
+    assertOk((await convectiveChip.getAttribute("data-stability-view")) === null, "hovering a stability chip should not persist toggle state");
+    await page.mouse.move(1, 1);
+    assertOk(await convectiveChip.locator(".stability-summary").isVisible(), "leaving a stability chip should restore the summary");
     await convectiveChip.click();
-    assertOk(normalizeChipText(await convectiveChip.textContent()) === convectiveInitialText, "clicking a stability chip should leave the formula unchanged");
-    assertOk((await convectiveChip.getAttribute("data-stability-view")) === null, "clicking a stability chip should not create toggle state");
+    assertOk((await convectiveChip.getAttribute("aria-expanded")) === "true", "clicking a stability chip should expand the formula");
+    assertOk((await convectiveChip.getAttribute("data-stability-view")) === "formula", "clicking a stability chip should persist formula mode");
+    assertOk(await convectiveChip.locator(".stability-formula").isVisible(), "expanded stability chip should show the formula");
+    await convectiveChip.click();
+    assertOk((await convectiveChip.getAttribute("aria-expanded")) === "false", "clicking an expanded stability chip should collapse it");
     assertOk((await page.locator("#stabilityChipTooltip").count()) === 0, "stability chips should not create a separate tooltip box");
-    await convectiveChip.evaluate((node) => {
+    await pulsationalChip.evaluate((node) => {
       node.dispatchEvent(new PointerEvent("pointerdown", {
         bubbles: true,
         cancelable: true,
@@ -332,7 +346,11 @@ async function runPlaywrightChecks() {
         clientY: 20
       }));
     });
-    await convectiveChip.evaluate((node) => {
+    await page.waitForTimeout(560);
+    assertOk((await pulsationalChip.getAttribute("aria-expanded")) === "true", "long-pressing a stability chip should expand the formula");
+    assertOk((await pulsationalChip.getAttribute("data-stability-view")) === "formula", "long-pressing a stability chip should persist formula mode");
+    assertOk(await pulsationalChip.locator(".stability-formula").isVisible(), "long-pressed stability chip should show the formula");
+    await pulsationalChip.evaluate((node) => {
       node.dispatchEvent(new PointerEvent("pointerup", {
         bubbles: true,
         cancelable: true,
@@ -342,8 +360,6 @@ async function runPlaywrightChecks() {
         clientY: 20
       }));
     });
-    assertOk(normalizeChipText(await convectiveChip.textContent()) === convectiveInitialText, "touching a stability chip should leave the formula unchanged");
-    assertOk((await convectiveChip.getAttribute("data-stability-view")) === null, "touching a stability chip should not create toggle state");
 
     assertOk(await page.locator("[data-symbol='tau']").first().isVisible(), "tau symbol was not visible");
     const tauRowText = await page.locator("[data-symbol='tau']").first().locator("xpath=ancestor::tr").textContent();
@@ -626,9 +642,9 @@ async function runPlaywrightChecks() {
     assertOk(phaseDelta(resumedPhase, releasePhase) > 0.04, "phase animation should resume from the released position");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "L_c,L,L_r", "model luminosity arc labels should be active");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-geometry-guides")) === "R=1,eta,minR,maxR", "model geometry guides should be active");
-    assertOk((await page.locator("#modelCanvas").getAttribute("data-boundary-luminosity-lines")) === "L_base,L", "model luminosity boundary lines should be active");
-    assertOk((await page.locator("#modelCanvas").getAttribute("data-velocity-arc-label")) === "V", "model velocity arc label should be active");
-    assertOk((await page.locator("#modelCanvas").getAttribute("data-radius-label")) === "R", "model radius label should be active");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-boundary-luminosity-lines")) === null, "model luminosity boundary lines should be absent");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-velocity-arc-label")) === null, "model velocity arc label should be absent");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-radius-label")) === null, "model radius label should be absent");
     assertOk((await page.locator("#plotGrid").getAttribute("data-plot-columns")) === null, "plot grid should not force a column mode");
     assertOk(!(await page.locator("#hiddenPlotControls").isVisible()), "hidden plot controls should start hidden");
     assertOk((await page.locator("#plotGrid").evaluate((node) => getComputedStyle(node).display)) === "flex", "plot grid should use flex display");
@@ -835,9 +851,9 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("[data-value-for='zetac']").textContent()) === "1", "convective response should still display one");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-convection-active")) === "true", "model arcs should start in convective mode");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "L_c,L,L_r", "model arcs should expose luminosity labels");
-    assertOk((await page.locator("#modelCanvas").getAttribute("data-boundary-luminosity-lines")) === "L_base,L", "model boundary luminosity lines should be active");
-    assertOk((await page.locator("#modelCanvas").getAttribute("data-velocity-arc-label")) === "V", "model velocity arc label should be active");
-    assertOk((await page.locator("#modelCanvas").getAttribute("data-radius-label")) === "R", "model radius label should be active");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-boundary-luminosity-lines")) === null, "model boundary luminosity lines should be absent");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-velocity-arc-label")) === null, "model velocity arc label should be absent");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-radius-label")) === null, "model radius label should be absent");
     await page.locator("input[aria-label='convective response']").evaluate((input) => {
       const slider = input;
       slider.value = "-2";
@@ -859,9 +875,9 @@ async function runPlaywrightChecks() {
     assertOk(/stable:\d+,secular:\d+,dynamic:\d+,pulsational:\d+,neutral:\d+/.test(await page.locator("#cepheidGuideCanvas").getAttribute("data-instability-counts") || ""), "radiative instability strip counts should omit convective/turbulent counts");
     await page.waitForFunction(() => document.querySelector("#modelCanvas")?.getAttribute("data-convection-active") === "false");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "", "model luminosity arc labels should hide when convection is off");
-    assertOk((await page.locator("#modelCanvas").getAttribute("data-boundary-luminosity-lines")) === "L_base,L", "model boundary luminosity lines should remain active when convection is off");
-    assertOk((await page.locator("#modelCanvas").getAttribute("data-velocity-arc-label")) === "V", "model velocity arc label should remain active when convection is off");
-    assertOk((await page.locator("#modelCanvas").getAttribute("data-radius-label")) === "R", "model radius label should remain active when convection is off");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-boundary-luminosity-lines")) === null, "model boundary luminosity lines should remain absent when convection is off");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-velocity-arc-label")) === null, "model velocity arc label should remain absent when convection is off");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-radius-label")) === null, "model radius label should remain absent when convection is off");
     assertOk((await page.locator("#derivationPanel").getAttribute("data-physics-mode")) === "radiative", "derivation should switch to radiative reduced criteria");
     assertOk((await page.locator("#derivationPanel").getAttribute("data-convection-mode")) === "frozen", "derivation should mark convection as frozen");
     assertOk((await page.locator("#derivationContent [data-stability-kind='convective']").count()) === 0, "radiative derivation should omit the convective/turbulent criterion");
@@ -880,7 +896,7 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#derivationPanel").getAttribute("data-convection-mode")) === "time-dependent", "derivation should return to time-dependent convection");
     assertOk((await page.locator("#derivationContent [data-stability-kind='convective']").count()) === 1, "convective derivation criterion should return");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "L_c,L,L_r", "model luminosity arc labels should return when convection is on");
-    assertOk((await page.locator("#modelCanvas").getAttribute("data-boundary-luminosity-lines")) === "L_base,L", "model boundary luminosity lines should return when convection is on");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-boundary-luminosity-lines")) === null, "model boundary luminosity lines should stay absent when convection is on");
     const radiusToggle = page.locator("#timeLegend [data-plot-series='R']");
     assertOk((await radiusToggle.getAttribute("aria-pressed")) === "true", "radius toggle should start visible");
     await radiusToggle.click();
