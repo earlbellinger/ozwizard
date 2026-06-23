@@ -7688,6 +7688,15 @@ function drawHeatEnginePistonCausal(
   ]);
   const forceArrowLength = (value: number) => 9 + heatEngineNormalizedMagnitude(value, forceMagnitudeMax) * 52;
   const heatFlowMagnitude = (value: number) => heatEngineNormalizedMagnitude(value, heatFlowMagnitudeMax);
+  const luminosityRange = rawRange([
+    ...rows.map((item) => item.L),
+    ...radiativeValues,
+    ...convectiveValues,
+    row.L,
+    terms.radiativeLeak,
+    terms.convectiveLeak
+  ]);
+  const luminosityLevel = (value: number) => normalizedInRange(value, luminosityRange);
   const travelTop = chamber.top + 18;
   const travelBottom = bottom - 88;
   const pistonY = travelBottom - normalizedInRange(row.R, radiusRange) * Math.max(1, travelBottom - travelTop);
@@ -7705,18 +7714,22 @@ function drawHeatEnginePistonCausal(
   ctx.lineTo(right, chamber.top);
   ctx.stroke();
 
-  const radiativeNorm = heatFlowMagnitude(terms.radiativeLeak);
+  const radiativeLevel = luminosityLevel(terms.radiativeLeak);
   const radiativeX = chamber.left + chamber.width * 0.95 - 10;
   const radiativeBaseY = pistonY - pistonHeight / 2 - 2;
-  const radiativeTipY = Math.max(chamber.top - 12, radiativeBaseY - (18 + radiativeNorm * 14));
+  const radiativeTipY = Math.max(chamber.top - 12, radiativeBaseY - 28);
   const radiativeLabelY = (radiativeBaseY + radiativeTipY) / 2;
-  ctx.strokeStyle = colorWithAlpha(COLORS.Lr, 0.78);
-  ctx.lineWidth = 2.2 + radiativeNorm * 5.2;
+  ctx.strokeStyle = colorWithAlpha(COLORS.Lr, 0.26 + radiativeLevel * 0.62);
+  ctx.shadowColor = colorWithAlpha(COLORS.Lr, 0.2 + radiativeLevel * 0.52);
+  ctx.shadowBlur = 2 + radiativeLevel * 10;
+  ctx.lineWidth = 4.4;
   ctx.lineCap = "butt";
   ctx.beginPath();
   ctx.moveTo(radiativeX, radiativeBaseY);
   ctx.lineTo(radiativeX, radiativeTipY);
   ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = colorWithAlpha(COLORS.Lr, 0.32 + radiativeLevel * 0.62);
   ctx.lineWidth = 1.4;
   ctx.lineCap = "round";
   for (let ray = -1; ray <= 1; ray += 1) {
@@ -7739,7 +7752,7 @@ function drawHeatEnginePistonCausal(
   ctx.fillRect(chamber.left + 3, gasTop, chamber.width - 6, bottom - gasTop - 3);
   ctx.shadowBlur = 0;
 
-  const pistonLuminosity = normalizedInRange(row.L, latestPhaseLuminosityRange);
+  const pistonLuminosity = luminosityLevel(row.L);
   const pistonBlackbody = blackbodyRgbForTemperature(inferEffectiveTemperature(row.L, row.R));
   const pistonColor = scaledRgb(pistonBlackbody, 0.58 + pistonLuminosity * 0.52);
   roundedRectPath(ctx, chamber.left - 5, pistonY - pistonHeight / 2, chamber.width + 10, pistonHeight, 3);
@@ -7794,7 +7807,7 @@ function drawHeatEnginePistonCausal(
   drawHeatEngineLabel(ctx, "source", sourceX + 10, bottom + 18, sourceLuminosityColor(), "left", 9.4, 760);
   drawHeatEngineLabel(ctx, "luminosity", sourceX + 10, bottom + 30, sourceLuminosityColor(), "left", 9.4, 760);
 
-  const convectiveLeakNorm = heatFlowMagnitude(terms.convectiveLeak);
+  const convectiveLeakLevel = luminosityLevel(terms.convectiveLeak);
   const hasConvectiveLeak = convectiveLuminosityAvailable(parameters);
   if (hasConvectiveLeak) {
     const convectionResponsive = !convectiveResponseDisabled(parameters);
@@ -7861,15 +7874,19 @@ function drawHeatEnginePistonCausal(
       fontSize: 10
     });
     const leakX = slotX + slotWidth / 2;
-    const leakBaseY = slotTop + 1;
-    const leakTipY = Math.max(chamber.top - 8, leakBaseY - (18 + convectiveLeakNorm * 14));
-    ctx.strokeStyle = colorWithAlpha(COLORS.Lc, 0.78);
-    ctx.lineWidth = 2.2 + convectiveLeakNorm * 5.2;
+    const leakBaseY = slotTop - 1;
+    const leakTipY = Math.max(chamber.top - 8, leakBaseY - 28);
+    ctx.strokeStyle = colorWithAlpha(COLORS.Lc, 0.26 + convectiveLeakLevel * 0.62);
+    ctx.shadowColor = colorWithAlpha(COLORS.Lc, 0.2 + convectiveLeakLevel * 0.52);
+    ctx.shadowBlur = 2 + convectiveLeakLevel * 10;
+    ctx.lineWidth = 4.4;
     ctx.lineCap = "butt";
     ctx.beginPath();
     ctx.moveTo(leakX, leakBaseY);
     ctx.lineTo(leakX, leakTipY);
     ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = colorWithAlpha(COLORS.Lc, 0.32 + convectiveLeakLevel * 0.62);
     ctx.lineWidth = 1.4;
     ctx.lineCap = "round";
     for (let ray = -1; ray <= 1; ray += 1) {
