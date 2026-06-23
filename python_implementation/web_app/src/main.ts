@@ -7693,7 +7693,7 @@ function drawHeatEnginePistonCausal(
   const radiativeX = chamber.left + chamber.width * 0.95 - 10;
   const radiativeBaseY = pistonY - pistonHeight / 2 - 2;
   const radiativeTipY = Math.max(chamber.top - 12, radiativeBaseY - (18 + radiativeNorm * 14));
-  const radiativeLabelY = (radiativeBaseY + radiativeTipY) / 2 - 7;
+  const radiativeLabelY = (radiativeBaseY + radiativeTipY) / 2;
   ctx.strokeStyle = colorWithAlpha(COLORS.Lr, 0.78);
   ctx.lineWidth = 2.2 + radiativeNorm * 5.2;
   ctx.lineCap = "butt";
@@ -7709,8 +7709,10 @@ function drawHeatEnginePistonCausal(
     ctx.lineTo(radiativeX + ray * 11, radiativeTipY - 15);
     ctx.stroke();
   }
-  drawHeatEngineLabel(ctx, "radiative", radiativeX - 10, radiativeLabelY, COLORS.Lr, "right", 9.2, 760);
-  drawHeatEngineLabel(ctx, "leak", radiativeX - 10, radiativeLabelY + 12, COLORS.Lr, "right", 9.2, 760);
+  drawHeatEngineMathLabel(ctx, [{ text: "L", subscript: "r", color: COLORS.Lr, weight: 800 }], radiativeX - 10, radiativeLabelY, {
+    align: "right",
+    fontSize: 11
+  });
 
   const fillGradient = ctx.createLinearGradient(0, gasTop, 0, bottom);
   fillGradient.addColorStop(0, colorWithAlpha(COLORS.H, 0.18 + hLevel * 0.22));
@@ -7782,21 +7784,23 @@ function drawHeatEnginePistonCausal(
     const slotX = right + 14;
     const slotBottom = bottom - 34;
     const slotTop = slotBottom - slotHeight;
-    const outletEndX = slotX;
-    const outletY = slotTop + slotHeight * 0.58;
-    const outletThickness = 2.8 + convectiveLeakNorm * 8.2;
-    const outletWidth = Math.max(1, outletEndX - right);
-    const flowHeadLength = Math.min(9, Math.max(3, outletWidth - 2));
-    const flowHeadHalfHeight = Math.max(4, outletThickness * 0.48);
-    const flowHeadX = right + outletWidth * 0.58;
+    const ductY = slotTop + slotHeight * 0.58;
+    const ductHeight = 6;
+    const ductWidth = Math.max(1, slotX - right);
 
-    ctx.fillStyle = colorWithAlpha(COLORS.Lc, 0.34 + convectiveLeakNorm * 0.56);
-    ctx.fillRect(right, outletY - outletThickness / 2, outletWidth, outletThickness);
-    ctx.fillStyle = "rgba(245, 252, 255, 0.78)";
+    ctx.fillStyle = colorWithAlpha(COLORS.Lc, 0.18);
+    ctx.fillRect(right, ductY - ductHeight / 2, ductWidth, ductHeight);
+    ctx.strokeStyle = colorWithAlpha(COLORS.Lc, 0.42);
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(right, ductY - ductHeight / 2, ductWidth, ductHeight);
+    const ductArrowX = right + ductWidth * 0.28;
+    const ductArrowLength = Math.min(8, Math.max(4, ductWidth * 0.48));
+    const ductArrowHalfHeight = Math.max(3.5, ductHeight * 0.65);
+    ctx.fillStyle = colorWithAlpha(COLORS.Lc, 0.72);
     ctx.beginPath();
-    ctx.moveTo(flowHeadX, outletY);
-    ctx.lineTo(flowHeadX - flowHeadLength, outletY - flowHeadHalfHeight);
-    ctx.lineTo(flowHeadX - flowHeadLength, outletY + flowHeadHalfHeight);
+    ctx.moveTo(ductArrowX + ductArrowLength / 2, ductY);
+    ctx.lineTo(ductArrowX - ductArrowLength / 2, ductY - ductArrowHalfHeight);
+    ctx.lineTo(ductArrowX - ductArrowLength / 2, ductY + ductArrowHalfHeight);
     ctx.closePath();
     ctx.fill();
 
@@ -7836,6 +7840,29 @@ function drawHeatEnginePistonCausal(
     drawHeatEngineMathLabel(ctx, [{ text: "U", subscript: "c", color: COLORS.Uc }], slotX + slotWidth / 2, slotBottom + 12, {
       align: "center",
       fontSize: 10
+    });
+    const leakX = slotX + slotWidth / 2;
+    const leakBaseY = slotTop + 1;
+    const leakTipY = Math.max(chamber.top - 8, leakBaseY - (18 + convectiveLeakNorm * 14));
+    ctx.strokeStyle = colorWithAlpha(COLORS.Lc, 0.78);
+    ctx.lineWidth = 2.2 + convectiveLeakNorm * 5.2;
+    ctx.lineCap = "butt";
+    ctx.beginPath();
+    ctx.moveTo(leakX, leakBaseY);
+    ctx.lineTo(leakX, leakTipY);
+    ctx.stroke();
+    ctx.lineWidth = 1.4;
+    ctx.lineCap = "round";
+    for (let ray = -1; ray <= 1; ray += 1) {
+      ctx.beginPath();
+      ctx.moveTo(leakX + ray * 7, leakTipY - 3);
+      ctx.lineTo(leakX + ray * 11, leakTipY - 15);
+      ctx.stroke();
+    }
+    const leakLabelY = (leakBaseY + leakTipY) / 2;
+    drawHeatEngineMathLabel(ctx, [{ text: "L", subscript: "c", color: COLORS.Lc, weight: 800 }], leakX + 10, leakLabelY, {
+      align: "left",
+      fontSize: 11
     });
   }
 
@@ -8236,7 +8263,7 @@ function drawHeatEnginePanel(): void {
   canvas.dataset.forceTerms = "pressure,gravity,damping";
   const heatEngineShowsUc = convectiveLuminosityAvailable(latestPhaseParameters);
   const heatEngineConvectionResponsive = heatEngineShowsUc && !convectiveResponseDisabled(latestPhaseParameters);
-  canvas.dataset.heatFluxTerms = heatEngineShowsUc ? "source,radiative leak,convective outlet" : "source,radiative leak";
+  canvas.dataset.heatFluxTerms = heatEngineShowsUc ? "source,L_r,L_c" : "source,L_r";
   canvas.dataset.convectiveValve = heatEngineShowsUc ? (heatEngineConvectionResponsive ? "time-dependent" : "frozen") : "hidden";
   if (heatEngineConvectionResponsive) {
     canvas.dataset.convectiveTarget = "U_c,*";
