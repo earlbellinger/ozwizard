@@ -7787,16 +7787,17 @@
       ctx.restore();
       drawHeatEngineLabel(ctx, "opacity", ghostX + ghostWidth / 2, ghostTop + ghostHeight / 2, "rgba(210, 218, 232, 0.9)", "center", 9.4, 760);
     }
-    const pistonLuminosity = luminosityLevel(row.L);
-    const pistonBlackbody = blackbodyRgbForTemperature(inferEffectiveTemperature(row.L, row.R));
-    const pistonColor = scaledRgb(pistonBlackbody, 0.58 + pistonLuminosity * 0.52);
+    const temperatureValues = rows.map((item) => effectiveTemperatureProxy(item) ?? NaN).filter(Number.isFinite);
+    const currentTemperatureProxy = effectiveTemperatureProxy(row);
+    const pistonTemperatureLevel = normalizedInRange(currentTemperatureProxy ?? 1, range([...temperatureValues, currentTemperatureProxy ?? NaN], 0.08));
+    const pistonTemperatureColor = blackbodyRgbForTemperature(inferEffectiveTemperature(row.L, row.R));
     roundedRectPath(ctx, chamber.left - 5, pistonY - pistonHeight / 2, chamber.width + 10, pistonHeight, 3);
-    ctx.shadowColor = rgbCss(pistonColor, 0.34 + pistonLuminosity * 0.48);
-    ctx.shadowBlur = 4 + pistonLuminosity * 13;
-    ctx.fillStyle = rgbCss(pistonColor, 0.72 + pistonLuminosity * 0.22);
+    ctx.shadowColor = rgbCss(pistonTemperatureColor, 0.2 + pistonTemperatureLevel * 0.5);
+    ctx.shadowBlur = 4 + pistonTemperatureLevel * 13;
+    ctx.fillStyle = rgbCss(pistonTemperatureColor, 0.44 + pistonTemperatureLevel * 0.42);
     ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = rgbCss(scaledRgb(pistonColor, 1.18), 0.94);
+    ctx.strokeStyle = "rgba(240, 245, 255, 0.88)";
     ctx.lineWidth = 1.2;
     ctx.stroke();
     drawHeatEngineArrow(ctx, pressureX, Math.min(bottom - 10, gasTop + pressureLength + 8), pressureX, gasTop + 2, COLORS.H, 3.1);
