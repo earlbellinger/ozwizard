@@ -1243,6 +1243,8 @@
   }
 
   // src/displayWindow.ts
+  var AMPLITUDE_NOISE_FLOOR = 1e-5;
+  var PARTIAL_CHANGE_FACTOR = 1.25;
   function isTimeWindowReason(message) {
     return message === "equilibrium" || message === "runaway" || message === "runaway_trend";
   }
@@ -1257,28 +1259,47 @@
     };
   }
   function buildTimeDisplayWindow(rows, reason, message) {
-    const windowRows = terminalTimeWindowRows(rows, reason);
+    const selection = terminalTimeWindowSelection(rows, reason);
     return {
       mode: "time",
       reason,
-      rows: windowRows,
-      xlim: timeDomain(windowRows),
+      rows: selection.rows,
+      xlim: timeDomain(selection.rows),
       period: null,
-      message
+      message: selection.kind === "damping_decade" ? "time window: last damping decade" : selection.kind === "partial_damping" ? "time window: partial damping window" : selection.kind === "growth_decade" ? "time window: runaway growth decade" : selection.kind === "partial_growth" ? "time window: partial runaway growth" : message
     };
   }
-  function terminalTimeWindowRows(rows, reason) {
+  function terminalTimeWindowSelection(rows, reason) {
     const finiteRows = rows.filter((row) => Number.isFinite(row.tau));
-    if (finiteRows.length <= 2) return [...finiteRows];
+    if (finiteRows.length <= 2) return { rows: [...finiteRows], kind: "terminal" };
     const firstTau = finiteRows[0].tau;
     const finalTau = finiteRows[finiteRows.length - 1].tau;
     const span = finalTau - firstTau;
-    if (span <= 0) return [...finiteRows];
+    if (span <= 0) return { rows: [...finiteRows], kind: "terminal" };
     let startTau = null;
+    let kind = "terminal";
+    if (reason === "equilibrium") {
+      const dampingWindow = dampingWindowStart(finiteRows);
+      if (dampingWindow) {
+        startTau = dampingWindow.startTau;
+        kind = dampingWindow.kind;
+      }
+    }
     if (reason === "runaway" || reason === "runaway_trend") {
-      const extrema = luminosityExtremaIndices(finiteRows);
-      if (extrema.length >= 6) startTau = finiteRows[extrema[extrema.length - 6]].tau;
-      else if (extrema.length >= 3) startTau = finiteRows[extrema[0]].tau;
+      const growthWindow = growthWindowStart(finiteRows);
+      if (growthWindow) {
+        startTau = growthWindow.startTau;
+        kind = growthWindow.kind;
+      } else {
+        const extrema = luminosityExtremaIndices(finiteRows);
+        if (extrema.length >= 6) {
+          startTau = finiteRows[extrema[extrema.length - 6]].tau;
+          kind = "recent_extrema";
+        } else if (extrema.length >= 3) {
+          startTau = finiteRows[extrema[0]].tau;
+          kind = "recent_extrema";
+        }
+      }
     }
     if (startTau === null) {
       const fraction = reason === "equilibrium" ? 0.22 : 0.28;
@@ -1288,7 +1309,10 @@
       startTau = Math.max(firstTau, finalTau - duration);
     }
     const selected = finiteRows.filter((row) => row.tau >= startTau && row.tau <= finalTau);
-    return selected.length >= 2 ? selected : finiteRows.slice(-Math.min(finiteRows.length, 64));
+    return {
+      rows: selected.length >= 2 ? selected : finiteRows.slice(-Math.min(finiteRows.length, 64)),
+      kind
+    };
   }
   function rowAtDisplayPosition(display, position) {
     if (display.mode === "time") return rowAtTime(display.rows, displayTimeAtPosition(display, position));
@@ -1370,6 +1394,172 @@
       }
     }
     return extrema;
+  }
+  function dampingWindowStart(rows) {
+    const extrema = luminosityExtremaIndices(rows);
+    if (extrema.length < 5) return null;
+    const samples = luminosityAmplitudeSamples(rows, extrema);
+    if (samples.length < 4) return null;
+    const amplitudes = samples.map((sample2) => sample2.amplitude);
+    const maxAmplitude = Math.max(...amplitudes);
+    if (!Number.isFinite(maxAmplitude) || maxAmplitude <= 0) return null;
+    const amplitudeFloor = amplitudeNoiseFloor(maxAmplitude);
+    let lastIndex = -1;
+    for (let index = samples.length - 1; index >= 0; index -= 1) {
+      if (samples[index].amplitude >= amplitudeFloor) {
+        lastIndex = index;
+        break;
+      }
+    }
+    if (lastIndex < 2) return null;
+    const targetAmplitude = samples[lastIndex].amplitude * 10;
+    if (targetAmplitude <= maxAmplitude * 1.02) {
+      for (let index = lastIndex - 1; index >= 0; index -= 1) {
+        if (samples[index].amplitude >= targetAmplitude) {
+          return {
+            startTau: paddedOscillationStartTau(rows, extrema, samples[index].startTau),
+            kind: "damping_decade"
+          };
+        }
+      }
+    }
+    const earlier = samples.slice(0, lastIndex).map((sample2, index) => ({ ...sample2, index })).filter((sample2) => sample2.amplitude >= amplitudeFloor).sort((a, b) => b.amplitude - a.amplitude)[0];
+    if (!earlier || earlier.amplitude < samples[lastIndex].amplitude * PARTIAL_CHANGE_FACTOR) return null;
+    return {
+      startTau: paddedOscillationStartTau(rows, extrema, earlier.startTau),
+      kind: "partial_damping"
+    };
+  }
+  function growthWindowStart(rows) {
+    return oscillatoryGrowthWindowStart(rows) ?? runawayMagnitudeGrowthWindowStart(rows);
+  }
+  function oscillatoryGrowthWindowStart(rows) {
+    const extrema = luminosityExtremaIndices(rows);
+    if (extrema.length < 5) return null;
+    const samples = luminosityAmplitudeSamples(rows, extrema);
+    if (samples.length < 4) return null;
+    const amplitudes = samples.map((sample2) => sample2.amplitude);
+    const maxAmplitude = Math.max(...amplitudes);
+    if (!Number.isFinite(maxAmplitude) || maxAmplitude <= 0) return null;
+    const amplitudeFloor = amplitudeNoiseFloor(maxAmplitude);
+    let lastIndex = -1;
+    for (let index = samples.length - 1; index >= 0; index -= 1) {
+      if (samples[index].amplitude >= amplitudeFloor) {
+        lastIndex = index;
+        break;
+      }
+    }
+    if (lastIndex < 2) return null;
+    const finalAmplitude = samples[lastIndex].amplitude;
+    const previousMax = Math.max(...samples.slice(0, lastIndex).map((sample2) => sample2.amplitude));
+    if (!Number.isFinite(finalAmplitude + previousMax) || finalAmplitude <= 0 || finalAmplitude < previousMax * 0.8) return null;
+    const targetAmplitude = finalAmplitude / 10;
+    for (let index = lastIndex - 1; index >= 0; index -= 1) {
+      if (samples[index].amplitude >= amplitudeFloor && samples[index].amplitude <= targetAmplitude) {
+        return {
+          startTau: paddedOscillationStartTau(rows, extrema, samples[index].startTau),
+          kind: "growth_decade"
+        };
+      }
+    }
+    const earlier = samples.slice(0, lastIndex).map((sample2, index) => ({ ...sample2, index })).filter((sample2) => sample2.amplitude >= amplitudeFloor).sort((a, b) => a.amplitude - b.amplitude)[0];
+    if (!earlier || finalAmplitude < earlier.amplitude * PARTIAL_CHANGE_FACTOR) return null;
+    return {
+      startTau: paddedOscillationStartTau(rows, extrema, earlier.startTau),
+      kind: "partial_growth"
+    };
+  }
+  function paddedOscillationStartTau(rows, extrema, startTau) {
+    const firstTau = rows[0].tau;
+    const finalTau = rows[rows.length - 1].tau;
+    const period = luminosityExtremaPeriod(rows, extrema);
+    let paddedStartTau = startTau;
+    if (period !== null) {
+      paddedStartTau = Math.max(firstTau, paddedStartTau - 0.25 * period);
+      const minimumDuration = Math.max(3, 2.5 * period);
+      if (finalTau - paddedStartTau < minimumDuration) paddedStartTau = Math.max(firstTau, finalTau - minimumDuration);
+    }
+    return paddedStartTau;
+  }
+  function runawayMagnitudeGrowthWindowStart(rows) {
+    if (rows.length < 4) return null;
+    const values = rows.map(runawayMagnitude);
+    const finalValue = values.at(-1) ?? 0;
+    const maxValue = Math.max(...values);
+    const floor = amplitudeNoiseFloor(maxValue);
+    if (!Number.isFinite(finalValue + maxValue) || finalValue <= floor || finalValue < maxValue * 0.8) return null;
+    const target = finalValue / 10;
+    for (let index = values.length - 2; index >= 0; index -= 1) {
+      if (values[index] >= floor && values[index] <= target) {
+        return {
+          startTau: paddedTrendStartTau(rows, rows[index].tau),
+          kind: "growth_decade"
+        };
+      }
+    }
+    let startIndex = -1;
+    let minValue = Infinity;
+    for (let index = 0; index < values.length - 1; index += 1) {
+      if (values[index] >= floor && values[index] < minValue) {
+        minValue = values[index];
+        startIndex = index;
+      }
+    }
+    if (startIndex < 0 || finalValue < minValue * PARTIAL_CHANGE_FACTOR) return null;
+    return {
+      startTau: paddedTrendStartTau(rows, rows[startIndex].tau),
+      kind: "partial_growth"
+    };
+  }
+  function paddedTrendStartTau(rows, startTau) {
+    const firstTau = rows[0].tau;
+    const finalTau = rows[rows.length - 1].tau;
+    const minimumDuration = Math.max(2, (finalTau - firstTau) * 0.06);
+    let paddedStartTau = startTau;
+    if (finalTau - paddedStartTau < minimumDuration) paddedStartTau = Math.max(firstTau, finalTau - minimumDuration);
+    return paddedStartTau;
+  }
+  function runawayMagnitude(row) {
+    const values = [
+      Math.abs(row.R - 1),
+      Math.abs(row.H - 1),
+      Math.abs(row.Uc - 1),
+      Math.abs(row.L - 1),
+      Math.abs(row.V)
+    ].filter(Number.isFinite);
+    return values.length ? Math.max(...values) : 0;
+  }
+  function amplitudeNoiseFloor(maxAmplitude) {
+    return Math.max(AMPLITUDE_NOISE_FLOOR, maxAmplitude * 1e-4);
+  }
+  function luminosityAmplitudeSamples(rows, extrema) {
+    const samples = [];
+    for (let index = 0; index < extrema.length - 1; index += 1) {
+      const left = rows[extrema[index]];
+      const right = rows[extrema[index + 1]];
+      const duration = right.tau - left.tau;
+      const scale = Math.max(1, Math.abs(left.L), Math.abs(right.L));
+      const amplitude = Math.abs(right.L - left.L) / scale;
+      if (duration > 0 && Number.isFinite(amplitude) && amplitude > 0) {
+        samples.push({ startTau: left.tau, amplitude });
+      }
+    }
+    return samples;
+  }
+  function luminosityExtremaPeriod(rows, extrema) {
+    const gaps = [];
+    for (let index = 0; index < extrema.length - 1; index += 1) {
+      const gap = rows[extrema[index + 1]].tau - rows[extrema[index]].tau;
+      if (gap > 0 && Number.isFinite(gap)) gaps.push(gap);
+    }
+    const halfPeriod = median2(gaps);
+    return halfPeriod !== null ? 2 * halfPeriod : null;
+  }
+  function median2(values) {
+    const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+    if (!sorted.length) return null;
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
   }
   function normalizeFoldedPhase(phase) {
     if (!Number.isFinite(phase)) return 0;
@@ -1958,6 +2148,7 @@
     light: "Lightcurve",
     velocity: "RV Curve",
     heatEngine: "Heat Engine",
+    work: "Work",
     time: "History",
     lum: "Luminosity Evolution",
     tpOpacity: "T-P Opacity",
@@ -1970,6 +2161,7 @@
     light: true,
     velocity: true,
     heatEngine: true,
+    work: true,
     time: true,
     lum: true,
     tpOpacity: true,
@@ -3203,7 +3395,7 @@
     const hiddenControls = el("hiddenPlotControls");
     let hiddenCount = 0;
     Object.keys(plotPanelVisibility).forEach((plotId) => {
-      const forcedHidden = gridState.enabled && (plotId === "model" || plotId === "heatEngine" || plotId === "time" || plotId === "lum");
+      const forcedHidden = gridState.enabled && (plotId === "model" || plotId === "heatEngine" || plotId === "work" || plotId === "time" || plotId === "lum");
       const visible = forcedHidden ? false : plotPanelVisibility[plotId];
       const panel = document.querySelector(`[data-plot-panel="${plotId}"]`);
       const control = document.querySelector(`[data-plot-control="${plotId}"]`);
@@ -3253,11 +3445,13 @@
       gridState.restorePlotVisibility = {
         model: plotPanelVisibility.model,
         heatEngine: plotPanelVisibility.heatEngine,
+        work: plotPanelVisibility.work,
         time: plotPanelVisibility.time,
         lum: plotPanelVisibility.lum
       };
       plotPanelVisibility.model = false;
       plotPanelVisibility.heatEngine = false;
+      plotPanelVisibility.work = false;
       plotPanelVisibility.time = false;
       plotPanelVisibility.lum = false;
       modelAnimationStartTime = null;
@@ -3277,6 +3471,7 @@
       if (gridState.restorePlotVisibility) {
         plotPanelVisibility.model = gridState.restorePlotVisibility.model;
         plotPanelVisibility.heatEngine = gridState.restorePlotVisibility.heatEngine;
+        plotPanelVisibility.work = gridState.restorePlotVisibility.work;
         plotPanelVisibility.time = gridState.restorePlotVisibility.time;
         plotPanelVisibility.lum = gridState.restorePlotVisibility.lum;
       }
@@ -4904,7 +5099,7 @@
     }
     const cached = pointsByDensity.get(maxPoints);
     if (cached) return cached;
-    const points = thermodynamicPoints(result.phaseRows, result.parameters, maxPoints);
+    const points = thermodynamicPoints(closedLoopPanelRows(result.phaseRows), result.parameters, maxPoints);
     pointsByDensity.set(maxPoints, points);
     return points;
   }
@@ -4989,6 +5184,20 @@
     }
     const pad = (max - min) * padFraction;
     return [min - pad, max + pad];
+  }
+  function anchoredVisualRange(values, anchor, minimumHalfSpan, padFraction = 0.08) {
+    const base = range([...values, anchor], padFraction);
+    if (!Number.isFinite(anchor) || !Number.isFinite(minimumHalfSpan) || minimumHalfSpan <= 0) return base;
+    return [
+      Math.min(base[0], anchor - minimumHalfSpan),
+      Math.max(base[1], anchor + minimumHalfSpan)
+    ];
+  }
+  function stableTimeEquilibriumDisplayActive() {
+    return latestDisplayWindow.mode === "time" && latestDisplayWindow.reason === "equilibrium";
+  }
+  function stableTimeVisualReferenceRows(rows) {
+    return stableTimeEquilibriumDisplayActive() && latestRows.length ? latestRows : rows;
   }
   function expandRangeToInclude(base, included) {
     if (!included) return base;
@@ -5861,26 +6070,10 @@
     const base = label.base === "phi" ? "\u03C6" : label.base;
     drawCanvasMathFragments(ctx, [{ text: base, subscript: label.subscript }], x, y, { rotate: -Math.PI / 2 });
   }
-  function drawStabilityLinearizedLabel(ctx, x, y, gammac) {
-    ctx.save();
-    ctx.font = "12px Inter, sans-serif";
-    ctx.fillStyle = THEME.axisText;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    const prefix = "linearized at ";
-    ctx.fillText(prefix, x, y);
-    const prefixWidth = ctx.measureText(prefix).width;
-    ctx.restore();
-    drawCanvasMathFragments(
-      ctx,
-      [
-        { text: "\u03B3", subscript: "c", color: COLORS.gammac, weight: 600 },
-        { text: ` = ${fmt(gammac, 2)}` }
-      ],
-      x + prefixWidth,
-      y,
-      { align: "left" }
-    );
+  function updateStabilityLinearizedHeader(gammac) {
+    const note = document.getElementById("stabilityLinearizedHeader");
+    if (!note) return;
+    note.textContent = `linearized at \u03B3c = ${fmt(gammac, 2)}`;
   }
   function drawFourierSeriesPath(ctx, plot, xlim, ylim, points, width, color, dash = []) {
     if (points.length < 2) return;
@@ -6154,23 +6347,27 @@
   }
   function drawReferenceLegend(ctx, x, y, items, options = {}) {
     ctx.save();
-    ctx.font = "11px Inter, sans-serif";
+    const fontSize = options.fontSize ?? 11;
+    const swatchSize = options.swatchSize ?? 10;
+    const labelGap = options.labelGap ?? 14;
+    const itemGap = options.itemGap ?? 14;
+    ctx.font = `${fontSize}px Inter, sans-serif`;
     ctx.textBaseline = "middle";
     let cursor = x;
     let rowY = y;
     const maxX = options.maxX ?? Infinity;
-    const lineHeight = options.lineHeight ?? 14;
+    const lineHeight = options.lineHeight ?? Math.max(12, fontSize + 3);
     items.forEach((item) => {
-      const itemWidth = 10 + 14 + ctx.measureText(item.label).width + 18;
+      const itemWidth = swatchSize + labelGap + ctx.measureText(item.label).width + itemGap;
       if (cursor > x && cursor + itemWidth > maxX) {
         cursor = x;
         rowY += lineHeight;
       }
       ctx.fillStyle = item.color;
-      ctx.fillRect(cursor, rowY - 5, 10, 10);
+      ctx.fillRect(cursor, rowY - swatchSize / 2, swatchSize, swatchSize);
       ctx.fillStyle = THEME.axisText;
       ctx.textAlign = "left";
-      ctx.fillText(item.label, cursor + 14, rowY);
+      ctx.fillText(item.label, cursor + swatchSize + labelGap, rowY);
       cursor += itemWidth;
     });
     ctx.restore();
@@ -6242,12 +6439,12 @@
         { text: "thermal response ", color: COLORS.zeta, weight: 600 },
         { text: "\u03B6", color: COLORS.zeta, weight: 600 }
       ],
-      20,
+      10,
       plot.top + plot.height / 2,
       { rotate: -Math.PI / 2, fontSize: 11 }
     );
-    drawStabilityLinearizedLabel(ctx, plot.left, 16, parameters.gammac);
-    drawReferenceLegend(ctx, plot.left + 150, 15, linearStabilityLegendItems(stabilityPhysics), { maxX: plot.left + plot.width - 4 });
+    updateStabilityLinearizedHeader(parameters.gammac);
+    drawReferenceLegend(ctx, plot.left + 4, 15, linearStabilityLegendItems(stabilityPhysics), { maxX: plot.left + plot.width - 4, fontSize: 10.5, swatchSize: 9, labelGap: 5, itemGap: 10, lineHeight: 12 });
     drawStabilityOverlays(ctx, plot, parameters, overlays);
   }
   function drawDashedCurve(ctx, points) {
@@ -6319,8 +6516,8 @@
         stripCellHeight + 0.5
       );
     });
-    drawAxes(ctx, plot, [STRIP_LOG_RATIO_MIN, STRIP_LOG_RATIO_MAX], [0, 1], "", "", THEME.axisText, THEME.axisText, 22);
-    drawReferenceLegend(ctx, plot.left + 8, 15, linearStabilityLegendItems(stripPhysics), { maxX: plot.left + plot.width - 4 });
+    drawAxes(ctx, plot, [STRIP_LOG_RATIO_MIN, STRIP_LOG_RATIO_MAX], [0, 1], "", "", THEME.axisText, THEME.axisText, 12);
+    drawReferenceLegend(ctx, plot.left + 8, 15, linearStabilityLegendItems(stripPhysics), { maxX: plot.left + plot.width - 4, fontSize: 10.5, swatchSize: 9, labelGap: 5, itemGap: 10, lineHeight: 12 });
     drawCanvasMathFragments(
       ctx,
       [
@@ -6350,7 +6547,7 @@
         { text: "convective flux fraction ", color: COLORS.gammac, weight: 600 },
         { text: "\u03B3", subscript: "c", color: COLORS.gammac, weight: 600 }
       ],
-      22,
+      12,
       plot.top + plot.height / 2,
       { rotate: -Math.PI / 2, fontSize: 11 }
     );
@@ -6358,23 +6555,12 @@
     ctx.font = "700 13px Inter, sans-serif";
     ctx.textAlign = "center";
     ctx.font = "12px Inter, sans-serif";
-    ctx.fillText("red edge", sx(0.67), sy(0.22));
-    ctx.beginPath();
-    ctx.moveTo(sx(0.68), sy(0.31));
-    ctx.lineTo(sx(0.68), sy(0.43));
-    ctx.strokeStyle = THEME.axisText;
-    ctx.stroke();
     const locus = Array.from({ length: 80 }, (_value, index) => {
       const x = index / 79;
       const gamma = clamp4(0.02 + 0.92 * x ** 2.25, 0, 1);
       return { x: sx(x), y: sy(gamma) };
     });
     drawDashedCurve(ctx, locus);
-    ctx.fillStyle = "rgba(238, 245, 255, 0.68)";
-    ctx.font = "11px Inter, sans-serif";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.fillText("schematic locus", sx(0.54), sy(0.42));
     const overlays = stabilityOverlayResults();
     overlays.forEach((result) => {
       drawReferenceMarker(
@@ -6494,8 +6680,8 @@
     });
     ctx.restore();
   }
-  function drawPhasePortraitCurrentMarkers(ctx, plot, xlim, ylim) {
-    const row = rowAtCurrentDisplayPosition(latestPhaseRows);
+  function drawPhasePortraitCurrentMarkers(ctx, plot, xlim, ylim, rows = latestPhaseRows) {
+    const row = rowAtCurrentClosedLoopPosition(rows);
     if (!row) return null;
     const sx = (x) => plot.left + (x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
     const sy = (y) => plot.top + plot.height - (y - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
@@ -6916,7 +7102,8 @@
       canvas.dataset.tpOpacityRows = String(currentPoints2.length);
       return;
     }
-    const currentPoints = thermodynamicPoints(latestPhaseRows, latestPhaseParameters, 1400);
+    const loopRows = closedLoopPanelRows(latestPhaseRows);
+    const currentPoints = thermodynamicPoints(loopRows, latestPhaseParameters, 1400);
     const tracks = [];
     if (currentPoints.length > 1) tracks.push({ points: currentPoints, width: 2.8, alpha: 0.98 });
     const allPoints = tracks.flatMap((track) => track.points);
@@ -6936,7 +7123,8 @@
     const ylim = range([...allPoints.map((point) => point.logP), 0], 0.14);
     const opacityRange = range([...allPoints.map((point) => point.logOpacity), 0], 0.12);
     const plot = thermodynamicPlotBox(width, height);
-    const currentPoint = currentThermodynamicPoint(latestPhaseParameters);
+    const currentLoopRow = rowAtCurrentClosedLoopPosition(loopRows);
+    const currentPoint = currentLoopRow ? thermodynamicPoint(currentLoopRow, latestPhaseParameters) : null;
     drawThermodynamicStaticLayer(ctx, canvas, plot, xlim, ylim, opacityRange, latestPhaseParameters, tracks, currentPoint?.logOpacity);
     drawThermodynamicCurrentMarker(ctx, plot, xlim, ylim, opacityRange, latestPhaseParameters, currentPoint);
   }
@@ -6955,11 +7143,12 @@
     if (!ctx) return;
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
+    const loopRows = closedLoopPanelRows(latestPhaseRows);
     canvas.dataset.phasePortraitMode = gridState.enabled ? "grid" : "single";
-    canvas.dataset.phasePortraitRows = String(latestPhaseRows.length);
+    canvas.dataset.phasePortraitRows = String(loopRows.length);
     canvas.dataset.stellingwerfLabels = latestDisplayWindow.mode === "time" ? "R,H,U_c,current_time" : "R,H,U_c,current_phase";
     canvas.dataset.axisLabels = "radius R,state";
-    if (!latestPhaseRows.length) {
+    if (!loopRows.length) {
       delete canvas.dataset.currentPhase;
       delete canvas.dataset.currentTime;
       drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
@@ -6975,9 +7164,10 @@
       canvas.dataset.currentPhase = fmtFixed(phaseModOne(currentAnimationPhase), 3);
       delete canvas.dataset.currentTime;
     }
-    const rows = downsample(latestPhaseRows, 1400, ["R", "H", "Uc"]);
-    const xlim = range(rows.map((row) => row.R), 0.08);
-    const ylim = range([...rows.map((row) => row.H), ...rows.map((row) => row.Uc)], 0.1);
+    const rows = downsample(loopRows, 1400, ["R", "H", "Uc"]);
+    const scaleRows = stableTimeVisualReferenceRows(rows);
+    const xlim = stableTimeEquilibriumDisplayActive() ? anchoredVisualRange(scaleRows.map((row) => row.R), 1, 0.045, 0.08) : range(rows.map((row) => row.R), 0.08);
+    const ylim = stableTimeEquilibriumDisplayActive() ? anchoredVisualRange([...scaleRows.map((row) => row.H), ...scaleRows.map((row) => row.Uc)], 1, 0.05, 0.1) : range([...rows.map((row) => row.H), ...rows.map((row) => row.Uc)], 0.1);
     const plot = { left: 78, top: 28, width: width - 102, height: height - 88 };
     drawAxes(ctx, plot, xlim, ylim, "", "state", THEME.axisText, THEME.axisText, 22);
     drawCanvasMathFragments(
@@ -6995,7 +7185,7 @@
     drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "H", COLORS.H, 0.62);
     drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, 0.3);
     drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, 0.74);
-    if (!gridState.enabled) drawPhasePortraitCurrentMarkers(ctx, plot, xlim, ylim);
+    if (!gridState.enabled) drawPhasePortraitCurrentMarkers(ctx, plot, xlim, ylim, rows);
     drawPhasePortraitLegend(ctx, plot);
     if (!gridState.enabled) drawPhasePortraitPhaseLabel(ctx, plot);
   }
@@ -7104,7 +7294,10 @@
       anchor: phaseAnchor
     });
   }
-  function buildCurrentDisplayWindow(rows, phase, gridResult, phaseMessage) {
+  function shouldUseStableDampingTimeWindow(phase, stability) {
+    return state.phaseMode === "final" && stability.pulsational.stable && latestResult.message !== "limit_cycle" && phase.reason === "ok" && Boolean(phase.period) && latestResult.message !== "runaway" && latestResult.message !== "runaway_trend";
+  }
+  function buildCurrentDisplayWindow(rows, phase, gridResult, stability, phaseMessage) {
     if (gridResult) {
       return {
         ...buildPhaseDisplayWindow({ ...phase, reason: "ok", rows: gridResult.phaseRows, period: gridResult.period }, phaseMessage),
@@ -7114,6 +7307,9 @@
     if (gridState.enabled) return buildPhaseDisplayWindow(phase, phaseMessage);
     if (isTimeWindowReason(latestResult.message)) {
       return buildTimeDisplayWindow(rows, latestResult.message, timeWindowMessage(latestResult.message));
+    }
+    if (!gridState.enabled && shouldUseStableDampingTimeWindow(phase, stability)) {
+      return buildTimeDisplayWindow(rows, "equilibrium", "time window: stable damping");
     }
     return buildPhaseDisplayWindow(phase, phaseMessage);
   }
@@ -7145,6 +7341,24 @@
   }
   function rowAtCurrentDisplayPosition(rows = latestPhaseRows) {
     return rowAtDisplayPosition(displayWindowForRows(rows), currentAnimationPhase);
+  }
+  function closedLoopPanelRows(rows = latestPhaseRows) {
+    if (latestDisplayWindow.mode === "phase") {
+      const cycle = phaseWindowRows(rows, 0, 1, true);
+      if (cycle.length > 2) return cycle;
+    }
+    return [...rows];
+  }
+  function rowAtCurrentClosedLoopPosition(rows) {
+    if (latestDisplayWindow.mode !== "phase") return rowAtCurrentDisplayPosition(rows);
+    const cycleWindow = {
+      mode: "phase",
+      reason: "phase",
+      rows,
+      xlim: [0, 1],
+      period: latestDisplayWindow.period
+    };
+    return rowAtDisplayPosition(cycleWindow, phaseModOne(currentAnimationPhase));
   }
   function currentDisplayCoordinateLabel() {
     if (latestDisplayWindow.mode === "time") {
@@ -7568,11 +7782,141 @@
     return Object.values(terms).every(Number.isFinite) ? terms : null;
   }
   function heatEngineCycleRows(rows) {
-    if (latestDisplayWindow.mode === "phase") {
-      const cycle = phaseWindowRows(rows, 0, 1, true);
-      if (cycle.length > 2) return cycle;
+    return closedLoopPanelRows(rows);
+  }
+  function radiusExtremaForWork(rows) {
+    const extrema = [];
+    for (let index = 1; index < rows.length - 1; index += 1) {
+      const previous = rows[index - 1].R;
+      const current = rows[index].R;
+      const next = rows[index + 1].R;
+      if (!Number.isFinite(previous + current + next)) continue;
+      if (current >= previous && current > next) extrema.push({ index, kind: "max" });
+      else if (current <= previous && current < next) extrema.push({ index, kind: "min" });
     }
-    return [...rows];
+    return extrema;
+  }
+  function radiusExtremaWithEndpointsForWork(rows) {
+    const extrema = radiusExtremaForWork(rows);
+    if (rows.length < 2) return extrema;
+    const firstKind = rows[0].R <= rows[1].R ? "min" : "max";
+    const lastIndex = rows.length - 1;
+    const lastKind = rows[lastIndex].R <= rows[lastIndex - 1].R ? "min" : "max";
+    return [
+      { index: 0, kind: firstKind },
+      ...extrema,
+      { index: lastIndex, kind: lastKind }
+    ];
+  }
+  function completeRadiusCycleRowsForWork(rows) {
+    const extrema = radiusExtremaForWork(rows);
+    if (extrema.length < 3) return [];
+    let best = null;
+    for (let startOrder = 0; startOrder < extrema.length - 2; startOrder += 1) {
+      for (let endOrder = extrema.length - 1; endOrder >= startOrder + 2; endOrder -= 1) {
+        if (extrema[endOrder].kind !== extrema[startOrder].kind) continue;
+        const start = extrema[startOrder].index;
+        const end = extrema[endOrder].index;
+        const span = end - start;
+        if (span > 1 && (!best || span > best.span)) best = { start, end, span };
+        break;
+      }
+    }
+    return best ? rows.slice(best.start, best.end + 1) : [];
+  }
+  function samePhaseCycleSegmentsForWork(rows) {
+    const extrema = radiusExtremaWithEndpointsForWork(rows);
+    const segments = [];
+    for (let extremaIndex = 0; extremaIndex < extrema.length - 2; extremaIndex += 2) {
+      const start = extrema[extremaIndex];
+      const end = extrema[extremaIndex + 2];
+      if (start.kind !== end.kind || end.index - start.index < 2) continue;
+      segments.push(rows.slice(start.index, end.index + 1));
+    }
+    return segments;
+  }
+  function heatEngineWorkRows(rows) {
+    const selectedRows = heatEngineCycleRows(rows);
+    if (latestDisplayWindow.mode !== "time") {
+      return { selectedRows, integrationRows: selectedRows, scope: "cycle" };
+    }
+    const completeCycleRows = completeRadiusCycleRowsForWork(selectedRows);
+    if (completeCycleRows.length > 2) {
+      return { selectedRows, integrationRows: completeCycleRows, scope: "cycles" };
+    }
+    return { selectedRows, integrationRows: selectedRows, scope: "window" };
+  }
+  function integrateHeatEngineWorkTerms(rows, parameters, closePressureLoop) {
+    let pressure = 0;
+    let gravity = 0;
+    let damping = 0;
+    const phaseTimeScale = latestDisplayWindow.mode === "phase" && latestDisplayWindow.period ? latestDisplayWindow.period : 1;
+    for (let index = 1; index < rows.length; index += 1) {
+      const left = rows[index - 1];
+      const right = rows[index];
+      const leftForce = pressureSupport(left, parameters);
+      const rightForce = pressureSupport(right, parameters);
+      const deltaR = right.R - left.R;
+      if (Number.isFinite(leftForce + rightForce + deltaR)) {
+        pressure += 0.5 * (leftForce + rightForce) * deltaR;
+      }
+      const dt = (right.tau - left.tau) * phaseTimeScale;
+      if (!Number.isFinite(dt) || dt <= 0) continue;
+      const leftGravityPower = -left.V / left.R ** 2;
+      const rightGravityPower = -right.V / right.R ** 2;
+      const leftDampingPower = -parameters.cq * left.V ** 4;
+      const rightDampingPower = -parameters.cq * right.V ** 4;
+      if (Number.isFinite(leftGravityPower + rightGravityPower)) {
+        gravity += 0.5 * (leftGravityPower + rightGravityPower) * dt;
+      }
+      if (Number.isFinite(leftDampingPower + rightDampingPower)) {
+        damping += 0.5 * (leftDampingPower + rightDampingPower) * dt;
+      }
+    }
+    if (closePressureLoop && rows.length > 1) {
+      const first = rows[0];
+      const last = rows[rows.length - 1];
+      const firstForce = pressureSupport(first, parameters);
+      const lastForce = pressureSupport(last, parameters);
+      const closingDeltaR = first.R - last.R;
+      if (Number.isFinite(firstForce + lastForce + closingDeltaR)) {
+        pressure += 0.5 * (firstForce + lastForce) * closingDeltaR;
+      }
+    }
+    return { pressure, gravity, damping };
+  }
+  function heatEngineCycleWork(rows, parameters) {
+    const segments = latestDisplayWindow.mode === "time" ? samePhaseCycleSegmentsForWork(rows) : [];
+    const workSegments = segments.length ? segments : [rows];
+    let pressure = 0;
+    let gravity = 0;
+    let damping = 0;
+    workSegments.forEach((segment) => {
+      const terms = integrateHeatEngineWorkTerms(segment, parameters, true);
+      pressure += terms.pressure;
+      gravity += terms.gravity;
+      damping += terms.damping;
+    });
+    const net = pressure + damping;
+    const mechanicalNet = net + gravity;
+    return {
+      pressure,
+      gravity,
+      damping,
+      net,
+      mechanicalNet,
+      pressureDampingRatio: Math.abs(damping) > 1e-12 ? pressure / Math.abs(damping) : null
+    };
+  }
+  function heatEngineRegime(work, rows) {
+    if (latestResult.message === "equilibrium") return "equilibrium";
+    if (latestResult.message === "runaway" || latestResult.message === "runaway_trend") return "runaway";
+    const radiusRange = rawRange(rows.map((row) => row.R));
+    const velocityMax = Math.max(...rows.map((row) => Math.abs(row.V)).filter(Number.isFinite), 0);
+    if (radiusRange[1] - radiusRange[0] < 1e-4 && velocityMax < 1e-4) return "equilibrium";
+    const scale = Math.max(Math.abs(work.pressure), Math.abs(work.damping), 1e-8);
+    if (Math.abs(work.net) <= scale * 0.08) return "limit cycle";
+    return work.net > 0 ? "driving" : "damped";
   }
   function roundedRectPath(ctx, x, y, width, height, radius) {
     const r = Math.min(radius, width / 2, height / 2);
@@ -7629,6 +7973,11 @@
       { align, fontSize: size }
     );
   }
+  function heatEngineSignedValue(value, digits = 3) {
+    if (!Number.isFinite(value)) return "n/a";
+    const formatted = fmt(value, digits);
+    return value > 0 ? `+${formatted}` : formatted;
+  }
   function heatEngineMaxMagnitude(values) {
     return Math.max(
       1e-9,
@@ -7637,6 +7986,13 @@
   }
   function heatEngineNormalizedMagnitude(value, maxMagnitude) {
     return clamp4(Math.abs(value) / maxMagnitude, 0, 1);
+  }
+  function heatEngineRegimeColor(regime) {
+    if (regime === "driving") return COLORS.Lc;
+    if (regime === "damped") return NEGATIVE_VELOCITY_COLOR;
+    if (regime === "runaway") return sourceLuminosityColor();
+    if (regime === "equilibrium") return THEME.axisText;
+    return PHASE_MARKER_COLOR;
   }
   function drawHeatEngineArrow(ctx, x1, y1, x2, y2, color, width = 2.2, label, labelOffset = 12, headSize = 8) {
     const dx = x2 - x1;
@@ -7668,18 +8024,36 @@
       drawHeatEngineCanvasLabel(ctx, label, lx, ly, color);
     }
   }
+  function drawHeatEngineArrowHead(ctx, x1, y1, x2, y2, color, size = 8) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const length = Math.hypot(dx, dy);
+    if (length < 1) return;
+    const ux = dx / length;
+    const uy = dy / length;
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - ux * size - uy * size * 0.55, y2 - uy * size + ux * size * 0.55);
+    ctx.lineTo(x2 - ux * size + uy * size * 0.55, y2 - uy * size - ux * size * 0.55);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
   function drawHeatEnginePistonCausal(ctx, row, rows, terms, chamber, parameters) {
     const right = chamber.left + chamber.width;
     const bottom = chamber.top + chamber.height;
     const centerX = chamber.left + chamber.width / 2;
-    const radiusRange = range(rows.map((item) => item.R), 0.08);
-    const hRange = range(rows.map((item) => item.H), 0.08);
-    const pressureValues = rows.map((item) => pressureSupport(item, parameters));
-    const gravityValues = rows.map((item) => 1 / item.R ** 2);
-    const dampingValues = rows.map((item) => parameters.cq * item.V ** 3);
-    const sourceValues = rows.map((item) => baseLuminosity(item, parameters));
-    const radiativeValues = rows.map((item) => item.Lr);
-    const convectiveValues = rows.map((item) => item.Lc);
+    const scaleRows = stableTimeVisualReferenceRows(rows);
+    const radiusRange = stableTimeEquilibriumDisplayActive() ? anchoredVisualRange(scaleRows.map((item) => item.R), 1, 0.045, 0.08) : range(rows.map((item) => item.R), 0.08);
+    const hRange = stableTimeEquilibriumDisplayActive() ? anchoredVisualRange(scaleRows.map((item) => item.H), 1, 0.045, 0.08) : range(rows.map((item) => item.H), 0.08);
+    const pressureValues = scaleRows.map((item) => pressureSupport(item, parameters));
+    const gravityValues = scaleRows.map((item) => 1 / item.R ** 2);
+    const dampingValues = scaleRows.map((item) => parameters.cq * item.V ** 3);
+    const sourceValues = scaleRows.map((item) => baseLuminosity(item, parameters));
+    const radiativeValues = scaleRows.map((item) => item.Lr);
+    const convectiveValues = scaleRows.map((item) => item.Lc);
     const forceMagnitudeMax = heatEngineMaxMagnitude([
       ...pressureValues,
       ...gravityValues,
@@ -7700,7 +8074,7 @@
     const forceArrowLength = (value) => heatEngineNormalizedMagnitude(value, forceMagnitudeMax) * 61;
     const heatFlowMagnitude = (value) => heatEngineNormalizedMagnitude(value, heatFlowMagnitudeMax);
     const luminosityRange = rawRange([
-      ...rows.map((item) => item.L),
+      ...scaleRows.map((item) => item.L),
       ...radiativeValues,
       ...convectiveValues,
       row.L,
@@ -7763,8 +8137,8 @@
     const pressureX = centerX - 52;
     const currentOpacityPoint = thermodynamicPoint(row, parameters);
     if (currentOpacityPoint) {
-      const opacityValues = rows.map((item) => thermodynamicPoint(item, parameters)?.logOpacity ?? NaN).filter(Number.isFinite);
-      const opacityRange = range([...opacityValues, currentOpacityPoint.logOpacity, 0], 0.12);
+      const opacityValues = scaleRows.map((item) => thermodynamicPoint(item, parameters)?.logOpacity ?? NaN).filter(Number.isFinite);
+      const opacityRange = stableTimeEquilibriumDisplayActive() ? anchoredVisualRange([...opacityValues, currentOpacityPoint.logOpacity], 0, 0.05, 0.12) : range([...opacityValues, currentOpacityPoint.logOpacity, 0], 0.12);
       const opacityLevel = normalizedInRange(currentOpacityPoint.logOpacity, opacityRange);
       const ghostWidth = 52;
       const ghostMaxHeight = 42;
@@ -7795,9 +8169,10 @@
       ctx.restore();
       drawHeatEngineLabel(ctx, "opacity", ghostX + ghostWidth / 2, ghostTop + ghostHeight / 2, "rgba(210, 218, 232, 0.9)", "center", 9.4, 760);
     }
-    const temperatureValues = rows.map((item) => effectiveTemperatureProxy(item) ?? NaN).filter(Number.isFinite);
+    const temperatureValues = scaleRows.map((item) => effectiveTemperatureProxy(item) ?? NaN).filter(Number.isFinite);
     const currentTemperatureProxy = effectiveTemperatureProxy(row);
-    const pistonTemperatureLevel = normalizedInRange(currentTemperatureProxy ?? 1, range([...temperatureValues, currentTemperatureProxy ?? NaN], 0.08));
+    const temperatureRange = stableTimeEquilibriumDisplayActive() ? anchoredVisualRange([...temperatureValues, currentTemperatureProxy ?? NaN], 1, 0.02, 0.08) : range([...temperatureValues, currentTemperatureProxy ?? NaN], 0.08);
+    const pistonTemperatureLevel = normalizedInRange(currentTemperatureProxy ?? 1, temperatureRange);
     const pistonTemperatureColor = blackbodyRgbForTemperature(inferEffectiveTemperature(row.L, row.R));
     roundedRectPath(ctx, chamber.left - 5, pistonY - pistonHeight / 2, chamber.width + 10, pistonHeight, 3);
     ctx.shadowColor = rgbCss(pistonTemperatureColor, 0.2 + pistonTemperatureLevel * 0.5);
@@ -7868,8 +8243,9 @@
       ctx.lineTo(ductArrowX - ductArrowLength / 2, ductY + ductArrowHalfHeight);
       ctx.closePath();
       ctx.fill();
-      const targetValues = convectionResponsive ? rows.map((item) => convectiveVelocityTarget(item, parameters)) : [];
-      const ucRange = range(convectionResponsive ? [...rows.map((item) => item.Uc), ...targetValues] : [...rows.map((item) => item.Uc), 0], 0.12);
+      const targetValues = convectionResponsive ? scaleRows.map((item) => convectiveVelocityTarget(item, parameters)) : [];
+      const ucValues = convectionResponsive ? [...scaleRows.map((item) => item.Uc), ...targetValues] : [...scaleRows.map((item) => item.Uc), 0];
+      const ucRange = stableTimeEquilibriumDisplayActive() ? anchoredVisualRange(ucValues, 1, 0.05, 0.12) : range(ucValues, 0.12);
       const currentAperture = normalizedInRange(row.Uc, ucRange);
       const currentY = slotBottom - currentAperture * slotHeight;
       roundedRectPath(ctx, slotX, slotTop, slotWidth, slotHeight, 6);
@@ -7937,6 +8313,240 @@
       fontSize: 13
     });
     ctx.restore();
+  }
+  function drawWorkLoopPanel(ctx, rows, currentRow, parameters, work, regime, plot, scope) {
+    const forces = rows.map((row) => pressureSupport(row, parameters));
+    const scaleRows = stableTimeVisualReferenceRows(rows);
+    const scaleForces = scaleRows.map((row) => pressureSupport(row, parameters));
+    const xlim = stableTimeEquilibriumDisplayActive() ? anchoredVisualRange(scaleRows.map((row) => row.R), 1, 0.045, 0.08) : range(rows.map((row) => row.R), 0.08);
+    const ylim = stableTimeEquilibriumDisplayActive() ? anchoredVisualRange(scaleForces, 1, 0.045, 0.1) : range(forces, 0.1);
+    const sx = (x) => plot.left + (x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
+    const sy = (y) => plot.top + plot.height - (y - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
+    const loopColor = COLORS.H;
+    const ratio = work.pressureDampingRatio === null ? "n/a" : fmt(work.pressureDampingRatio, 2);
+    const plotted = rows.map((loopRow) => {
+      const force = pressureSupport(loopRow, parameters);
+      return Number.isFinite(loopRow.R + force) ? { x: sx(loopRow.R), y: sy(force) } : null;
+    }).filter((point) => Boolean(point));
+    ctx.save();
+    drawHeatEngineMathLabel(
+      ctx,
+      [
+        { text: "W", subscript: "P", color: loopColor },
+        { text: "/|" },
+        { text: "W", subscript: "damp", color: COLORS.cq },
+        { text: `|=${ratio}` }
+      ],
+      plot.left,
+      plot.top - 15,
+      { align: "left", fontSize: 10.6, subscriptSize: 8.6, strokeWidth: 2.6 }
+    );
+    drawHeatEngineMathLabel(
+      ctx,
+      [{ text: scope }, { text: " " }, { text: "W", subscript: "P", color: loopColor }, { text: `=${heatEngineSignedValue(work.pressure, 3)}` }],
+      plot.left + plot.width,
+      plot.top - 15,
+      { align: "right", fontSize: 10.8, subscriptSize: 8.8, strokeWidth: 2.6 }
+    );
+    ctx.strokeStyle = "rgba(38, 51, 78, 0.9)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 3; i += 1) {
+      const x = plot.left + plot.width * i / 3;
+      const y = plot.top + plot.height * i / 3;
+      ctx.beginPath();
+      ctx.moveTo(x, plot.top);
+      ctx.lineTo(x, plot.top + plot.height);
+      ctx.moveTo(plot.left, y);
+      ctx.lineTo(plot.left + plot.width, y);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = THEME.axisBorder;
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
+    if (plotted.length > 2) {
+      ctx.beginPath();
+      plotted.forEach((point, index) => {
+        if (index === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = colorWithAlpha(loopColor, 0.16);
+      ctx.strokeStyle = colorWithAlpha(loopColor, 0.95);
+      ctx.lineWidth = 2.4;
+      ctx.fill();
+      ctx.stroke();
+      [0.2, 0.46, 0.72].forEach((fraction) => {
+        const index = Math.min(plotted.length - 2, Math.max(0, Math.round(fraction * (plotted.length - 2))));
+        drawHeatEngineArrowHead(ctx, plotted[index].x, plotted[index].y, plotted[index + 1].x, plotted[index + 1].y, loopColor, 6.5);
+      });
+    }
+    const currentForce = pressureSupport(currentRow, parameters);
+    if (Number.isFinite(currentRow.R + currentForce)) {
+      ctx.fillStyle = PHASE_MARKER_COLOR;
+      ctx.strokeStyle = "#050814";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(sx(currentRow.R), sy(currentForce), 5.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    drawHeatEngineMathLabel(ctx, [{ text: "R", color: COLORS.R }], plot.left + plot.width / 2, plot.top + plot.height + 18, {
+      align: "center",
+      fontSize: 10.7
+    });
+    drawWorkPressureSupportAxisLabel(ctx, plot.left - 24, plot.top + plot.height / 2, -Math.PI / 2);
+    ctx.restore();
+  }
+  function drawWorkPressureSupportAxisLabel(ctx, x, y, rotate = 0) {
+    const baseSize = 9.8;
+    const exponentSize = 7.4;
+    const exponentY = -baseSize * 0.45;
+    const parts = [
+      { text: "pressure support ", color: THEME.axisText, size: baseSize, y: 0 },
+      { text: "H", color: COLORS.H, size: baseSize, y: 0 },
+      { text: "/", color: THEME.axisText, size: baseSize, y: 0 },
+      { text: "R", color: COLORS.R, size: baseSize, y: 0 },
+      { text: "\u03C7", color: COLORS.m, size: exponentSize, y: exponentY },
+      { text: "\u0393\u2081", color: COLORS.gamma1, size: exponentSize, y: exponentY },
+      { text: "-2", color: THEME.axisText, size: exponentSize, y: exponentY }
+    ];
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rotate);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    const totalWidth = parts.reduce((total, part) => {
+      ctx.font = canvasMathFont(part.size, 760);
+      return total + ctx.measureText(part.text).width;
+    }, 0);
+    let cursor = -totalWidth / 2;
+    parts.forEach((part) => {
+      ctx.font = canvasMathFont(part.size, 760);
+      ctx.strokeStyle = "rgba(5, 8, 20, 0.9)";
+      ctx.lineWidth = part.size === exponentSize ? 2 : 2.4;
+      ctx.fillStyle = part.color;
+      ctx.strokeText(part.text, cursor, part.y);
+      ctx.fillText(part.text, cursor, part.y);
+      cursor += ctx.measureText(part.text).width;
+    });
+    ctx.restore();
+  }
+  function drawWorkSummaryBars(ctx, work, regime, x, y, width, height) {
+    const rows = [
+      { label: [{ text: "W", subscript: "P", color: COLORS.H }], value: work.pressure, color: COLORS.H, width: 4.8 },
+      { label: [{ text: "W", subscript: "damp", color: COLORS.cq }], value: work.damping, color: COLORS.cq, width: 4.8 },
+      { label: [{ text: "\u0394E", subscript: "mech", color: heatEngineRegimeColor(regime) }], value: work.net, color: heatEngineRegimeColor(regime), width: 5.4 }
+    ];
+    const maxAbs = Math.max(1e-8, ...rows.map((row) => Math.abs(row.value)).filter(Number.isFinite));
+    const center = x + width * 0.51;
+    const barLimit = width * 0.22;
+    ctx.save();
+    roundedRectPath(ctx, x, y, width, height, 5);
+    ctx.fillStyle = "rgba(5, 8, 20, 0.28)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(82, 100, 137, 0.58)";
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(192, 202, 232, 0.42)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(center, y + 6);
+    ctx.lineTo(center, y + height - 6);
+    ctx.stroke();
+    const laneGap = height / rows.length;
+    rows.forEach((row, index) => {
+      const laneY = y + laneGap * (index + 0.5);
+      const bar = clamp4(row.value / maxAbs, -1, 1) * barLimit;
+      ctx.strokeStyle = "rgba(82, 100, 137, 0.5)";
+      ctx.lineWidth = 1;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(center - barLimit, laneY);
+      ctx.lineTo(center + barLimit, laneY);
+      ctx.stroke();
+      ctx.strokeStyle = colorWithAlpha(row.color, 0.95);
+      ctx.shadowColor = colorWithAlpha(row.color, 0.22);
+      ctx.shadowBlur = 5;
+      ctx.lineWidth = row.width;
+      ctx.beginPath();
+      ctx.moveTo(center, laneY);
+      ctx.lineTo(center + bar, laneY);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      drawHeatEngineMathLabel(
+        ctx,
+        row.label.map((fragment) => ({
+          ...fragment,
+          color: fragment.color || row.color,
+          weight: fragment.weight || 760
+        })),
+        x + 8,
+        laneY,
+        { align: "left", fontSize: 9.6, subscriptSize: 8.2, strokeWidth: 2.5 }
+      );
+    });
+    const regimeColor = heatEngineRegimeColor(regime);
+    drawHeatEngineLabel(ctx, regime, center + barLimit + 8, y + height - 8, regimeColor, "left", 8.6, 800);
+    ctx.restore();
+  }
+  function drawWorkPanel() {
+    const canvas = document.getElementById("workCanvas");
+    if (!(canvas instanceof HTMLCanvasElement)) return;
+    const panel = canvas.closest(".plot-panel");
+    if (panel?.hidden) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(260, rect.width || 292);
+    const height = Math.max(230, rect.height || 260);
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+    const { selectedRows, integrationRows, scope } = heatEngineWorkRows(latestPhaseRows);
+    const plotRows = downsample(integrationRows, 1100, ["R", "V", "H", "Uc", "L", "Lr", "Lc"]);
+    const row = integrationRows.length ? rowAtCurrentClosedLoopPosition(integrationRows) : null;
+    if (!row || integrationRows.length < 2 || plotRows.length < 2) {
+      canvas.dataset.workMode = "unavailable";
+      canvas.dataset.workWindowRows = String(selectedRows.length);
+      canvas.dataset.workRows = String(integrationRows.length);
+      canvas.dataset.workPlotRows = String(plotRows.length);
+      drawCanvasMessage(ctx, width, height, latestPhaseMessage || "work unavailable");
+      return;
+    }
+    const work = heatEngineCycleWork(integrationRows, latestPhaseParameters);
+    const regime = heatEngineRegime(work, integrationRows);
+    canvas.dataset.workMode = gridState.enabled ? "grid" : "single";
+    canvas.dataset.workScope = scope;
+    canvas.dataset.workWindowRows = String(selectedRows.length);
+    canvas.dataset.workRows = String(integrationRows.length);
+    canvas.dataset.workPlotRows = String(plotRows.length);
+    canvas.dataset.workVisualization = "pressure support H/R^(chi Gamma1-2)-R loop";
+    canvas.dataset.workLoop = "pressure support H/R^(chi Gamma1-2) versus R";
+    canvas.dataset.workTerms = "W_P,W_damp,DeltaE_mech";
+    canvas.dataset.cycleWorkPressure = fmt(work.pressure, 6);
+    canvas.dataset.cycleWorkDamping = fmt(work.damping, 6);
+    canvas.dataset.cycleWorkNet = fmt(work.net, 6);
+    canvas.dataset.cycleWorkRatio = work.pressureDampingRatio === null ? "n/a" : fmt(work.pressureDampingRatio, 6);
+    canvas.dataset.regime = regime;
+    if (latestDisplayWindow.mode === "time") {
+      canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
+      delete canvas.dataset.currentPhase;
+    } else {
+      canvas.dataset.currentPhase = fmtFixed(phaseModOne(currentAnimationPhase), 3);
+      delete canvas.dataset.currentTime;
+    }
+    const summaryHeight = height < 245 ? 46 : 50;
+    const summaryY = height - summaryHeight - 10;
+    const loopPlot = {
+      left: 38,
+      top: 34,
+      width: Math.max(180, width - 52),
+      height: Math.max(94, summaryY - 66)
+    };
+    drawWorkLoopPanel(ctx, plotRows, row, latestPhaseParameters, work, regime, loopPlot, scope);
+    drawWorkSummaryBars(ctx, work, regime, 10, summaryY, width - 20, summaryHeight);
   }
   function drawHeatEnginePanel() {
     const canvas = document.getElementById("heatEngineCanvas");
@@ -8040,7 +8650,8 @@
     const size = Math.min(width, height);
     const centerX = width / 2;
     const centerY = height / 2;
-    const maxRadius = maximumPhaseRadius(latestPhaseRows);
+    const modelScaleRows = stableTimeVisualReferenceRows(latestPhaseRows);
+    const maxRadius = maximumPhaseRadius(modelScaleRows);
     const radiusScale = size * 0.36 / maxRadius;
     const geometry = shellGeometryFromModel(row, state);
     const luminosityLevel = normalizedInRange(row.L, latestPhaseLuminosityRange);
@@ -8065,7 +8676,7 @@
     delete canvas.dataset.velocityArcLabel;
     delete canvas.dataset.radiusLabel;
     ctx.save();
-    drawModelReferenceGuides(ctx, latestPhaseRows, centerX, centerY, radiusScale);
+    drawModelReferenceGuides(ctx, modelScaleRows, centerX, centerY, radiusScale);
     ctx.shadowColor = rgbCss(blackbody, 0.65);
     ctx.shadowBlur = 12 + luminosityLevel * 22;
     drawAnnularSegment(
@@ -8086,6 +8697,7 @@
     drawModelVisualization();
     drawPhasePlots();
     drawHeatEnginePanel();
+    drawWorkPanel();
     drawThermodynamicPanel();
     drawCepheidGuide();
     drawPhasePortraitPanel();
@@ -8099,7 +8711,8 @@
     latestPhaseSample = latestPhaseRows.length ? downsample(latestPhaseRows, 1800, ["L", "V", "H"]) : [];
     latestPhaseMessage = displayWindow.message;
     latestPhasePeriodLabel = displayWindow.mode === "time" ? "time \u03C4" : `phase (period = ${phasePeriod ? fmt(phasePeriod, 3) : "n/a"} \u03C4)`;
-    latestPhaseLuminosityRange = rawRange(latestPhaseRows.map((row) => row.L));
+    const luminosityRows = stableTimeVisualReferenceRows(latestPhaseRows);
+    latestPhaseLuminosityRange = stableTimeEquilibriumDisplayActive() ? anchoredVisualRange(luminosityRows.map((row) => row.L), 1, 0.05) : rawRange(latestPhaseRows.map((row) => row.L));
   }
   function drawGridAnimationFrame() {
     if (!gridState.enabled) {
@@ -8116,6 +8729,7 @@
       latestRows,
       { reason: "ok", reference: null, rows: gridResult.phaseRows, period: gridResult.period },
       gridResult,
+      analyticStabilityConditions(gridResult.parameters),
       phaseMessage
     );
     updateGridLoopSliderMarkers();
@@ -8161,9 +8775,9 @@
     const phase = phaseForRows(rows);
     const gridResult = gridState.enabled ? currentGridResult() : null;
     const phaseMessage = gridState.enabled && activeGridRanges().length && !gridState.results.length ? gridState.statusText : phaseUnavailableLabel(phase);
-    const displayWindow = buildCurrentDisplayWindow(rows, phase, gridResult, phaseMessage);
     const stabilityParameters = stabilityDisplayParameters();
     const s72Stability = analyticStabilityConditions(stabilityParameters);
+    const displayWindow = buildCurrentDisplayWindow(rows, phase, gridResult, s72Stability, phaseMessage);
     const linearPeriod = linearDynamicPeriod(stabilityParameters);
     const nonlinearPeriod = displayWindow.period;
     updateGridLoopSliderMarkers();
@@ -8229,6 +8843,7 @@
     drawModelVisualization();
     drawPhasePlots();
     drawHeatEnginePanel();
+    drawWorkPanel();
     drawThermodynamicPanel();
     const timeXlim = integrationTimeRange(rows);
     const showUcSeries = convectiveVelocityHistoryAvailable(rows);

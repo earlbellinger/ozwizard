@@ -1334,6 +1334,12 @@
       font-size: 12px;
     }
 
+    .plot-title-note {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
     .plot-tools {
       display: inline-flex;
       align-items: center;
@@ -1462,7 +1468,8 @@
       overflow-x: hidden;
     }
 
-    .plot-panel[data-plot-panel="heatEngine"] {
+    .plot-panel[data-plot-panel="heatEngine"],
+    .plot-panel[data-plot-panel="work"] {
       --heat-engine-panel-size: 316px;
       width: min(100%, var(--heat-engine-panel-size));
       flex: 0 0 min(100%, var(--heat-engine-panel-size));
@@ -1470,7 +1477,8 @@
       overflow-x: hidden;
     }
 
-    .heat-engine-canvas {
+    .heat-engine-canvas,
+    .work-canvas {
       height: 260px;
     }
 
@@ -2075,11 +2083,13 @@
         --model-panel-size: 286px;
       }
 
-      .plot-panel[data-plot-panel="heatEngine"] {
+      .plot-panel[data-plot-panel="heatEngine"],
+      .plot-panel[data-plot-panel="work"] {
         --heat-engine-panel-size: 286px;
       }
 
-      .heat-engine-canvas {
+      .heat-engine-canvas,
+      .work-canvas {
         height: 230px;
       }
     }
@@ -2246,7 +2256,7 @@
         </div>
       </section>
 
-      <section class="plot-grid" id="plotGrid" data-pressure-visible="false" data-visible-plots="10">
+      <section class="plot-grid" id="plotGrid" data-pressure-visible="false" data-visible-plots="11">
         <div class="plot-panel" data-plot-panel="model">
           <div class="plot-title">
             <div class="plot-title-left" data-plot-control-home="model">
@@ -2278,6 +2288,19 @@
             </div>
           </div>
           <canvas class="heat-engine-canvas" id="heatEngineCanvas" aria-label="work-cycle heat engine piston visualization"></canvas>
+        </div>
+
+        <div class="plot-panel" data-plot-panel="work">
+          <div class="plot-title">
+            <div class="plot-title-left" data-plot-control-home="work">
+              <label class="plot-enable-control" data-plot-control="work">
+                <input type="checkbox" data-plot-toggle="work" checked aria-label="Hide Work plot">
+                <span>Work</span>
+              </label>
+              <h3>Work</h3>
+            </div>
+          </div>
+          <canvas class="work-canvas" id="workCanvas" aria-label="cycle work pressure versus damping visualization"></canvas>
         </div>
 
         <div class="plot-panel" data-plot-panel="light">
@@ -2406,6 +2429,7 @@
                 <span>Stability Map</span>
               </label>
               <h3>Stability Map</h3>
+              <span class="plot-title-note" id="stabilityLinearizedHeader"></span>
             </div>
           </div>
           <canvas id="stabilityMapCanvas" aria-label="zeta zeta_c stability map"></canvas>

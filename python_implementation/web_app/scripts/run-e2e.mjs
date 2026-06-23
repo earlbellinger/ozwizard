@@ -526,7 +526,7 @@ async function runPlaywrightChecks() {
       input.value = "1";
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    assertOk(await page.locator("#plotGrid .plot-panel canvas:visible").count() === 10, "expected ten visible plot canvases");
+    assertOk(await page.locator("#plotGrid .plot-panel canvas:visible").count() === 11, "expected eleven visible plot canvases");
     const modelBox = await page.locator("#modelCanvas").boundingBox();
     const modelPanelBox = await page.locator("[data-plot-panel='model']").boundingBox();
     const lightBox = await page.locator("#lightCanvas").boundingBox();
@@ -579,6 +579,7 @@ async function runPlaywrightChecks() {
         return {
           id: panel.dataset.plotPanel || "",
           top: Math.round(rect.top),
+          left: Math.round(rect.left),
           width: Math.round(rect.width)
         };
       });
@@ -592,14 +593,20 @@ async function runPlaywrightChecks() {
     assertOk(plotLayout.flexWrap === "wrap", "plot grid should wrap flex rows");
     const firstRow = plotLayout.panels.filter((panel) => panel.top === plotLayout.panels[0].top);
     const referencePanels = plotLayout.panels.filter((panel) => ["stability", "strip", "phasePortrait"].includes(panel.id));
+    const heatPanel = plotLayout.panels.find((panel) => panel.id === "heatEngine");
+    const workPanel = plotLayout.panels.find((panel) => panel.id === "work");
     const plotIds = plotLayout.panels.map((panel) => panel.id);
-    const requiredPlotIds = ["model", "light", "velocity", "tpOpacity", "phasePortrait", "heatEngine", "time", "lum", "stability", "strip"];
-    assertOk(requiredPlotIds.every((id) => plotIds.includes(id)) && plotIds.length === requiredPlotIds.length, `plot grid should include all removable panels, saw ${plotIds.join("|")}`);
-    const phaseGroupStart = plotIds.indexOf("light");
-    assertOk(plotIds.slice(phaseGroupStart, phaseGroupStart + 4).join("|") === "light|velocity|tpOpacity|phasePortrait", "phase plot panels should stay grouped near the RV curve");
+    assertOk(plotIds.join("|") === "model|heatEngine|work|light|velocity|tpOpacity|phasePortrait|time|lum|stability|strip", `plot grid should include all removable panels, saw ${plotIds.join("|")}`);
+    assertOk(plotIds.slice(1, 6).join("|") === "heatEngine|work|light|velocity|tpOpacity", "phase plot panels should stay grouped near the RV curve");
     const firstRowIds = firstRow.map((panel) => panel.id).join("|");
-    assertOk(firstRowIds.startsWith("model|") && firstRowIds.includes("light"), `first plot row should start with Shell and include Lightcurve, saw ${firstRowIds}`);
+    assertOk(["model", "heatEngine", "work"].every((id) => firstRowIds.split("|").includes(id)), `first plot row should include Shell and the compact work panels, saw ${firstRowIds}`);
+    assertOk(Boolean(heatPanel), "Heat Engine panel was missing from the plot grid");
+    assertOk(Boolean(workPanel), "Work panel was missing from the plot grid");
+    assertOk(workPanel.top === heatPanel.top, "Work panel should sit on the Heat Engine row");
+    assertOk(workPanel.left > heatPanel.left, "Work panel should sit to the right of Heat Engine");
     assertOk(firstRow.find((panel) => panel.id === "model")?.width < 360, "Shell should stay compact");
+    assertOk(heatPanel.width < 360, "Heat Engine should stay compact");
+    assertOk(workPanel.width < 360, "Work panel should stay compact");
     assertOk(firstRow.find((panel) => panel.id === "light")?.width > 360, "Lightcurve should expand beside Shell");
     assertOk(plotLayout.panels.find((panel) => panel.id === "velocity")?.width > 360, "RV Curve should expand near the phase panels");
     assertOk(plotLayout.panels.find((panel) => panel.id === "phasePortrait")?.width > 360, "Thermal-Convection Loop should expand near the phase panels");
@@ -665,13 +672,13 @@ async function runPlaywrightChecks() {
     assertOk(!(await page.locator("[data-plot-panel='model']").isVisible()), "Shell panel should hide when unchecked");
     assertOk(await page.locator("#hiddenPlotControls").isVisible(), "hidden plot controls should appear when a plot is hidden");
     assertOk((await page.locator("#hiddenPlotControls").textContent())?.includes("Shell"), "hidden plot controls should include Shell");
-    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "9", "nine visible plots should be tracked");
+    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "10", "ten visible plots should be tracked");
     assertOk((await page.locator("#plotGrid").getAttribute("data-plot-columns")) === null, "plot grid should not force a column mode after hiding a plot");
-    assertOk(await page.locator("#plotGrid .plot-panel canvas:visible").count() === 9, "expected nine visible plot canvases after hiding Shell");
+    assertOk(await page.locator("#plotGrid .plot-panel canvas:visible").count() === 10, "expected ten visible plot canvases after hiding Shell");
     await page.locator("#hiddenPlotControls [data-plot-toggle='model']").check();
     assertOk(await page.locator("[data-plot-panel='model']").isVisible(), "Shell panel should return when rechecked");
     assertOk(!(await page.locator("#hiddenPlotControls").isVisible()), "hidden plot controls should hide again when all plots are visible");
-    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "10", "ten visible plots should be tracked after restore");
+    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "11", "eleven visible plots should be tracked after restore");
     assertOk(!(await page.getByLabel("Enable grid mode").isChecked()), "grid mode should start off");
     assertOk(!(await page.locator("#fourierGridPanel").isVisible()), "Fourier grid panel should start hidden");
     await page.getByLabel("Enable grid mode").check();
