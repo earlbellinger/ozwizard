@@ -7574,6 +7574,13 @@ function heatEngineNormalizedMagnitude(value: number, maxMagnitude: number): num
   return clamp(Math.abs(value) / maxMagnitude, 0, 1);
 }
 
+function heatEngineCompressibilityLevel(compressibility: number): number {
+  const value = Math.max(0, compressibility);
+  const low = Math.log1p(1);
+  const high = Math.log1p(24);
+  return clamp((Math.log1p(value) - low) / (high - low), 0, 1);
+}
+
 function heatEngineRegimeColor(regime: ReturnType<typeof heatEngineRegime>): string {
   if (regime === "driving") return COLORS.Lc;
   if (regime === "damped") return NEGATIVE_VELOCITY_COLOR;
@@ -7700,6 +7707,46 @@ function drawHeatEnginePhaseRail(
       700
     );
   });
+  ctx.restore();
+}
+
+function drawHeatEngineCompressibilitySpring(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  topY: number,
+  bottomY: number,
+  compressibility: number
+): void {
+  const span = bottomY - topY;
+  if (!Number.isFinite(span + compressibility) || span <= 7) return;
+  const stiffness = heatEngineCompressibilityLevel(compressibility);
+  const lead = clamp(span * 0.08, 3, 8);
+  const coilTop = topY + lead;
+  const coilBottom = bottomY - lead;
+  const coilSpan = Math.max(1, coilBottom - coilTop);
+  const targetHalfWaves = Math.round(8 + stiffness * 18);
+  const halfWaves = Math.max(4, Math.min(targetHalfWaves, Math.floor(coilSpan / 2.2)));
+  const amplitude = 6.2 + stiffness * 2.4;
+  const alpha = 0.2 + stiffness * 0.18;
+
+  ctx.save();
+  ctx.strokeStyle = `rgba(210, 218, 232, ${alpha})`;
+  ctx.shadowColor = `rgba(210, 218, 232, ${alpha * 0.6})`;
+  ctx.shadowBlur = 2 + stiffness * 4;
+  ctx.lineWidth = 1.05 + stiffness * 1.15;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x, topY);
+  ctx.lineTo(x, coilTop);
+  for (let wave = 1; wave <= halfWaves; wave += 1) {
+    const y = coilTop + (coilSpan * wave) / halfWaves;
+    const side = wave % 2 === 0 ? -1 : 1;
+    ctx.lineTo(x + amplitude * side, y);
+  }
+  ctx.lineTo(x, coilBottom);
+  ctx.lineTo(x, bottomY);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -7926,6 +7973,14 @@ function drawHeatEnginePistonCausal(
   ctx.fillRect(chamber.left + 3, gasTop, chamber.width - 6, bottom - gasTop - 3);
   ctx.shadowBlur = 0;
 
+  drawHeatEngineCompressibilitySpring(
+    ctx,
+    centerX + 9,
+    gasTop + 7,
+    bottom - 13,
+    terms.q
+  );
+
   const pressureLength = forceArrowLength(terms.pressureForce);
   const pressureX = centerX - 52;
   const currentOpacityPoint = thermodynamicPoint(row, parameters);
@@ -7937,7 +7992,7 @@ function drawHeatEnginePistonCausal(
       ? anchoredVisualRange([...opacityValues, currentOpacityPoint.logOpacity], 0, 0.05, 0.12)
       : range([...opacityValues, currentOpacityPoint.logOpacity, 0], 0.12);
     const opacityLevel = normalizedInRange(currentOpacityPoint.logOpacity, opacityRange);
-    const ghostWidth = 52;
+    const ghostWidth = 48;
     const ghostMaxHeight = 42;
     const ghostHeight = 16 + opacityLevel * (ghostMaxHeight - 16);
     const ghostX = clamp(radiativeX - ghostWidth / 2, chamber.left + 10, right - ghostWidth - 8);
@@ -7988,7 +8043,7 @@ function drawHeatEnginePistonCausal(
 
   const pressureEndY = gasTop + 2;
   drawHeatEngineArrow(ctx, pressureX, Math.min(bottom - 10, pressureEndY + pressureLength), pressureX, pressureEndY, COLORS.H, 3.1);
-  drawHeatEngineLabel(ctx, "pressure", pressureX + 10, gasTop + 27, COLORS.H, "left", 9.4, 760);
+  drawHeatEngineLabel(ctx, "pressure", pressureX + 7, gasTop + 27, COLORS.H, "left", 9.4, 760);
 
   const gravityLength = forceArrowLength(terms.gravityForce);
   const gravityX = chamber.left + chamber.width * 0.05;
