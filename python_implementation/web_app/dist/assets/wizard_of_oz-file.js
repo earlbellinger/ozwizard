@@ -7629,12 +7629,13 @@
       { align, fontSize: size }
     );
   }
-  function heatEngineNormalizedMagnitude(value, values) {
-    const maxMagnitude = Math.max(
+  function heatEngineMaxMagnitude(values) {
+    return Math.max(
       1e-9,
-      Math.abs(value),
       ...values.map((item) => Math.abs(item)).filter(Number.isFinite)
     );
+  }
+  function heatEngineNormalizedMagnitude(value, maxMagnitude) {
     return clamp4(Math.abs(value) / maxMagnitude, 0, 1);
   }
   function drawHeatEngineArrow(ctx, x1, y1, x2, y2, color, width = 2.2, label, labelOffset = 12, headSize = 8) {
@@ -7679,10 +7680,24 @@
     const sourceValues = rows.map((item) => baseLuminosity(item, parameters));
     const radiativeValues = rows.map((item) => item.Lr);
     const convectiveValues = rows.map((item) => item.Lc);
-    const forceScaleValues = [...pressureValues, ...gravityValues];
-    const heatFlowScaleValues = sourceValues;
-    const forceArrowLength = (value) => 9 + heatEngineNormalizedMagnitude(value, forceScaleValues) * 52;
-    const heatFlowMagnitude = (value) => heatEngineNormalizedMagnitude(value, heatFlowScaleValues);
+    const forceMagnitudeMax = heatEngineMaxMagnitude([
+      ...pressureValues,
+      ...gravityValues,
+      ...dampingValues,
+      terms.pressureForce,
+      terms.gravityForce,
+      terms.dampingAcceleration
+    ]);
+    const heatFlowMagnitudeMax = heatEngineMaxMagnitude([
+      ...sourceValues,
+      ...radiativeValues,
+      ...convectiveValues,
+      terms.source,
+      terms.radiativeLeak,
+      terms.convectiveLeak
+    ]);
+    const forceArrowLength = (value) => 9 + heatEngineNormalizedMagnitude(value, forceMagnitudeMax) * 52;
+    const heatFlowMagnitude = (value) => heatEngineNormalizedMagnitude(value, heatFlowMagnitudeMax);
     const travelTop = chamber.top + 18;
     const travelBottom = bottom - 88;
     const pistonY = travelBottom - normalizedInRange(row.R, radiusRange) * Math.max(1, travelBottom - travelTop);
@@ -7748,12 +7763,14 @@
     drawHeatEngineLabel(ctx, "pressure", pressureX + 10, gasTop + 27, COLORS.H, "left", 9.4, 760);
     const gravityLength = forceArrowLength(terms.gravityForce);
     const gravityX = chamber.left + chamber.width * 0.05;
+    const gravityEndY = pistonY - pistonHeight / 2 - 2;
+    const gravityStartY = Math.max(3, gravityEndY - gravityLength);
     drawHeatEngineArrow(
       ctx,
       gravityX,
-      Math.max(chamber.top + 8, pistonY - pistonHeight / 2 - gravityLength),
+      gravityStartY,
       gravityX,
-      pistonY - pistonHeight / 2 - 2,
+      gravityEndY,
       THEME.axisText,
       2.6
     );
@@ -7776,7 +7793,8 @@
     const sourceX = centerX - chamber.width * 0.22;
     const sourceLength = 18 + sourceNorm * 24;
     drawHeatEngineArrow(ctx, sourceX, bottom + sourceLength + 4, sourceX, bottom + 3, sourceLuminosityColor(), 3);
-    drawHeatEngineLabel(ctx, "source", sourceX + 10, bottom + 14, sourceLuminosityColor(), "left", 9.4, 760);
+    drawHeatEngineLabel(ctx, "source", sourceX + 10, bottom + 18, sourceLuminosityColor(), "left", 9.4, 760);
+    drawHeatEngineLabel(ctx, "luminosity", sourceX + 10, bottom + 30, sourceLuminosityColor(), "left", 9.4, 760);
     const convectiveLeakNorm = heatFlowMagnitude(terms.convectiveLeak);
     const hasConvectiveLeak = convectiveLuminosityAvailable(parameters);
     if (hasConvectiveLeak) {
@@ -7794,6 +7812,16 @@
       ctx.strokeStyle = colorWithAlpha(COLORS.Lc, 0.42);
       ctx.lineWidth = 1.2;
       ctx.strokeRect(right, ductY - ductHeight / 2, ductWidth, ductHeight);
+      const ductArrowX = right + ductWidth * 0.28;
+      const ductArrowLength = Math.min(8, Math.max(4, ductWidth * 0.48));
+      const ductArrowHalfHeight = Math.max(3.5, ductHeight * 0.65);
+      ctx.fillStyle = colorWithAlpha(COLORS.Lc, 0.72);
+      ctx.beginPath();
+      ctx.moveTo(ductArrowX + ductArrowLength / 2, ductY);
+      ctx.lineTo(ductArrowX - ductArrowLength / 2, ductY - ductArrowHalfHeight);
+      ctx.lineTo(ductArrowX - ductArrowLength / 2, ductY + ductArrowHalfHeight);
+      ctx.closePath();
+      ctx.fill();
       const targetValues = convectionResponsive ? rows.map((item) => convectiveVelocityTarget(item, parameters)) : [];
       const ucRange = range(convectionResponsive ? [...rows.map((item) => item.Uc), ...targetValues] : [...rows.map((item) => item.Uc), 0], 0.12);
       const currentAperture = normalizedInRange(row.Uc, ucRange);
@@ -7890,7 +7918,7 @@
       drawCanvasMessage(ctx, width, height, "heat engine terms unavailable");
       return;
     }
-    const cycleRows = downsample(heatEngineCycleRows(latestPhaseRows), 1100, ["R", "H", "Uc", "L"]);
+    const cycleRows = downsample(heatEngineCycleRows(latestPhaseRows), 1100, ["R", "V", "H", "Uc", "L", "Lr", "Lc"]);
     canvas.dataset.heatEngineMode = gridState.enabled ? "grid" : "single";
     canvas.dataset.heatEngineRows = String(cycleRows.length);
     canvas.dataset.forceTerms = "pressure,gravity,damping";
