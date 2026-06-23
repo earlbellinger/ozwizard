@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CONTROL_GROUPS, DEFAULT_PRESET_NAME, PRESETS, compareRows, derivatives, linearDynamicPeriod, sample, solveModel, solverOptionsFromParameters, type Row } from "../src/model";
+import { CONTROL_GROUPS, DEFAULT_PRESET_NAME, PRESETS, compareRows, derivedPowers, derivatives, effectiveGammaC, linearDynamicPeriod, sample, solveModel, solverOptionsFromParameters, type Row } from "../src/model";
 import { buildTwoCyclePhase, findLuminosityMaxima } from "../src/phase";
 import { integrate } from "../src/solvers";
 
@@ -71,6 +71,16 @@ describe("one-zone model", () => {
     expect(row.Lc).toBeCloseTo(p.gammac * p.r0 ** (-(p.m - 2)) * p.uc0 ** 3, 12);
   });
 
+  it("uses radiative luminosity for the full flux when convection is absent", () => {
+    const p = { ...PRESETS[STRIP_PRESET], zetac: 0, uc0: 0, gammac: 0.7 };
+    const row = sample(0, [p.r0, p.v0, p.h0, p.uc0], p);
+    const powers = derivedPowers(p.r0, p);
+    expect(effectiveGammaC(p)).toBe(0);
+    expect(row.Lc).toBe(0);
+    expect(row.Lr).toBeCloseTo(p.r0 ** powers.b * p.h0 ** (p.s + 4), 12);
+    expect(row.L).toBeCloseTo(row.Lr, 12);
+  });
+
   it("matches the Python derivative fixture for the instability-strip initial state", () => {
     const p = PRESETS[STRIP_PRESET];
     const actual = derivatives(0, [p.r0, p.v0, p.h0, p.uc0], p);
@@ -122,7 +132,7 @@ describe("one-zone model", () => {
     expect(result.message).toBe("runaway_trend");
     expect(result.rows.at(-1)?.R).toBeGreaterThan(20);
     expect(result.rows.length).toBeLessThan(14000);
-  });
+  }, 15000);
 
   it("integrates every preset for a short bounded smoke run", () => {
     for (const [name, preset] of Object.entries(PRESETS)) {

@@ -645,13 +645,17 @@
       d: m * gamma11 / 2
     };
   }
+  function effectiveGammaC(p) {
+    return p.zetac <= 0 && Math.abs(p.uc0) <= 1e-9 ? 0 : p.gammac;
+  }
   function sample(tau, y, p) {
     const [radius, velocity, pressure, convectiveVelocity] = y;
     const powers = derivedPowers(radius, p);
+    const gammaC = effectiveGammaC(p);
     const rawLr = radius ** powers.b * pressure ** (p.s + 4);
     const rawLc = radius ** -powers.c * convectiveVelocity ** 3;
-    const lr = (1 - p.gammac) * rawLr;
-    const lc = p.gammac * rawLc;
+    const lr = (1 - gammaC) * rawLr;
+    const lc = gammaC * rawLc;
     return { tau, R: radius, V: velocity, H: pressure, Uc: convectiveVelocity, Lr: lr, Lc: lc, L: lr + lc };
   }
   function derivatives(_t, y, p) {
@@ -660,14 +664,15 @@
       throw new Error("model left the positive-radius/positive-H domain");
     }
     const powers = derivedPowers(radius, p);
+    const gammaC = effectiveGammaC(p);
     const lr = radius ** powers.b * pressure ** (p.s + 4);
     const lc = radius ** -powers.c * convectiveVelocity ** 3;
-    const radiativeWeight = 1 - p.gammac;
+    const radiativeWeight = 1 - gammaC;
     const driver = p.driver === "h" ? Math.sqrt(pressure) : Math.sqrt(Math.abs(velocity));
     return [
       velocity,
       pressure / radius ** powers.q - 1 / radius ** 2 - p.cq * velocity ** 3,
-      p.zeta * radius ** (powers.m * (p.gamma1 - 1)) * (radius ** p.sourceExp - radiativeWeight * lr - p.gammac * lc),
+      p.zeta * radius ** (powers.m * (p.gamma1 - 1)) * (radius ** p.sourceExp - radiativeWeight * lr - gammaC * lc),
       p.zetac * (radius ** -powers.d * driver - convectiveVelocity)
     ];
   }

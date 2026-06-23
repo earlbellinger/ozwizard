@@ -1463,11 +1463,15 @@
     }
 
     .plot-panel[data-plot-panel="heatEngine"] {
-      --plot-panel-min-width: 520px;
+      --heat-engine-panel-size: 316px;
+      width: min(100%, var(--heat-engine-panel-size));
+      flex: 0 0 min(100%, var(--heat-engine-panel-size));
+      min-width: 0;
+      overflow-x: hidden;
     }
 
     .heat-engine-canvas {
-      height: 480px;
+      height: 260px;
     }
 
     canvas.model-canvas {
@@ -1508,10 +1512,6 @@
     canvas.reference-control-canvas {
       cursor: crosshair;
       touch-action: none;
-    }
-
-    .reference-plot-panel[data-reference-panel="phase"] canvas {
-      height: 340px;
     }
 
     .legend {
@@ -2057,10 +2057,6 @@
         height: 176px;
       }
 
-      .heat-engine-canvas {
-        height: 430px;
-      }
-
       .reference-plot-panel canvas,
       .reference-plot-panel[data-reference-panel="phase"] canvas {
         height: 260px;
@@ -2077,6 +2073,14 @@
 
       .plot-panel[data-plot-panel="model"] {
         --model-panel-size: 286px;
+      }
+
+      .plot-panel[data-plot-panel="heatEngine"] {
+        --heat-engine-panel-size: 286px;
+      }
+
+      .heat-engine-canvas {
+        height: 230px;
       }
     }
   </style>
@@ -2263,6 +2267,19 @@
           </div>
         </div>
 
+        <div class="plot-panel" data-plot-panel="heatEngine">
+          <div class="plot-title">
+            <div class="plot-title-left" data-plot-control-home="heatEngine">
+              <label class="plot-enable-control" data-plot-control="heatEngine">
+                <input type="checkbox" data-plot-toggle="heatEngine" checked aria-label="Hide Heat Engine plot">
+                <span>Heat Engine</span>
+              </label>
+              <h3>Heat Engine</h3>
+            </div>
+          </div>
+          <canvas class="heat-engine-canvas" id="heatEngineCanvas" aria-label="work-cycle heat engine piston visualization"></canvas>
+        </div>
+
         <div class="plot-panel" data-plot-panel="light">
           <div class="plot-title">
             <div class="plot-title-left" data-plot-control-home="light">
@@ -2338,19 +2355,6 @@
             </div>
           </div>
           <canvas id="phasePortraitCanvas" aria-label="H of R and U_c of R phase portrait"></canvas>
-        </div>
-
-        <div class="plot-panel" data-plot-panel="heatEngine">
-          <div class="plot-title">
-            <div class="plot-title-left" data-plot-control-home="heatEngine">
-              <label class="plot-enable-control" data-plot-control="heatEngine">
-                <input type="checkbox" data-plot-toggle="heatEngine" checked aria-label="Hide Heat Engine plot">
-                <span>Heat Engine</span>
-              </label>
-              <h3>Heat Engine</h3>
-            </div>
-          </div>
-          <canvas class="heat-engine-canvas" id="heatEngineCanvas" aria-label="work-cycle heat engine piston visualization"></canvas>
         </div>
 
         <div class="plot-panel" id="pressurePhasePanel" hidden>
@@ -2529,7 +2533,7 @@
           </p>
         </div>
 
-        <details class="content-panel derivation-panel" id="derivationPanel" open>
+        <details class="content-panel derivation-panel" id="derivationPanel">
           <summary><h3>Derivation</h3></summary>
           <div class="derivation-content" id="derivationContent"></div>
         </details>

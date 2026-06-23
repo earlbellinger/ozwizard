@@ -1253,6 +1253,19 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#derivationPanel")).toHaveAttribute("data-physics-mode", "radiative");
   await expect(page.locator("#derivationPanel")).toHaveAttribute("data-convection-mode", "frozen");
   await expect(page.locator("#derivationContent [data-stability-kind='convective']")).toHaveCount(0);
+  await page.locator("input[aria-label='initial convective velocity']").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "1";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#timeLegend [data-plot-series='Uc']")).toHaveCount(1);
+  await expect(page.locator("#timeLegend")).toContainText("convective velocity");
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-convection-active", "true");
+  await page.locator("input[aria-label='initial convective velocity']").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "0";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
   await page.locator("input[aria-label='convective response']").evaluate((input) => {
     const slider = input as HTMLInputElement;
     slider.value = "0";

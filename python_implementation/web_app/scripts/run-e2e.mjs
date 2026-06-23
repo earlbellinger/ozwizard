@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
-import { chromium } from "playwright";
+import { chromium } from "@playwright/test";
 
 const host = "127.0.0.1";
 const port = process.env.E2E_PORT || "4173";
@@ -122,6 +122,7 @@ async function runPlaywrightChecks() {
     await pianoToggle.click();
     assertOk((await pianoToggle.getAttribute("aria-pressed")) === "true", "piano mode did not turn on");
     assertOk(await page.locator("#pianoPanel").isVisible(), "piano panel did not open");
+    await page.waitForFunction(() => document.querySelector("#sonificationToggle")?.disabled === true, null, { timeout: 5000 });
     assertOk(await sonificationToggle.isDisabled(), "continuous speaker should be disabled in piano mode");
     assertOk((await page.getByLabel("shown piano octaves").inputValue()) === "3", "piano octave slider should start at C3-B4");
     assertOk((await page.locator("#sonificationHz").textContent()) === "C3-B4", "piano mode should show visible octaves");
@@ -174,6 +175,7 @@ async function runPlaywrightChecks() {
     assertOk(!cKeyClassAfterRelease?.includes("active"), "keyboard Z should release visible C");
     await pianoToggle.click();
     assertOk(!(await page.locator("#pianoPanel").isVisible()), "piano panel did not close");
+    await page.waitForFunction(() => document.querySelector("#sonificationToggle")?.disabled === false, null, { timeout: 5000 });
     assertOk(!(await sonificationToggle.isDisabled()), "speaker should re-enable after piano mode closes");
     assertOk((await sonificationToggle.getAttribute("aria-pressed")) === "false", "speaker should stay muted after piano mode closes");
     assertOk((await page.getByLabel("reference pitch").inputValue()) === "69", "reference pitch slider should be restored after piano mode");
@@ -325,42 +327,46 @@ async function runPlaywrightChecks() {
     assertOk(await convectiveChip.locator(".stability-summary").isVisible(), "stability chip summary should be visible initially");
     assertOk(!(await convectiveChip.locator(".stability-formula").isVisible()), "stability chip formula should be hidden initially");
     await convectiveChip.hover();
-    assertOk(!(await convectiveChip.locator(".stability-summary").isVisible()), "hovering a stability chip should hide the summary");
-    assertOk(await convectiveChip.locator(".stability-formula").isVisible(), "hovering a stability chip should reveal the formula");
+    assertOk(await convectiveChip.locator(".stability-summary").isVisible(), "hovering a stability chip should keep the summary visible");
+    assertOk(!(await convectiveChip.locator(".stability-formula").isVisible()), "hovering a stability chip should not reveal the formula");
     assertOk((await convectiveChip.getAttribute("data-stability-view")) === null, "hovering a stability chip should not persist toggle state");
     await page.mouse.move(1, 1);
     assertOk(await convectiveChip.locator(".stability-summary").isVisible(), "leaving a stability chip should restore the summary");
     await convectiveChip.click();
     assertOk((await convectiveChip.getAttribute("aria-expanded")) === "true", "clicking a stability chip should expand the formula");
     assertOk((await convectiveChip.getAttribute("data-stability-view")) === "formula", "clicking a stability chip should persist formula mode");
+    assertOk(await convectiveChip.locator(".stability-summary").isVisible(), "expanded stability chip should keep the summary visible");
     assertOk(await convectiveChip.locator(".stability-formula").isVisible(), "expanded stability chip should show the formula");
+    assertOk((await convectiveChip.locator(".stability-formula .stability-equation-chunk").count()) > 0, "expanded stability chip should render equation chunks");
+    assertOk(!/Extra \\left|missing \\right/i.test(await page.locator("body").innerText()), "expanded stability formulas should not trigger MathJax delimiter errors");
     await convectiveChip.click();
     assertOk((await convectiveChip.getAttribute("aria-expanded")) === "false", "clicking an expanded stability chip should collapse it");
+    assertOk(!(await convectiveChip.locator(".stability-formula").isVisible()), "collapsed stability chip should hide the formula");
+    await secularChip.click();
+    assertOk((await secularChip.getAttribute("aria-expanded")) === "true", "clicking the secular chip should expand the formula");
+    assertOk(await secularChip.locator(".stability-summary").isVisible(), "expanded secular chip should keep the summary visible");
+    assertOk(await secularChip.locator(".stability-formula").isVisible(), "expanded secular chip should show the formula");
+    assertOk((await secularChip.locator(".stability-formula .stability-equation-chunk").count()) > 0, "expanded secular chip should render equation chunks");
+    assertOk(!/Extra \\left|missing \\right/i.test(await page.locator("body").innerText()), "expanded secular stability formula should not trigger MathJax delimiter errors");
+    await secularChip.click();
+    assertOk((await secularChip.getAttribute("aria-expanded")) === "false", "clicking the expanded secular chip should collapse it");
     assertOk((await page.locator("#stabilityChipTooltip").count()) === 0, "stability chips should not create a separate tooltip box");
-    await pulsationalChip.evaluate((node) => {
-      node.dispatchEvent(new PointerEvent("pointerdown", {
-        bubbles: true,
-        cancelable: true,
-        pointerId: 91,
-        pointerType: "touch",
-        clientX: 20,
-        clientY: 20
-      }));
+    await page.setViewportSize({ width: 390, height: 844 });
+    await pulsationalChip.click();
+    assertOk((await pulsationalChip.getAttribute("aria-expanded")) === "true", "clicking the pulsational chip should expand the formula on mobile");
+    assertOk((await pulsationalChip.getAttribute("data-stability-view")) === "formula", "clicking the pulsational chip should persist formula mode");
+    assertOk(await pulsationalChip.locator(".stability-summary").isVisible(), "expanded pulsational chip should keep the summary visible");
+    assertOk(await pulsationalChip.locator(".stability-formula").isVisible(), "expanded pulsational chip should show the formula");
+    const expandedStabilityFitsMobile = await pulsationalChip.evaluate((chip) => {
+      const page = document.documentElement;
+      return {
+        chipFits: chip.scrollWidth <= chip.clientWidth + 1,
+        pageFits: page.scrollWidth <= page.clientWidth + 1
+      };
     });
-    await page.waitForTimeout(560);
-    assertOk((await pulsationalChip.getAttribute("aria-expanded")) === "true", "long-pressing a stability chip should expand the formula");
-    assertOk((await pulsationalChip.getAttribute("data-stability-view")) === "formula", "long-pressing a stability chip should persist formula mode");
-    assertOk(await pulsationalChip.locator(".stability-formula").isVisible(), "long-pressed stability chip should show the formula");
-    await pulsationalChip.evaluate((node) => {
-      node.dispatchEvent(new PointerEvent("pointerup", {
-        bubbles: true,
-        cancelable: true,
-        pointerId: 91,
-        pointerType: "touch",
-        clientX: 20,
-        clientY: 20
-      }));
-    });
+    assertOk(expandedStabilityFitsMobile.chipFits && expandedStabilityFitsMobile.pageFits, "expanded stability chip should fit on mobile");
+    await pulsationalChip.click();
+    await page.setViewportSize({ width: 1280, height: 720 });
 
     assertOk(await page.locator("[data-symbol='tau']").first().isVisible(), "tau symbol was not visible");
     const tauRowText = await page.locator("[data-symbol='tau']").first().locator("xpath=ancestor::tr").textContent();
@@ -382,10 +388,13 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#derivationPanel").getAttribute("data-geometry-mode")) === "radius-dependent", "derivation should start with radius-dependent geometry");
     assertOk((await page.locator("#derivationPanel").getAttribute("data-driver-mode")) === "h", "derivation should start with pressure driver");
     assertOk((await page.locator("#derivationPanel").getAttribute("data-convection-mode")) === "time-dependent", "derivation should start with time-dependent convection");
+    await page.locator("[data-derivation-block='opacity']").waitFor({ state: "attached", timeout: 15000 });
+    await page.locator("[data-derivation-block='equilibrium']").waitFor({ state: "attached", timeout: 15000 });
+    await page.locator("[data-derivation-block='linear']").waitFor({ state: "attached", timeout: 15000 });
     assertOk((await page.locator("#derivationContent [data-derivation-block]").count()) === 6, "derivation should render six separable blocks");
-    assertOk(await page.locator("[data-derivation-block='opacity']").isVisible(), "derivation should include opacity block");
-    assertOk(await page.locator("[data-derivation-block='equilibrium']").isVisible(), "derivation should include equilibrium block");
-    assertOk(await page.locator("[data-derivation-block='linear']").isVisible(), "derivation should include linear stability block");
+    assertOk((await page.locator("[data-derivation-block='opacity']").count()) === 1, "derivation should include opacity block");
+    assertOk((await page.locator("[data-derivation-block='equilibrium']").count()) === 1, "derivation should include equilibrium block");
+    assertOk((await page.locator("[data-derivation-block='linear']").count()) === 1, "derivation should include linear stability block");
     assertOk((await page.locator("#derivationContent [data-stability-kind='convective']").count()) === 1, "convective derivation should include the convective/turbulent criterion");
     const sourceText = await page.evaluate(async () => (await fetch("/src/main.ts")).text());
     const modelText = await page.evaluate(async () => (await fetch("/src/model.ts")).text());
@@ -517,7 +526,7 @@ async function runPlaywrightChecks() {
       input.value = "1";
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    assertOk(await page.locator("#plotGrid .plot-panel canvas:visible").count() === 9, "expected nine visible plot canvases");
+    assertOk(await page.locator("#plotGrid .plot-panel canvas:visible").count() === 10, "expected ten visible plot canvases");
     const modelBox = await page.locator("#modelCanvas").boundingBox();
     const modelPanelBox = await page.locator("[data-plot-panel='model']").boundingBox();
     const lightBox = await page.locator("#lightCanvas").boundingBox();
@@ -583,12 +592,17 @@ async function runPlaywrightChecks() {
     assertOk(plotLayout.flexWrap === "wrap", "plot grid should wrap flex rows");
     const firstRow = plotLayout.panels.filter((panel) => panel.top === plotLayout.panels[0].top);
     const referencePanels = plotLayout.panels.filter((panel) => ["stability", "strip", "phasePortrait"].includes(panel.id));
-    assertOk(plotLayout.panels.map((panel) => panel.id).join("|") === "model|light|velocity|time|lum|tpOpacity|stability|strip|phasePortrait", `plot grid should include all removable panels, saw ${plotLayout.panels.map((panel) => panel.id).join("|")}`);
+    const plotIds = plotLayout.panels.map((panel) => panel.id);
+    const requiredPlotIds = ["model", "light", "velocity", "tpOpacity", "phasePortrait", "heatEngine", "time", "lum", "stability", "strip"];
+    assertOk(requiredPlotIds.every((id) => plotIds.includes(id)) && plotIds.length === requiredPlotIds.length, `plot grid should include all removable panels, saw ${plotIds.join("|")}`);
+    const phaseGroupStart = plotIds.indexOf("light");
+    assertOk(plotIds.slice(phaseGroupStart, phaseGroupStart + 4).join("|") === "light|velocity|tpOpacity|phasePortrait", "phase plot panels should stay grouped near the RV curve");
     const firstRowIds = firstRow.map((panel) => panel.id).join("|");
-    assertOk(firstRowIds === "model|light|velocity" || firstRowIds === "model|light|velocity|time", `first plot row should start with model/light/velocity, saw ${firstRowIds}`);
+    assertOk(firstRowIds.startsWith("model|") && firstRowIds.includes("light"), `first plot row should start with Shell and include Lightcurve, saw ${firstRowIds}`);
     assertOk(firstRow.find((panel) => panel.id === "model")?.width < 360, "Shell should stay compact");
     assertOk(firstRow.find((panel) => panel.id === "light")?.width > 360, "Lightcurve should expand beside Shell");
-    assertOk(firstRow.find((panel) => panel.id === "velocity")?.width > 360, "RV Curve should expand beside Shell");
+    assertOk(plotLayout.panels.find((panel) => panel.id === "velocity")?.width > 360, "RV Curve should expand near the phase panels");
+    assertOk(plotLayout.panels.find((panel) => panel.id === "phasePortrait")?.width > 360, "Thermal-Convection Loop should expand near the phase panels");
     assertOk(plotLayout.panels.find((panel) => panel.id === "time")?.width > 360, "History should expand to fill its flex row");
     assertOk(plotLayout.panels.find((panel) => panel.id === "tpOpacity")?.width > 360, "T-P Opacity should expand to fill its flex row");
     assertOk(referencePanels.every((panel) => panel.width >= 400), "reference panels should use the shared plot grid sizing");
@@ -630,7 +644,11 @@ async function runPlaywrightChecks() {
     await page.mouse.up();
     assertOk((await page.locator("#lightCanvas").getAttribute("data-phase-scrubbing")) !== "true", "lightcurve should stop scrubbing on mouse release");
     const releasePhase = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
-    await page.waitForTimeout(260);
+    await page.waitForFunction((released) => {
+      const current = Number(document.querySelector("#lightCanvas")?.getAttribute("data-current-phase"));
+      const direct = Math.abs(current - released);
+      return Math.min(direct, 2 - direct) > 0.04;
+    }, releasePhase, { timeout: 1500 });
     const resumedPhase = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
     assertOk(phaseDelta(resumedPhase, releasePhase) > 0.04, "phase animation should resume from the released position");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "L_c,L,L_r", "model luminosity arc labels should be active");
@@ -647,13 +665,13 @@ async function runPlaywrightChecks() {
     assertOk(!(await page.locator("[data-plot-panel='model']").isVisible()), "Shell panel should hide when unchecked");
     assertOk(await page.locator("#hiddenPlotControls").isVisible(), "hidden plot controls should appear when a plot is hidden");
     assertOk((await page.locator("#hiddenPlotControls").textContent())?.includes("Shell"), "hidden plot controls should include Shell");
-    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "8", "eight visible plots should be tracked");
+    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "9", "nine visible plots should be tracked");
     assertOk((await page.locator("#plotGrid").getAttribute("data-plot-columns")) === null, "plot grid should not force a column mode after hiding a plot");
-    assertOk(await page.locator("#plotGrid .plot-panel canvas:visible").count() === 8, "expected eight visible plot canvases after hiding Shell");
+    assertOk(await page.locator("#plotGrid .plot-panel canvas:visible").count() === 9, "expected nine visible plot canvases after hiding Shell");
     await page.locator("#hiddenPlotControls [data-plot-toggle='model']").check();
     assertOk(await page.locator("[data-plot-panel='model']").isVisible(), "Shell panel should return when rechecked");
     assertOk(!(await page.locator("#hiddenPlotControls").isVisible()), "hidden plot controls should hide again when all plots are visible");
-    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "9", "nine visible plots should be tracked after restore");
+    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "10", "ten visible plots should be tracked after restore");
     assertOk(!(await page.getByLabel("Enable grid mode").isChecked()), "grid mode should start off");
     assertOk(!(await page.locator("#fourierGridPanel").isVisible()), "Fourier grid panel should start hidden");
     await page.getByLabel("Enable grid mode").check();
@@ -667,16 +685,23 @@ async function runPlaywrightChecks() {
     await fluxControl.dispatchEvent("contextmenu");
     assertOk(await page.getByLabel("Enable grid mode").isChecked(), "right clicking a slider should enable grid mode");
     assertOk(await page.locator("[data-plot-panel='model']").isHidden(), "Shell should be hidden in grid mode");
+    assertOk(await page.locator("[data-plot-panel='heatEngine']").isHidden(), "Heat Engine should be hidden in grid mode");
     assertOk(await page.locator("[data-plot-panel='time']").isHidden(), "History should be hidden in grid mode");
     assertOk(await page.locator("[data-plot-panel='lum']").isHidden(), "Luminosity Evolution should be hidden in grid mode");
     assertOk(await page.locator("[data-plot-panel='tpOpacity']").isVisible(), "T-P Opacity should remain visible in grid mode");
     assertOk(await page.locator("[data-plot-panel='stability']").isVisible(), "Stability Map should remain visible in grid mode");
     assertOk(await page.locator("[data-plot-panel='strip']").isVisible(), "Instability Strip should remain visible in grid mode");
     assertOk(await page.locator("[data-plot-panel='phasePortrait']").isVisible(), "Thermal-Convection Loop should remain visible in grid mode");
+    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "6", "six visible plots should be tracked in grid mode");
     assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='model']").isDisabled(), "Shell toggle should be disabled in grid mode");
+    assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='heatEngine']").isDisabled(), "Heat Engine toggle should be disabled in grid mode");
     assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='time']").isDisabled(), "History toggle should be disabled in grid mode");
     assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='lum']").isDisabled(), "Luminosity toggle should be disabled in grid mode");
     assertOk(!(await page.locator("[data-plot-toggle='tpOpacity']").isDisabled()), "T-P Opacity toggle should remain enabled in grid mode");
+    await page.waitForFunction(() => {
+      const panel = document.querySelector("#fourierGridPanel");
+      return panel instanceof HTMLElement && !panel.hidden && getComputedStyle(panel).display !== "none";
+    }, null, { timeout: 5000 });
     assertOk(await page.locator("#fourierGridPanel").isVisible(), "Fourier grid panel should show in grid mode");
     const loopSpeed = page.getByRole("slider", { name: "parameter loop speed" });
     assertOk((await loopSpeed.inputValue()) === "1", "parameter loop speed should start at 1x");
@@ -746,12 +771,12 @@ async function runPlaywrightChecks() {
     });
     assertOk(fourierHasPaint, "Fourier canvas should paint in grid mode");
     assertOk(
-      (await page.locator("#fourierCanvas").getAttribute("data-fourier-axis-labels")) === String.raw`A_L,r_{21},\phi_{21},r_{31},\phi_{31},\phi_{31}/\phi_{21},\phi_{k1}/S_k,\phi_{k1}/P,\phi_{k1}/A_c,\phi_{k1}/S_k`,
-      "Fourier canvas should expose the expanded phase-diagnostic panels"
+      (await page.locator("#fourierCanvas").getAttribute("data-fourier-axis-labels")) === String.raw`r_{21},r_{31},\phi_{21},\phi_{31}`,
+      "Fourier canvas should expose only the period harmonic panels"
     );
     assertOk((await page.locator("#fourierCanvas").getAttribute("data-fourier-phase-ticks")) === "pi-multiples", "Fourier phase axes should use pi-multiple ticks");
-    assertOk(/phi31_vs_phi21.*phi_k1_vs_skewness.*phi_k1_vs_period.*phi_k1_vs_acuteness/.test(await page.locator("#fourierCanvas").getAttribute("data-fourier-structural-panels") || ""), "Fourier canvas should expose structural phase diagnostics");
-    assertOk(/[1-9]\d*/.test(await page.locator("#fourierCanvas").getAttribute("data-fourier-adiabatic-reference") || ""), "Fourier canvas should draw an adiabatic reference");
+    assertOk((await page.locator("#fourierCanvas").getAttribute("data-fourier-structural-panels")) === null, "Fourier canvas should omit structural phase diagnostics");
+    assertOk((await page.locator("#fourierCanvas").getAttribute("data-fourier-adiabatic-reference")) === null, "Fourier canvas should omit the adiabatic reference");
     await page.locator("#lightCanvas").scrollIntoViewIfNeeded();
     const lightCanvasBox = await page.locator("#lightCanvas").boundingBox();
     assertOk(Boolean(lightCanvasBox), "light canvas bounds were unavailable for colorbar scrub");
@@ -799,9 +824,13 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("#lightLegend").count() === 0, "phase luminosity legend should be removed");
     assertOk(await page.locator("#velocityLegend").count() === 0, "phase velocity legend should be removed");
     assertOk(await page.locator("#phaseLegend").count() === 0, "combined phase legend should be removed");
-    assertOk(await page.getByLabel("Annotations").isChecked(), "annotations should start on");
+    assertOk(!(await page.getByLabel("Annotations").isChecked()), "annotations should start off");
+    assertOk(!(await page.locator("#phaseAnnotationLegendItems").isVisible()), "annotation legend should start hidden");
+    assertOk((await page.locator("#lightCanvas").getAttribute("data-annotations")) === "off", "lightcurve annotations should start off");
+    await page.getByLabel("Annotations").check();
+    assertOk(await page.getByLabel("Annotations").isChecked(), "annotations should turn on");
     assertOk(await page.locator("#phaseAnnotationLegendItems").isVisible(), "annotation legend should show when annotations are enabled");
-    assertOk((await page.locator("#lightCanvas").getAttribute("data-annotations")) === "on", "lightcurve annotations should start on");
+    assertOk((await page.locator("#lightCanvas").getAttribute("data-annotations")) === "on", "lightcurve annotations should turn on");
     const annotationLabels = await page.locator("#phaseAnnotationLegendItems .annotation-symbol-item").evaluateAll((items) =>
       items.map((item) => item.textContent?.replace(/\s+/g, " ").trim()).join("|")
     );
@@ -838,8 +867,10 @@ async function runPlaywrightChecks() {
     const lumLegend = await page.locator("#lumLegend").textContent();
     assertOk(lumLegend?.includes("total"), "luminosity legend should show total luminosity");
     assertOk(lumLegend?.includes("radiative") && lumLegend.includes("convective"), "luminosity legend should expose radiative and convective entries by default");
-    assertOk(lumLegend?.includes("base"), "luminosity legend should expose base luminosity");
-    assertOk((await page.locator("#lumLegend [data-plot-series='Lb']").getAttribute("aria-pressed")) === "true", "base luminosity toggle should start visible");
+    assertOk(lumLegend?.includes("source"), "luminosity legend should expose source luminosity");
+    assertOk(!lumLegend?.includes("base"), "luminosity legend should not expose base luminosity");
+    assertOk((await page.locator("#lumLegend [data-plot-series='Lb']").getAttribute("aria-pressed")) === "true", "source luminosity toggle should start visible");
+    assertOk((await page.locator("#lumLegend [data-plot-series='Lb']").getAttribute("aria-label")) === "Toggle source luminosity visibility", "source luminosity toggle should use the source label");
     assertOk((await page.locator("input[aria-label='convective response']").inputValue()) === "0", "convective response slider coordinate should still be log10(1)");
     assertOk((await page.locator("[data-value-for='zetac']").textContent()) === "1", "convective response should still display one");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-convection-active")) === "true", "model arcs should start in convective mode");
@@ -856,7 +887,8 @@ async function runPlaywrightChecks() {
     assertOk(!((await page.locator("#timeLegend").textContent())?.includes("convective velocity")), "convective velocity should hide when convective response is zero");
     const zeroLumLegend = await page.locator("#lumLegend").textContent();
     assertOk(!zeroLumLegend?.includes("radiative") && !zeroLumLegend?.includes("convective"), "luminosity legend should show only total luminosity when convective response is zero");
-    assertOk(zeroLumLegend?.includes("base"), "base luminosity should remain visible when convective response is zero");
+    assertOk(zeroLumLegend?.includes("source"), "source luminosity should remain visible when convective response is zero");
+    assertOk(!zeroLumLegend?.includes("base"), "base luminosity should not remain visible when convective response is zero");
     assertOk((await page.locator("#metrics").getAttribute("data-s72-physics-mode")) === "radiative", "S72 status should switch to radiative mode when convective response is zero");
     assertOk((await page.locator("#metrics").getAttribute("data-s72-convective")) === null, "convective/turbulent status should hide in radiative mode");
     await page.waitForFunction(() => !document.querySelector("#metrics [data-stability-kind='convective']"));

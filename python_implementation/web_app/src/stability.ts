@@ -1,4 +1,4 @@
-import { derivedPowers, derivatives, mAt, type ModelParameters } from "./model";
+import { derivedPowers, derivatives, effectiveGammaC, mAt, type ModelParameters } from "./model";
 
 export type StabilityKind = "stable" | "convective" | "secular" | "dynamic" | "pulsational" | "neutral";
 export type AnalyticStabilityKind = "convective" | "secular" | "dynamic" | "pulsational";
@@ -80,15 +80,16 @@ export function analyticStabilityConditions(parameters: ModelParameters): Analyt
   const radius = 1;
   const m = mAt(radius, parameters);
   const powers = derivedPowers(radius, parameters);
-  const radiativeWeight = 1 - parameters.gammac;
-  const eCoefficient = radiativeWeight * powers.b - parameters.gammac * powers.c - parameters.sourceExp;
+  const gammaC = effectiveGammaC(parameters);
+  const radiativeWeight = 1 - gammaC;
+  const eCoefficient = radiativeWeight * powers.b - gammaC * powers.c - parameters.sourceExp;
   const radiativeThermal = radiativeWeight * (parameters.s + 4);
   const restoring = powers.q - 2;
   const secularCoupling = eCoefficient + restoring * radiativeThermal;
-  const convectiveCorrection = 1.5 * parameters.gammac * (m - 4);
+  const convectiveCorrection = 1.5 * gammaC * (m - 4);
   const convectiveResponse = parameters.zeta * parameters.zetac * (secularCoupling + convectiveCorrection);
   const secularResponse = parameters.zetac * restoring + parameters.zeta * secularCoupling;
-  const dynamicCoupling = parameters.zeta * parameters.zetac * (radiativeThermal + 1.5 * parameters.gammac) + restoring;
+  const dynamicCoupling = parameters.zeta * parameters.zetac * (radiativeThermal + 1.5 * gammaC) + restoring;
   const thermalResponse = parameters.zetac + parameters.zeta * radiativeThermal;
   const terms = {
     radiativeThermal,
