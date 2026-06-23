@@ -888,14 +888,15 @@
       )
     }));
   }
-  function buildLoopPathSamples(ranges, loopKey) {
+  function buildLoopPathSamples(ranges, loopKey, options = {}) {
     return ranges.map((rangeInput) => {
       const range = normalizeGridRange(rangeInput);
       const mean = meanSliderSample(range);
+      const samples = options.zeroCompletedFallback ? fallbackSliderSamples(range, true) : generateSliderSamples(range, options.stride ?? 1);
       return {
         key: range.key,
         centerSliderValue: mean,
-        samples: range.key === loopKey ? generateSliderSamples(range, 1) : [mean]
+        samples: range.key === loopKey ? samples : [mean]
       };
     });
   }
@@ -1241,15 +1242,15 @@
       callbacks.post({ type: "grid-canceled", requestId: request.requestId });
       return;
     }
-    const path = await runLoopPathPass(request, callbacks);
+    const path = request.ranges.length <= 1 ? coarsened : await runLoopPathPass(request, callbacks, estimate.stride, estimate.zeroCompletedFallback);
     if (callbacks.isCanceled()) {
       callbacks.post({ type: "grid-canceled", requestId: request.requestId });
       return;
     }
     postComplete(request, coarsened, path.results, estimate.stride, true, estimate.zeroCompletedFallback, callbacks);
   }
-  async function runLoopPathPass(request, callbacks) {
-    const pathSamples = buildLoopPathSamples(request.ranges, request.loopKey);
+  async function runLoopPathPass(request, callbacks, stride = 1, zeroCompletedFallback = false) {
+    const pathSamples = buildLoopPathSamples(request.ranges, request.loopKey, { stride, zeroCompletedFallback });
     return runGridPass(request, pathSamples, callbacks, void 0, false);
   }
   async function runGridPass(request, samples, callbacks, deadlineMs, reportProgress = true) {

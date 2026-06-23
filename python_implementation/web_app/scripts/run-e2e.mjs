@@ -122,8 +122,12 @@ async function runPlaywrightChecks() {
     await pianoToggle.click();
     assertOk((await pianoToggle.getAttribute("aria-pressed")) === "true", "piano mode did not turn on");
     assertOk(await page.locator("#pianoPanel").isVisible(), "piano panel did not open");
-    await page.waitForFunction(() => document.querySelector("#sonificationToggle")?.disabled === true, null, { timeout: 5000 });
-    assertOk(await sonificationToggle.isDisabled(), "continuous speaker should be disabled in piano mode");
+    await page.waitForFunction(() => document.querySelector("#sonificationToggle")?.disabled === false, null, { timeout: 5000 });
+    assertOk(!(await sonificationToggle.isDisabled()), "continuous speaker should stay enabled in piano mode");
+    await sonificationToggle.click();
+    assertOk((await sonificationToggle.getAttribute("aria-pressed")) === "true", "sonification should start while the piano is open");
+    await sonificationToggle.click();
+    assertOk((await sonificationToggle.getAttribute("aria-pressed")) === "false", "sonification should stop while the piano is open");
     assertOk((await page.getByLabel("shown piano octaves").inputValue()) === "3", "piano octave slider should start at C3-B4");
     assertOk((await page.locator("#sonificationHz").textContent()) === "C3-B4", "piano mode should show visible octaves");
     assertOk((await page.locator(".piano-key").count()) === 24, "piano should render two octaves of keys");
@@ -611,14 +615,16 @@ async function runPlaywrightChecks() {
     assertOk(plotLayout.panels.find((panel) => panel.id === "velocity")?.width > 360, "RV Curve should expand near the phase panels");
     assertOk(plotLayout.panels.find((panel) => panel.id === "phasePortrait")?.width > 360, "Thermal-Convection Loop should expand near the phase panels");
     assertOk(plotLayout.panels.find((panel) => panel.id === "time")?.width > 360, "History should expand to fill its flex row");
-    assertOk(plotLayout.panels.find((panel) => panel.id === "tpOpacity")?.width > 360, "T-P Opacity should expand to fill its flex row");
+    assertOk(plotLayout.panels.find((panel) => panel.id === "tpOpacity")?.width > 360, "T-P Loop should expand to fill its flex row");
     assertOk(referencePanels.every((panel) => panel.width >= 400), "reference panels should use the shared plot grid sizing");
     assertOk((await page.locator("#cepheidGuideCanvas").getAttribute("data-instability-labels")) === "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability", "instability strip should use computed stability labels");
     assertOk(/stable:\d+,convective:\d+,secular:\d+,dynamic:\d+,pulsational:\d+,neutral:\d+/.test(await page.locator("#cepheidGuideCanvas").getAttribute("data-instability-counts") || ""), "instability strip should expose computed stability counts");
-    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-tp-opacity-mode")) === "single", "T-P opacity panel should start in single-model mode");
-    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-axis-labels")) === "log10(T/T0),log10(P/P0)", "T-P opacity panel should expose temperature-pressure axes");
-    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-color-variable")) === "log10(kappa/kappa0)", "T-P opacity panel should color by opacity");
-    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-opacity-colorbar")) === "log10(kappa/kappa0)", "T-P opacity panel should expose opacity colorbar metadata");
+    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-tp-opacity-mode")) === "single", "T-P Loop should start in single-model mode");
+    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-axis-labels")) === "log10(T/T0),log10(P/P0)", "T-P Loop should expose temperature-pressure axes");
+    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-color-variable")) === "log10(kappa/kappa0)", "T-P Loop should color by opacity in single mode");
+    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-opacity-colorbar")) === "log10(kappa/kappa0)", "T-P Loop should expose opacity colorbar metadata in single mode");
+    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-opacity-contours")) === "log10(kappa/kappa0)", "T-P Loop should expose opacity contours");
+    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-opacity-vector-field")) === null, "T-P Loop should not draw the old opacity vector field");
     const hasModelPaint = await page.locator("#modelCanvas").evaluate((canvas) => {
       const node = canvas;
       const ctx = node.getContext("2d");
@@ -631,7 +637,7 @@ async function runPlaywrightChecks() {
       if (!ctx) return false;
       return ctx.getImageData(0, 0, canvas.width, canvas.height).data.some((value) => value !== 0);
     });
-    assertOk(tpOpacityHasPaint, "T-P opacity canvas was blank");
+    assertOk(tpOpacityHasPaint, "T-P Loop canvas was blank");
     const phaseDelta = (a, b) => {
       const direct = Math.abs(a - b);
       return Math.min(direct, 2 - direct);
@@ -695,7 +701,7 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("[data-plot-panel='heatEngine']").isHidden(), "Heat Engine should be hidden in grid mode");
     assertOk(await page.locator("[data-plot-panel='time']").isHidden(), "History should be hidden in grid mode");
     assertOk(await page.locator("[data-plot-panel='lum']").isHidden(), "Luminosity Evolution should be hidden in grid mode");
-    assertOk(await page.locator("[data-plot-panel='tpOpacity']").isVisible(), "T-P Opacity should remain visible in grid mode");
+    assertOk(await page.locator("[data-plot-panel='tpOpacity']").isVisible(), "T-P Loop should remain visible in grid mode");
     assertOk(await page.locator("[data-plot-panel='stability']").isVisible(), "Stability Map should remain visible in grid mode");
     assertOk(await page.locator("[data-plot-panel='strip']").isVisible(), "Instability Strip should remain visible in grid mode");
     assertOk(await page.locator("[data-plot-panel='phasePortrait']").isVisible(), "Thermal-Convection Loop should remain visible in grid mode");
@@ -704,7 +710,7 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='heatEngine']").isDisabled(), "Heat Engine toggle should be disabled in grid mode");
     assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='time']").isDisabled(), "History toggle should be disabled in grid mode");
     assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='lum']").isDisabled(), "Luminosity toggle should be disabled in grid mode");
-    assertOk(!(await page.locator("[data-plot-toggle='tpOpacity']").isDisabled()), "T-P Opacity toggle should remain enabled in grid mode");
+    assertOk(!(await page.locator("[data-plot-toggle='tpOpacity']").isDisabled()), "T-P Loop toggle should remain enabled in grid mode");
     await page.waitForFunction(() => {
       const panel = document.querySelector("#fourierGridPanel");
       return panel instanceof HTMLElement && !panel.hidden && getComputedStyle(panel).display !== "none";
@@ -757,6 +763,11 @@ async function runPlaywrightChecks() {
     await velocitySource.evaluate((button) => button.click());
     await pianoToggle.click();
     assertOk(await page.locator("#pianoPanel").isVisible(), "piano panel should open in grid mode");
+    assertOk(!(await sonificationToggle.isDisabled()), "speaker should stay enabled in grid piano mode");
+    await sonificationToggle.click();
+    assertOk((await sonificationToggle.getAttribute("aria-pressed")) === "true", "speaker should start in grid piano mode");
+    await sonificationToggle.click();
+    assertOk((await sonificationToggle.getAttribute("aria-pressed")) === "false", "speaker should stop in grid piano mode");
     await page.waitForFunction(() => Boolean(document.querySelector("#pianoPanel")?.getAttribute("data-sonification-signature")), null, { timeout: 5000 });
     const gridPianoSignature = await page.locator("#pianoPanel").getAttribute("data-sonification-signature");
     await page.waitForFunction((previous) => {
@@ -767,10 +778,13 @@ async function runPlaywrightChecks() {
     await pianoToggle.click();
     await page.locator("#gridLoopControls input[value='gammac']").check();
     await page.waitForFunction(() => document.querySelector("#lightCanvas")?.getAttribute("data-grid-colorbar-key") === "gammac", null, { timeout: 5000 });
-    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-tp-opacity-mode")) === "grid", "T-P opacity panel should switch to grid mode");
+    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-tp-opacity-mode")) === "grid", "T-P Loop should switch to grid mode");
     await page.waitForFunction(() => /[2-9]\d*/.test(document.querySelector("#tpOpacityCanvas")?.getAttribute("data-tp-opacity-tracks") || ""), null, { timeout: 5000 });
-    assertOk(/[2-9]\d*/.test(await page.locator("#tpOpacityCanvas").getAttribute("data-tp-opacity-tracks") || ""), "T-P opacity panel should draw a sequence of grid models");
-    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-opacity-colorbar")) === "log10(kappa/kappa0)", "T-P opacity panel should expose opacity colorbar metadata");
+    assertOk(/[2-9]\d*/.test(await page.locator("#tpOpacityCanvas").getAttribute("data-tp-opacity-tracks") || ""), "T-P Loop should draw a sequence of grid models");
+    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-color-variable")) === "grid parameter", "T-P Loop should color grid loops by the grid parameter");
+    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-opacity-contours")) === "log10(kappa/kappa0)", "T-P Loop should keep opacity contours in grid mode");
+    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-grid-colorbar")) === "ready", "T-P Loop should use the shared grid colorbar in grid mode");
+    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-opacity-colorbar")) === null, "T-P Loop should not show an opacity colorbar in grid mode");
     const fourierHasPaint = await page.locator("#fourierCanvas").evaluate((canvas) => {
       const ctx = canvas.getContext("2d");
       if (!ctx) return false;
@@ -812,7 +826,7 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("[data-plot-panel='model']").isVisible(), "Shell visibility should restore after grid mode exits");
     assertOk(await page.locator("[data-plot-panel='time']").isVisible(), "History visibility should restore after grid mode exits");
     assertOk(await page.locator("[data-plot-panel='lum']").isVisible(), "Luminosity Evolution visibility should restore after grid mode exits");
-    assertOk(await page.locator("[data-plot-panel='tpOpacity']").isVisible(), "T-P Opacity visibility should remain after grid mode exits");
+    assertOk(await page.locator("[data-plot-panel='tpOpacity']").isVisible(), "T-P Loop visibility should remain after grid mode exits");
     assertOk(await page.locator("#adsrCanvas").count() === 1, "expected one ADSR canvas");
     assertOk(await page.getByRole("heading", { name: "Lightcurve" }).isVisible(), "Lightcurve heading was not visible");
     assertOk((await page.locator("[data-plot-panel='light'] .plot-title #phaseAnnotationToggleLabel").textContent())?.includes("Annotations"), "annotation toggle should sit in the Lightcurve header");

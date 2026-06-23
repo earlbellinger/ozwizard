@@ -98,6 +98,32 @@ describe("grid range helpers", () => {
     expect(parameterValueFromSlider("m", shellSamples[0])).toBeCloseTo(10);
   });
 
+  it("coarsens loop path samples when the grid was coarsened", () => {
+    const ranges: GridRange[] = [
+      {
+        key: "gammac",
+        lowerSliderValue: 0,
+        upperSliderValue: 0.5,
+        centerSliderValue: 0.5,
+        nativeStep: 0.01
+      },
+      {
+        key: "r0",
+        lowerSliderValue: 1.09,
+        upperSliderValue: 1.11,
+        centerSliderValue: 1.1,
+        nativeStep: 0.01
+      }
+    ];
+    const samples = buildLoopPathSamples(ranges, "gammac", { stride: 25 });
+    expect(samples.find((item) => item.key === "gammac")?.samples).toEqual([0, 0.25, 0.5]);
+    expect(samples.find((item) => item.key === "r0")?.samples).toEqual([1.1]);
+
+    const fallback = buildLoopPathSamples(ranges, "gammac", { zeroCompletedFallback: true });
+    expect(fallback.find((item) => item.key === "gammac")?.samples).toEqual([0, 0.5]);
+    expect(fallback.find((item) => item.key === "r0")?.samples).toEqual([1.1]);
+  });
+
   it("estimates uniform coarsening from partial completion and falls back for zero completions", () => {
     expect(estimateGridCoarseness(40, 40, 500, 1)).toMatchObject({ stride: 1, zeroCompletedFallback: false });
 

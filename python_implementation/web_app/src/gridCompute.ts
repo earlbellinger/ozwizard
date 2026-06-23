@@ -70,7 +70,9 @@ export async function computeGridWithMessages(request: GridComputeRequest, callb
     callbacks.post({ type: "grid-canceled", requestId: request.requestId });
     return;
   }
-  const path = await runLoopPathPass(request, callbacks);
+  const path = request.ranges.length <= 1
+    ? coarsened
+    : await runLoopPathPass(request, callbacks, estimate.stride, estimate.zeroCompletedFallback);
   if (callbacks.isCanceled()) {
     callbacks.post({ type: "grid-canceled", requestId: request.requestId });
     return;
@@ -78,8 +80,13 @@ export async function computeGridWithMessages(request: GridComputeRequest, callb
   postComplete(request, coarsened, path.results, estimate.stride, true, estimate.zeroCompletedFallback, callbacks);
 }
 
-async function runLoopPathPass(request: GridComputeRequest, callbacks: GridComputeCallbacks): Promise<GridRunStats> {
-  const pathSamples = buildLoopPathSamples(request.ranges, request.loopKey);
+async function runLoopPathPass(
+  request: GridComputeRequest,
+  callbacks: GridComputeCallbacks,
+  stride = 1,
+  zeroCompletedFallback = false
+): Promise<GridRunStats> {
+  const pathSamples = buildLoopPathSamples(request.ranges, request.loopKey, { stride, zeroCompletedFallback });
   return runGridPass(request, pathSamples, callbacks, undefined, false);
 }
 

@@ -272,15 +272,19 @@ export function buildRangeSamples(
 
 export function buildLoopPathSamples(
   ranges: readonly GridRange[],
-  loopKey: ControlParameterKey
+  loopKey: ControlParameterKey,
+  options: { stride?: number; zeroCompletedFallback?: boolean } = {}
 ): GridRangeSamples[] {
   return ranges.map((rangeInput) => {
     const range = normalizeGridRange(rangeInput);
     const mean = meanSliderSample(range);
+    const samples = options.zeroCompletedFallback
+      ? fallbackSliderSamples(range, true)
+      : generateSliderSamples(range, options.stride ?? 1);
     return {
       key: range.key,
       centerSliderValue: mean,
-      samples: range.key === loopKey ? generateSliderSamples(range, 1) : [mean]
+      samples: range.key === loopKey ? samples : [mean]
     };
   });
 }

@@ -124,7 +124,7 @@ const GRID_PHASE_BACKGROUND_MAX_MODELS = 96;
 const GRID_PHASE_BACKGROUND_MAX_POINTS = 160;
 const GRID_PHASE_PATH_MAX_POINTS = 260;
 const GRID_PHASE_CURRENT_MAX_POINTS = 900;
-const TP_OPACITY_BACKGROUND_MAX_MODELS = 80;
+const TP_OPACITY_BACKGROUND_MAX_MODELS = 28;
 const TP_OPACITY_BACKGROUND_MAX_POINTS = 220;
 const TP_OPACITY_PATH_MAX_POINTS = 360;
 const TP_OPACITY_CURRENT_MAX_POINTS = 900;
@@ -476,7 +476,7 @@ const PLOT_PANEL_LABELS: Record<UserPlotId, string> = {
   work: "Work",
   time: "History",
   lum: "Luminosity Evolution",
-  tpOpacity: "T-P Opacity",
+  tpOpacity: "T-P Loop",
   stability: "Stability Map",
   strip: "Instability Strip",
   phasePortrait: "Thermal-Convection Loop"
@@ -1024,14 +1024,6 @@ function updateSonificationToggleUi(): void {
     toggle.setAttribute("aria-pressed", "false");
     return;
   }
-  if (pianoModeActive) {
-    toggle.classList.remove("active");
-    toggle.disabled = true;
-    toggle.setAttribute("aria-pressed", "false");
-    toggle.setAttribute("aria-label", "Continuous sonification muted in piano mode");
-    toggle.title = "Continuous sonification muted in piano mode";
-    return;
-  }
   toggle.disabled = false;
   const action = sonificationActive ? "Stop" : "Start";
   toggle.classList.toggle("active", sonificationActive);
@@ -1052,7 +1044,6 @@ function updatePianoToggleUi(): void {
 function togglePianoMode(): void {
   pianoModeActive = !pianoModeActive;
   if (pianoModeActive) {
-    stopSonification();
     buildPianoKeyboard();
     setPianoPanelVisible(true);
   } else {
@@ -1303,7 +1294,6 @@ function drawAdsrVisualization(): void {
 }
 
 function toggleSonification(): void {
-  if (pianoModeActive) return;
   if (sonificationActive) {
     stopSonification();
     return;
@@ -1637,6 +1627,15 @@ function updateSonificationCurve(phaseRows: Row[], fallbackRows: Row[], paramete
   sonificationWaveformSignature = nextSignature;
   updateSonificationWaveform();
   updateActivePianoWaveforms();
+}
+
+function syncSonificationCurve(displayWindow: DisplayWindow, gridResult: GridModelResult | null, fallbackRows: Row[]): void {
+  const sonificationFallbackRows = displayWindow.mode === "time" || gridResult ? latestPhaseRows : fallbackRows;
+  updateSonificationCurve(
+    displayWindow.mode === "phase" ? latestPhaseRows : [],
+    sonificationFallbackRows,
+    latestPhaseParameters
+  );
 }
 
 function sonificationSampleSignature(samples: SonificationSample[]): string {
@@ -3978,6 +3977,7 @@ interface ThermodynamicTrackSpec {
   points: ThermodynamicPoint[];
   width: number;
   alpha: number;
+  color?: string;
 }
 
 interface ThermodynamicGridBackdrop {
@@ -5849,35 +5849,31 @@ function opacityColor(logOpacity: number, opacityRange: NumericRange, alpha = 1)
   return `rgba(${channel(start.r, end.r)}, ${channel(start.g, end.g)}, ${channel(start.b, end.b)}, ${clamp(alpha, 0, 1)})`;
 }
 
-function drawOpacityFieldBackground(
-  ctx: CanvasRenderingContext2D,
-  plot: PlotBox,
+function opacityContourSegment(
+  value: number,
   xlim: NumericRange,
   ylim: NumericRange,
-  parameters: ModelParameters,
-  opacityRange: NumericRange
-): void {
-  const columns = Math.max(14, Math.min(42, Math.ceil(plot.width / 18)));
-  const rows = Math.max(8, Math.min(28, Math.ceil(plot.height / 16)));
-  const cellWidth = plot.width / columns;
-  const cellHeight = plot.height / rows;
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(plot.left, plot.top, plot.width, plot.height);
-  ctx.clip();
-  for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
-    for (let column = 0; column < columns; column += 1) {
-      const logT = xlim[0] + ((column + 0.5) / columns) * (xlim[1] - xlim[0]);
-      const logP = ylim[1] - ((rowIndex + 0.5) / rows) * (ylim[1] - ylim[0]);
-      const logOpacity = opacityLogFromLogTemperaturePressure(logT, logP, parameters);
-      ctx.fillStyle = opacityColor(logOpacity, opacityRange, 0.13);
-      ctx.fillRect(plot.left + column * cellWidth - 0.5, plot.top + rowIndex * cellHeight - 0.5, cellWidth + 1, cellHeight + 1);
-    }
+  parameters: ModelParameters
+): Array<{ x: number; y: number }> | null {
+  const a = -(parameters.n + parameters.s);
+  const b = parameters.n;
+  const points: Array<{ x: number; y: number }> = [];
+  const push = (x: number, y: number) => {
+    if (!Number.isFinite(x + y)) return;
+    if (x < xlim[0] - 1e-9 || x > xlim[1] + 1e-9 || y < ylim[0] - 1e-9 || y > ylim[1] + 1e-9) return;
+    if (points.some((point) => Math.hypot(point.x - x, point.y - y) < 1e-7)) return;
+    points.push({ x: clamp(x, xlim[0], xlim[1]), y: clamp(y, ylim[0], ylim[1]) });
+  };
+  if (Math.abs(b) > 1e-12) {
+    xlim.forEach((x) => push(x, (value - a * x) / b));
   }
-  ctx.restore();
+  if (Math.abs(a) > 1e-12) {
+    ylim.forEach((y) => push((value - b * y) / a, y));
+  }
+  return points.length >= 2 ? points.slice(0, 2) : null;
 }
 
-function drawOpacityVectorField(
+function drawOpacityContours(
   ctx: CanvasRenderingContext2D,
   plot: PlotBox,
   xlim: NumericRange,
@@ -5887,55 +5883,24 @@ function drawOpacityVectorField(
   sx: (x: number) => number,
   sy: (y: number) => number
 ): void {
-  const dataDx = -(parameters.n + parameters.s);
-  const dataDy = parameters.n;
-  const screenDx = (dataDx / Math.max(1e-12, xlim[1] - xlim[0])) * plot.width;
-  const screenDy = -(dataDy / Math.max(1e-12, ylim[1] - ylim[0])) * plot.height;
-  const magnitude = Math.hypot(screenDx, screenDy);
-  if (magnitude <= 1e-9) return;
-  const unitX = screenDx / magnitude;
-  const unitY = screenDy / magnitude;
-  const columns = Math.max(4, Math.min(8, Math.floor(plot.width / 96)));
-  const rows = Math.max(3, Math.min(6, Math.floor(plot.height / 62)));
-  const length = Math.max(18, Math.min(30, Math.min(plot.width / 18, plot.height / 5.5)));
-  const headLength = Math.max(5.5, Math.min(7.5, length * 0.32));
+  if (!validRange(opacityRange)) return;
+  const contourCount = 6;
   ctx.save();
   ctx.beginPath();
   ctx.rect(plot.left, plot.top, plot.width, plot.height);
   ctx.clip();
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
-    for (let column = 0; column < columns; column += 1) {
-      const logT = xlim[0] + ((column + 0.5) / columns) * (xlim[1] - xlim[0]);
-      const logP = ylim[0] + ((rowIndex + 0.5) / rows) * (ylim[1] - ylim[0]);
-      const x = sx(logT);
-      const y = sy(logP);
-      const logOpacity = opacityLogFromLogTemperaturePressure(logT, logP, parameters);
-      const x0 = x - unitX * length * 0.5;
-      const y0 = y - unitY * length * 0.5;
-      const x1 = x + unitX * length * 0.5;
-      const y1 = y + unitY * length * 0.5;
-      const angle = Math.atan2(unitY, unitX);
-      const vectorAlpha = 0.58 + normalizedInRange(logOpacity, opacityRange) * 0.14;
-      const drawArrow = (strokeStyle: string, fillStyle: string, lineWidth: number, headScale = 1) => {
-        ctx.strokeStyle = strokeStyle;
-        ctx.fillStyle = fillStyle;
-        ctx.lineWidth = lineWidth;
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x1 - Math.cos(angle - 0.55) * headLength * headScale, y1 - Math.sin(angle - 0.55) * headLength * headScale);
-        ctx.lineTo(x1 - Math.cos(angle + 0.55) * headLength * headScale, y1 - Math.sin(angle + 0.55) * headLength * headScale);
-        ctx.closePath();
-        ctx.fill();
-      };
-      drawArrow("rgba(3, 7, 18, 0.84)", "rgba(3, 7, 18, 0.84)", 4.8, 1.2);
-      drawArrow(`rgba(236, 243, 255, ${vectorAlpha})`, `rgba(236, 243, 255, ${Math.min(0.88, vectorAlpha + 0.1)})`, 1.8);
-    }
+  ctx.lineWidth = 1;
+  ctx.setLineDash([7, 9]);
+  for (let index = 1; index <= contourCount; index += 1) {
+    const fraction = index / (contourCount + 1);
+    const value = opacityRange[0] + fraction * (opacityRange[1] - opacityRange[0]);
+    const segment = opacityContourSegment(value, xlim, ylim, parameters);
+    if (!segment) continue;
+    ctx.strokeStyle = opacityColor(value, opacityRange, 0.22);
+    ctx.beginPath();
+    ctx.moveTo(sx(segment[0].x), sy(segment[0].y));
+    ctx.lineTo(sx(segment[1].x), sy(segment[1].y));
+    ctx.stroke();
   }
   ctx.restore();
 }
@@ -5957,6 +5922,21 @@ function setOpacityColorbarDataset(
   }
 }
 
+function clearOpacityColorbarDataset(canvas: HTMLCanvasElement): void {
+  delete canvas.dataset.opacityColorbar;
+  delete canvas.dataset.opacityPalette;
+  delete canvas.dataset.opacityRange;
+  delete canvas.dataset.opacityColorbarMarker;
+  delete canvas.dataset.currentOpacity;
+}
+
+function clearThermodynamicGridColorbar(canvas: HTMLCanvasElement): void {
+  gridColorbarRegions.delete("tpOpacityCanvas");
+  delete canvas.dataset.gridColorbar;
+  delete canvas.dataset.gridColorbarKey;
+  delete canvas.dataset.gridColorbarHit;
+}
+
 function drawOpacityColorbar(
   ctx: CanvasRenderingContext2D,
   plot: PlotBox,
@@ -5964,8 +5944,8 @@ function drawOpacityColorbar(
   canvas: HTMLCanvasElement,
   currentLogOpacity?: number
 ): void {
-  const width = Math.min(156, Math.max(118, plot.width * 0.26));
-  const height = 12;
+  const width = Math.min(138, Math.max(108, plot.width * 0.22));
+  const height = 9;
   const left = plot.left + plot.width - width - 12;
   const top = plot.top + 12;
   const gradient = ctx.createLinearGradient(left, top, left + width, top);
@@ -5975,8 +5955,8 @@ function drawOpacityColorbar(
     gradient.addColorStop(fraction, opacityColor(value, opacityRange, 1));
   }
   ctx.save();
-  ctx.fillStyle = "rgba(3, 7, 18, 0.78)";
-  ctx.fillRect(left - 9, top - 9, width + 18, 53);
+  ctx.fillStyle = "rgba(3, 7, 18, 0.42)";
+  ctx.fillRect(left - 7, top - 7, width + 14, 42);
   ctx.fillStyle = gradient;
   ctx.fillRect(left, top, width, height);
   ctx.strokeStyle = "rgba(238, 245, 255, 0.62)";
@@ -5985,7 +5965,7 @@ function drawOpacityColorbar(
   if (Number.isFinite(currentLogOpacity)) {
     const markerX = left + normalizedInRange(currentLogOpacity as number, opacityRange) * width;
     ctx.strokeStyle = "rgba(3, 7, 18, 0.9)";
-    ctx.lineWidth = 4.2;
+    ctx.lineWidth = 3.8;
     ctx.beginPath();
     ctx.moveTo(markerX, top - 3);
     ctx.lineTo(markerX, top + height + 4);
@@ -5997,7 +5977,7 @@ function drawOpacityColorbar(
     ctx.lineTo(markerX, top + height + 4);
     ctx.stroke();
   }
-  ctx.font = "11px Inter, sans-serif";
+  ctx.font = "10.5px Inter, sans-serif";
   ctx.fillStyle = THEME.axisText;
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
@@ -6005,8 +5985,8 @@ function drawOpacityColorbar(
   ctx.textAlign = "right";
   ctx.fillText(fmt(opacityRange[1], 2), left + width, top + height + 8);
   ctx.textAlign = "center";
-  ctx.font = "600 11px Inter, sans-serif";
-  ctx.fillText("log10 \u03BA/\u03BA0", left + width / 2, top + height + 25);
+  ctx.font = "600 10.5px Inter, sans-serif";
+  ctx.fillText("log10 \u03BA/\u03BA0", left + width / 2, top + height + 23);
   ctx.restore();
   setOpacityColorbarDataset(canvas, opacityRange, currentLogOpacity);
 }
@@ -6021,7 +6001,8 @@ function drawThermodynamicTrack(
   width: number,
   alpha: number,
   sx: (x: number) => number,
-  sy: (y: number) => number
+  sy: (y: number) => number,
+  color?: string
 ): void {
   if (points.length < 2) return;
   ctx.save();
@@ -6046,7 +6027,7 @@ function drawThermodynamicTrack(
       ctx.lineTo(x1, y1);
       ctx.stroke();
     }
-    ctx.strokeStyle = opacityColor((previous.logOpacity + current.logOpacity) / 2, opacityRange, alpha);
+    ctx.strokeStyle = color || opacityColor((previous.logOpacity + current.logOpacity) / 2, opacityRange, alpha);
     ctx.lineWidth = width;
     ctx.beginPath();
     ctx.moveTo(x0, y0);
@@ -6125,16 +6106,16 @@ function drawThermodynamicStaticLayer(
   opacityRange: NumericRange,
   parameters: ModelParameters,
   tracks: readonly ThermodynamicTrackSpec[],
-  currentLogOpacity?: number
+  options: { currentLogOpacity?: number; showOpacityColorbar?: boolean } = {}
 ): void {
   const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
   const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
-  drawOpacityFieldBackground(ctx, plot, xlim, ylim, parameters, opacityRange);
+  drawOpacityContours(ctx, plot, xlim, ylim, parameters, opacityRange, sx, sy);
   drawAxes(ctx, plot, xlim, ylim, "", "", THEME.axisText, THEME.axisText, 22);
-  drawOpacityVectorField(ctx, plot, xlim, ylim, parameters, opacityRange, sx, sy);
-  tracks.forEach((track) => drawThermodynamicTrack(ctx, track.points, plot, xlim, ylim, opacityRange, track.width, track.alpha, sx, sy));
-  drawOpacityColorbar(ctx, plot, opacityRange, canvas, currentLogOpacity);
-  canvas.dataset.opacityVectorField = "gradient";
+  tracks.forEach((track) => drawThermodynamicTrack(ctx, track.points, plot, xlim, ylim, opacityRange, track.width, track.alpha, sx, sy, track.color));
+  if (options.showOpacityColorbar ?? true) drawOpacityColorbar(ctx, plot, opacityRange, canvas, options.currentLogOpacity);
+  canvas.dataset.opacityContours = "log10(kappa/kappa0)";
+  delete canvas.dataset.opacityVectorField;
   drawThermodynamicAxisLabels(ctx, plot);
 }
 
@@ -6144,11 +6125,11 @@ function thermodynamicGridStaticTracks(): ThermodynamicTrackSpec[] {
   gridState.results.forEach((result, index) => {
     if (index % backgroundStride !== 0) return;
     const points = thermodynamicPointsForGridResult(result, TP_OPACITY_BACKGROUND_MAX_POINTS);
-    if (points.length > 1) tracks.push({ points, width: 0.7, alpha: 0.2 });
+    if (points.length > 1) tracks.push({ points, width: 0.75, alpha: 0.16, color: gridResultColor(result, 0.16) });
   });
   gridPathResults().forEach((result) => {
     const points = thermodynamicPointsForGridResult(result, TP_OPACITY_PATH_MAX_POINTS);
-    if (points.length > 1) tracks.push({ points, width: 1.25, alpha: 0.38 });
+    if (points.length > 1) tracks.push({ points, width: 1.35, alpha: 0.44, color: gridResultColor(result, 0.44) });
   });
   return tracks;
 }
@@ -6200,7 +6181,7 @@ function thermodynamicGridBackdrop(
   if (!cacheCtx) return null;
   cacheCtx.scale(dpr, dpr);
   cacheCtx.clearRect(0, 0, width, height);
-  drawThermodynamicStaticLayer(cacheCtx, canvas, plot, xlim, ylim, opacityRange, latestPhaseParameters, tracks);
+  drawThermodynamicStaticLayer(cacheCtx, canvas, plot, xlim, ylim, opacityRange, latestPhaseParameters, tracks, { showOpacityColorbar: false });
   thermodynamicGridBackdropCache = {
     key,
     canvas: cacheCanvas,
@@ -6234,7 +6215,7 @@ function drawThermodynamicPanel(): void {
 
   canvas.dataset.tpOpacityMode = gridState.enabled ? "grid" : "single";
   canvas.dataset.axisLabels = "log10(T/T0),log10(P/P0)";
-  canvas.dataset.colorVariable = "log10(kappa/kappa0)";
+  canvas.dataset.colorVariable = gridState.enabled ? "grid parameter" : "log10(kappa/kappa0)";
   if (gridState.enabled) {
     delete canvas.dataset.currentPhase;
     delete canvas.dataset.currentTime;
@@ -6248,12 +6229,10 @@ function drawThermodynamicPanel(): void {
 
   if (gridState.enabled) {
     if (!gridState.results.length) {
-      delete canvas.dataset.opacityColorbar;
-      delete canvas.dataset.opacityPalette;
-      delete canvas.dataset.opacityRange;
+      clearOpacityColorbarDataset(canvas);
+      clearThermodynamicGridColorbar(canvas);
+      delete canvas.dataset.opacityContours;
       delete canvas.dataset.opacityVectorField;
-      delete canvas.dataset.opacityColorbarMarker;
-      delete canvas.dataset.currentOpacity;
       canvas.dataset.tpOpacityTracks = "0";
       canvas.dataset.tpOpacityRows = "0";
       drawCanvasMessage(ctx, width, height, latestPhaseMessage || gridState.statusText || "phase unavailable");
@@ -6261,20 +6240,20 @@ function drawThermodynamicPanel(): void {
     }
     const backdrop = thermodynamicGridBackdrop(canvas, width, height, dpr);
     if (!backdrop) {
-      delete canvas.dataset.opacityColorbar;
-      delete canvas.dataset.opacityPalette;
-      delete canvas.dataset.opacityRange;
+      clearOpacityColorbarDataset(canvas);
+      clearThermodynamicGridColorbar(canvas);
+      delete canvas.dataset.opacityContours;
       delete canvas.dataset.opacityVectorField;
-      delete canvas.dataset.opacityColorbarMarker;
-      delete canvas.dataset.currentOpacity;
       canvas.dataset.tpOpacityTracks = "0";
       canvas.dataset.tpOpacityRows = "0";
       drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
       return;
     }
     ctx.drawImage(backdrop.canvas, 0, 0, width, height);
-    setOpacityColorbarDataset(canvas, backdrop.opacityRange);
-    canvas.dataset.opacityVectorField = "gradient";
+    clearOpacityColorbarDataset(canvas);
+    canvas.dataset.opacityContours = "log10(kappa/kappa0)";
+    delete canvas.dataset.opacityVectorField;
+    drawGridColorbar(ctx, backdrop.plot, backdrop.xlim, backdrop.ylim, "tpOpacityCanvas");
     const sx = (x: number) => backdrop.plot.left + ((x - backdrop.xlim[0]) / (backdrop.xlim[1] - backdrop.xlim[0])) * backdrop.plot.width;
     const sy = (y: number) => backdrop.plot.top + backdrop.plot.height - ((y - backdrop.ylim[0]) / (backdrop.ylim[1] - backdrop.ylim[0])) * backdrop.plot.height;
     let dynamicTrackCount = 0;
@@ -6283,13 +6262,13 @@ function drawThermodynamicPanel(): void {
     if (highlighted && highlighted !== currentGrid) {
       const points = thermodynamicPointsForGridResult(highlighted, TP_OPACITY_CURRENT_MAX_POINTS);
       if (points.length > 1) {
-        drawThermodynamicTrack(ctx, points, backdrop.plot, backdrop.xlim, backdrop.ylim, backdrop.opacityRange, 3.4, 0.92, sx, sy);
+        drawThermodynamicTrack(ctx, points, backdrop.plot, backdrop.xlim, backdrop.ylim, backdrop.opacityRange, 3.4, 0.92, sx, sy, gridResultColor(highlighted, 0.98));
         dynamicTrackCount += 1;
       }
     }
     const currentPoints = currentGrid ? thermodynamicPointsForGridResult(currentGrid, TP_OPACITY_CURRENT_MAX_POINTS) : [];
     if (currentPoints.length > 1) {
-      drawThermodynamicTrack(ctx, currentPoints, backdrop.plot, backdrop.xlim, backdrop.ylim, backdrop.opacityRange, 3.1, 0.98, sx, sy);
+      drawThermodynamicTrack(ctx, currentPoints, backdrop.plot, backdrop.xlim, backdrop.ylim, backdrop.opacityRange, 3.1, 0.98, sx, sy, gridResultColor(currentGrid as GridModelResult, 0.98));
       dynamicTrackCount += 1;
     }
     canvas.dataset.tpOpacityTracks = String(backdrop.staticTrackCount + dynamicTrackCount);
@@ -6298,6 +6277,7 @@ function drawThermodynamicPanel(): void {
   }
 
   const loopRows = closedLoopPanelRows(latestPhaseRows);
+  clearThermodynamicGridColorbar(canvas);
   const currentPoints = thermodynamicPoints(loopRows, latestPhaseParameters, 1400);
   const tracks: ThermodynamicTrackSpec[] = [];
   if (currentPoints.length > 1) tracks.push({ points: currentPoints, width: 2.8, alpha: 0.98 });
@@ -6306,12 +6286,9 @@ function drawThermodynamicPanel(): void {
   canvas.dataset.tpOpacityTracks = String(tracks.length);
   canvas.dataset.tpOpacityRows = String(currentPoints.length);
   if (!allPoints.length) {
-    delete canvas.dataset.opacityColorbar;
-    delete canvas.dataset.opacityPalette;
-    delete canvas.dataset.opacityRange;
+    clearOpacityColorbarDataset(canvas);
+    delete canvas.dataset.opacityContours;
     delete canvas.dataset.opacityVectorField;
-    delete canvas.dataset.opacityColorbarMarker;
-    delete canvas.dataset.currentOpacity;
     drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
     return;
   }
@@ -6323,7 +6300,10 @@ function drawThermodynamicPanel(): void {
   const currentLoopRow = rowAtCurrentClosedLoopPosition(loopRows);
   const currentPoint = currentLoopRow ? thermodynamicPoint(currentLoopRow, latestPhaseParameters) : null;
 
-  drawThermodynamicStaticLayer(ctx, canvas, plot, xlim, ylim, opacityRange, latestPhaseParameters, tracks, currentPoint?.logOpacity);
+  drawThermodynamicStaticLayer(ctx, canvas, plot, xlim, ylim, opacityRange, latestPhaseParameters, tracks, {
+    currentLogOpacity: currentPoint?.logOpacity,
+    showOpacityColorbar: true
+  });
   drawThermodynamicCurrentMarker(ctx, plot, xlim, ylim, opacityRange, latestPhaseParameters, currentPoint);
 }
 
@@ -9018,6 +8998,7 @@ function drawGridAnimationFrame(): void {
   );
   updateGridLoopSliderMarkers();
   updateLatestPhaseDisplay(displayWindow, gridResult);
+  syncSonificationCurve(displayWindow, gridResult, latestRows);
   drawPhasePlots();
   drawThermodynamicPanel();
   drawFourierPanel();
@@ -9135,8 +9116,7 @@ function drawAll(): void {
   queueMathTypeset([metricsNode]);
 
   updateLatestPhaseDisplay(displayWindow, gridResult);
-  const sonificationFallbackRows = displayWindow.mode === "time" || gridResult ? latestPhaseRows : rows;
-  updateSonificationCurve(displayWindow.mode === "phase" ? latestPhaseRows : [], sonificationFallbackRows, latestPhaseParameters);
+  syncSonificationCurve(displayWindow, gridResult, rows);
   drawModelVisualization();
   drawPhasePlots();
   drawHeatEnginePanel();

@@ -196,11 +196,53 @@ test("audio voices start from the tap even when mobile WebKit keeps resume pendi
   await sonificationToggle.click();
   await page.locator("#pianoToggle").click();
   await expect(page.locator("#pianoPanel")).toBeVisible();
+  await expect(sonificationToggle).not.toBeDisabled();
+  await sonificationToggle.click();
+  await expect(sonificationToggle).toHaveAttribute("aria-pressed", "true");
+  await sonificationToggle.click();
+  await expect(sonificationToggle).toHaveAttribute("aria-pressed", "false");
   const startsBeforePiano = (await audioEvents(page)).filter((eventName) => eventName === "oscillator:start").length;
   await page.locator(".piano-key[data-midi='48']").click();
   const pianoEvents = await audioEvents(page);
   const startsAfterPiano = pianoEvents.filter((eventName) => eventName === "oscillator:start").length;
   expect(startsAfterPiano).toBeGreaterThan(startsBeforePiano);
+});
+
+test("grid loop refreshes speaker and held piano waveforms", async ({ page }) => {
+  await installPendingResumeAudioContext(page);
+  await page.goto("/wizard_of_oz.html");
+  await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
+  await page.getByLabel("Enable grid mode").check();
+  await setSliderValue(page, "convective flux fraction grid lower bound", "0");
+  await setSliderValue(page, "convective flux fraction grid upper bound", "0.02");
+  await expect(page.locator("#gridStatusText")).toContainText("Grid complete", { timeout: 15000 });
+
+  const sonificationToggle = page.locator("#sonificationToggle");
+  await expect(sonificationToggle).not.toBeDisabled();
+  await sonificationToggle.click();
+  await expect(sonificationToggle).toHaveAttribute("aria-pressed", "true");
+  const speakerStartsBeforeLoop = (await audioEvents(page)).filter((eventName) => eventName === "oscillator:start").length;
+  const firstSpeakerSignature = await page.locator("#pianoPanel").getAttribute("data-sonification-signature");
+  await expect.poll(async () => page.locator("#pianoPanel").getAttribute("data-sonification-signature"), { timeout: 5000 })
+    .not.toBe(firstSpeakerSignature);
+  const speakerStartsAfterLoop = (await audioEvents(page)).filter((eventName) => eventName === "oscillator:start").length;
+  expect(speakerStartsAfterLoop).toBeGreaterThan(speakerStartsBeforeLoop);
+  await sonificationToggle.click();
+  await expect(sonificationToggle).toHaveAttribute("aria-pressed", "false");
+
+  await page.locator("#pianoToggle").click();
+  await expect(page.locator("#pianoPanel")).toBeVisible();
+  await expect(sonificationToggle).not.toBeDisabled();
+  await page.keyboard.down("z");
+  await expect(page.locator(".piano-key[data-midi='48']")).toHaveClass(/active/);
+  const pianoWavesBeforeLoop = (await audioEvents(page)).filter((eventName) => eventName === "oscillator:wave").length;
+  const firstPianoSignature = await page.locator("#pianoPanel").getAttribute("data-sonification-signature");
+  await expect.poll(async () => page.locator("#pianoPanel").getAttribute("data-sonification-signature"), { timeout: 5000 })
+    .not.toBe(firstPianoSignature);
+  const pianoWavesAfterLoop = (await audioEvents(page)).filter((eventName) => eventName === "oscillator:wave").length;
+  expect(pianoWavesAfterLoop).toBeGreaterThan(pianoWavesBeforeLoop);
+  await page.keyboard.up("z");
+  await expect(page.locator(".piano-key[data-midi='48']")).not.toHaveClass(/active/);
 });
 
 test("terminal runaway models use time windows instead of phase windows", async ({ page }) => {
@@ -326,7 +368,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await pianoToggle.click();
   await expect(pianoToggle).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#pianoPanel")).toBeVisible();
-  await expect(sonificationToggle).toBeDisabled();
+  await expect(sonificationToggle).not.toBeDisabled();
   await expect(sonificationToggle).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByLabel("shown piano octaves")).toHaveValue("3");
   await expect(page.locator("#sonificationHz")).toHaveText("C3-B4");
@@ -839,7 +881,8 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-color-variable", "log10(kappa/kappa0)");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-colorbar", "log10(kappa/kappa0)");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-palette", "blue-gold");
-  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-vector-field", "gradient");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-contours", "log10(kappa/kappa0)");
+  await expect(page.locator("#tpOpacityCanvas")).not.toHaveAttribute("data-opacity-vector-field");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-colorbar-marker", "current-phase");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-current-opacity", /-?\d+\.\d+/);
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-current-phase", /\d+\.\d+/);
@@ -1016,6 +1059,11 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await velocitySource.evaluate((button) => (button as HTMLButtonElement).click());
   await pianoToggle.click();
   await expect(page.locator("#pianoPanel")).toBeVisible();
+  await expect(sonificationToggle).not.toBeDisabled();
+  await sonificationToggle.click();
+  await expect(sonificationToggle).toHaveAttribute("aria-pressed", "true");
+  await sonificationToggle.click();
+  await expect(sonificationToggle).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator("#pianoPanel")).toHaveAttribute("data-sonification-signature", /.+/);
   const gridPianoSignature = await page.locator("#pianoPanel").getAttribute("data-sonification-signature");
   await expect.poll(async () => page.locator("#pianoPanel").getAttribute("data-sonification-signature"), { timeout: 5000 })
@@ -1029,8 +1077,11 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-phase-portrait-mode", "grid");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-tp-opacity-mode", "grid");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-tp-opacity-tracks", /[2-9]\d*/);
-  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-colorbar", "log10(kappa/kappa0)");
-  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-palette", "blue-gold");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-color-variable", "grid parameter");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-contours", "log10(kappa/kappa0)");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-grid-colorbar", "ready");
+  await expect(page.locator("#tpOpacityCanvas")).not.toHaveAttribute("data-opacity-colorbar");
+  await expect(page.locator("#tpOpacityCanvas")).not.toHaveAttribute("data-opacity-palette");
   await expect(page.locator("#tpOpacityCanvas")).not.toHaveAttribute("data-opacity-colorbar-marker");
   await expect(page.locator("#phasePortraitCanvas")).not.toHaveAttribute("data-current-phase");
   const fourierHasPaint = await page.locator("#fourierCanvas").evaluate((canvas) => {
