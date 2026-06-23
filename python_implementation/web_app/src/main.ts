@@ -7432,7 +7432,7 @@ function drawHeatEngineArrow(
   if (length < 1) return;
   const ux = dx / length;
   const uy = dy / length;
-  const head = headSize;
+  const head = Math.min(headSize, Math.max(0.8, length * 0.42), length * 0.8);
   ctx.save();
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
@@ -7686,7 +7686,8 @@ function drawHeatEnginePistonCausal(
     terms.radiativeLeak,
     terms.convectiveLeak
   ]);
-  const forceArrowLength = (value: number) => 9 + heatEngineNormalizedMagnitude(value, forceMagnitudeMax) * 52;
+  const forceMagnitude = (value: number) => heatEngineNormalizedMagnitude(value, forceMagnitudeMax);
+  const forceArrowLength = (value: number) => heatEngineNormalizedMagnitude(value, forceMagnitudeMax) * 61;
   const heatFlowMagnitude = (value: number) => heatEngineNormalizedMagnitude(value, heatFlowMagnitudeMax);
   const luminosityRange = rawRange([
     ...rows.map((item) => item.L),
@@ -7800,7 +7801,8 @@ function drawHeatEnginePistonCausal(
   ctx.lineWidth = 1.2;
   ctx.stroke();
 
-  drawHeatEngineArrow(ctx, pressureX, Math.min(bottom - 10, gasTop + pressureLength + 8), pressureX, gasTop + 2, COLORS.H, 3.1);
+  const pressureEndY = gasTop + 2;
+  drawHeatEngineArrow(ctx, pressureX, Math.min(bottom - 10, pressureEndY + pressureLength), pressureX, pressureEndY, COLORS.H, 3.1);
   drawHeatEngineLabel(ctx, "pressure", pressureX + 10, gasTop + 27, COLORS.H, "left", 9.4, 760);
 
   const gravityLength = forceArrowLength(terms.gravityForce);
@@ -7819,24 +7821,20 @@ function drawHeatEnginePistonCausal(
   drawHeatEngineLabel(ctx, "gravity", gravityX + 10, pistonY - Math.max(12, pistonHeight * 0.9), THEME.axisText, "left", 9.4, 760);
 
   if (Math.abs(parameters.cq) > 1e-9) {
-    const dampingLength = forceArrowLength(terms.dampingAcceleration);
+    const dampingLevel = Math.sqrt(forceMagnitude(terms.dampingAcceleration));
+    const dampingLength = Math.max(9, forceArrowLength(terms.dampingAcceleration));
     const velocitySign = Math.abs(row.V) < 1e-6 ? 1 : Math.sign(row.V);
     const dampingDirection = velocitySign >= 0 ? 1 : -1;
     const dampingX = chamber.left - 10;
-    ctx.strokeStyle = colorWithAlpha(COLORS.cq, 0.72);
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(chamber.left + 1, pistonY);
-    ctx.lineTo(dampingX, pistonY);
-    ctx.stroke();
-    drawHeatEngineArrow(ctx, dampingX, pistonY - dampingDirection * dampingLength / 2, dampingX, pistonY + dampingDirection * dampingLength / 2, COLORS.cq, 2.4, undefined, 12, 5);
-    drawHeatEngineLabel(ctx, "drag", dampingX - 6, pistonY, COLORS.cq, "right", 9.4, 760);
+    const dampingColor = colorWithAlpha(COLORS.cq, 0.56 + dampingLevel * 0.34);
+    drawHeatEngineArrow(ctx, dampingX, pistonY - dampingDirection * dampingLength / 2, dampingX, pistonY + dampingDirection * dampingLength / 2, dampingColor, 2 + dampingLevel * 0.8, undefined, 12, 5);
+    drawHeatEngineLabel(ctx, "drag", dampingX - 3, pistonY, COLORS.cq, "right", 9.4, 760);
   }
 
   const sourceNorm = heatFlowMagnitude(terms.source);
   const sourceX = centerX - chamber.width * 0.22;
-  const sourceLength = 18 + sourceNorm * 24;
-  drawHeatEngineArrow(ctx, sourceX, bottom + sourceLength + 4, sourceX, bottom + 3, sourceLuminosityColor(), 3);
+  const sourceLength = sourceNorm * 42;
+  drawHeatEngineArrow(ctx, sourceX, bottom + sourceLength + 3, sourceX, bottom + 3, sourceLuminosityColor(), 3);
   drawHeatEngineLabel(ctx, "source", sourceX + 10, bottom + 18, sourceLuminosityColor(), "left", 9.4, 760);
   drawHeatEngineLabel(ctx, "luminosity", sourceX + 10, bottom + 30, sourceLuminosityColor(), "left", 9.4, 760);
 
