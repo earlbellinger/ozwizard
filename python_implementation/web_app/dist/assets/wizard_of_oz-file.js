@@ -7760,7 +7760,7 @@
     ctx.fillRect(chamber.left + 3, gasTop, chamber.width - 6, bottom - gasTop - 3);
     ctx.shadowBlur = 0;
     const pressureLength = forceArrowLength(terms.pressureForce);
-    const pressureX = centerX - 6;
+    const pressureX = centerX - 52;
     const currentOpacityPoint = thermodynamicPoint(row, parameters);
     if (currentOpacityPoint) {
       const opacityValues = rows.map((item) => thermodynamicPoint(item, parameters)?.logOpacity ?? NaN).filter(Number.isFinite);
@@ -7769,14 +7769,21 @@
       const ghostWidth = 52;
       const ghostMaxHeight = 42;
       const ghostHeight = 16 + opacityLevel * (ghostMaxHeight - 16);
-      const ghostX = Math.max(chamber.left + 12, pressureX - ghostWidth - 15);
+      const ghostX = clamp4(radiativeX - ghostWidth / 2, chamber.left + 10, right - ghostWidth - 8);
       const ghostY = clamp4(
         gasTop + Math.max(18, (bottom - gasTop) * 0.22),
         gasTop + 14,
         bottom - ghostMaxHeight - 24
       );
       const ghostTop = ghostY + ghostMaxHeight - ghostHeight;
+      const opacityConnectorX = radiativeX;
       ctx.save();
+      ctx.strokeStyle = "rgba(180, 190, 205, 0.42)";
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(opacityConnectorX, ghostTop);
+      ctx.lineTo(opacityConnectorX, gasTop);
+      ctx.stroke();
       roundedRectPath(ctx, ghostX, ghostTop, ghostWidth, ghostHeight, 7);
       ctx.fillStyle = "rgba(160, 172, 190, 0.09)";
       ctx.fill();
@@ -7925,8 +7932,8 @@
         fontSize: 11
       });
     }
-    drawHeatEngineMathLabel(ctx, [{ text: "H", color: COLORS.H, weight: 800 }], right - 17, bottom - 17, {
-      align: "right",
+    drawHeatEngineMathLabel(ctx, [{ text: "H", color: COLORS.H, weight: 800 }], chamber.left + 8, bottom - 17, {
+      align: "left",
       fontSize: 13
     });
     ctx.restore();
