@@ -7758,6 +7758,35 @@
     ctx.shadowBlur = 8 + hLevel * 18;
     ctx.fillRect(chamber.left + 3, gasTop, chamber.width - 6, bottom - gasTop - 3);
     ctx.shadowBlur = 0;
+    const pressureLength = forceArrowLength(terms.pressureForce);
+    const pressureX = centerX - 6;
+    const currentOpacityPoint = thermodynamicPoint(row, parameters);
+    if (currentOpacityPoint) {
+      const opacityValues = rows.map((item) => thermodynamicPoint(item, parameters)?.logOpacity ?? NaN).filter(Number.isFinite);
+      const opacityRange = range([...opacityValues, currentOpacityPoint.logOpacity, 0], 0.12);
+      const opacityLevel = normalizedInRange(currentOpacityPoint.logOpacity, opacityRange);
+      const ghostWidth = 52;
+      const ghostMaxHeight = 42;
+      const ghostHeight = 16 + opacityLevel * (ghostMaxHeight - 16);
+      const ghostX = Math.max(chamber.left + 12, pressureX - ghostWidth - 15);
+      const ghostY = clamp4(
+        gasTop + Math.max(18, (bottom - gasTop) * 0.22),
+        gasTop + 14,
+        bottom - ghostMaxHeight - 24
+      );
+      const ghostTop = ghostY + ghostMaxHeight - ghostHeight;
+      ctx.save();
+      roundedRectPath(ctx, ghostX, ghostTop, ghostWidth, ghostHeight, 7);
+      ctx.fillStyle = "rgba(160, 172, 190, 0.09)";
+      ctx.fill();
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = "rgba(180, 190, 205, 0.52)";
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+      drawHeatEngineLabel(ctx, "opacity", ghostX + ghostWidth / 2, ghostTop + ghostHeight / 2, "rgba(210, 218, 232, 0.9)", "center", 9.4, 760);
+    }
     const pistonLuminosity = luminosityLevel(row.L);
     const pistonBlackbody = blackbodyRgbForTemperature(inferEffectiveTemperature(row.L, row.R));
     const pistonColor = scaledRgb(pistonBlackbody, 0.58 + pistonLuminosity * 0.52);
@@ -7770,8 +7799,6 @@
     ctx.strokeStyle = rgbCss(scaledRgb(pistonColor, 1.18), 0.94);
     ctx.lineWidth = 1.2;
     ctx.stroke();
-    const pressureLength = forceArrowLength(terms.pressureForce);
-    const pressureX = centerX - 20;
     drawHeatEngineArrow(ctx, pressureX, Math.min(bottom - 10, gasTop + pressureLength + 8), pressureX, gasTop + 2, COLORS.H, 3.1);
     drawHeatEngineLabel(ctx, "pressure", pressureX + 10, gasTop + 27, COLORS.H, "left", 9.4, 760);
     const gravityLength = forceArrowLength(terms.gravityForce);
