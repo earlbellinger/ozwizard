@@ -2,9 +2,11 @@ import { computeFourierParameters, hasUsableFourierAmplitudes } from "./fourier"
 import {
   buildLoopPathSamples,
   buildRangeSamples,
-  estimateGridCoarseness,
+  estimateGridBudgetFromModelCount,
+  estimateGridBudgetFromTiming,
   gridTotal,
   parameterValueFromSlider,
+  type GridBudgetCoarsenessEstimate,
   type GridComputeRequest,
   type GridModelResult,
   type GridRangeSamples,
@@ -33,34 +35,64 @@ export interface GridComputeCallbacks {
 }
 
 export async function computeGridWithMessages(request: GridComputeRequest, callbacks: GridComputeCallbacks): Promise<void> {
+  const budget = request.budget ?? { mode: "timeout" as const, timeoutMs: 2000 };
   const nativeSamples = buildRangeSamples(request.ranges, request.loopKey, { stride: 1 });
-  const native = await runGridPass(request, nativeSamples, callbacks, 2000);
+  if (budget.mode === "models") {
+    const estimate = estimateGridBudgetFromModelCount(request.ranges, request.loopKey, budget.maxModels);
+    if (estimate.stride === 1 && estimate.coarsenedModelCount.total === estimate.fullModelCount.total) {
+      const native = await runGridPass(request, nativeSamples, callbacks);
+      if (callbacks.isCanceled()) {
+        callbacks.post({ type: "grid-canceled", requestId: request.requestId });
+        return;
+      }
+      await postGridCompleteFromPass(request, native, 1, false, false, callbacks);
+      return;
+    }
+    postCoarsening(request, 0, gridTotal(nativeSamples), 0, estimate, callbacks);
+    await runCoarsenedGrid(request, estimate, callbacks);
+    return;
+  }
+
+  const native = await runGridPass(request, nativeSamples, callbacks, budget.timeoutMs);
   if (callbacks.isCanceled()) {
     callbacks.post({ type: "grid-canceled", requestId: request.requestId });
     return;
   }
+  const estimate = estimateGridBudgetFromTiming(request.ranges, request.loopKey, native.attempted, native.elapsedMs, budget.timeoutMs);
 
-  if (native.completed) {
-    const path = request.ranges.length <= 1 ? native : await runLoopPathPass(request, callbacks);
-    if (callbacks.isCanceled()) {
-      callbacks.post({ type: "grid-canceled", requestId: request.requestId });
-      return;
-    }
-    postComplete(request, native, path.results, 1, false, false, callbacks);
+  if (native.completed && estimate.stride === 1 && !estimate.zeroCompletedFallback) {
+    await postGridCompleteFromPass(request, native, 1, false, false, callbacks);
     return;
   }
 
-  const estimate = estimateGridCoarseness(native.total, native.attempted, native.elapsedMs, Math.max(1, request.ranges.length));
+  postCoarsening(request, native.attempted, native.total, native.elapsedMs, estimate, callbacks);
+  await runCoarsenedGrid(request, estimate, callbacks);
+}
+
+function postCoarsening(
+  request: GridComputeRequest,
+  completed: number,
+  total: number,
+  elapsedMs: number,
+  estimate: GridBudgetCoarsenessEstimate,
+  callbacks: GridComputeCallbacks
+): void {
   callbacks.post({
     type: "grid-canceled-for-coarsening",
     requestId: request.requestId,
-    completed: native.attempted,
-    total: native.total,
-    elapsedMs: native.elapsedMs,
+    completed,
+    total,
+    elapsedMs,
     stride: estimate.stride,
     estimatedTotalMs: estimate.estimatedTotalMs
   });
+}
 
+async function runCoarsenedGrid(
+  request: GridComputeRequest,
+  estimate: GridBudgetCoarsenessEstimate,
+  callbacks: GridComputeCallbacks
+): Promise<void> {
   const coarsenedSamples = buildRangeSamples(request.ranges, request.loopKey, {
     stride: estimate.stride,
     zeroCompletedFallback: estimate.zeroCompletedFallback
@@ -70,14 +102,25 @@ export async function computeGridWithMessages(request: GridComputeRequest, callb
     callbacks.post({ type: "grid-canceled", requestId: request.requestId });
     return;
   }
+  await postGridCompleteFromPass(request, coarsened, estimate.stride, true, estimate.zeroCompletedFallback, callbacks);
+}
+
+async function postGridCompleteFromPass(
+  request: GridComputeRequest,
+  stats: GridRunStats,
+  stride: number,
+  coarsened: boolean,
+  zeroCompletedFallback: boolean,
+  callbacks: GridComputeCallbacks
+): Promise<void> {
   const path = request.ranges.length <= 1
-    ? coarsened
-    : await runLoopPathPass(request, callbacks, estimate.stride, estimate.zeroCompletedFallback);
+    ? stats
+    : await runLoopPathPass(request, callbacks, stride, zeroCompletedFallback);
   if (callbacks.isCanceled()) {
     callbacks.post({ type: "grid-canceled", requestId: request.requestId });
     return;
   }
-  postComplete(request, coarsened, path.results, estimate.stride, true, estimate.zeroCompletedFallback, callbacks);
+  postComplete(request, stats, path.results, stride, coarsened, zeroCompletedFallback, callbacks);
 }
 
 async function runLoopPathPass(

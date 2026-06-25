@@ -702,18 +702,76 @@
     const high = roundToNativeStep(range2.upperSliderValue, range2.nativeStep);
     return [.../* @__PURE__ */ new Set([low, center, high])].sort((a, b) => a - b);
   }
-  function estimateGridCoarseness(total, completed, elapsedMs, dimensionCount, targetMs = 1e3) {
-    if (completed <= 0 || elapsedMs <= 0 || total <= 0) {
-      return { stride: 1, estimatedTotalMs: null, zeroCompletedFallback: true };
+  function gridModelCountForStride(ranges, loopKey, options = {}) {
+    const main = gridTotal(buildRangeSamples(ranges, loopKey, options));
+    const path = ranges.length <= 1 ? 0 : gridTotal(buildLoopPathSamples(ranges, loopKey, options));
+    return { main, path, total: main + path };
+  }
+  function estimateGridBudgetFromModelCount(ranges, loopKey, maxModels) {
+    return estimateGridBudgetForTargetModelCount(ranges, loopKey, Math.max(1, Math.floor(maxModels)));
+  }
+  function estimateGridBudgetFromTiming(ranges, loopKey, completed, elapsedMs, timeoutMs) {
+    const fullModelCount = gridModelCountForStride(ranges, loopKey);
+    if (completed <= 0 || elapsedMs <= 0 || timeoutMs <= 0) {
+      return {
+        stride: 1,
+        estimatedTotalMs: null,
+        zeroCompletedFallback: true,
+        fullModelCount,
+        coarsenedModelCount: gridModelCountForStride(ranges, loopKey, { zeroCompletedFallback: true }),
+        targetModelCount: null
+      };
     }
-    const estimatedTotalMs = elapsedMs * total / completed;
-    const reduction = Math.max(1, estimatedTotalMs / targetMs);
-    const exponent = 1 / Math.max(1, dimensionCount);
+    const modelMs = elapsedMs / completed;
+    const targetModelCount = Math.max(1, Math.floor(timeoutMs / Math.max(modelMs, 1e-9)));
     return {
-      stride: Math.max(1, Math.ceil(reduction ** exponent)),
-      estimatedTotalMs,
-      zeroCompletedFallback: false
+      ...estimateGridBudgetForTargetModelCount(ranges, loopKey, targetModelCount),
+      estimatedTotalMs: modelMs * fullModelCount.total
     };
+  }
+  function estimateGridBudgetForTargetModelCount(ranges, loopKey, targetModelCount) {
+    const fullModelCount = gridModelCountForStride(ranges, loopKey);
+    if (fullModelCount.total <= targetModelCount) {
+      return {
+        stride: 1,
+        estimatedTotalMs: null,
+        zeroCompletedFallback: false,
+        fullModelCount,
+        coarsenedModelCount: fullModelCount,
+        targetModelCount
+      };
+    }
+    let bestStride = 1;
+    let bestCount = fullModelCount;
+    const maxStride = maxUsefulGridStride(ranges);
+    for (let stride = 2; stride <= maxStride; stride += 1) {
+      const count = gridModelCountForStride(ranges, loopKey, { stride });
+      if (count.total < bestCount.total) {
+        bestStride = stride;
+        bestCount = count;
+      }
+      if (count.total <= targetModelCount) {
+        return {
+          stride,
+          estimatedTotalMs: null,
+          zeroCompletedFallback: false,
+          fullModelCount,
+          coarsenedModelCount: count,
+          targetModelCount
+        };
+      }
+    }
+    return {
+      stride: bestStride,
+      estimatedTotalMs: null,
+      zeroCompletedFallback: false,
+      fullModelCount,
+      coarsenedModelCount: bestCount,
+      targetModelCount
+    };
+  }
+  function maxUsefulGridStride(ranges) {
+    return Math.max(1, ...ranges.map((range2) => generateSliderSamples(range2, 1).length));
   }
   function buildRangeSamples(ranges, loopKey, options = {}) {
     return ranges.map((range2) => ({
@@ -1573,31 +1631,48 @@
 
   // src/gridCompute.ts
   async function computeGridWithMessages(request, callbacks) {
+    const budget = request.budget ?? { mode: "timeout", timeoutMs: 2e3 };
     const nativeSamples = buildRangeSamples(request.ranges, request.loopKey, { stride: 1 });
-    const native = await runGridPass(request, nativeSamples, callbacks, 2e3);
+    if (budget.mode === "models") {
+      const estimate2 = estimateGridBudgetFromModelCount(request.ranges, request.loopKey, budget.maxModels);
+      if (estimate2.stride === 1 && estimate2.coarsenedModelCount.total === estimate2.fullModelCount.total) {
+        const native2 = await runGridPass(request, nativeSamples, callbacks);
+        if (callbacks.isCanceled()) {
+          callbacks.post({ type: "grid-canceled", requestId: request.requestId });
+          return;
+        }
+        await postGridCompleteFromPass(request, native2, 1, false, false, callbacks);
+        return;
+      }
+      postCoarsening(request, 0, gridTotal(nativeSamples), 0, estimate2, callbacks);
+      await runCoarsenedGrid(request, estimate2, callbacks);
+      return;
+    }
+    const native = await runGridPass(request, nativeSamples, callbacks, budget.timeoutMs);
     if (callbacks.isCanceled()) {
       callbacks.post({ type: "grid-canceled", requestId: request.requestId });
       return;
     }
-    if (native.completed) {
-      const path2 = request.ranges.length <= 1 ? native : await runLoopPathPass(request, callbacks);
-      if (callbacks.isCanceled()) {
-        callbacks.post({ type: "grid-canceled", requestId: request.requestId });
-        return;
-      }
-      postComplete(request, native, path2.results, 1, false, false, callbacks);
+    const estimate = estimateGridBudgetFromTiming(request.ranges, request.loopKey, native.attempted, native.elapsedMs, budget.timeoutMs);
+    if (native.completed && estimate.stride === 1 && !estimate.zeroCompletedFallback) {
+      await postGridCompleteFromPass(request, native, 1, false, false, callbacks);
       return;
     }
-    const estimate = estimateGridCoarseness(native.total, native.attempted, native.elapsedMs, Math.max(1, request.ranges.length));
+    postCoarsening(request, native.attempted, native.total, native.elapsedMs, estimate, callbacks);
+    await runCoarsenedGrid(request, estimate, callbacks);
+  }
+  function postCoarsening(request, completed, total, elapsedMs, estimate, callbacks) {
     callbacks.post({
       type: "grid-canceled-for-coarsening",
       requestId: request.requestId,
-      completed: native.attempted,
-      total: native.total,
-      elapsedMs: native.elapsedMs,
+      completed,
+      total,
+      elapsedMs,
       stride: estimate.stride,
       estimatedTotalMs: estimate.estimatedTotalMs
     });
+  }
+  async function runCoarsenedGrid(request, estimate, callbacks) {
     const coarsenedSamples = buildRangeSamples(request.ranges, request.loopKey, {
       stride: estimate.stride,
       zeroCompletedFallback: estimate.zeroCompletedFallback
@@ -1607,12 +1682,15 @@
       callbacks.post({ type: "grid-canceled", requestId: request.requestId });
       return;
     }
-    const path = request.ranges.length <= 1 ? coarsened : await runLoopPathPass(request, callbacks, estimate.stride, estimate.zeroCompletedFallback);
+    await postGridCompleteFromPass(request, coarsened, estimate.stride, true, estimate.zeroCompletedFallback, callbacks);
+  }
+  async function postGridCompleteFromPass(request, stats, stride, coarsened, zeroCompletedFallback, callbacks) {
+    const path = request.ranges.length <= 1 ? stats : await runLoopPathPass(request, callbacks, stride, zeroCompletedFallback);
     if (callbacks.isCanceled()) {
       callbacks.post({ type: "grid-canceled", requestId: request.requestId });
       return;
     }
-    postComplete(request, coarsened, path.results, estimate.stride, true, estimate.zeroCompletedFallback, callbacks);
+    postComplete(request, stats, path.results, stride, coarsened, zeroCompletedFallback, callbacks);
   }
   async function runLoopPathPass(request, callbacks, stride = 1, zeroCompletedFallback = false) {
     const pathSamples = buildLoopPathSamples(request.ranges, request.loopKey, { stride, zeroCompletedFallback });
@@ -2001,6 +2079,13 @@
   var GRID_LOOP_BASE_INTERVAL_MS = 90;
   var GRID_LOOP_MIN_SPEED = 0.25;
   var GRID_LOOP_MAX_SPEED = 4;
+  var GRID_TIMEOUT_DEFAULT_SECONDS = 3;
+  var GRID_TIMEOUT_MIN_SECONDS = 0.25;
+  var GRID_TIMEOUT_MAX_SECONDS = 30;
+  var GRID_TIMEOUT_STEP_SECONDS = 0.25;
+  var GRID_MODEL_BUDGET_DEFAULT = 50;
+  var GRID_MODEL_BUDGET_MIN = 3;
+  var GRID_MODEL_BUDGET_MAX = 2e3;
   var GRID_PHASE_BACKGROUND_MAX_MODELS = 96;
   var GRID_PHASE_BACKGROUND_MAX_POINTS = 160;
   var GRID_PHASE_PATH_MAX_POINTS = 260;
@@ -2054,6 +2139,9 @@
   var currentAnimationPhase = 0;
   var modelAnimationSpeed = 1;
   var gridLoopSpeed = 1;
+  var gridBudgetMode = "timeout";
+  var gridTimeoutSeconds = GRID_TIMEOUT_DEFAULT_SECONDS;
+  var gridModelBudget = GRID_MODEL_BUDGET_DEFAULT;
   var modelAnimationFrame = 0;
   var modelAnimationStartTime = null;
   var latestDisplayWindow = {
@@ -3375,6 +3463,112 @@
     input.addEventListener("input", sync);
     sync();
   }
+  function ensureGridBudgetControls() {
+    const container = el("integrationControls");
+    if (document.getElementById("gridBudgetControl")) {
+      updateGridBudgetControls();
+      return;
+    }
+    const control = document.createElement("div");
+    control.className = "grid-budget-controls";
+    control.id = "gridBudgetControl";
+    control.hidden = true;
+    control.innerHTML = `
+    <div id="gridTimeoutControl" class="slider-control grid-budget-slider" data-grid-budget-kind="timeout" style="--accent:${THEME.neutralSymbol}">
+      <div class="slider-label" title="grid timeout">
+        <span class="slider-name">grid timeout</span>
+        <span class="slider-reading"><span class="slider-symbol">s</span><span class="slider-equals">=</span><span class="slider-value" data-grid-budget-value="timeout"></span></span>
+      </div>
+      <div class="slider-track">
+        <input id="gridTimeoutSeconds" class="single-slider" type="range" min="${GRID_TIMEOUT_MIN_SECONDS}" max="${GRID_TIMEOUT_MAX_SECONDS}" step="${GRID_TIMEOUT_STEP_SECONDS}" value="${formatGridTimeoutSeconds(gridTimeoutSeconds)}" aria-label="grid timeout">
+      </div>
+      <label class="grid-budget-mode" title="Use grid timeout budget" aria-label="Use grid timeout budget">
+        <input id="gridBudgetTimeoutMode" type="radio" name="gridBudgetMode" value="timeout">
+      </label>
+    </div>
+    <div id="gridModelBudgetControl" class="slider-control grid-budget-slider" data-grid-budget-kind="models" style="--accent:${THEME.neutralSymbol}">
+      <div class="slider-label" title="num grid models">
+        <span class="slider-name">num grid models</span>
+        <span class="slider-reading"><span class="slider-symbol">N</span><span class="slider-equals">=</span><span class="slider-value" data-grid-budget-value="models"></span></span>
+      </div>
+      <div class="slider-track">
+        <input id="gridModelBudget" class="single-slider" type="range" min="${GRID_MODEL_BUDGET_MIN}" max="${GRID_MODEL_BUDGET_MAX}" step="1" value="${String(gridModelBudget)}" aria-label="num grid models">
+      </div>
+      <label class="grid-budget-mode" title="Use num grid models budget" aria-label="Use num grid models budget">
+        <input id="gridBudgetModelsMode" type="radio" name="gridBudgetMode" value="models">
+      </label>
+    </div>
+  `;
+    container.appendChild(control);
+    const timeoutMode = el("gridBudgetTimeoutMode");
+    const modelsMode = el("gridBudgetModelsMode");
+    const timeoutInput = el("gridTimeoutSeconds");
+    const modelInput = el("gridModelBudget");
+    timeoutMode.addEventListener("change", () => {
+      if (!timeoutMode.checked) return;
+      gridBudgetMode = "timeout";
+      updateGridBudgetControls();
+      scheduleGridCompute();
+    });
+    modelsMode.addEventListener("change", () => {
+      if (!modelsMode.checked) return;
+      gridBudgetMode = "models";
+      updateGridBudgetControls();
+      scheduleGridCompute();
+    });
+    timeoutInput.addEventListener("input", () => {
+      const value = Number(timeoutInput.value);
+      if (!Number.isFinite(value)) return;
+      gridTimeoutSeconds = clampGridTimeoutSeconds(value);
+      gridBudgetMode = "timeout";
+      updateGridBudgetControls();
+      scheduleGridCompute();
+    });
+    modelInput.addEventListener("input", () => {
+      const value = Number(modelInput.value);
+      if (!Number.isFinite(value)) return;
+      gridModelBudget = clampGridModelBudget(value);
+      gridBudgetMode = "models";
+      updateGridBudgetControls();
+      scheduleGridCompute();
+    });
+    updateGridBudgetControls();
+  }
+  function updateGridBudgetControls() {
+    const control = document.getElementById("gridBudgetControl");
+    if (!(control instanceof HTMLElement)) return;
+    control.hidden = !gridState.enabled;
+    control.dataset.gridBudgetMode = gridBudgetMode;
+    const timeoutMode = document.getElementById("gridBudgetTimeoutMode");
+    const modelsMode = document.getElementById("gridBudgetModelsMode");
+    const timeoutInput = document.getElementById("gridTimeoutSeconds");
+    const modelInput = document.getElementById("gridModelBudget");
+    const timeoutValue = document.querySelector("[data-grid-budget-value='timeout']");
+    const modelValue = document.querySelector("[data-grid-budget-value='models']");
+    const timeoutControl = document.getElementById("gridTimeoutControl");
+    const modelControl = document.getElementById("gridModelBudgetControl");
+    if (timeoutMode instanceof HTMLInputElement) timeoutMode.checked = gridBudgetMode === "timeout";
+    if (modelsMode instanceof HTMLInputElement) modelsMode.checked = gridBudgetMode === "models";
+    if (timeoutInput instanceof HTMLInputElement) timeoutInput.value = formatGridTimeoutSeconds(gridTimeoutSeconds);
+    if (modelInput instanceof HTMLInputElement) modelInput.value = String(gridModelBudget);
+    if (timeoutValue) timeoutValue.textContent = formatGridTimeoutSeconds(gridTimeoutSeconds);
+    if (modelValue) modelValue.textContent = String(gridModelBudget);
+    if (timeoutControl instanceof HTMLElement) timeoutControl.classList.toggle("is-grid-budget-active", gridBudgetMode === "timeout");
+    if (modelControl instanceof HTMLElement) modelControl.classList.toggle("is-grid-budget-active", gridBudgetMode === "models");
+  }
+  function gridBudgetRequest() {
+    return gridBudgetMode === "models" ? { mode: "models", maxModels: gridModelBudget } : { mode: "timeout", timeoutMs: gridTimeoutSeconds * 1e3 };
+  }
+  function clampGridTimeoutSeconds(value) {
+    const clamped = clamp4(value, GRID_TIMEOUT_MIN_SECONDS, GRID_TIMEOUT_MAX_SECONDS);
+    return Number((Math.round(clamped / GRID_TIMEOUT_STEP_SECONDS) * GRID_TIMEOUT_STEP_SECONDS).toFixed(2));
+  }
+  function clampGridModelBudget(value) {
+    return Math.round(clamp4(value, GRID_MODEL_BUDGET_MIN, GRID_MODEL_BUDGET_MAX));
+  }
+  function formatGridTimeoutSeconds(value) {
+    return String(Number(value.toFixed(2)));
+  }
   function isUserPlotId(value) {
     return Boolean(value && value in PLOT_PANEL_LABELS);
   }
@@ -3430,6 +3624,7 @@
       toggle.addEventListener("change", () => setGridModeEnabled(toggle.checked, { defaultGammaRange: toggle.checked }));
     }
     setupGridLoopSpeedControl();
+    updateGridBudgetControls();
     updateGridRangeUi();
     updateGridStatusUi();
   }
@@ -3479,6 +3674,7 @@
     }
     updatePlotPanelVisibility();
     updateGridRangeUi();
+    updateGridBudgetControls();
     updateGridStatusUi();
     updateFourierPanelVisibility();
     if (enabled) scheduleGridCompute();
@@ -3696,6 +3892,7 @@
       baseParameters: { ...state },
       ranges,
       loopKey,
+      budget: gridBudgetRequest(),
       phase: {
         warmupTau: state.phaseWarmupTau,
         minAmplitude: state.phaseMinAmplitude,
@@ -4531,6 +4728,7 @@
     if (!container.querySelector("[data-control-key]")) {
       buildSliderGroup("integrationControls", CONTROL_GROUPS.integration);
     }
+    ensureGridBudgetControls();
     updateIntegrationControlVisibility();
     updateResetButtons();
   }
@@ -4540,6 +4738,7 @@
       const key = wrapper.dataset.controlKey;
       wrapper.hidden = !key || !visible.has(key);
     });
+    updateGridBudgetControls();
     updateGridLoopControls();
   }
   function buildSliderGroup(containerId, controls) {

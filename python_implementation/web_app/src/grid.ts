@@ -39,11 +39,16 @@ export interface GridModelResult {
   fourier: FourierParameters | null;
 }
 
+export type GridBudget =
+  | { mode: "timeout"; timeoutMs: number }
+  | { mode: "models"; maxModels: number };
+
 export interface GridComputeRequest {
   requestId: number;
   baseParameters: ModelParameters;
   ranges: GridRange[];
   loopKey: ControlParameterKey;
+  budget: GridBudget;
   phase: {
     warmupTau?: number;
     minAmplitude: number;
@@ -103,6 +108,18 @@ export interface CoarsenessEstimate {
   stride: number;
   estimatedTotalMs: number | null;
   zeroCompletedFallback: boolean;
+}
+
+export interface GridModelCount {
+  main: number;
+  path: number;
+  total: number;
+}
+
+export interface GridBudgetCoarsenessEstimate extends CoarsenessEstimate {
+  fullModelCount: GridModelCount;
+  coarsenedModelCount: GridModelCount;
+  targetModelCount: number | null;
 }
 
 export interface SliderMeta {
@@ -251,6 +268,100 @@ export function estimateGridCoarseness(
     estimatedTotalMs,
     zeroCompletedFallback: false
   };
+}
+
+export function gridModelCountForStride(
+  ranges: readonly GridRange[],
+  loopKey: ControlParameterKey,
+  options: { stride?: number; zeroCompletedFallback?: boolean } = {}
+): GridModelCount {
+  const main = gridTotal(buildRangeSamples(ranges, loopKey, options));
+  const path = ranges.length <= 1 ? 0 : gridTotal(buildLoopPathSamples(ranges, loopKey, options));
+  return { main, path, total: main + path };
+}
+
+export function estimateGridBudgetFromModelCount(
+  ranges: readonly GridRange[],
+  loopKey: ControlParameterKey,
+  maxModels: number
+): GridBudgetCoarsenessEstimate {
+  return estimateGridBudgetForTargetModelCount(ranges, loopKey, Math.max(1, Math.floor(maxModels)));
+}
+
+export function estimateGridBudgetFromTiming(
+  ranges: readonly GridRange[],
+  loopKey: ControlParameterKey,
+  completed: number,
+  elapsedMs: number,
+  timeoutMs: number
+): GridBudgetCoarsenessEstimate {
+  const fullModelCount = gridModelCountForStride(ranges, loopKey);
+  if (completed <= 0 || elapsedMs <= 0 || timeoutMs <= 0) {
+    return {
+      stride: 1,
+      estimatedTotalMs: null,
+      zeroCompletedFallback: true,
+      fullModelCount,
+      coarsenedModelCount: gridModelCountForStride(ranges, loopKey, { zeroCompletedFallback: true }),
+      targetModelCount: null
+    };
+  }
+  const modelMs = elapsedMs / completed;
+  const targetModelCount = Math.max(1, Math.floor(timeoutMs / Math.max(modelMs, 1e-9)));
+  return {
+    ...estimateGridBudgetForTargetModelCount(ranges, loopKey, targetModelCount),
+    estimatedTotalMs: modelMs * fullModelCount.total
+  };
+}
+
+function estimateGridBudgetForTargetModelCount(
+  ranges: readonly GridRange[],
+  loopKey: ControlParameterKey,
+  targetModelCount: number
+): GridBudgetCoarsenessEstimate {
+  const fullModelCount = gridModelCountForStride(ranges, loopKey);
+  if (fullModelCount.total <= targetModelCount) {
+    return {
+      stride: 1,
+      estimatedTotalMs: null,
+      zeroCompletedFallback: false,
+      fullModelCount,
+      coarsenedModelCount: fullModelCount,
+      targetModelCount
+    };
+  }
+  let bestStride = 1;
+  let bestCount = fullModelCount;
+  const maxStride = maxUsefulGridStride(ranges);
+  for (let stride = 2; stride <= maxStride; stride += 1) {
+    const count = gridModelCountForStride(ranges, loopKey, { stride });
+    if (count.total < bestCount.total) {
+      bestStride = stride;
+      bestCount = count;
+    }
+    if (count.total <= targetModelCount) {
+      return {
+        stride,
+        estimatedTotalMs: null,
+        zeroCompletedFallback: false,
+        fullModelCount,
+        coarsenedModelCount: count,
+        targetModelCount
+      };
+    }
+  }
+  return {
+    stride: bestStride,
+    estimatedTotalMs: null,
+    zeroCompletedFallback: false,
+    fullModelCount,
+    coarsenedModelCount: bestCount,
+    targetModelCount
+  };
+}
+
+function maxUsefulGridStride(ranges: readonly GridRange[]): number {
+  return Math.max(1, ...ranges.map((range) => generateSliderSamples(range, 1).length));
 }
 
 export function buildRangeSamples(

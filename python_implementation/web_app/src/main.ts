@@ -30,6 +30,7 @@ import {
   sliderMeta,
   sliderValueFromNumericValue,
   sliderValueFromParameter,
+  type GridBudget,
   type GridCompleteMessage,
   type GridModelResult,
   type GridRange,
@@ -120,6 +121,13 @@ const MODEL_ANIMATION_MAX_SPEED = 4;
 const GRID_LOOP_BASE_INTERVAL_MS = 90;
 const GRID_LOOP_MIN_SPEED = 0.25;
 const GRID_LOOP_MAX_SPEED = 4;
+const GRID_TIMEOUT_DEFAULT_SECONDS = 3;
+const GRID_TIMEOUT_MIN_SECONDS = 0.25;
+const GRID_TIMEOUT_MAX_SECONDS = 30;
+const GRID_TIMEOUT_STEP_SECONDS = 0.25;
+const GRID_MODEL_BUDGET_DEFAULT = 50;
+const GRID_MODEL_BUDGET_MIN = 3;
+const GRID_MODEL_BUDGET_MAX = 2000;
 const GRID_PHASE_BACKGROUND_MAX_MODELS = 96;
 const GRID_PHASE_BACKGROUND_MAX_POINTS = 160;
 const GRID_PHASE_PATH_MAX_POINTS = 260;
@@ -175,6 +183,9 @@ const gridState: GridModeState = {
 let currentAnimationPhase = 0;
 let modelAnimationSpeed = 1;
 let gridLoopSpeed = 1;
+let gridBudgetMode: GridBudgetMode = "timeout";
+let gridTimeoutSeconds = GRID_TIMEOUT_DEFAULT_SECONDS;
+let gridModelBudget = GRID_MODEL_BUDGET_DEFAULT;
 let modelAnimationFrame = 0;
 let modelAnimationStartTime: number | null = null;
 let latestDisplayWindow: DisplayWindow = {
@@ -234,6 +245,7 @@ type RowSeriesKey = "R" | "V" | "H" | "Uc" | "L" | "Lr" | "Lc";
 type PlotSeriesKey = RowSeriesKey | "Lb";
 type UserPlotId = "model" | "light" | "velocity" | "heatEngine" | "work" | "time" | "lum" | "tpOpacity" | "stability" | "strip" | "phasePortrait";
 type SonificationSource = "luminosity" | "velocity" | "pressure";
+type GridBudgetMode = GridBudget["mode"];
 
 interface PlotView {
   xlim?: NumericRange;
@@ -1876,6 +1888,121 @@ function setupGridLoopSpeedControl(): void {
   sync();
 }
 
+function ensureGridBudgetControls(): void {
+  const container = el<HTMLDivElement>("integrationControls");
+  if (document.getElementById("gridBudgetControl")) {
+    updateGridBudgetControls();
+    return;
+  }
+  const control = document.createElement("div");
+  control.className = "grid-budget-controls";
+  control.id = "gridBudgetControl";
+  control.hidden = true;
+  control.innerHTML = `
+    <div id="gridTimeoutControl" class="slider-control grid-budget-slider" data-grid-budget-kind="timeout" style="--accent:${THEME.neutralSymbol}">
+      <div class="slider-label" title="grid timeout">
+        <span class="slider-name">grid timeout</span>
+        <span class="slider-reading"><span class="slider-symbol">s</span><span class="slider-equals">=</span><span class="slider-value" data-grid-budget-value="timeout"></span></span>
+      </div>
+      <div class="slider-track">
+        <input id="gridTimeoutSeconds" class="single-slider" type="range" min="${GRID_TIMEOUT_MIN_SECONDS}" max="${GRID_TIMEOUT_MAX_SECONDS}" step="${GRID_TIMEOUT_STEP_SECONDS}" value="${formatGridTimeoutSeconds(gridTimeoutSeconds)}" aria-label="grid timeout">
+      </div>
+      <label class="grid-budget-mode" title="Use grid timeout budget" aria-label="Use grid timeout budget">
+        <input id="gridBudgetTimeoutMode" type="radio" name="gridBudgetMode" value="timeout">
+      </label>
+    </div>
+    <div id="gridModelBudgetControl" class="slider-control grid-budget-slider" data-grid-budget-kind="models" style="--accent:${THEME.neutralSymbol}">
+      <div class="slider-label" title="num grid models">
+        <span class="slider-name">num grid models</span>
+        <span class="slider-reading"><span class="slider-symbol">N</span><span class="slider-equals">=</span><span class="slider-value" data-grid-budget-value="models"></span></span>
+      </div>
+      <div class="slider-track">
+        <input id="gridModelBudget" class="single-slider" type="range" min="${GRID_MODEL_BUDGET_MIN}" max="${GRID_MODEL_BUDGET_MAX}" step="1" value="${String(gridModelBudget)}" aria-label="num grid models">
+      </div>
+      <label class="grid-budget-mode" title="Use num grid models budget" aria-label="Use num grid models budget">
+        <input id="gridBudgetModelsMode" type="radio" name="gridBudgetMode" value="models">
+      </label>
+    </div>
+  `;
+  container.appendChild(control);
+
+  const timeoutMode = el<HTMLInputElement>("gridBudgetTimeoutMode");
+  const modelsMode = el<HTMLInputElement>("gridBudgetModelsMode");
+  const timeoutInput = el<HTMLInputElement>("gridTimeoutSeconds");
+  const modelInput = el<HTMLInputElement>("gridModelBudget");
+  timeoutMode.addEventListener("change", () => {
+    if (!timeoutMode.checked) return;
+    gridBudgetMode = "timeout";
+    updateGridBudgetControls();
+    scheduleGridCompute();
+  });
+  modelsMode.addEventListener("change", () => {
+    if (!modelsMode.checked) return;
+    gridBudgetMode = "models";
+    updateGridBudgetControls();
+    scheduleGridCompute();
+  });
+  timeoutInput.addEventListener("input", () => {
+    const value = Number(timeoutInput.value);
+    if (!Number.isFinite(value)) return;
+    gridTimeoutSeconds = clampGridTimeoutSeconds(value);
+    gridBudgetMode = "timeout";
+    updateGridBudgetControls();
+    scheduleGridCompute();
+  });
+  modelInput.addEventListener("input", () => {
+    const value = Number(modelInput.value);
+    if (!Number.isFinite(value)) return;
+    gridModelBudget = clampGridModelBudget(value);
+    gridBudgetMode = "models";
+    updateGridBudgetControls();
+    scheduleGridCompute();
+  });
+  updateGridBudgetControls();
+}
+
+function updateGridBudgetControls(): void {
+  const control = document.getElementById("gridBudgetControl");
+  if (!(control instanceof HTMLElement)) return;
+  control.hidden = !gridState.enabled;
+  control.dataset.gridBudgetMode = gridBudgetMode;
+  const timeoutMode = document.getElementById("gridBudgetTimeoutMode");
+  const modelsMode = document.getElementById("gridBudgetModelsMode");
+  const timeoutInput = document.getElementById("gridTimeoutSeconds");
+  const modelInput = document.getElementById("gridModelBudget");
+  const timeoutValue = document.querySelector<HTMLElement>("[data-grid-budget-value='timeout']");
+  const modelValue = document.querySelector<HTMLElement>("[data-grid-budget-value='models']");
+  const timeoutControl = document.getElementById("gridTimeoutControl");
+  const modelControl = document.getElementById("gridModelBudgetControl");
+  if (timeoutMode instanceof HTMLInputElement) timeoutMode.checked = gridBudgetMode === "timeout";
+  if (modelsMode instanceof HTMLInputElement) modelsMode.checked = gridBudgetMode === "models";
+  if (timeoutInput instanceof HTMLInputElement) timeoutInput.value = formatGridTimeoutSeconds(gridTimeoutSeconds);
+  if (modelInput instanceof HTMLInputElement) modelInput.value = String(gridModelBudget);
+  if (timeoutValue) timeoutValue.textContent = formatGridTimeoutSeconds(gridTimeoutSeconds);
+  if (modelValue) modelValue.textContent = String(gridModelBudget);
+  if (timeoutControl instanceof HTMLElement) timeoutControl.classList.toggle("is-grid-budget-active", gridBudgetMode === "timeout");
+  if (modelControl instanceof HTMLElement) modelControl.classList.toggle("is-grid-budget-active", gridBudgetMode === "models");
+}
+
+function gridBudgetRequest(): GridBudget {
+  return gridBudgetMode === "models"
+    ? { mode: "models", maxModels: gridModelBudget }
+    : { mode: "timeout", timeoutMs: gridTimeoutSeconds * 1000 };
+}
+
+function clampGridTimeoutSeconds(value: number): number {
+  const clamped = clamp(value, GRID_TIMEOUT_MIN_SECONDS, GRID_TIMEOUT_MAX_SECONDS);
+  return Number((Math.round(clamped / GRID_TIMEOUT_STEP_SECONDS) * GRID_TIMEOUT_STEP_SECONDS).toFixed(2));
+}
+
+function clampGridModelBudget(value: number): number {
+  return Math.round(clamp(value, GRID_MODEL_BUDGET_MIN, GRID_MODEL_BUDGET_MAX));
+}
+
+function formatGridTimeoutSeconds(value: number): string {
+  return String(Number(value.toFixed(2)));
+}
+
 function isUserPlotId(value: string | undefined): value is UserPlotId {
   return Boolean(value && value in PLOT_PANEL_LABELS);
 }
@@ -1938,6 +2065,7 @@ function setupGridControls(): void {
       toggle.addEventListener("change", () => setGridModeEnabled(toggle.checked, { defaultGammaRange: toggle.checked }));
   }
   setupGridLoopSpeedControl();
+  updateGridBudgetControls();
   updateGridRangeUi();
   updateGridStatusUi();
 }
@@ -1990,6 +2118,7 @@ function setGridModeEnabled(enabled: boolean, options: { defaultGammaRange?: boo
 
   updatePlotPanelVisibility();
   updateGridRangeUi();
+  updateGridBudgetControls();
   updateGridStatusUi();
   updateFourierPanelVisibility();
   if (enabled) scheduleGridCompute();
@@ -2240,6 +2369,7 @@ function startGridCompute(): void {
     baseParameters: { ...state },
     ranges,
     loopKey,
+    budget: gridBudgetRequest(),
     phase: {
       warmupTau: state.phaseWarmupTau,
       minAmplitude: state.phaseMinAmplitude,
@@ -2288,6 +2418,7 @@ function startGridFallbackCompute(request: {
   baseParameters: ModelParameters;
   ranges: GridRange[];
   loopKey: ControlParameterKey;
+  budget: GridBudget;
   phase: {
     warmupTau?: number;
     minAmplitude: number;
@@ -3177,6 +3308,7 @@ function rebuildIntegrationControls(): void {
   if (!container.querySelector("[data-control-key]")) {
     buildSliderGroup("integrationControls", CONTROL_GROUPS.integration);
   }
+  ensureGridBudgetControls();
   updateIntegrationControlVisibility();
   updateResetButtons();
 }
@@ -3187,6 +3319,7 @@ function updateIntegrationControlVisibility(): void {
     const key = wrapper.dataset.controlKey as ControlParameterKey | undefined;
     wrapper.hidden = !key || !visible.has(key);
   });
+  updateGridBudgetControls();
   updateGridLoopControls();
 }
 

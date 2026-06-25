@@ -3,8 +3,11 @@ import { computeFourierParameters, hasUsableFourierAmplitudes, luminosityAmplitu
 import {
   buildLoopPathSamples,
   defaultGridRange,
+  estimateGridBudgetFromModelCount,
+  estimateGridBudgetFromTiming,
   estimateGridCoarseness,
   generateSliderSamples,
+  gridModelCountForStride,
   parameterValueFromSlider,
   sliderValueFromNumericValue,
   type GridRange,
@@ -124,6 +127,102 @@ describe("grid range helpers", () => {
     expect(fallback.find((item) => item.key === "r0")?.samples).toEqual([1.1]);
   });
 
+  it("counts the main grid and extra loop path for grid budgets", () => {
+    const ranges: GridRange[] = [
+      {
+        key: "gammac",
+        lowerSliderValue: 0,
+        upperSliderValue: 0.5,
+        centerSliderValue: 0.5,
+        nativeStep: 0.01
+      },
+      {
+        key: "r0",
+        lowerSliderValue: 1.09,
+        upperSliderValue: 1.11,
+        centerSliderValue: 1.1,
+        nativeStep: 0.01
+      }
+    ];
+    expect(gridModelCountForStride(ranges, "gammac")).toEqual({ main: 153, path: 51, total: 204 });
+    expect(gridModelCountForStride(ranges, "gammac", { stride: 25 })).toEqual({ main: 9, path: 3, total: 12 });
+  });
+
+  it("chooses coarsening directly from a model-count budget", () => {
+    const ranges: GridRange[] = [
+      {
+        key: "gammac",
+        lowerSliderValue: 0,
+        upperSliderValue: 0.5,
+        centerSliderValue: 0.5,
+        nativeStep: 0.01
+      },
+      {
+        key: "r0",
+        lowerSliderValue: 1.09,
+        upperSliderValue: 1.11,
+        centerSliderValue: 1.1,
+        nativeStep: 0.01
+      }
+    ];
+    const estimate = estimateGridBudgetFromModelCount(ranges, "gammac", 50);
+    expect(estimate.stride).toBeGreaterThan(1);
+    expect(estimate.fullModelCount.total).toBe(204);
+    expect(estimate.coarsenedModelCount.total).toBeLessThanOrEqual(50);
+    expect(estimate.estimatedTotalMs).toBeNull();
+    expect(estimate.zeroCompletedFallback).toBe(false);
+
+    const minimum = estimateGridBudgetFromModelCount(ranges, "gammac", 3);
+    expect(minimum.coarsenedModelCount.total).toBeGreaterThan(3);
+    expect(minimum.coarsenedModelCount.total).toBeLessThan(estimate.fullModelCount.total);
+  });
+
+  it("chooses coarsening from timeout timing estimates", () => {
+    const ranges: GridRange[] = [
+      {
+        key: "gammac",
+        lowerSliderValue: 0,
+        upperSliderValue: 0.5,
+        centerSliderValue: 0.5,
+        nativeStep: 0.01
+      },
+      {
+        key: "r0",
+        lowerSliderValue: 1.09,
+        upperSliderValue: 1.11,
+        centerSliderValue: 1.1,
+        nativeStep: 0.01
+      }
+    ];
+    const estimate = estimateGridBudgetFromTiming(ranges, "gammac", 10, 1000, 2000);
+    expect(estimate.targetModelCount).toBe(20);
+    expect(estimate.estimatedTotalMs).toBeCloseTo(20400);
+    expect(estimate.stride).toBeGreaterThan(1);
+    expect(estimate.coarsenedModelCount.total).toBeLessThanOrEqual(20);
+
+    expect(estimateGridBudgetFromTiming(ranges, "gammac", 0, 2000, 2000)).toMatchObject({
+      stride: 1,
+      estimatedTotalMs: null,
+      zeroCompletedFallback: true,
+      targetModelCount: null
+    });
+  });
+
+  it("does not count an extra loop path for one-parameter grids", () => {
+    const ranges: GridRange[] = [{
+      key: "gammac",
+      lowerSliderValue: 0,
+      upperSliderValue: 0.5,
+      centerSliderValue: 0.5,
+      nativeStep: 0.01
+    }];
+    const count = gridModelCountForStride(ranges, "gammac");
+    expect(count).toEqual({ main: 51, path: 0, total: 51 });
+    const estimate = estimateGridBudgetFromModelCount(ranges, "gammac", 50);
+    expect(estimate.coarsenedModelCount.path).toBe(0);
+    expect(estimate.coarsenedModelCount.total).toBeLessThanOrEqual(50);
+  });
+
   it("estimates uniform coarsening from partial completion and falls back for zero completions", () => {
     expect(estimateGridCoarseness(40, 40, 500, 1)).toMatchObject({ stride: 1, zeroCompletedFallback: false });
 
@@ -160,6 +259,7 @@ describe("grid computation", () => {
         nativeStep: 0.01
       }],
       loopKey: "gammac",
+      budget: { mode: "models", maxModels: 10 },
       phase: {
         warmupTau: 1,
         minAmplitude: 1e-4,

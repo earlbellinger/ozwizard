@@ -693,10 +693,21 @@ async function runPlaywrightChecks() {
     assertOk((await page.getByLabel("convective flux fraction grid upper bound").inputValue()) === "0.5", "default gamma_c grid should end at 0.5");
     await page.getByLabel("Enable grid mode").uncheck();
     assertOk(!(await page.locator("#fourierGridPanel").isVisible()), "Fourier grid panel should hide after default grid check");
+    assertOk(!(await page.locator("#gridTimeoutControl").isVisible()), "grid timeout control should hide outside grid mode");
+    assertOk(!(await page.locator("#gridModelBudgetControl").isVisible()), "grid model budget control should hide outside grid mode");
     const fluxControl = page.getByRole("slider", { name: "convective flux fraction" }).locator("xpath=ancestor::*[contains(@class, 'slider-control')]");
     const fluxHeightBefore = await fluxControl.evaluate((node) => node.getBoundingClientRect().height);
     await fluxControl.dispatchEvent("contextmenu");
     assertOk(await page.getByLabel("Enable grid mode").isChecked(), "right clicking a slider should enable grid mode");
+    assertOk(await page.locator("#gridTimeoutControl").isVisible(), "grid timeout control should show in grid mode");
+    assertOk(await page.locator("#gridModelBudgetControl").isVisible(), "grid model budget control should show in grid mode");
+    assertOk((await page.locator("#gridBudgetControl").getAttribute("data-grid-budget-mode")) === "timeout", "grid budget should default to timeout mode");
+    assertOk((await page.locator("#gridTimeoutControl").textContent())?.includes("grid timeout"), "grid budget should label timeout mode");
+    assertOk((await page.locator("#gridModelBudgetControl").textContent())?.includes("num grid models"), "grid budget should label model-count mode");
+    assertOk(await page.locator("#gridBudgetTimeoutMode").isChecked(), "timeout budget radio should start checked");
+    assertOk(!(await page.locator("#gridBudgetModelsMode").isChecked()), "model budget radio should start unchecked");
+    assertOk((await page.locator("#gridTimeoutSeconds").inputValue()) === "3", "grid timeout should default to 3 seconds");
+    assertOk((await page.locator("#gridModelBudget").inputValue()) === "50", "grid model budget should default to 50");
     assertOk(await page.locator("[data-plot-panel='model']").isHidden(), "Shell should be hidden in grid mode");
     assertOk(await page.locator("[data-plot-panel='heatEngine']").isHidden(), "Heat Engine should be hidden in grid mode");
     assertOk(await page.locator("[data-plot-panel='time']").isHidden(), "History should be hidden in grid mode");
@@ -757,6 +768,22 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("#gridLoopControls").isVisible(), "multi-parameter grid should show loop radio buttons");
     assertOk(await page.locator("#gridLoopControls input[type='radio']").count() === 2, "two varied parameters should produce two loop radios");
     await page.waitForFunction(() => document.querySelector("#gridStatusText")?.textContent?.includes("Grid complete"), null, { timeout: 15000 });
+    await page.locator("#gridModelBudget").evaluate((input) => {
+      input.value = "6";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    assertOk(await page.locator("#gridBudgetModelsMode").isChecked(), "editing model budget should select model-count mode");
+    assertOk((await page.locator("#gridBudgetControl").getAttribute("data-grid-budget-mode")) === "models", "grid budget mode should switch to models");
+    assertOk((await page.locator("#gridModelBudget").inputValue()) === "6", "grid model budget should accept edits");
+    await page.waitForFunction(() => /\/6 phase models/.test(document.querySelector("#gridStatusText")?.textContent || ""), null, { timeout: 15000 });
+    await page.locator("#gridTimeoutSeconds").evaluate((input) => {
+      input.value = "3";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    assertOk(await page.locator("#gridBudgetTimeoutMode").isChecked(), "editing timeout should select timeout mode");
+    assertOk((await page.locator("#gridBudgetControl").getAttribute("data-grid-budget-mode")) === "timeout", "grid budget mode should switch to timeout");
+    assertOk((await page.locator("#gridTimeoutSeconds").inputValue()) === "3", "grid timeout should accept edits");
+    await page.waitForFunction(() => /\/9 phase models/.test(document.querySelector("#gridStatusText")?.textContent || ""), null, { timeout: 15000 });
     assertOk(await page.locator("[data-control-key='gammac'] [data-grid-loop-marker]").isVisible(), "selected loop slider should show the animated value marker");
     assertOk(await page.locator("[data-control-key='r0'] [data-grid-loop-marker]").isHidden(), "non-selected range slider should hide the animated value marker");
     await page.locator("#gridLoopControls input[value='r0']").check();

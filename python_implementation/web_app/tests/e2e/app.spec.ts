@@ -965,11 +965,22 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await page.getByLabel("Enable grid mode").uncheck();
   await expect(page.getByLabel("Enable grid mode")).not.toBeChecked();
   await expect(page.locator("#fourierGridPanel")).toBeHidden();
+  await expect(page.locator("#gridTimeoutControl")).toBeHidden();
+  await expect(page.locator("#gridModelBudgetControl")).toBeHidden();
   const fluxControl = page.getByRole("slider", { name: "convective flux fraction" })
     .locator("xpath=ancestor::*[contains(@class, 'slider-control')]");
   const fluxHeightBefore = await fluxControl.evaluate((node) => node.getBoundingClientRect().height);
   await fluxControl.dispatchEvent("contextmenu");
   await expect(page.getByLabel("Enable grid mode")).toBeChecked();
+  await expect(page.locator("#gridTimeoutControl")).toBeVisible();
+  await expect(page.locator("#gridModelBudgetControl")).toBeVisible();
+  await expect(page.locator("#gridBudgetControl")).toHaveAttribute("data-grid-budget-mode", "timeout");
+  await expect(page.locator("#gridTimeoutControl")).toContainText("grid timeout");
+  await expect(page.locator("#gridModelBudgetControl")).toContainText("num grid models");
+  await expect(page.locator("#gridBudgetTimeoutMode")).toBeChecked();
+  await expect(page.locator("#gridBudgetModelsMode")).not.toBeChecked();
+  await expect(page.locator("#gridTimeoutSeconds")).toHaveValue("3");
+  await expect(page.locator("#gridModelBudget")).toHaveValue("50");
   await expect(page.locator("[data-plot-panel='model']")).toBeHidden();
   await expect(page.locator("[data-plot-panel='heatEngine']")).toBeHidden();
   await expect(page.locator("[data-plot-panel='work']")).toBeHidden();
@@ -1053,6 +1064,24 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#gridLoopControls")).toBeVisible();
   await expect(page.locator("#gridLoopControls input[type='radio']")).toHaveCount(2);
   await expect(page.locator("#gridStatusText")).toContainText("Grid complete", { timeout: 15000 });
+  await page.locator("#gridModelBudget").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "6";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#gridBudgetModelsMode")).toBeChecked();
+  await expect(page.locator("#gridBudgetControl")).toHaveAttribute("data-grid-budget-mode", "models");
+  await expect(page.locator("#gridModelBudget")).toHaveValue("6");
+  await expect(page.locator("#gridStatusText")).toHaveText(/\/6 phase models/, { timeout: 15000 });
+  await page.locator("#gridTimeoutSeconds").evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    slider.value = "3";
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(page.locator("#gridBudgetTimeoutMode")).toBeChecked();
+  await expect(page.locator("#gridBudgetControl")).toHaveAttribute("data-grid-budget-mode", "timeout");
+  await expect(page.locator("#gridTimeoutSeconds")).toHaveValue("3");
+  await expect(page.locator("#gridStatusText")).toHaveText(/\/9 phase models/, { timeout: 15000 });
   await expect(page.locator("[data-control-key='gammac'] [data-grid-loop-marker]")).toBeVisible();
   await expect(page.locator("[data-control-key='r0'] [data-grid-loop-marker]")).toBeHidden();
   await page.locator("#gridLoopControls input[value='r0']").check();

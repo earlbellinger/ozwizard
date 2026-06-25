@@ -604,6 +604,33 @@
       accent-color: var(--logo-gold);
     }
 
+    .grid-budget-controls {
+      display: contents;
+    }
+
+    .grid-budget-controls[hidden] {
+      display: none;
+    }
+
+    .grid-budget-slider.is-grid-budget-active {
+      border-color: color-mix(in srgb, var(--logo-gold-bright) 24%, var(--line));
+    }
+
+    .grid-budget-mode {
+      width: 22px;
+      height: 22px;
+      display: inline-grid;
+      place-items: center;
+      cursor: pointer;
+    }
+
+    .grid-budget-mode input {
+      width: 14px;
+      height: 14px;
+      margin: 0;
+      accent-color: var(--logo-gold);
+    }
+
     .control-section > summary.section-title {
       cursor: pointer;
       display: flex;

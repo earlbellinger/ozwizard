@@ -865,18 +865,76 @@
     const high = roundToNativeStep(range.upperSliderValue, range.nativeStep);
     return [.../* @__PURE__ */ new Set([low, center, high])].sort((a, b) => a - b);
   }
-  function estimateGridCoarseness(total, completed, elapsedMs, dimensionCount, targetMs = 1e3) {
-    if (completed <= 0 || elapsedMs <= 0 || total <= 0) {
-      return { stride: 1, estimatedTotalMs: null, zeroCompletedFallback: true };
+  function gridModelCountForStride(ranges, loopKey, options = {}) {
+    const main = gridTotal(buildRangeSamples(ranges, loopKey, options));
+    const path = ranges.length <= 1 ? 0 : gridTotal(buildLoopPathSamples(ranges, loopKey, options));
+    return { main, path, total: main + path };
+  }
+  function estimateGridBudgetFromModelCount(ranges, loopKey, maxModels) {
+    return estimateGridBudgetForTargetModelCount(ranges, loopKey, Math.max(1, Math.floor(maxModels)));
+  }
+  function estimateGridBudgetFromTiming(ranges, loopKey, completed, elapsedMs, timeoutMs) {
+    const fullModelCount = gridModelCountForStride(ranges, loopKey);
+    if (completed <= 0 || elapsedMs <= 0 || timeoutMs <= 0) {
+      return {
+        stride: 1,
+        estimatedTotalMs: null,
+        zeroCompletedFallback: true,
+        fullModelCount,
+        coarsenedModelCount: gridModelCountForStride(ranges, loopKey, { zeroCompletedFallback: true }),
+        targetModelCount: null
+      };
     }
-    const estimatedTotalMs = elapsedMs * total / completed;
-    const reduction = Math.max(1, estimatedTotalMs / targetMs);
-    const exponent = 1 / Math.max(1, dimensionCount);
+    const modelMs = elapsedMs / completed;
+    const targetModelCount = Math.max(1, Math.floor(timeoutMs / Math.max(modelMs, 1e-9)));
     return {
-      stride: Math.max(1, Math.ceil(reduction ** exponent)),
-      estimatedTotalMs,
-      zeroCompletedFallback: false
+      ...estimateGridBudgetForTargetModelCount(ranges, loopKey, targetModelCount),
+      estimatedTotalMs: modelMs * fullModelCount.total
     };
+  }
+  function estimateGridBudgetForTargetModelCount(ranges, loopKey, targetModelCount) {
+    const fullModelCount = gridModelCountForStride(ranges, loopKey);
+    if (fullModelCount.total <= targetModelCount) {
+      return {
+        stride: 1,
+        estimatedTotalMs: null,
+        zeroCompletedFallback: false,
+        fullModelCount,
+        coarsenedModelCount: fullModelCount,
+        targetModelCount
+      };
+    }
+    let bestStride = 1;
+    let bestCount = fullModelCount;
+    const maxStride = maxUsefulGridStride(ranges);
+    for (let stride = 2; stride <= maxStride; stride += 1) {
+      const count = gridModelCountForStride(ranges, loopKey, { stride });
+      if (count.total < bestCount.total) {
+        bestStride = stride;
+        bestCount = count;
+      }
+      if (count.total <= targetModelCount) {
+        return {
+          stride,
+          estimatedTotalMs: null,
+          zeroCompletedFallback: false,
+          fullModelCount,
+          coarsenedModelCount: count,
+          targetModelCount
+        };
+      }
+    }
+    return {
+      stride: bestStride,
+      estimatedTotalMs: null,
+      zeroCompletedFallback: false,
+      fullModelCount,
+      coarsenedModelCount: bestCount,
+      targetModelCount
+    };
+  }
+  function maxUsefulGridStride(ranges) {
+    return Math.max(1, ...ranges.map((range) => generateSliderSamples(range, 1).length));
   }
   function buildRangeSamples(ranges, loopKey, options = {}) {
     return ranges.map((range) => ({
@@ -1208,31 +1266,48 @@
 
   // src/gridCompute.ts
   async function computeGridWithMessages(request, callbacks) {
+    const budget = request.budget ?? { mode: "timeout", timeoutMs: 2e3 };
     const nativeSamples = buildRangeSamples(request.ranges, request.loopKey, { stride: 1 });
-    const native = await runGridPass(request, nativeSamples, callbacks, 2e3);
+    if (budget.mode === "models") {
+      const estimate2 = estimateGridBudgetFromModelCount(request.ranges, request.loopKey, budget.maxModels);
+      if (estimate2.stride === 1 && estimate2.coarsenedModelCount.total === estimate2.fullModelCount.total) {
+        const native2 = await runGridPass(request, nativeSamples, callbacks);
+        if (callbacks.isCanceled()) {
+          callbacks.post({ type: "grid-canceled", requestId: request.requestId });
+          return;
+        }
+        await postGridCompleteFromPass(request, native2, 1, false, false, callbacks);
+        return;
+      }
+      postCoarsening(request, 0, gridTotal(nativeSamples), 0, estimate2, callbacks);
+      await runCoarsenedGrid(request, estimate2, callbacks);
+      return;
+    }
+    const native = await runGridPass(request, nativeSamples, callbacks, budget.timeoutMs);
     if (callbacks.isCanceled()) {
       callbacks.post({ type: "grid-canceled", requestId: request.requestId });
       return;
     }
-    if (native.completed) {
-      const path2 = request.ranges.length <= 1 ? native : await runLoopPathPass(request, callbacks);
-      if (callbacks.isCanceled()) {
-        callbacks.post({ type: "grid-canceled", requestId: request.requestId });
-        return;
-      }
-      postComplete(request, native, path2.results, 1, false, false, callbacks);
+    const estimate = estimateGridBudgetFromTiming(request.ranges, request.loopKey, native.attempted, native.elapsedMs, budget.timeoutMs);
+    if (native.completed && estimate.stride === 1 && !estimate.zeroCompletedFallback) {
+      await postGridCompleteFromPass(request, native, 1, false, false, callbacks);
       return;
     }
-    const estimate = estimateGridCoarseness(native.total, native.attempted, native.elapsedMs, Math.max(1, request.ranges.length));
+    postCoarsening(request, native.attempted, native.total, native.elapsedMs, estimate, callbacks);
+    await runCoarsenedGrid(request, estimate, callbacks);
+  }
+  function postCoarsening(request, completed, total, elapsedMs, estimate, callbacks) {
     callbacks.post({
       type: "grid-canceled-for-coarsening",
       requestId: request.requestId,
-      completed: native.attempted,
-      total: native.total,
-      elapsedMs: native.elapsedMs,
+      completed,
+      total,
+      elapsedMs,
       stride: estimate.stride,
       estimatedTotalMs: estimate.estimatedTotalMs
     });
+  }
+  async function runCoarsenedGrid(request, estimate, callbacks) {
     const coarsenedSamples = buildRangeSamples(request.ranges, request.loopKey, {
       stride: estimate.stride,
       zeroCompletedFallback: estimate.zeroCompletedFallback
@@ -1242,12 +1317,15 @@
       callbacks.post({ type: "grid-canceled", requestId: request.requestId });
       return;
     }
-    const path = request.ranges.length <= 1 ? coarsened : await runLoopPathPass(request, callbacks, estimate.stride, estimate.zeroCompletedFallback);
+    await postGridCompleteFromPass(request, coarsened, estimate.stride, true, estimate.zeroCompletedFallback, callbacks);
+  }
+  async function postGridCompleteFromPass(request, stats, stride, coarsened, zeroCompletedFallback, callbacks) {
+    const path = request.ranges.length <= 1 ? stats : await runLoopPathPass(request, callbacks, stride, zeroCompletedFallback);
     if (callbacks.isCanceled()) {
       callbacks.post({ type: "grid-canceled", requestId: request.requestId });
       return;
     }
-    postComplete(request, coarsened, path.results, estimate.stride, true, estimate.zeroCompletedFallback, callbacks);
+    postComplete(request, stats, path.results, stride, coarsened, zeroCompletedFallback, callbacks);
   }
   async function runLoopPathPass(request, callbacks, stride = 1, zeroCompletedFallback = false) {
     const pathSamples = buildLoopPathSamples(request.ranges, request.loopKey, { stride, zeroCompletedFallback });
