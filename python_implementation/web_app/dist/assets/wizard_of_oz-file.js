@@ -2039,7 +2039,6 @@
     const secularResponse = parameters.zetac * restoring + parameters.zeta * secularCoupling;
     const dynamicCoupling = parameters.zeta * parameters.zetac * (radiativeThermal + 1.5 * gammaC) + restoring;
     const thermalResponse = parameters.zetac + parameters.zeta * radiativeThermal;
-    const reducedRadiativeMode = parameters.zetac <= 0 || gammaC <= 1e-9;
     const terms = {
       radiativeThermal,
       restoring,
@@ -2049,7 +2048,7 @@
       dynamicCoupling,
       thermalResponse
     };
-    if (reducedRadiativeMode) {
+    if (parameters.zetac <= 0) {
       const thermalMargin = parameters.zeta * radiativeThermal;
       const secular2 = condition(
         "secular",

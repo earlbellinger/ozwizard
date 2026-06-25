@@ -578,7 +578,7 @@ async function runPlaywrightChecks() {
     const velocityHoverPhase = Number(await page.locator("#velocityCanvas").getAttribute("data-current-phase"));
     assertOk(velocityHoverPhase > 1.44 && velocityHoverPhase < 1.56, `hovering RV Curve should set phase near 1.50, saw ${velocityHoverPhase}`);
     const plotLayout = await page.locator("#plotGrid").evaluate((grid) => {
-      const panels = [...grid.querySelectorAll("[data-plot-panel]")].map((panel) => {
+      const panels = [...grid.querySelectorAll("[data-plot-panel]")].filter((panel) => !panel.hidden).map((panel) => {
         const rect = panel.getBoundingClientRect();
         return {
           id: panel.dataset.plotPanel || "",
@@ -625,6 +625,7 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-opacity-colorbar")) === "log10(kappa/kappa0)", "T-P Loop should expose opacity colorbar metadata in single mode");
     assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-opacity-contours")) === "log10(kappa/kappa0)", "T-P Loop should expose opacity contours");
     assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-opacity-vector-field")) === null, "T-P Loop should not draw the old opacity vector field");
+    assertOk(await page.locator("[data-plot-panel='phaseLag']").isHidden(), "Phase Lag should be hidden in single-model mode");
     const hasModelPaint = await page.locator("#modelCanvas").evaluate((canvas) => {
       const node = canvas;
       const ctx = node.getContext("2d");
@@ -713,15 +714,17 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("[data-plot-panel='time']").isHidden(), "History should be hidden in grid mode");
     assertOk(await page.locator("[data-plot-panel='lum']").isHidden(), "Luminosity Evolution should be hidden in grid mode");
     assertOk(await page.locator("[data-plot-panel='tpOpacity']").isVisible(), "T-P Loop should remain visible in grid mode");
+    assertOk(await page.locator("[data-plot-panel='phaseLag']").isVisible(), "Phase Lag should show in grid mode");
     assertOk(await page.locator("[data-plot-panel='stability']").isVisible(), "Stability Map should remain visible in grid mode");
     assertOk(await page.locator("[data-plot-panel='strip']").isVisible(), "Instability Strip should remain visible in grid mode");
     assertOk(await page.locator("[data-plot-panel='phasePortrait']").isVisible(), "Thermal-Convection Loop should remain visible in grid mode");
-    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "6", "six visible plots should be tracked in grid mode");
+    assertOk((await page.locator("#plotGrid").getAttribute("data-visible-plots")) === "7", "seven visible plots should be tracked in grid mode");
     assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='model']").isDisabled(), "Shell toggle should be disabled in grid mode");
     assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='heatEngine']").isDisabled(), "Heat Engine toggle should be disabled in grid mode");
     assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='time']").isDisabled(), "History toggle should be disabled in grid mode");
     assertOk(await page.locator("#hiddenPlotControls [data-plot-toggle='lum']").isDisabled(), "Luminosity toggle should be disabled in grid mode");
     assertOk(!(await page.locator("[data-plot-toggle='tpOpacity']").isDisabled()), "T-P Loop toggle should remain enabled in grid mode");
+    assertOk(!(await page.locator("[data-plot-toggle='phaseLag']").isDisabled()), "Phase Lag toggle should remain enabled in grid mode");
     await page.waitForFunction(() => {
       const panel = document.querySelector("#fourierGridPanel");
       return panel instanceof HTMLElement && !panel.hidden && getComputedStyle(panel).display !== "none";
@@ -793,6 +796,7 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("[data-control-key='gammac'] [data-grid-loop-marker]").isVisible(), "selected loop slider should show the animated value marker");
     assertOk(await page.locator("[data-control-key='r0'] [data-grid-loop-marker]").isHidden(), "non-selected range slider should hide the animated value marker");
     await page.locator("#gridLoopControls input[value='r0']").check();
+    await page.waitForFunction(() => document.querySelector("#phaseLagCanvas")?.getAttribute("data-phase-lag-loop-key") === "r0", null, { timeout: 5000 });
     await velocitySource.evaluate((button) => button.click());
     await pianoToggle.click();
     assertOk(await page.locator("#pianoPanel").isVisible(), "piano panel should open in grid mode");
@@ -810,6 +814,7 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#pianoPanel").getAttribute("data-sonification-signature")) !== gridPianoSignature, "piano waveform should follow the grid loop model");
     await pianoToggle.click();
     await page.locator("#gridLoopControls input[value='gammac']").check();
+    await page.waitForFunction(() => document.querySelector("#phaseLagCanvas")?.getAttribute("data-phase-lag-loop-key") === "gammac", null, { timeout: 5000 });
     await page.waitForFunction(() => document.querySelector("#lightCanvas")?.getAttribute("data-grid-colorbar-key") === "gammac", null, { timeout: 5000 });
     assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-tp-opacity-mode")) === "grid", "T-P Loop should switch to grid mode");
     await page.waitForFunction(() => /[2-9]\d*/.test(document.querySelector("#tpOpacityCanvas")?.getAttribute("data-tp-opacity-tracks") || ""), null, { timeout: 5000 });
@@ -818,6 +823,19 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-opacity-contours")) === "log10(kappa/kappa0)", "T-P Loop should keep opacity contours in grid mode");
     assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-grid-colorbar")) === "ready", "T-P Loop should use the shared grid colorbar in grid mode");
     assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-opacity-colorbar")) === null, "T-P Loop should not show an opacity colorbar in grid mode");
+    assertOk((await page.locator("#phaseLagCanvas").getAttribute("data-phase-lag-mode")) === "grid", "Phase Lag should switch to grid mode");
+    assertOk(/[2-9]\d*/.test(await page.locator("#phaseLagCanvas").getAttribute("data-phase-lag-path-count") || ""), "Phase Lag should use the selected grid path");
+    assertOk((await page.locator("#phaseLagCanvas").getAttribute("data-axis-labels")) === "grid parameter,phase lag \u0394\u03c6", "Phase Lag should expose grid-parameter axes");
+    assertOk(/R\u2192L.*R\u2192V.*R\u2192H.*H\u2192L.*H\u2192Uc/.test(await page.locator("#phaseLagCanvas").getAttribute("data-phase-lag-pairs") || ""), "Phase Lag should start with the default five pairs");
+    assertOk(await page.locator("#phaseLagLegend [data-phase-lag-pair][aria-pressed='true']").count() === 5, "Phase Lag should start with five active pair toggles");
+    await page.locator("#phaseLagLegend [data-phase-lag-pair='R-T']").click();
+    await page.waitForFunction(() => document.querySelector("#phaseLagCanvas")?.getAttribute("data-phase-lag-pairs")?.includes("R\u2192T"), null, { timeout: 5000 });
+    const phaseLagHasPaint = await page.locator("#phaseLagCanvas").evaluate((canvas) => {
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return false;
+      return ctx.getImageData(0, 0, canvas.width, canvas.height).data.some((value) => value !== 0);
+    });
+    assertOk(phaseLagHasPaint, "Phase Lag canvas should paint in grid mode");
     const fourierHasPaint = await page.locator("#fourierCanvas").evaluate((canvas) => {
       const ctx = canvas.getContext("2d");
       if (!ctx) return false;
@@ -860,6 +878,7 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("[data-plot-panel='time']").isVisible(), "History visibility should restore after grid mode exits");
     assertOk(await page.locator("[data-plot-panel='lum']").isVisible(), "Luminosity Evolution visibility should restore after grid mode exits");
     assertOk(await page.locator("[data-plot-panel='tpOpacity']").isVisible(), "T-P Loop visibility should remain after grid mode exits");
+    assertOk(await page.locator("[data-plot-panel='phaseLag']").isHidden(), "Phase Lag should hide after grid mode exits");
     assertOk(await page.locator("#adsrCanvas").count() === 1, "expected one ADSR canvas");
     assertOk(await page.getByRole("heading", { name: "Lightcurve" }).isVisible(), "Lightcurve heading was not visible");
     assertOk((await page.locator("[data-plot-panel='light'] .plot-title #phaseAnnotationToggleLabel").textContent())?.includes("Annotations"), "annotation toggle should sit in the Lightcurve header");
@@ -927,6 +946,12 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#lumLegend [data-plot-series='Lb']").getAttribute("aria-label")) === "Toggle source luminosity visibility", "source luminosity toggle should use the source label");
     assertOk((await page.locator("input[aria-label='convective response']").inputValue()) === "0", "convective response slider coordinate should still be log10(1)");
     assertOk((await page.locator("[data-value-for='zetac']").textContent()) === "1", "convective response should still display one");
+    assertOk((await page.locator("#variablesPanel").getAttribute("data-convective-luminosity")) === "available", "variables panel should start with convective luminosity available");
+    assertOk((await page.locator("#variablesPanel").getAttribute("data-variable-rows")) === "tau,R,V,H,Uc,Lr,Lc,L", "variables panel should list all variables when convective luminosity is available");
+    assertOk(await page.locator("[data-variable-row='Uc']").isVisible(), "convective velocity row should show when convective luminosity is available");
+    assertOk(await page.locator("[data-variable-row='Lc']").isVisible(), "convective luminosity row should show when convective luminosity is available");
+    assertOk((await page.locator("#odeEquations").getAttribute("data-equation-variables")) === "R,V,H,Uc", "equations should include U_c when convective luminosity is available");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-luminosity-terms")) === "L_r,L_c,L", "luminosity equations should include L_c when available");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-convection-active")) === "true", "model arcs should start in convective mode");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "L_c,L,L_r", "model arcs should expose luminosity labels");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-boundary-luminosity-lines")) === null, "model boundary luminosity lines should be absent");
@@ -957,6 +982,12 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#modelCanvas").getAttribute("data-boundary-luminosity-lines")) === null, "model boundary luminosity lines should remain absent when convection is off");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-velocity-arc-label")) === null, "model velocity arc label should remain absent when convection is off");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-radius-label")) === null, "model radius label should remain absent when convection is off");
+    assertOk((await page.locator("#variablesPanel").getAttribute("data-convective-luminosity")) === "absent", "variables panel should mark convective luminosity absent");
+    assertOk((await page.locator("#variablesPanel").getAttribute("data-variable-rows")) === "tau,R,V,H,Lr,L", "variables panel should omit U_c and L_c when convective luminosity is absent");
+    assertOk(!(await page.locator("[data-variable-row='Uc']").isVisible()), "convective velocity row should hide when convective luminosity is absent");
+    assertOk(!(await page.locator("[data-variable-row='Lc']").isVisible()), "convective luminosity row should hide when absent");
+    assertOk((await page.locator("#odeEquations").getAttribute("data-equation-variables")) === "R,V,H", "equations should omit U_c when convective luminosity is absent");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-luminosity-terms")) === "L_r,L", "luminosity equations should reduce to radiative terms when L_c is absent");
     assertOk((await page.locator("#derivationPanel").getAttribute("data-physics-mode")) === "radiative", "derivation should switch to radiative reduced criteria");
     assertOk((await page.locator("#derivationPanel").getAttribute("data-convection-mode")) === "frozen", "derivation should mark convection as frozen");
     assertOk((await page.locator("#derivationContent [data-stability-kind='convective']").count()) === 0, "radiative derivation should omit the convective/turbulent criterion");
@@ -967,6 +998,11 @@ async function runPlaywrightChecks() {
     });
     await page.locator("#timeLegend [data-plot-series='Uc']").waitFor({ state: "attached", timeout: 15000 });
     await page.waitForFunction(() => document.querySelector("#modelCanvas")?.getAttribute("data-convection-active") === "true");
+    assertOk((await page.locator("#variablesPanel").getAttribute("data-convective-luminosity")) === "available", "variables panel should restore convective luminosity when convective response returns");
+    assertOk(await page.locator("[data-variable-row='Uc']").isVisible(), "convective velocity row should return when convective luminosity returns");
+    assertOk(await page.locator("[data-variable-row='Lc']").isVisible(), "convective luminosity row should return when convective luminosity returns");
+    assertOk((await page.locator("#odeEquations").getAttribute("data-equation-variables")) === "R,V,H,Uc", "equations should restore U_c when convective luminosity returns");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-luminosity-terms")) === "L_r,L_c,L", "luminosity equations should restore L_c when available");
     assertOk((await page.locator("#metrics").getAttribute("data-s72-physics-mode")) === "convective", "S72 status should return to convective mode");
     assertOk((await page.locator("#metrics").getAttribute("data-s72-convective")) === "stable", "convective/turbulent status should return when convective response is on");
     await page.waitForFunction(() => document.querySelectorAll("#metrics [data-stability-kind='convective']").length === 1);
@@ -975,6 +1011,8 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#derivationPanel").getAttribute("data-convection-mode")) === "time-dependent", "derivation should return to time-dependent convection");
     assertOk((await page.locator("#derivationContent [data-stability-kind='convective']").count()) === 1, "convective derivation criterion should return");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "L_c,L,L_r", "model luminosity arc labels should return when convection is on");
+    assertOk((await page.locator("#variablesPanel").getAttribute("data-convective-luminosity")) === "available", "variables panel should remain full after convective response returns");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-luminosity-terms")) === "L_r,L_c,L", "luminosity equations should remain full after convective response returns");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-boundary-luminosity-lines")) === null, "model boundary luminosity lines should stay absent when convection is on");
     const radiusToggle = page.locator("#timeLegend [data-plot-series='R']");
     assertOk((await radiusToggle.getAttribute("aria-pressed")) === "true", "radius toggle should start visible");
