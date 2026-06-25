@@ -1920,6 +1920,91 @@
     return shellGeometryFor(row.R, mAt(row.R, parameters));
   }
 
+  // src/phaseLag.ts
+  var PHASE_LAG_PAIRS = [
+    { id: "R-L", reference: "R", target: "L" },
+    { id: "R-V", reference: "R", target: "V" },
+    { id: "R-T", reference: "R", target: "T" },
+    { id: "R-H", reference: "R", target: "H" },
+    { id: "R-Uc", reference: "R", target: "Uc" },
+    { id: "L-V", reference: "L", target: "V" },
+    { id: "L-T", reference: "L", target: "T" },
+    { id: "H-L", reference: "H", target: "L" },
+    { id: "L-Uc", reference: "L", target: "Uc" },
+    { id: "V-T", reference: "V", target: "T" },
+    { id: "V-H", reference: "V", target: "H" },
+    { id: "V-Uc", reference: "V", target: "Uc" },
+    { id: "T-H", reference: "T", target: "H" },
+    { id: "T-Uc", reference: "T", target: "Uc" },
+    { id: "H-Uc", reference: "H", target: "Uc" }
+  ];
+  var PHASE_LAG_DEFAULT_PAIR_IDS = /* @__PURE__ */ new Set(["R-L", "R-V", "R-H", "H-L", "H-Uc"]);
+  function phaseLagQuantityValue(row, key, parameters) {
+    if (key === "T") return thermodynamicTemperatureRatio(row, parameters);
+    const value = row[key];
+    return Number.isFinite(value) ? value : NaN;
+  }
+  function thermodynamicTemperatureRatio(row, parameters) {
+    if (!Number.isFinite(row.R + row.H) || row.R <= 0 || row.H <= 0) return NaN;
+    const chi = mAt(row.R, parameters);
+    const value = row.R ** (-chi * (parameters.gamma1 - 1)) * row.H;
+    return Number.isFinite(value) && value > 0 ? value : NaN;
+  }
+  function signedPhaseLag(referencePhase, targetPhase) {
+    if (!Number.isFinite(referencePhase + targetPhase)) return NaN;
+    let lag = targetPhase - referencePhase;
+    while (lag > 0.5) lag -= 1;
+    while (lag < -0.5) lag += 1;
+    return lag;
+  }
+  function refinedMaximumPhase(rows, key, parameters) {
+    const samples = rows.filter((row) => row.tau >= 0 && row.tau < 1).map((row) => ({ phase: row.tau, value: phaseLagQuantityValue(row, key, parameters) })).filter((sample2) => Number.isFinite(sample2.phase + sample2.value)).sort((a2, b2) => a2.phase - b2.phase);
+    if (samples.length < 3) return null;
+    const min = Math.min(...samples.map((sample2) => sample2.value));
+    const max = Math.max(...samples.map((sample2) => sample2.value));
+    const scale = Math.max(1, Math.abs(min), Math.abs(max));
+    if (!Number.isFinite(max - min) || (max - min) / scale < 1e-9) return null;
+    let bestIndex = 0;
+    for (let index = 1; index < samples.length; index += 1) {
+      if (samples[index].value > samples[bestIndex].value) bestIndex = index;
+    }
+    const previousIndex = bestIndex === 0 ? samples.length - 1 : bestIndex - 1;
+    const nextIndex = bestIndex === samples.length - 1 ? 0 : bestIndex + 1;
+    const center = samples[bestIndex];
+    const previous = samples[previousIndex];
+    const next = samples[nextIndex];
+    const x0 = previous.phase < center.phase ? previous.phase - center.phase : previous.phase - center.phase - 1;
+    const x2 = next.phase > center.phase ? next.phase - center.phase : next.phase - center.phase + 1;
+    const y0 = previous.value - center.value;
+    const y2 = next.value - center.value;
+    if (!(x0 < 0 && x2 > 0)) return phaseModOne(center.phase);
+    const slope0 = y0 / x0;
+    const a = (slope0 - y2 / x2) / (x0 - x2);
+    const b = slope0 - a * x0;
+    if (!Number.isFinite(a + b) || a >= 0 || Math.abs(a) < 1e-14) return phaseModOne(center.phase);
+    const vertex = -b / (2 * a);
+    if (!Number.isFinite(vertex) || vertex < x0 || vertex > x2) return phaseModOne(center.phase);
+    return phaseModOne(center.phase + vertex);
+  }
+  function phaseLagForPair(rows, pair, parameters) {
+    const referencePhase = refinedMaximumPhase(rows, pair.reference, parameters);
+    const targetPhase = refinedMaximumPhase(rows, pair.target, parameters);
+    if (referencePhase === null || targetPhase === null) return null;
+    const lag = signedPhaseLag(referencePhase, targetPhase);
+    return Number.isFinite(lag) ? lag : null;
+  }
+  function phaseLagSeriesPoints(results, pair, loopKey) {
+    return results.map((result) => {
+      const x = result.sliderValues[loopKey];
+      if (x === void 0 || !Number.isFinite(x)) return null;
+      const lag = phaseLagForPair(result.phaseRows, pair, result.parameters);
+      return lag === null ? null : { x, lag, result };
+    }).filter((point) => Boolean(point)).sort((a, b) => a.x - b.x);
+  }
+  function phaseModOne(value) {
+    return (value % 1 + 1) % 1;
+  }
+
   // src/stability.ts
   function condition(kind, value, expression) {
     return {
@@ -1954,6 +2039,7 @@
     const secularResponse = parameters.zetac * restoring + parameters.zeta * secularCoupling;
     const dynamicCoupling = parameters.zeta * parameters.zetac * (radiativeThermal + 1.5 * gammaC) + restoring;
     const thermalResponse = parameters.zetac + parameters.zeta * radiativeThermal;
+    const reducedRadiativeMode = parameters.zetac <= 0 || gammaC <= 1e-9;
     const terms = {
       radiativeThermal,
       restoring,
@@ -1963,7 +2049,7 @@
       dynamicCoupling,
       thermalResponse
     };
-    if (parameters.zetac <= 0) {
+    if (reducedRadiativeMode) {
       const thermalMargin = parameters.zeta * radiativeThermal;
       const secular2 = condition(
         "secular",
@@ -2193,6 +2279,8 @@
     selectionStroke: "#9EA7FF",
     neutralSymbol: "#C0CAE8"
   };
+  var PHASE_LAG_YLIM = [-0.5, 0.5];
+  var PHASE_LAG_AXIS_LABEL = "phase lag \u0394\u03C6";
   var PIANO_KEYBOARD_BINDINGS = [
     { code: "KeyZ", label: "Z", offset: 0 },
     { code: "KeyS", label: "S", offset: 1 },
@@ -2241,6 +2329,7 @@
     time: "History",
     lum: "Luminosity Evolution",
     tpOpacity: "T-P Loop",
+    phaseLag: "Phase Lag",
     stability: "Stability Map",
     strip: "Instability Strip",
     phasePortrait: "Thermal-Convection Loop"
@@ -2254,16 +2343,22 @@
     time: true,
     lum: true,
     tpOpacity: true,
+    phaseLag: true,
     stability: true,
     strip: true,
     phasePortrait: true
   };
+  var phaseLagPairVisibility = Object.fromEntries(
+    PHASE_LAG_PAIRS.map((pair) => [pair.id, PHASE_LAG_DEFAULT_PAIR_IDS.has(pair.id)])
+  );
   var plotRenderStates = /* @__PURE__ */ new Map();
   var legendSignatures = /* @__PURE__ */ new Map();
   var activeSelection = null;
   var gridColorbarRegions = /* @__PURE__ */ new Map();
   var fourierPointHits = [];
   var activeGridCanvasInteraction = null;
+  var activeGridSliderPointers = /* @__PURE__ */ new Set();
+  var pendingGridComputeAfterSliderRelease = false;
   var SLIDER_RANGE_DOUBLE_TAP_MS = 360;
   var SLIDER_RANGE_DOUBLE_TAP_DISTANCE = 22;
   var activeSliderTapStart = null;
@@ -3339,6 +3434,7 @@
     setupStabilityChipInteractions();
     setupModelSpeedControl();
     setupPhaseAnnotationControls();
+    setupGridSliderDeferral();
     buildPresetButtons();
     buildSolverButtons();
     buildSliderGroup("physicalControls", CONTROL_GROUPS.physical);
@@ -3463,6 +3559,43 @@
     input.addEventListener("input", sync);
     sync();
   }
+  function setupGridSliderDeferral() {
+    window.addEventListener("pointerup", finishGridSliderPointer, true);
+    window.addEventListener("pointercancel", finishGridSliderPointer, true);
+    window.addEventListener("blur", finishAllGridSliderPointers);
+  }
+  function attachGridSliderDeferral(input) {
+    input.addEventListener("pointerdown", beginGridSliderPointer);
+    input.addEventListener("change", flushDeferredGridCompute);
+    input.addEventListener("blur", flushDeferredGridCompute);
+  }
+  function beginGridSliderPointer(event) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    activeGridSliderPointers.add(event.pointerId);
+    if (!gridState.enabled) return;
+    window.clearTimeout(gridState.debounceTimer);
+    if (gridState.status === "running" || gridState.status === "coarsening" || gridState.status === "queued") {
+      cancelGridCompute();
+      pendingGridComputeAfterSliderRelease = true;
+      gridState.status = "queued";
+      gridState.statusText = "Grid queued until slider release";
+      updateGridStatusUi();
+    }
+  }
+  function finishGridSliderPointer(event) {
+    if (!activeGridSliderPointers.delete(event.pointerId)) return;
+    flushDeferredGridCompute();
+  }
+  function finishAllGridSliderPointers() {
+    if (!activeGridSliderPointers.size) return;
+    activeGridSliderPointers.clear();
+    flushDeferredGridCompute();
+  }
+  function flushDeferredGridCompute() {
+    if (activeGridSliderPointers.size || !pendingGridComputeAfterSliderRelease) return;
+    pendingGridComputeAfterSliderRelease = false;
+    scheduleGridCompute();
+  }
   function ensureGridBudgetControls() {
     const container = el("integrationControls");
     if (document.getElementById("gridBudgetControl")) {
@@ -3504,6 +3637,8 @@
     const modelsMode = el("gridBudgetModelsMode");
     const timeoutInput = el("gridTimeoutSeconds");
     const modelInput = el("gridModelBudget");
+    attachGridSliderDeferral(timeoutInput);
+    attachGridSliderDeferral(modelInput);
     timeoutMode.addEventListener("change", () => {
       if (!timeoutMode.checked) return;
       gridBudgetMode = "timeout";
@@ -3588,6 +3723,7 @@
     const hiddenControls = el("hiddenPlotControls");
     let hiddenCount = 0;
     Object.keys(plotPanelVisibility).forEach((plotId) => {
+      const gridOnlyUnavailable = !gridState.enabled && plotId === "phaseLag";
       const forcedHidden = gridState.enabled && (plotId === "model" || plotId === "heatEngine" || plotId === "work" || plotId === "time" || plotId === "lum");
       const visible = forcedHidden ? false : plotPanelVisibility[plotId];
       const panel = document.querySelector(`[data-plot-panel="${plotId}"]`);
@@ -3595,6 +3731,14 @@
       const home = document.querySelector(`[data-plot-control-home="${plotId}"]`);
       const input = control?.querySelector("[data-plot-toggle]");
       if (!panel || !control || !home || !input) return;
+      if (gridOnlyUnavailable) {
+        if (control.parentElement !== home) home.prepend(control);
+        input.checked = false;
+        input.disabled = true;
+        input.setAttribute("aria-label", `Show ${PLOT_PANEL_LABELS[plotId]} plot`);
+        panel.hidden = true;
+        return;
+      }
       input.checked = visible;
       input.disabled = forcedHidden;
       input.setAttribute("aria-label", `${visible ? "Hide" : "Show"} ${PLOT_PANEL_LABELS[plotId]} plot`);
@@ -3858,6 +4002,14 @@
   }
   function scheduleGridCompute() {
     if (!gridState.enabled) return;
+    if (activeGridSliderPointers.size) {
+      pendingGridComputeAfterSliderRelease = true;
+      window.clearTimeout(gridState.debounceTimer);
+      gridState.status = "queued";
+      gridState.statusText = "Grid queued until slider release";
+      updateGridStatusUi();
+      return;
+    }
     window.clearTimeout(gridState.debounceTimer);
     const ranges = activeGridRanges();
     if (!ranges.length) {
@@ -4790,12 +4942,14 @@
         state[key] = valueFromSlider(key, Number(event.target.value));
         syncGridRangeCenter(key);
         updateSliderLabel(key);
-        if (key === "m") updateEquationBlocks();
-        else updateDerivationPanel();
+        updateReferencePanelsForKey(key);
         refreshActivePreset();
         scheduleSolve();
       });
       const updateBounds = () => updateGridRangeBounds(key, Number(lower.value), Number(upper.value));
+      attachGridSliderDeferral(input);
+      attachGridSliderDeferral(lower);
+      attachGridSliderDeferral(upper);
       lower.addEventListener("input", updateBounds);
       upper.addEventListener("input", updateBounds);
       wrapper.addEventListener("pointerdown", (event) => beginSliderTap(event, key));
@@ -5076,65 +5230,120 @@
     stageMathHtml(node, buildDerivationHtml(parameters, stability));
     queueMathTypeset([node]);
   }
+  function referencePanelsDependOnKey(key) {
+    return key === "m" || key === "gammac" || key === "zetac" || key === "uc0";
+  }
+  function updateReferencePanelsForKey(key) {
+    if (referencePanelsDependOnKey(key)) updateEquationBlocks();
+    else updateDerivationPanel();
+  }
+  function updateVariableReferencePanel(parameters = state) {
+    const panel = document.getElementById("variablesPanel");
+    if (!(panel instanceof HTMLElement)) return [];
+    const hasConvectiveLuminosity = convectiveLuminosityAvailable(parameters);
+    const visibleRows2 = hasConvectiveLuminosity ? ["tau", "R", "V", "H", "Uc", "Lr", "Lc", "L"] : ["tau", "R", "V", "H", "Lr", "L"];
+    panel.dataset.convectiveLuminosity = hasConvectiveLuminosity ? "available" : "absent";
+    panel.dataset.variableRows = visibleRows2.join(",");
+    panel.querySelectorAll("[data-variable-row]").forEach((row) => {
+      const key = row.dataset.variableRow;
+      row.hidden = !key || !visibleRows2.includes(key);
+    });
+    const meaningTargets = [];
+    const meanings = {
+      meaningLr: hasConvectiveLuminosity ? `Radiative contribution, including its \\(1-\\ozGammac{\\gamma_c}\\) weight` : `Radiative luminosity; carries the full shell luminosity in this reduced case`,
+      meaningL: hasConvectiveLuminosity ? `Sum \\(\\ozLuminosity{L}=\\ozRadiative{L_r}+\\ozConvLum{L_c}\\)` : `Equal to \\(\\ozRadiative{L_r}\\) because \\(\\ozConvLum{L_c}=0\\)`
+    };
+    Object.entries(meanings).forEach(([id, html]) => {
+      const node = document.getElementById(id);
+      if (!(node instanceof HTMLElement)) return;
+      if (node.dataset.mathSource === html || stagedMathUpdates.get(node)?.html === html) return;
+      node.dataset.mathSource = html;
+      stageMathHtml(node, html);
+      meaningTargets.push(node);
+    });
+    return meaningTargets;
+  }
   function updateEquationBlocks() {
     const eta = Math.cbrt(Math.max(0, 1 - 3 / state.m));
     const etaDisplay = fmtFixed(eta, 2);
+    const hasConvectiveLuminosity = convectiveLuminosityAvailable();
     const geometry = state.variableM ? `\\ozChi{\\chi} &= \\frac{3}{1-(\\ozEta{\\eta}/\\ozRadius{R})^3}\\\\[0.2em]
        \\ozEta{\\eta} &= \\left(1-\\frac{3}{\\ozChiZero{\\chi_0}}\\right)^{1/3}=\\ozEta{${etaDisplay}}` : `\\ozChi{\\chi} &= \\ozChiZero{\\chi_0}`;
     const driver = state.driver === "abs-v" ? "\\sqrt{|\\ozVelocity{V}|}" : "\\sqrt{\\ozPressure{H}}";
     const odeNode = el("odeEquations");
     const luminosityNode = el("luminosityEquations");
     odeNode.dataset.driverMode = state.driver;
-    const odeHtml = `
-    \\[
-    \\begin{aligned}
-    \\frac{d\\ozRadius{R}}{d\\ozTau{\\tau}} &=
-      \\ozVelocity{V}\\\\[0.35em]
-    \\frac{d\\ozVelocity{V}}{d\\ozTau{\\tau}} &=
+    odeNode.dataset.convectiveLuminosity = hasConvectiveLuminosity ? "available" : "absent";
+    odeNode.dataset.equationVariables = hasConvectiveLuminosity ? "R,V,H,Uc" : "R,V,H";
+    const odeLines = [
+      `\\frac{d\\ozRadius{R}}{d\\ozTau{\\tau}} &= \\ozVelocity{V}`,
+      `\\frac{d\\ozVelocity{V}}{d\\ozTau{\\tau}} &=
       \\frac{\\ozPressure{H}}{\\ozRadius{R}^{\\ozChi{\\chi}\\ozGamma{\\Gamma_1}-2}}
       - \\frac{1}{\\ozRadius{R}^{2}}
-      - \\ozDamping{C_q}\\ozVelocity{V}^{3}\\\\[0.35em]
-    \\frac{d\\ozPressure{H}}{d\\ozTau{\\tau}} &=
+      - \\ozDamping{C_q}\\ozVelocity{V}^{3}`,
+      `\\frac{d\\ozPressure{H}}{d\\ozTau{\\tau}} &=
       \\ozZeta{\\zeta}\\,
       \\ozRadius{R}^{\\ozChi{\\chi}(\\ozGamma{\\Gamma_1}-1)}
       \\left[
         \\ozRadius{R}^{\\ozSource{U}}
         - \\ozLuminosity{L}
-      \\right]\\\\[0.35em]
-    \\frac{d\\ozConvective{U_c}}{d\\ozTau{\\tau}} &=
+      \\right]`
+    ];
+    if (hasConvectiveLuminosity) {
+      odeLines.push(`\\frac{d\\ozConvective{U_c}}{d\\ozTau{\\tau}} &=
       \\ozZetac{\\zeta_c}
       \\left[
         \\ozRadius{R}^{-\\ozChi{\\chi}(\\ozGamma{\\Gamma_1}-1)/2}\\,${driver}
         - \\ozConvective{U_c}
-      \\right]
+      \\right]`);
+    }
+    const odeHtml = `
+    \\[
+    \\begin{aligned}
+    ${odeLines.join("\\\\[0.35em]\n")}
     \\end{aligned}
     \\]
   `;
     luminosityNode.dataset.geometryMode = state.variableM ? "radius-dependent" : "fixed";
     luminosityNode.dataset.geometryLayout = "stacked";
     luminosityNode.dataset.etaValue = etaDisplay;
+    luminosityNode.dataset.convectiveLuminosity = hasConvectiveLuminosity ? "available" : "absent";
+    luminosityNode.dataset.luminosityTerms = hasConvectiveLuminosity ? "L_r,L_c,L" : "L_r,L";
+    const luminosityLines = [
+      geometry,
+      hasConvectiveLuminosity ? `\\ozRadiative{L_r} &=
+        (1-\\ozGammac{\\gamma_c})\\,
+        \\ozRadius{R}^{4+\\ozChi{\\chi}
+        \\left[\\ozBlue{n}-(\\ozPink{s}+4)(\\ozGamma{\\Gamma_1}-1)\\right]}
+        \\ozPressure{H}^{\\ozPink{s}+4}` : `\\ozRadiative{L_r} &=
+        \\ozRadius{R}^{4+\\ozChi{\\chi}
+        \\left[\\ozBlue{n}-(\\ozPink{s}+4)(\\ozGamma{\\Gamma_1}-1)\\right]}
+        \\ozPressure{H}^{\\ozPink{s}+4}`
+    ];
+    if (hasConvectiveLuminosity) {
+      luminosityLines.push(
+        `\\ozConvLum{L_c} &=
+        \\ozGammac{\\gamma_c}\\,
+        \\ozRadius{R}^{-(\\ozChi{\\chi}-2)}
+        \\ozConvective{U_c}^{3}`,
+        `\\ozLuminosity{L} &=
+        \\ozRadiative{L_r}
+        + \\ozConvLum{L_c}`
+      );
+    } else {
+      luminosityLines.push(`\\ozLuminosity{L} &= \\ozRadiative{L_r}`);
+    }
     const luminosityHtml = `
     \\[
     \\begin{aligned}
-    ${geometry}\\\\[0.35em]
-    \\ozRadiative{L_r} &=
-      (1-\\ozGammac{\\gamma_c})\\,
-      \\ozRadius{R}^{4+\\ozChi{\\chi}
-      \\left[\\ozBlue{n}-(\\ozPink{s}+4)(\\ozGamma{\\Gamma_1}-1)\\right]}
-      \\ozPressure{H}^{\\ozPink{s}+4}\\\\[0.35em]
-    \\ozConvLum{L_c} &=
-      \\ozGammac{\\gamma_c}\\,
-      \\ozRadius{R}^{-(\\ozChi{\\chi}-2)}
-      \\ozConvective{U_c}^{3}\\\\[0.35em]
-    \\ozLuminosity{L} &=
-      \\ozRadiative{L_r}
-      + \\ozConvLum{L_c}
+    ${luminosityLines.join("\\\\[0.35em]\n")}
     \\end{aligned}
     \\]
   `;
+    const variableTargets = updateVariableReferencePanel();
     stageMathHtml(odeNode, odeHtml);
     stageMathHtml(luminosityNode, luminosityHtml);
-    queueMathTypeset([odeNode, luminosityNode]);
+    queueMathTypeset([odeNode, luminosityNode, ...variableTargets]);
     updateDerivationPanel();
   }
   function updateVariableInitials() {
@@ -5178,8 +5387,7 @@
     state[key] = PRESETS[selectedPreset][key];
     syncGridRangeCenter(key);
     updateSliderLabel(key);
-    if (key === "m") updateEquationBlocks();
-    else updateDerivationPanel();
+    updateReferencePanelsForKey(key);
     refreshActivePreset();
     scheduleSolve();
   }
@@ -6340,10 +6548,11 @@
     return clamp4(Math.log10(value), RESPONSE_LOG_MIN, RESPONSE_LOG_MAX);
   }
   function stabilityCacheKey(parameters) {
+    const physicsMode = analyticStabilityConditions(parameters).physicsMode;
     return [
       RESPONSE_LOG_MIN,
       RESPONSE_LOG_MAX,
-      parameters.zetac <= 0 ? "radiative" : "convective",
+      physicsMode,
       parameters.gammac.toFixed(3),
       parameters.n.toFixed(3),
       parameters.s.toFixed(3),
@@ -6360,7 +6569,7 @@
     if (cached) return cached;
     const kinds = [];
     const span = RESPONSE_LOG_MAX - RESPONSE_LOG_MIN;
-    const radiativeMode = parameters.zetac <= 0;
+    const radiativeMode = analyticStabilityConditions(parameters).physicsMode === "radiative";
     for (let row = 0; row < STABILITY_MAP_RESOLUTION; row += 1) {
       const zeta = 10 ** (RESPONSE_LOG_MIN + (row + 0.5) / STABILITY_MAP_RESOLUTION * span);
       for (let column = 0; column < STABILITY_MAP_RESOLUTION; column += 1) {
@@ -7234,7 +7443,7 @@
       canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
       delete canvas.dataset.currentPhase;
     } else {
-      canvas.dataset.currentPhase = fmtFixed(phaseModOne(currentAnimationPhase), 3);
+      canvas.dataset.currentPhase = fmtFixed(phaseModOne2(currentAnimationPhase), 3);
       delete canvas.dataset.currentTime;
     }
     if (gridState.enabled) {
@@ -7312,6 +7521,234 @@
     });
     drawThermodynamicCurrentMarker(ctx, plot, xlim, ylim, opacityRange, latestPhaseParameters, currentPoint);
   }
+  function phaseLagQuantityColor(key) {
+    switch (key) {
+      case "R":
+        return COLORS.R;
+      case "L":
+        return COLORS.L;
+      case "V":
+        return COLORS.V;
+      case "T":
+        return PHASE_MARKER_COLOR;
+      case "H":
+        return COLORS.H;
+      case "Uc":
+        return COLORS.Uc;
+    }
+  }
+  function phaseLagQuantityTex(key) {
+    switch (key) {
+      case "R":
+        return TEX.R;
+      case "L":
+        return TEX.L;
+      case "V":
+        return TEX.V;
+      case "T":
+        return "\\ozNeutral{T}";
+      case "H":
+        return TEX.H;
+      case "Uc":
+        return TEX.Uc;
+    }
+  }
+  function phaseLagPairLabel(pair) {
+    return `${pair.reference}\u2192${pair.target}`;
+  }
+  function phaseLagPairHtmlLabel(pair) {
+    return `\\(${phaseLagQuantityTex(pair.reference)}\\)&rarr;\\(${phaseLagQuantityTex(pair.target)}\\)`;
+  }
+  function visiblePhaseLagPairs() {
+    return PHASE_LAG_PAIRS.filter((pair) => phaseLagPairVisibility[pair.id] !== false);
+  }
+  function phaseLagPairDash(pair) {
+    const siblingIndex = PHASE_LAG_PAIRS.filter((candidate) => candidate.target === pair.target).findIndex((candidate) => candidate.id === pair.id);
+    const dashes = [
+      [],
+      [7, 4],
+      [2, 3],
+      [9, 3, 2, 3],
+      [1, 4]
+    ];
+    return dashes[Math.max(0, siblingIndex) % dashes.length];
+  }
+  function drawPhaseLagPanel() {
+    const canvas = document.getElementById("phaseLagCanvas");
+    if (!(canvas instanceof HTMLCanvasElement)) return;
+    const panel = canvas.closest(".plot-panel");
+    if (panel?.hidden) return;
+    drawPhaseLagLegend();
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(360, rect.width || 720);
+    const height = Math.max(260, rect.height || 300);
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+    const loopRange = currentLoopRange();
+    const path = gridPathResults();
+    const pairs = visiblePhaseLagPairs();
+    canvas.dataset.phaseLagMode = gridState.enabled ? "grid" : "single";
+    canvas.dataset.phaseLagPairs = pairs.map(phaseLagPairLabel).join(",");
+    canvas.dataset.phaseLagPathCount = String(path.length);
+    canvas.dataset.axisLabels = `grid parameter,${PHASE_LAG_AXIS_LABEL}`;
+    if (loopRange) canvas.dataset.phaseLagLoopKey = loopRange.key;
+    else delete canvas.dataset.phaseLagLoopKey;
+    if (!gridState.enabled) {
+      drawCanvasMessage(ctx, width, height, "phase lag is available in grid mode");
+      return;
+    }
+    if (!loopRange || !path.length) {
+      drawCanvasMessage(ctx, width, height, gridState.statusText || "grid path unavailable");
+      return;
+    }
+    if (!pairs.length) {
+      drawCanvasMessage(ctx, width, height, "all phase lag pairs hidden");
+      return;
+    }
+    const series = pairs.map((pair) => ({
+      pair,
+      points: phaseLagSeriesPoints(path, pair, loopRange.key),
+      color: phaseLagQuantityColor(pair.target),
+      dash: phaseLagPairDash(pair)
+    })).filter((item) => item.points.length > 0);
+    if (!series.length) {
+      drawCanvasMessage(ctx, width, height, "phase lags unavailable");
+      return;
+    }
+    const plot = { left: 74, top: 24, width: width - 96, height: height - 92 };
+    const pointXValues = series.flatMap((item) => item.points.map((point) => point.x));
+    const xlim = validRange(sortedRange(loopRange.lowerSliderValue, loopRange.upperSliderValue), 1e-12) || range(pointXValues, 0.04);
+    const ylim = PHASE_LAG_YLIM;
+    drawPhaseLagAxes(ctx, plot, xlim, ylim, loopRange);
+    drawPhaseLagSeries(ctx, plot, xlim, ylim, series);
+    drawPhaseLagCurrentMarker(ctx, plot, xlim, loopRange);
+  }
+  function drawPhaseLagAxes(ctx, plot, xlim, ylim, loopRange) {
+    const sx = (x) => plot.left + (x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
+    const sy = (y) => plot.top + plot.height - (y - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
+    ctx.save();
+    ctx.strokeStyle = THEME.axisGrid;
+    ctx.lineWidth = 1;
+    ctx.fillStyle = THEME.axisText;
+    ctx.font = "11px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    axisTickValues(xlim, false).forEach((value) => {
+      const x = sx(value);
+      if (!Number.isFinite(x)) return;
+      ctx.beginPath();
+      ctx.moveTo(x, plot.top);
+      ctx.lineTo(x, plot.top + plot.height);
+      ctx.stroke();
+      ctx.fillText(controlValueLabel(loopRange.key, parameterValueFromSlider(loopRange.key, value)), x, plot.top + plot.height + 8);
+    });
+    const yTicks = [-0.5, -0.25, 0, 0.25, 0.5];
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    yTicks.forEach((value) => {
+      const y = sy(value);
+      if (!Number.isFinite(y)) return;
+      ctx.beginPath();
+      ctx.moveTo(plot.left, y);
+      ctx.lineTo(plot.left + plot.width, y);
+      ctx.stroke();
+      ctx.fillText(fmt(value, 2), plot.left - 16, y);
+    });
+    const zeroY = sy(0);
+    if (Number.isFinite(zeroY)) {
+      ctx.strokeStyle = "rgba(238, 245, 255, 0.48)";
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.moveTo(plot.left, zeroY);
+      ctx.lineTo(plot.left + plot.width, zeroY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.strokeStyle = THEME.axisBorder;
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
+    ctx.restore();
+    drawCanvasMathFragments(
+      ctx,
+      [
+        { text: `${controlDefForKey(loopRange.key)?.[2] ?? controlShortLabel(loopRange.key)} `, color: THEME.axisText },
+        { text: controlCanvasSymbol(loopRange.key), color: controlColor(loopRange.key), weight: 700 }
+      ],
+      plot.left + plot.width / 2,
+      plot.top + plot.height + 48
+    );
+    drawCanvasMathFragments(
+      ctx,
+      [
+        { text: "phase lag ", color: THEME.axisText },
+        { text: "\u0394\u03C6", color: THEME.axisText, weight: 700 }
+      ],
+      22,
+      plot.top + plot.height / 2,
+      { rotate: -Math.PI / 2 }
+    );
+  }
+  function drawPhaseLagSeries(ctx, plot, xlim, ylim, series) {
+    const sx = (x) => plot.left + (x - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
+    const sy = (y) => plot.top + plot.height - (y - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(plot.left, plot.top, plot.width, plot.height);
+    ctx.clip();
+    series.forEach((item) => {
+      ctx.strokeStyle = colorWithAlpha(item.color, 0.92);
+      ctx.fillStyle = colorWithAlpha(item.color, 0.96);
+      ctx.lineWidth = 2.1;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.setLineDash(item.dash);
+      if (item.points.length > 1) {
+        ctx.beginPath();
+        item.points.forEach((point, index) => {
+          const x = sx(point.x);
+          const y = sy(point.lag);
+          if (!Number.isFinite(x + y)) return;
+          if (index === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      item.points.forEach((point) => {
+        const x = sx(point.x);
+        const y = sy(point.lag);
+        if (!Number.isFinite(x + y)) return;
+        ctx.beginPath();
+        ctx.arc(x, y, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    });
+    ctx.restore();
+  }
+  function drawPhaseLagCurrentMarker(ctx, plot, xlim, loopRange) {
+    const current = currentGridResult();
+    const xValue = current?.sliderValues[loopRange.key];
+    if (!current || xValue === void 0 || !Number.isFinite(xValue) || xValue < xlim[0] || xValue > xlim[1]) return;
+    const x = plot.left + (xValue - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(plot.left, plot.top, plot.width, plot.height);
+    ctx.clip();
+    ctx.strokeStyle = gridResultColor(current, 0.98);
+    ctx.lineWidth = 1.8;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(x, plot.top);
+    ctx.lineTo(x, plot.top + plot.height);
+    ctx.stroke();
+    ctx.restore();
+  }
   function drawPhasePortraitPanel() {
     const canvas = document.getElementById("phasePortraitCanvas");
     if (!(canvas instanceof HTMLCanvasElement)) return;
@@ -7345,7 +7782,7 @@
       canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
       delete canvas.dataset.currentPhase;
     } else {
-      canvas.dataset.currentPhase = fmtFixed(phaseModOne(currentAnimationPhase), 3);
+      canvas.dataset.currentPhase = fmtFixed(phaseModOne2(currentAnimationPhase), 3);
       delete canvas.dataset.currentTime;
     }
     const rows = downsample(loopRows, 1400, ["R", "H", "Uc"]);
@@ -7413,6 +7850,48 @@
       });
     }
     queueMathTypeset([node]);
+  }
+  function drawPhaseLagLegend() {
+    const node = document.getElementById("phaseLagLegend");
+    if (!(node instanceof HTMLElement)) return;
+    const signature = JSON.stringify(PHASE_LAG_PAIRS.map((pair) => ({
+      id: pair.id,
+      visible: phaseLagPairVisibility[pair.id] !== false,
+      color: phaseLagQuantityColor(pair.target)
+    })));
+    if (legendSignatures.get("phaseLagLegend") === signature) {
+      updatePhaseLagLegendToggleState(node);
+      return;
+    }
+    legendSignatures.set("phaseLagLegend", signature);
+    node.innerHTML = PHASE_LAG_PAIRS.map((pair) => {
+      const visible = phaseLagPairVisibility[pair.id] !== false;
+      const label = phaseLagPairHtmlLabel(pair);
+      return `
+        <button class="legend-item legend-toggle${visible ? "" : " is-hidden"}" type="button" data-phase-lag-pair="${pair.id}" aria-pressed="${String(visible)}" title="Toggle ${escapeAttribute(phaseLagPairLabel(pair))}" aria-label="Toggle ${escapeAttribute(phaseLagPairLabel(pair))}">
+          <span class="swatch" style="--color:${phaseLagQuantityColor(pair.target)}"></span>${label}
+        </button>
+      `;
+    }).join("");
+    node.querySelectorAll("[data-phase-lag-pair]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const pairId = button.dataset.phaseLagPair;
+        if (!pairId || !(pairId in phaseLagPairVisibility)) return;
+        phaseLagPairVisibility[pairId] = !phaseLagPairVisibility[pairId];
+        drawPhaseLagLegend();
+        drawPhaseLagPanel();
+      });
+    });
+    queueMathTypeset([node]);
+  }
+  function updatePhaseLagLegendToggleState(node) {
+    node.querySelectorAll("[data-phase-lag-pair]").forEach((button) => {
+      const pairId = button.dataset.phaseLagPair;
+      if (!pairId || !(pairId in phaseLagPairVisibility)) return;
+      const visible = phaseLagPairVisibility[pairId] !== false;
+      button.classList.toggle("is-hidden", !visible);
+      button.setAttribute("aria-pressed", String(visible));
+    });
   }
   function updateLegendToggleState(node, plotId) {
     if (!plotId) return;
@@ -7542,15 +8021,15 @@
       xlim: [0, 1],
       period: latestDisplayWindow.period
     };
-    return rowAtDisplayPosition(cycleWindow, phaseModOne(currentAnimationPhase));
+    return rowAtDisplayPosition(cycleWindow, phaseModOne2(currentAnimationPhase));
   }
   function currentDisplayCoordinateLabel() {
     if (latestDisplayWindow.mode === "time") {
       return `time \u03C4 = ${fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 2)}`;
     }
-    return `phase = ${fmtFixed(phaseModOne(currentAnimationPhase), 2)}`;
+    return `phase = ${fmtFixed(phaseModOne2(currentAnimationPhase), 2)}`;
   }
-  function phaseModOne(phase) {
+  function phaseModOne2(phase) {
     return (phase % 1 + 1) % 1;
   }
   function updatePhaseAnchorControlAvailability() {
@@ -8763,7 +9242,7 @@
       canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
       delete canvas.dataset.currentPhase;
     } else {
-      canvas.dataset.currentPhase = fmtFixed(phaseModOne(currentAnimationPhase), 3);
+      canvas.dataset.currentPhase = fmtFixed(phaseModOne2(currentAnimationPhase), 3);
       delete canvas.dataset.currentTime;
     }
     const summaryHeight = height < 245 ? 46 : 50;
@@ -8836,7 +9315,7 @@
       canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
       delete canvas.dataset.currentPhase;
     } else {
-      canvas.dataset.currentPhase = fmtFixed(phaseModOne(currentAnimationPhase), 3);
+      canvas.dataset.currentPhase = fmtFixed(phaseModOne2(currentAnimationPhase), 3);
       delete canvas.dataset.currentTime;
     }
     const chamberWidth = Math.max(160, Math.min(190, width - 128));
@@ -8928,6 +9407,7 @@
     drawHeatEnginePanel();
     drawWorkPanel();
     drawThermodynamicPanel();
+    drawPhaseLagPanel();
     drawCepheidGuide();
     drawPhasePortraitPanel();
   }
@@ -8966,6 +9446,7 @@
     syncSonificationCurve(displayWindow, gridResult, latestRows);
     drawPhasePlots();
     drawThermodynamicPanel();
+    drawPhaseLagPanel();
     drawFourierPanel();
     drawStellingwerfReferencePanel();
   }
@@ -9074,6 +9555,7 @@
     drawHeatEnginePanel();
     drawWorkPanel();
     drawThermodynamicPanel();
+    drawPhaseLagPanel();
     const timeXlim = integrationTimeRange(rows);
     const showUcSeries = convectiveVelocityHistoryAvailable(rows);
     const showLuminositySplit = convectiveLuminosityAvailable();

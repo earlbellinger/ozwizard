@@ -60,6 +60,15 @@ import {
   type RgbColor
 } from "./visualization";
 import {
+  PHASE_LAG_DEFAULT_PAIR_IDS,
+  PHASE_LAG_PAIRS,
+  phaseLagSeriesPoints,
+  type PhaseLagPair,
+  type PhaseLagPairId,
+  type PhaseLagPoint,
+  type PhaseLagQuantityKey
+} from "./phaseLag";
+import {
   analyticStabilityConditions,
   cepheidStripCoordinate,
   type AnalyticStabilityCondition,
@@ -243,9 +252,11 @@ type NumericRange = [number, number];
 type InteractivePlotId = "time" | "lum";
 type RowSeriesKey = "R" | "V" | "H" | "Uc" | "L" | "Lr" | "Lc";
 type PlotSeriesKey = RowSeriesKey | "Lb";
-type UserPlotId = "model" | "light" | "velocity" | "heatEngine" | "work" | "time" | "lum" | "tpOpacity" | "stability" | "strip" | "phasePortrait";
+type UserPlotId = "model" | "light" | "velocity" | "heatEngine" | "work" | "time" | "lum" | "tpOpacity" | "phaseLag" | "stability" | "strip" | "phasePortrait";
 type SonificationSource = "luminosity" | "velocity" | "pressure";
 type GridBudgetMode = GridBudget["mode"];
+const PHASE_LAG_YLIM: NumericRange = [-0.5, 0.5];
+const PHASE_LAG_AXIS_LABEL = "phase lag \u0394\u03c6";
 
 interface PlotView {
   xlim?: NumericRange;
@@ -489,6 +500,7 @@ const PLOT_PANEL_LABELS: Record<UserPlotId, string> = {
   time: "History",
   lum: "Luminosity Evolution",
   tpOpacity: "T-P Loop",
+  phaseLag: "Phase Lag",
   stability: "Stability Map",
   strip: "Instability Strip",
   phasePortrait: "Thermal-Convection Loop"
@@ -503,10 +515,15 @@ const plotPanelVisibility: Record<UserPlotId, boolean> = {
   time: true,
   lum: true,
   tpOpacity: true,
+  phaseLag: true,
   stability: true,
   strip: true,
   phasePortrait: true
 };
+
+const phaseLagPairVisibility = Object.fromEntries(
+  PHASE_LAG_PAIRS.map((pair) => [pair.id, PHASE_LAG_DEFAULT_PAIR_IDS.has(pair.id)])
+) as Record<PhaseLagPairId, boolean>;
 
 const plotRenderStates = new Map<string, PlotRenderState>();
 const legendSignatures = new Map<string, string>();
@@ -514,6 +531,8 @@ let activeSelection: PlotSelection | null = null;
 const gridColorbarRegions = new Map<string, GridColorbarRegion>();
 let fourierPointHits: FourierPointHit[] = [];
 let activeGridCanvasInteraction: GridCanvasInteraction | null = null;
+const activeGridSliderPointers = new Set<number>();
+let pendingGridComputeAfterSliderRelease = false;
 const SLIDER_RANGE_DOUBLE_TAP_MS = 360;
 const SLIDER_RANGE_DOUBLE_TAP_DISTANCE = 22;
 let activeSliderTapStart: { key: ControlParameterKey; pointerId: number; x: number; y: number } | null = null;
@@ -1751,6 +1770,7 @@ function buildControls(): void {
   setupStabilityChipInteractions();
   setupModelSpeedControl();
   setupPhaseAnnotationControls();
+  setupGridSliderDeferral();
   buildPresetButtons();
   buildSolverButtons();
   buildSliderGroup("physicalControls", CONTROL_GROUPS.physical);
@@ -1888,6 +1908,49 @@ function setupGridLoopSpeedControl(): void {
   sync();
 }
 
+function setupGridSliderDeferral(): void {
+  window.addEventListener("pointerup", finishGridSliderPointer, true);
+  window.addEventListener("pointercancel", finishGridSliderPointer, true);
+  window.addEventListener("blur", finishAllGridSliderPointers);
+}
+
+function attachGridSliderDeferral(input: HTMLInputElement): void {
+  input.addEventListener("pointerdown", beginGridSliderPointer);
+  input.addEventListener("change", flushDeferredGridCompute);
+  input.addEventListener("blur", flushDeferredGridCompute);
+}
+
+function beginGridSliderPointer(event: PointerEvent): void {
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  activeGridSliderPointers.add(event.pointerId);
+  if (!gridState.enabled) return;
+  window.clearTimeout(gridState.debounceTimer);
+  if (gridState.status === "running" || gridState.status === "coarsening" || gridState.status === "queued") {
+    cancelGridCompute();
+    pendingGridComputeAfterSliderRelease = true;
+    gridState.status = "queued";
+    gridState.statusText = "Grid queued until slider release";
+    updateGridStatusUi();
+  }
+}
+
+function finishGridSliderPointer(event: PointerEvent): void {
+  if (!activeGridSliderPointers.delete(event.pointerId)) return;
+  flushDeferredGridCompute();
+}
+
+function finishAllGridSliderPointers(): void {
+  if (!activeGridSliderPointers.size) return;
+  activeGridSliderPointers.clear();
+  flushDeferredGridCompute();
+}
+
+function flushDeferredGridCompute(): void {
+  if (activeGridSliderPointers.size || !pendingGridComputeAfterSliderRelease) return;
+  pendingGridComputeAfterSliderRelease = false;
+  scheduleGridCompute();
+}
+
 function ensureGridBudgetControls(): void {
   const container = el<HTMLDivElement>("integrationControls");
   if (document.getElementById("gridBudgetControl")) {
@@ -1930,6 +1993,8 @@ function ensureGridBudgetControls(): void {
   const modelsMode = el<HTMLInputElement>("gridBudgetModelsMode");
   const timeoutInput = el<HTMLInputElement>("gridTimeoutSeconds");
   const modelInput = el<HTMLInputElement>("gridModelBudget");
+  attachGridSliderDeferral(timeoutInput);
+  attachGridSliderDeferral(modelInput);
   timeoutMode.addEventListener("change", () => {
     if (!timeoutMode.checked) return;
     gridBudgetMode = "timeout";
@@ -2024,6 +2089,7 @@ function updatePlotPanelVisibility(): void {
   const hiddenControls = el<HTMLDivElement>("hiddenPlotControls");
   let hiddenCount = 0;
   (Object.keys(plotPanelVisibility) as UserPlotId[]).forEach((plotId) => {
+    const gridOnlyUnavailable = !gridState.enabled && plotId === "phaseLag";
     const forcedHidden = gridState.enabled && (plotId === "model" || plotId === "heatEngine" || plotId === "work" || plotId === "time" || plotId === "lum");
     const visible = forcedHidden ? false : plotPanelVisibility[plotId];
     const panel = document.querySelector<HTMLElement>(`[data-plot-panel="${plotId}"]`);
@@ -2031,6 +2097,15 @@ function updatePlotPanelVisibility(): void {
     const home = document.querySelector<HTMLElement>(`[data-plot-control-home="${plotId}"]`);
     const input = control?.querySelector<HTMLInputElement>("[data-plot-toggle]");
     if (!panel || !control || !home || !input) return;
+
+    if (gridOnlyUnavailable) {
+      if (control.parentElement !== home) home.prepend(control);
+      input.checked = false;
+      input.disabled = true;
+      input.setAttribute("aria-label", `Show ${PLOT_PANEL_LABELS[plotId]} plot`);
+      panel.hidden = true;
+      return;
+    }
 
     input.checked = visible;
     input.disabled = forcedHidden;
@@ -2333,6 +2408,14 @@ function createGridWorker(): Worker | null {
 
 function scheduleGridCompute(): void {
   if (!gridState.enabled) return;
+  if (activeGridSliderPointers.size) {
+    pendingGridComputeAfterSliderRelease = true;
+    window.clearTimeout(gridState.debounceTimer);
+    gridState.status = "queued";
+    gridState.statusText = "Grid queued until slider release";
+    updateGridStatusUi();
+    return;
+  }
   window.clearTimeout(gridState.debounceTimer);
   const ranges = activeGridRanges();
   if (!ranges.length) {
@@ -3373,12 +3456,14 @@ function buildSliderGroup(containerId: string, controls: ControlDef[]): void {
       state[key] = valueFromSlider(key, Number((event.target as HTMLInputElement).value));
       syncGridRangeCenter(key);
       updateSliderLabel(key);
-      if (key === "m") updateEquationBlocks();
-      else updateDerivationPanel();
+      updateReferencePanelsForKey(key);
       refreshActivePreset();
       scheduleSolve();
     });
     const updateBounds = () => updateGridRangeBounds(key, Number(lower.value), Number(upper.value));
+    attachGridSliderDeferral(input);
+    attachGridSliderDeferral(lower);
+    attachGridSliderDeferral(upper);
     lower.addEventListener("input", updateBounds);
     upper.addEventListener("input", updateBounds);
     wrapper.addEventListener("pointerdown", (event) => beginSliderTap(event, key));
@@ -3702,9 +3787,53 @@ function updateDerivationPanel(parameters: ModelParameters = state, stability = 
   queueMathTypeset([node]);
 }
 
+function referencePanelsDependOnKey(key: ControlParameterKey): boolean {
+  return key === "m" || key === "gammac" || key === "zetac" || key === "uc0";
+}
+
+function updateReferencePanelsForKey(key: ControlParameterKey): void {
+  if (referencePanelsDependOnKey(key)) updateEquationBlocks();
+  else updateDerivationPanel();
+}
+
+function updateVariableReferencePanel(parameters: ModelParameters = state): HTMLElement[] {
+  const panel = document.getElementById("variablesPanel");
+  if (!(panel instanceof HTMLElement)) return [];
+  const hasConvectiveLuminosity = convectiveLuminosityAvailable(parameters);
+  const visibleRows = hasConvectiveLuminosity
+    ? ["tau", "R", "V", "H", "Uc", "Lr", "Lc", "L"]
+    : ["tau", "R", "V", "H", "Lr", "L"];
+  panel.dataset.convectiveLuminosity = hasConvectiveLuminosity ? "available" : "absent";
+  panel.dataset.variableRows = visibleRows.join(",");
+  panel.querySelectorAll<HTMLElement>("[data-variable-row]").forEach((row) => {
+    const key = row.dataset.variableRow;
+    row.hidden = !key || !visibleRows.includes(key);
+  });
+
+  const meaningTargets: HTMLElement[] = [];
+  const meanings = {
+    meaningLr: hasConvectiveLuminosity
+      ? `Radiative contribution, including its \\(1-\\ozGammac{\\gamma_c}\\) weight`
+      : `Radiative luminosity; carries the full shell luminosity in this reduced case`,
+    meaningL: hasConvectiveLuminosity
+      ? `Sum \\(\\ozLuminosity{L}=\\ozRadiative{L_r}+\\ozConvLum{L_c}\\)`
+      : `Equal to \\(\\ozRadiative{L_r}\\) because \\(\\ozConvLum{L_c}=0\\)`
+  };
+  Object.entries(meanings).forEach(([id, html]) => {
+    const node = document.getElementById(id);
+    if (!(node instanceof HTMLElement)) return;
+    if (node.dataset.mathSource === html || stagedMathUpdates.get(node)?.html === html) return;
+    node.dataset.mathSource = html;
+    stageMathHtml(node, html);
+    meaningTargets.push(node);
+  });
+  return meaningTargets;
+}
+
 function updateEquationBlocks(): void {
   const eta = Math.cbrt(Math.max(0, 1 - 3 / state.m));
   const etaDisplay = fmtFixed(eta, 2);
+  const hasConvectiveLuminosity = convectiveLuminosityAvailable();
   const geometry = state.variableM
     ? `\\ozChi{\\chi} &= \\frac{3}{1-(\\ozEta{\\eta}/\\ozRadius{R})^3}\\\\[0.2em]
        \\ozEta{\\eta} &= \\left(1-\\frac{3}{\\ozChiZero{\\chi_0}}\\right)^{1/3}=\\ozEta{${etaDisplay}}`
@@ -3713,56 +3842,79 @@ function updateEquationBlocks(): void {
   const odeNode = el<HTMLDivElement>("odeEquations");
   const luminosityNode = el<HTMLDivElement>("luminosityEquations");
   odeNode.dataset.driverMode = state.driver;
-  const odeHtml = `
-    \\[
-    \\begin{aligned}
-    \\frac{d\\ozRadius{R}}{d\\ozTau{\\tau}} &=
-      \\ozVelocity{V}\\\\[0.35em]
-    \\frac{d\\ozVelocity{V}}{d\\ozTau{\\tau}} &=
+  odeNode.dataset.convectiveLuminosity = hasConvectiveLuminosity ? "available" : "absent";
+  odeNode.dataset.equationVariables = hasConvectiveLuminosity ? "R,V,H,Uc" : "R,V,H";
+  const odeLines = [
+    `\\frac{d\\ozRadius{R}}{d\\ozTau{\\tau}} &= \\ozVelocity{V}`,
+    `\\frac{d\\ozVelocity{V}}{d\\ozTau{\\tau}} &=
       \\frac{\\ozPressure{H}}{\\ozRadius{R}^{\\ozChi{\\chi}\\ozGamma{\\Gamma_1}-2}}
       - \\frac{1}{\\ozRadius{R}^{2}}
-      - \\ozDamping{C_q}\\ozVelocity{V}^{3}\\\\[0.35em]
-    \\frac{d\\ozPressure{H}}{d\\ozTau{\\tau}} &=
+      - \\ozDamping{C_q}\\ozVelocity{V}^{3}`,
+    `\\frac{d\\ozPressure{H}}{d\\ozTau{\\tau}} &=
       \\ozZeta{\\zeta}\\,
       \\ozRadius{R}^{\\ozChi{\\chi}(\\ozGamma{\\Gamma_1}-1)}
       \\left[
         \\ozRadius{R}^{\\ozSource{U}}
         - \\ozLuminosity{L}
-      \\right]\\\\[0.35em]
-    \\frac{d\\ozConvective{U_c}}{d\\ozTau{\\tau}} &=
+      \\right]`
+  ];
+  if (hasConvectiveLuminosity) {
+    odeLines.push(`\\frac{d\\ozConvective{U_c}}{d\\ozTau{\\tau}} &=
       \\ozZetac{\\zeta_c}
       \\left[
         \\ozRadius{R}^{-\\ozChi{\\chi}(\\ozGamma{\\Gamma_1}-1)/2}\\,${driver}
         - \\ozConvective{U_c}
-      \\right]
+      \\right]`);
+  }
+  const odeHtml = `
+    \\[
+    \\begin{aligned}
+    ${odeLines.join("\\\\[0.35em]\n")}
     \\end{aligned}
     \\]
   `;
   luminosityNode.dataset.geometryMode = state.variableM ? "radius-dependent" : "fixed";
   luminosityNode.dataset.geometryLayout = "stacked";
   luminosityNode.dataset.etaValue = etaDisplay;
+  luminosityNode.dataset.convectiveLuminosity = hasConvectiveLuminosity ? "available" : "absent";
+  luminosityNode.dataset.luminosityTerms = hasConvectiveLuminosity ? "L_r,L_c,L" : "L_r,L";
+  const luminosityLines = [
+    geometry,
+    hasConvectiveLuminosity
+      ? `\\ozRadiative{L_r} &=
+        (1-\\ozGammac{\\gamma_c})\\,
+        \\ozRadius{R}^{4+\\ozChi{\\chi}
+        \\left[\\ozBlue{n}-(\\ozPink{s}+4)(\\ozGamma{\\Gamma_1}-1)\\right]}
+        \\ozPressure{H}^{\\ozPink{s}+4}`
+      : `\\ozRadiative{L_r} &=
+        \\ozRadius{R}^{4+\\ozChi{\\chi}
+        \\left[\\ozBlue{n}-(\\ozPink{s}+4)(\\ozGamma{\\Gamma_1}-1)\\right]}
+        \\ozPressure{H}^{\\ozPink{s}+4}`
+  ];
+  if (hasConvectiveLuminosity) {
+    luminosityLines.push(
+      `\\ozConvLum{L_c} &=
+        \\ozGammac{\\gamma_c}\\,
+        \\ozRadius{R}^{-(\\ozChi{\\chi}-2)}
+        \\ozConvective{U_c}^{3}`,
+      `\\ozLuminosity{L} &=
+        \\ozRadiative{L_r}
+        + \\ozConvLum{L_c}`
+    );
+  } else {
+    luminosityLines.push(`\\ozLuminosity{L} &= \\ozRadiative{L_r}`);
+  }
   const luminosityHtml = `
     \\[
     \\begin{aligned}
-    ${geometry}\\\\[0.35em]
-    \\ozRadiative{L_r} &=
-      (1-\\ozGammac{\\gamma_c})\\,
-      \\ozRadius{R}^{4+\\ozChi{\\chi}
-      \\left[\\ozBlue{n}-(\\ozPink{s}+4)(\\ozGamma{\\Gamma_1}-1)\\right]}
-      \\ozPressure{H}^{\\ozPink{s}+4}\\\\[0.35em]
-    \\ozConvLum{L_c} &=
-      \\ozGammac{\\gamma_c}\\,
-      \\ozRadius{R}^{-(\\ozChi{\\chi}-2)}
-      \\ozConvective{U_c}^{3}\\\\[0.35em]
-    \\ozLuminosity{L} &=
-      \\ozRadiative{L_r}
-      + \\ozConvLum{L_c}
+    ${luminosityLines.join("\\\\[0.35em]\n")}
     \\end{aligned}
     \\]
   `;
+  const variableTargets = updateVariableReferencePanel();
   stageMathHtml(odeNode, odeHtml);
   stageMathHtml(luminosityNode, luminosityHtml);
-  queueMathTypeset([odeNode, luminosityNode]);
+  queueMathTypeset([odeNode, luminosityNode, ...variableTargets]);
   updateDerivationPanel();
 }
 
@@ -3812,8 +3964,7 @@ function restoreParameterDefault(key: ControlParameterKey): void {
   state[key] = PRESETS[selectedPreset][key];
   syncGridRangeCenter(key);
   updateSliderLabel(key);
-  if (key === "m") updateEquationBlocks();
-  else updateDerivationPanel();
+  updateReferencePanelsForKey(key);
   refreshActivePreset();
   scheduleSolve();
 }
@@ -5308,10 +5459,11 @@ function responseLogValue(value: number): number {
 }
 
 function stabilityCacheKey(parameters: ModelParameters): string {
+  const physicsMode = analyticStabilityConditions(parameters).physicsMode;
   return [
     RESPONSE_LOG_MIN,
     RESPONSE_LOG_MAX,
-    parameters.zetac <= 0 ? "radiative" : "convective",
+    physicsMode,
     parameters.gammac.toFixed(3),
     parameters.n.toFixed(3),
     parameters.s.toFixed(3),
@@ -5329,7 +5481,7 @@ function stabilityKindsForMap(parameters: ModelParameters): StabilityKind[] {
   if (cached) return cached;
   const kinds: StabilityKind[] = [];
   const span = RESPONSE_LOG_MAX - RESPONSE_LOG_MIN;
-  const radiativeMode = parameters.zetac <= 0;
+  const radiativeMode = analyticStabilityConditions(parameters).physicsMode === "radiative";
   for (let row = 0; row < STABILITY_MAP_RESOLUTION; row += 1) {
     const zeta = 10 ** (RESPONSE_LOG_MIN + ((row + 0.5) / STABILITY_MAP_RESOLUTION) * span);
     for (let column = 0; column < STABILITY_MAP_RESOLUTION; column += 1) {
@@ -6448,6 +6600,283 @@ function drawThermodynamicPanel(): void {
   drawThermodynamicCurrentMarker(ctx, plot, xlim, ylim, opacityRange, latestPhaseParameters, currentPoint);
 }
 
+interface PhaseLagSeriesSpec {
+  pair: PhaseLagPair;
+  points: PhaseLagPoint[];
+  color: string;
+  dash: number[];
+}
+
+function phaseLagQuantityColor(key: PhaseLagQuantityKey): string {
+  switch (key) {
+    case "R":
+      return COLORS.R;
+    case "L":
+      return COLORS.L;
+    case "V":
+      return COLORS.V;
+    case "T":
+      return PHASE_MARKER_COLOR;
+    case "H":
+      return COLORS.H;
+    case "Uc":
+      return COLORS.Uc;
+  }
+}
+
+function phaseLagQuantityTex(key: PhaseLagQuantityKey): string {
+  switch (key) {
+    case "R":
+      return TEX.R;
+    case "L":
+      return TEX.L;
+    case "V":
+      return TEX.V;
+    case "T":
+      return "\\ozNeutral{T}";
+    case "H":
+      return TEX.H;
+    case "Uc":
+      return TEX.Uc;
+  }
+}
+
+function phaseLagPairLabel(pair: PhaseLagPair): string {
+  return `${pair.reference}\u2192${pair.target}`;
+}
+
+function phaseLagPairHtmlLabel(pair: PhaseLagPair): string {
+  return `\\(${phaseLagQuantityTex(pair.reference)}\\)&rarr;\\(${phaseLagQuantityTex(pair.target)}\\)`;
+}
+
+function visiblePhaseLagPairs(): PhaseLagPair[] {
+  return PHASE_LAG_PAIRS.filter((pair) => phaseLagPairVisibility[pair.id] !== false);
+}
+
+function phaseLagPairDash(pair: PhaseLagPair): number[] {
+  const siblingIndex = PHASE_LAG_PAIRS
+    .filter((candidate) => candidate.target === pair.target)
+    .findIndex((candidate) => candidate.id === pair.id);
+  const dashes = [
+    [],
+    [7, 4],
+    [2, 3],
+    [9, 3, 2, 3],
+    [1, 4]
+  ];
+  return dashes[Math.max(0, siblingIndex) % dashes.length];
+}
+
+function drawPhaseLagPanel(): void {
+  const canvas = document.getElementById("phaseLagCanvas");
+  if (!(canvas instanceof HTMLCanvasElement)) return;
+  const panel = canvas.closest<HTMLElement>(".plot-panel");
+  if (panel?.hidden) return;
+  drawPhaseLagLegend();
+
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(360, rect.width || 720);
+  const height = Math.max(260, rect.height || 300);
+  canvas.width = Math.floor(width * dpr);
+  canvas.height = Math.floor(height * dpr);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+
+  const loopRange = currentLoopRange();
+  const path = gridPathResults();
+  const pairs = visiblePhaseLagPairs();
+  canvas.dataset.phaseLagMode = gridState.enabled ? "grid" : "single";
+  canvas.dataset.phaseLagPairs = pairs.map(phaseLagPairLabel).join(",");
+  canvas.dataset.phaseLagPathCount = String(path.length);
+  canvas.dataset.axisLabels = `grid parameter,${PHASE_LAG_AXIS_LABEL}`;
+  if (loopRange) canvas.dataset.phaseLagLoopKey = loopRange.key;
+  else delete canvas.dataset.phaseLagLoopKey;
+
+  if (!gridState.enabled) {
+    drawCanvasMessage(ctx, width, height, "phase lag is available in grid mode");
+    return;
+  }
+  if (!loopRange || !path.length) {
+    drawCanvasMessage(ctx, width, height, gridState.statusText || "grid path unavailable");
+    return;
+  }
+  if (!pairs.length) {
+    drawCanvasMessage(ctx, width, height, "all phase lag pairs hidden");
+    return;
+  }
+
+  const series: PhaseLagSeriesSpec[] = pairs
+    .map((pair) => ({
+      pair,
+      points: phaseLagSeriesPoints(path, pair, loopRange.key),
+      color: phaseLagQuantityColor(pair.target),
+      dash: phaseLagPairDash(pair)
+    }))
+    .filter((item) => item.points.length > 0);
+
+  if (!series.length) {
+    drawCanvasMessage(ctx, width, height, "phase lags unavailable");
+    return;
+  }
+
+  const plot: PlotBox = { left: 74, top: 24, width: width - 96, height: height - 92 };
+  const pointXValues = series.flatMap((item) => item.points.map((point) => point.x));
+  const xlim = validRange(sortedRange(loopRange.lowerSliderValue, loopRange.upperSliderValue), 1e-12)
+    || range(pointXValues, 0.04);
+  const ylim = PHASE_LAG_YLIM;
+  drawPhaseLagAxes(ctx, plot, xlim, ylim, loopRange);
+  drawPhaseLagSeries(ctx, plot, xlim, ylim, series);
+  drawPhaseLagCurrentMarker(ctx, plot, xlim, loopRange);
+}
+
+function drawPhaseLagAxes(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  loopRange: GridRange
+): void {
+  const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  ctx.save();
+  ctx.strokeStyle = THEME.axisGrid;
+  ctx.lineWidth = 1;
+  ctx.fillStyle = THEME.axisText;
+  ctx.font = "11px Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  axisTickValues(xlim, false).forEach((value) => {
+    const x = sx(value);
+    if (!Number.isFinite(x)) return;
+    ctx.beginPath();
+    ctx.moveTo(x, plot.top);
+    ctx.lineTo(x, plot.top + plot.height);
+    ctx.stroke();
+    ctx.fillText(controlValueLabel(loopRange.key, parameterValueFromSlider(loopRange.key, value)), x, plot.top + plot.height + 8);
+  });
+
+  const yTicks = [-0.5, -0.25, 0, 0.25, 0.5];
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  yTicks.forEach((value) => {
+    const y = sy(value);
+    if (!Number.isFinite(y)) return;
+    ctx.beginPath();
+    ctx.moveTo(plot.left, y);
+    ctx.lineTo(plot.left + plot.width, y);
+    ctx.stroke();
+    ctx.fillText(fmt(value, 2), plot.left - 16, y);
+  });
+
+  const zeroY = sy(0);
+  if (Number.isFinite(zeroY)) {
+    ctx.strokeStyle = "rgba(238, 245, 255, 0.48)";
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(plot.left, zeroY);
+    ctx.lineTo(plot.left + plot.width, zeroY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  ctx.strokeStyle = THEME.axisBorder;
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
+  ctx.restore();
+
+  drawCanvasMathFragments(
+    ctx,
+    [
+      { text: `${controlDefForKey(loopRange.key)?.[2] ?? controlShortLabel(loopRange.key)} `, color: THEME.axisText },
+      { text: controlCanvasSymbol(loopRange.key), color: controlColor(loopRange.key), weight: 700 }
+    ],
+    plot.left + plot.width / 2,
+    plot.top + plot.height + 48
+  );
+  drawCanvasMathFragments(
+    ctx,
+    [
+      { text: "phase lag ", color: THEME.axisText },
+      { text: "\u0394\u03c6", color: THEME.axisText, weight: 700 }
+    ],
+    22,
+    plot.top + plot.height / 2,
+    { rotate: -Math.PI / 2 }
+  );
+}
+
+function drawPhaseLagSeries(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  series: readonly PhaseLagSeriesSpec[]
+): void {
+  const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.width, plot.height);
+  ctx.clip();
+  series.forEach((item) => {
+    ctx.strokeStyle = colorWithAlpha(item.color, 0.92);
+    ctx.fillStyle = colorWithAlpha(item.color, 0.96);
+    ctx.lineWidth = 2.1;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.setLineDash(item.dash);
+    if (item.points.length > 1) {
+      ctx.beginPath();
+      item.points.forEach((point, index) => {
+        const x = sx(point.x);
+        const y = sy(point.lag);
+        if (!Number.isFinite(x + y)) return;
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    item.points.forEach((point) => {
+      const x = sx(point.x);
+      const y = sy(point.lag);
+      if (!Number.isFinite(x + y)) return;
+      ctx.beginPath();
+      ctx.arc(x, y, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  });
+  ctx.restore();
+}
+
+function drawPhaseLagCurrentMarker(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  loopRange: GridRange
+): void {
+  const current = currentGridResult();
+  const xValue = current?.sliderValues[loopRange.key];
+  if (!current || xValue === undefined || !Number.isFinite(xValue) || xValue < xlim[0] || xValue > xlim[1]) return;
+  const x = plot.left + ((xValue - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.width, plot.height);
+  ctx.clip();
+  ctx.strokeStyle = gridResultColor(current, 0.98);
+  ctx.lineWidth = 1.8;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(x, plot.top);
+  ctx.lineTo(x, plot.top + plot.height);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawPhasePortraitPanel(): void {
   const canvas = document.getElementById("phasePortraitCanvas");
   if (!(canvas instanceof HTMLCanvasElement)) return;
@@ -6566,6 +6995,52 @@ function drawLegend(id: string, items: LegendItem[], options: { plotId?: Interac
     });
   }
   queueMathTypeset([node]);
+}
+
+function drawPhaseLagLegend(): void {
+  const node = document.getElementById("phaseLagLegend");
+  if (!(node instanceof HTMLElement)) return;
+  const signature = JSON.stringify(PHASE_LAG_PAIRS.map((pair) => ({
+    id: pair.id,
+    visible: phaseLagPairVisibility[pair.id] !== false,
+    color: phaseLagQuantityColor(pair.target)
+  })));
+  if (legendSignatures.get("phaseLagLegend") === signature) {
+    updatePhaseLagLegendToggleState(node);
+    return;
+  }
+  legendSignatures.set("phaseLagLegend", signature);
+  node.innerHTML = PHASE_LAG_PAIRS
+    .map((pair) => {
+      const visible = phaseLagPairVisibility[pair.id] !== false;
+      const label = phaseLagPairHtmlLabel(pair);
+      return `
+        <button class="legend-item legend-toggle${visible ? "" : " is-hidden"}" type="button" data-phase-lag-pair="${pair.id}" aria-pressed="${String(visible)}" title="Toggle ${escapeAttribute(phaseLagPairLabel(pair))}" aria-label="Toggle ${escapeAttribute(phaseLagPairLabel(pair))}">
+          <span class="swatch" style="--color:${phaseLagQuantityColor(pair.target)}"></span>${label}
+        </button>
+      `;
+    })
+    .join("");
+  node.querySelectorAll<HTMLButtonElement>("[data-phase-lag-pair]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const pairId = button.dataset.phaseLagPair as PhaseLagPairId | undefined;
+      if (!pairId || !(pairId in phaseLagPairVisibility)) return;
+      phaseLagPairVisibility[pairId] = !phaseLagPairVisibility[pairId];
+      drawPhaseLagLegend();
+      drawPhaseLagPanel();
+    });
+  });
+  queueMathTypeset([node]);
+}
+
+function updatePhaseLagLegendToggleState(node: HTMLElement): void {
+  node.querySelectorAll<HTMLButtonElement>("[data-phase-lag-pair]").forEach((button) => {
+    const pairId = button.dataset.phaseLagPair as PhaseLagPairId | undefined;
+    if (!pairId || !(pairId in phaseLagPairVisibility)) return;
+    const visible = phaseLagPairVisibility[pairId] !== false;
+    button.classList.toggle("is-hidden", !visible);
+    button.setAttribute("aria-pressed", String(visible));
+  });
 }
 
 function updateLegendToggleState(node: HTMLElement, plotId?: InteractivePlotId): void {
@@ -9098,6 +9573,7 @@ function drawAnimatedPhaseViews(): void {
   drawHeatEnginePanel();
   drawWorkPanel();
   drawThermodynamicPanel();
+  drawPhaseLagPanel();
   drawCepheidGuide();
   drawPhasePortraitPanel();
 }
@@ -9142,6 +9618,7 @@ function drawGridAnimationFrame(): void {
   syncSonificationCurve(displayWindow, gridResult, latestRows);
   drawPhasePlots();
   drawThermodynamicPanel();
+  drawPhaseLagPanel();
   drawFourierPanel();
   drawStellingwerfReferencePanel();
 }
@@ -9263,6 +9740,7 @@ function drawAll(): void {
   drawHeatEnginePanel();
   drawWorkPanel();
   drawThermodynamicPanel();
+  drawPhaseLagPanel();
 
   const timeXlim = integrationTimeRange(rows);
   const showUcSeries = convectiveVelocityHistoryAvailable(rows);

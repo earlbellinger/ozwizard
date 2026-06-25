@@ -2394,6 +2394,20 @@
           <canvas id="tpOpacityCanvas" aria-label="temperature pressure loop plot"></canvas>
         </div>
 
+        <div class="plot-panel" data-plot-panel="phaseLag" hidden>
+          <div class="plot-title">
+            <div class="plot-title-left" data-plot-control-home="phaseLag">
+              <label class="plot-enable-control" data-plot-control="phaseLag">
+                <input type="checkbox" data-plot-toggle="phaseLag" checked aria-label="Hide Phase Lag plot">
+                <span>Phase Lag</span>
+              </label>
+              <h3>Phase Lag</h3>
+            </div>
+          </div>
+          <canvas id="phaseLagCanvas" aria-label="phase lag versus selected grid parameter"></canvas>
+          <div class="legend" id="phaseLagLegend"></div>
+        </div>
+
         <div class="plot-panel reference-plot-panel" data-plot-panel="phasePortrait" data-reference-panel="phase">
           <div class="plot-title">
             <div class="plot-title-left" data-plot-control-home="phasePortrait">
@@ -2494,21 +2508,21 @@
             <div class="equation-block" id="luminosityEquations"></div>
           </div>
 
-          <div class="content-panel reference-panel variables-panel">
+          <div class="content-panel reference-panel variables-panel" id="variablesPanel">
             <h3>Variables</h3>
             <table class="variable-table">
               <thead>
                 <tr><th>Symbol</th><th>Name</th><th>Initial</th><th>Meaning</th></tr>
               </thead>
               <tbody>
-                <tr><td class="symbol-cell" data-symbol="tau" style="--color:var(--tau)">\(\ozTau{\tau}\)</td><td>Time</td><td class="initial-cell" id="initialTau"></td><td>Dimensionless clock scaled by the model's dynamical time</td></tr>
-                <tr><td class="symbol-cell" style="--color:var(--radius)">\(\ozRadius{R}\)</td><td>Radius</td><td class="initial-cell" id="initialR"></td><td>Dimensionless radius of the shell</td></tr>
-                <tr><td class="symbol-cell" style="--color:var(--velocity)">\(\ozVelocity{V}\)</td><td>Radial velocity</td><td class="initial-cell" id="initialV"></td><td>Time derivative of the shell radius</td></tr>
-                <tr><td class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{H}\)</td><td>Thermal-pressure state</td><td class="initial-cell" id="initialH"></td><td>Dimensionless thermal-pressure state; raises pressure support and radiative luminosity</td></tr>
-                <tr><td class="symbol-cell" style="--color:var(--convective)">\(\ozConvective{U_c}\)</td><td>Convective velocity</td><td class="initial-cell" id="initialUc"></td><td>Time-dependent turbulent/convective velocity scale</td></tr>
-                <tr><td class="symbol-cell" style="--color:var(--radiative)">\(\ozRadiative{L_r}\)</td><td>Radiative luminosity</td><td class="initial-cell" id="initialLr"></td><td>Radiative contribution, including its \(1-\ozGammac{\gamma_c}\) weight</td></tr>
-                <tr><td class="symbol-cell" style="--color:var(--conv-lum)">\(\ozConvLum{L_c}\)</td><td>Convective luminosity</td><td class="initial-cell" id="initialLc"></td><td>Convective contribution, including its \(\ozGammac{\gamma_c}\) weight</td></tr>
-                <tr><td class="symbol-cell" style="--color:var(--luminosity)">\(\ozLuminosity{L}\)</td><td>Total luminosity</td><td class="initial-cell" id="initialL"></td><td>Sum \(\ozLuminosity{L}=\ozRadiative{L_r}+\ozConvLum{L_c}\)</td></tr>
+                <tr data-variable-row="tau"><td class="symbol-cell" data-symbol="tau" style="--color:var(--tau)">\(\ozTau{\tau}\)</td><td>Time</td><td class="initial-cell" id="initialTau"></td><td>Dimensionless clock scaled by the model's dynamical time</td></tr>
+                <tr data-variable-row="R"><td class="symbol-cell" style="--color:var(--radius)">\(\ozRadius{R}\)</td><td>Radius</td><td class="initial-cell" id="initialR"></td><td>Dimensionless radius of the shell</td></tr>
+                <tr data-variable-row="V"><td class="symbol-cell" style="--color:var(--velocity)">\(\ozVelocity{V}\)</td><td>Radial velocity</td><td class="initial-cell" id="initialV"></td><td>Time derivative of the shell radius</td></tr>
+                <tr data-variable-row="H"><td class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{H}\)</td><td>Thermal-pressure state</td><td class="initial-cell" id="initialH"></td><td>Dimensionless thermal-pressure state; raises pressure support and radiative luminosity</td></tr>
+                <tr data-variable-row="Uc"><td class="symbol-cell" style="--color:var(--convective)">\(\ozConvective{U_c}\)</td><td>Convective velocity</td><td class="initial-cell" id="initialUc"></td><td>Time-dependent turbulent/convective velocity scale</td></tr>
+                <tr data-variable-row="Lr"><td class="symbol-cell" style="--color:var(--radiative)">\(\ozRadiative{L_r}\)</td><td>Radiative luminosity</td><td class="initial-cell" id="initialLr"></td><td id="meaningLr">Radiative contribution, including its \(1-\ozGammac{\gamma_c}\) weight</td></tr>
+                <tr data-variable-row="Lc"><td class="symbol-cell" style="--color:var(--conv-lum)">\(\ozConvLum{L_c}\)</td><td>Convective luminosity</td><td class="initial-cell" id="initialLc"></td><td>Convective contribution, including its \(\ozGammac{\gamma_c}\) weight</td></tr>
+                <tr data-variable-row="L"><td class="symbol-cell" style="--color:var(--luminosity)">\(\ozLuminosity{L}\)</td><td>Total luminosity</td><td class="initial-cell" id="initialL"></td><td id="meaningL">Sum \(\ozLuminosity{L}=\ozRadiative{L_r}+\ozConvLum{L_c}\)</td></tr>
               </tbody>
             </table>
           </div>
