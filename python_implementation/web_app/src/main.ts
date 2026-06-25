@@ -2145,6 +2145,7 @@ function toggleGridRange(key: ControlParameterKey): void {
     const current = gridState.ranges.get(key);
     if (current) gridState.savedRanges.set(key, current);
     gridState.ranges.delete(key);
+    if (disableGridModeIfNoActiveRanges()) return;
   } else {
     enableGridRange(key);
     return;
@@ -2249,6 +2250,12 @@ function activeGridRanges(): GridRange[] {
     .map((key) => gridState.ranges.get(key))
     .filter((range): range is GridRange => Boolean(range))
     .map(normalizeGridRange);
+}
+
+function disableGridModeIfNoActiveRanges(): boolean {
+  if (!gridState.enabled || activeGridRangeKeys().length) return false;
+  setGridModeEnabled(false);
+  return true;
 }
 
 function updateGridRangeUi(): void {
@@ -3319,6 +3326,7 @@ function updateIntegrationControlVisibility(): void {
     const key = wrapper.dataset.controlKey as ControlParameterKey | undefined;
     wrapper.hidden = !key || !visible.has(key);
   });
+  if (disableGridModeIfNoActiveRanges()) return;
   updateGridBudgetControls();
   updateGridLoopControls();
 }

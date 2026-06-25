@@ -3699,6 +3699,7 @@
       const current = gridState.ranges.get(key);
       if (current) gridState.savedRanges.set(key, current);
       gridState.ranges.delete(key);
+      if (disableGridModeIfNoActiveRanges()) return;
     } else {
       enableGridRange(key);
       return;
@@ -3787,6 +3788,11 @@
   }
   function activeGridRanges() {
     return activeGridRangeKeys().map((key) => gridState.ranges.get(key)).filter((range2) => Boolean(range2)).map(normalizeGridRange);
+  }
+  function disableGridModeIfNoActiveRanges() {
+    if (!gridState.enabled || activeGridRangeKeys().length) return false;
+    setGridModeEnabled(false);
+    return true;
   }
   function updateGridRangeUi() {
     gridRangeElements.forEach((_elements, key) => refreshGridRangeUi(key));
@@ -4738,6 +4744,7 @@
       const key = wrapper.dataset.controlKey;
       wrapper.hidden = !key || !visible.has(key);
     });
+    if (disableGridModeIfNoActiveRanges()) return;
     updateGridBudgetControls();
     updateGridLoopControls();
   }

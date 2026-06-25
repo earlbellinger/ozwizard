@@ -747,7 +747,13 @@ async function runPlaywrightChecks() {
     });
     await fluxControl.dispatchEvent("contextmenu");
     assertOk(!((await fluxControl.getAttribute("class")) || "").includes("is-grid-range"), "right click should toggle grid range mode off");
+    assertOk(!(await page.getByLabel("Enable grid mode").isChecked()), "grid mode should uncheck when the final range slider is removed");
+    assertOk(!(await page.locator("#fourierGridPanel").isVisible()), "Fourier grid panel should hide when the final range slider is removed");
+    assertOk(!(await page.locator("#gridTimeoutControl").isVisible()), "grid timeout control should hide when the final range slider is removed");
+    assertOk(!(await page.locator("#gridModelBudgetControl").isVisible()), "grid model budget control should hide when the final range slider is removed");
     await fluxControl.dispatchEvent("contextmenu");
+    assertOk(await page.getByLabel("Enable grid mode").isChecked(), "right clicking a slider again should re-enable grid mode");
+    assertOk(((await fluxControl.getAttribute("class")) || "").includes("is-grid-range"), "right clicking again should restore the slider range");
     await radiusControl.dispatchEvent("contextmenu");
     await page.getByLabel("convective flux fraction grid lower bound").evaluate((input) => {
       input.value = "0";
