@@ -46,6 +46,7 @@ import {
   isTimeWindowReason,
   rowAtDisplayPosition,
   rowAtTime,
+  shouldUseRunawayGrowthWindow,
   type DisplayWindow,
   type DisplayWindowMode
 } from "./displayWindow";
@@ -7138,6 +7139,15 @@ function buildCurrentDisplayWindow(
   if (gridState.enabled) return buildPhaseDisplayWindow(phase, phaseMessage);
   if (isTimeWindowReason(latestResult.message)) {
     return buildTimeDisplayWindow(rows, latestResult.message, timeWindowMessage(latestResult.message));
+  }
+  if (!gridState.enabled && phase.reason !== "ok") {
+    if (stability.allStable) {
+      return buildTimeDisplayWindow(rows, "equilibrium", phaseMessage ?? "time window: phase unavailable");
+    }
+    const message = shouldUseRunawayGrowthWindow(rows, phase)
+      ? "time window: runaway growth"
+      : "time window: unstable trend";
+    return buildTimeDisplayWindow(rows, "runaway", message);
   }
   if (!gridState.enabled && shouldUseStableDampingTimeWindow(phase, stability)) {
     return buildTimeDisplayWindow(rows, "equilibrium", "time window: stable damping");

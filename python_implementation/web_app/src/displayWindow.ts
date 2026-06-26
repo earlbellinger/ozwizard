@@ -54,6 +54,12 @@ export function buildTimeDisplayWindow(rows: readonly Row[], reason: TimeWindowR
   };
 }
 
+export function shouldUseRunawayGrowthWindow(rows: readonly Row[], phase: PhaseResult): boolean {
+  if (phase.reason === "ok") return false;
+  const selection = terminalTimeWindowSelection(rows, "runaway");
+  return selection.kind === "growth_decade" || selection.kind === "partial_growth";
+}
+
 export function terminalTimeWindowRows(rows: readonly Row[], reason: TimeWindowReason): Row[] {
   return terminalTimeWindowSelection(rows, reason).rows;
 }

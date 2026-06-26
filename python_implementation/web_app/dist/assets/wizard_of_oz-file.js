@@ -4,7 +4,7 @@
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-  // src/solvers.ts
+  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/solvers.ts
   var DEFAULT_SOLVER = "rk45";
   var SOLVER_NAMES = ["rk45", "dop853", "midpoint"];
   function defaultSolverOptions(overrides = {}) {
@@ -256,7 +256,7 @@
     };
   }
 
-  // src/model.ts
+  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/model.ts
   var COLORS = {
     tau: "#8B949E",
     R: "#58A6FF",
@@ -594,7 +594,7 @@
     };
   }
 
-  // src/grid.ts
+  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/grid.ts
   var CONTROL_META = /* @__PURE__ */ new Map();
   Object.values(CONTROL_GROUPS).forEach((controls) => {
     controls.forEach(([key, _symbol, _name, min, max, step2, defaultValue]) => {
@@ -826,7 +826,7 @@
     return [.../* @__PURE__ */ new Set([...samples, center])].sort((a, b) => a - b);
   }
 
-  // src/fourier.ts
+  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/fourier.ts
   var TWO_PI = 2 * Math.PI;
   var FOURIER_HARMONICS = 7;
   var MIN_FOURIER_AMPLITUDE = 1e-4;
@@ -1020,7 +1020,7 @@
     return Boolean(fourier && fourier.amplitude1 >= minimum && fourier.amplitude2 >= minimum && fourier.amplitude3 >= minimum);
   }
 
-  // src/phase.ts
+  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/phase.ts
   var SAME_EXTREMUM_LUMINOSITY_TOLERANCE = 0.025;
   function defaultWarmupTau(rows) {
     const finalTau = rows.at(-1)?.tau ?? 0;
@@ -1301,7 +1301,7 @@
     return buildReference(rows, options);
   }
 
-  // src/displayWindow.ts
+  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/displayWindow.ts
   var AMPLITUDE_NOISE_FLOOR = 1e-5;
   var PARTIAL_CHANGE_FACTOR = 1.25;
   function isTimeWindowReason(message) {
@@ -1327,6 +1327,11 @@
       period: null,
       message: selection.kind === "damping_decade" ? "time window: last damping decade" : selection.kind === "partial_damping" ? "time window: partial damping window" : selection.kind === "growth_decade" ? "time window: runaway growth decade" : selection.kind === "partial_growth" ? "time window: partial runaway growth" : message
     };
+  }
+  function shouldUseRunawayGrowthWindow(rows, phase) {
+    if (phase.reason === "ok") return false;
+    const selection = terminalTimeWindowSelection(rows, "runaway");
+    return selection.kind === "growth_decade" || selection.kind === "partial_growth";
   }
   function terminalTimeWindowSelection(rows, reason) {
     const finiteRows = rows.filter((row) => Number.isFinite(row.tau));
@@ -1629,7 +1634,7 @@
     return Math.min(max, Math.max(min, value));
   }
 
-  // src/gridCompute.ts
+  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/gridCompute.ts
   async function computeGridWithMessages(request, callbacks) {
     const budget = request.budget ?? { mode: "timeout", timeoutMs: 2e3 };
     const nativeSamples = buildRangeSamples(request.ranges, request.loopKey, { stride: 1 });
@@ -1835,7 +1840,7 @@
     });
   }
 
-  // src/visualization.ts
+  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/visualization.ts
   var BLACKBODY_REFERENCE_TEMPERATURE = 6500;
   var BLACKBODY_RGB_10DEG_TABLE = [
     { temperature: 1e3, r: 255, g: 56, b: 0 },
@@ -1920,7 +1925,7 @@
     return shellGeometryFor(row.R, mAt(row.R, parameters));
   }
 
-  // src/phaseLag.ts
+  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/phaseLag.ts
   var PHASE_LAG_PAIRS = [
     { id: "R-L", reference: "R", target: "L" },
     { id: "R-V", reference: "R", target: "V" },
@@ -2005,7 +2010,7 @@
     return (value % 1 + 1) % 1;
   }
 
-  // src/stability.ts
+  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/stability.ts
   function condition(kind, value, expression) {
     return {
       kind,
@@ -2123,7 +2128,7 @@
     return Math.min(1, Math.max(0, (Math.log10(zetac / zeta) + 2) / 4));
   }
 
-  // src/main.ts
+  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/main.ts
   var state = { ...PRESETS[DEFAULT_PRESET_NAME] };
   var selectedPreset = DEFAULT_PRESET_NAME;
   var activePreset = DEFAULT_PRESET_NAME;
@@ -7969,6 +7974,13 @@
     if (gridState.enabled) return buildPhaseDisplayWindow(phase, phaseMessage);
     if (isTimeWindowReason(latestResult.message)) {
       return buildTimeDisplayWindow(rows, latestResult.message, timeWindowMessage(latestResult.message));
+    }
+    if (!gridState.enabled && phase.reason !== "ok") {
+      if (stability.allStable) {
+        return buildTimeDisplayWindow(rows, "equilibrium", phaseMessage ?? "time window: phase unavailable");
+      }
+      const message = shouldUseRunawayGrowthWindow(rows, phase) ? "time window: runaway growth" : "time window: unstable trend";
+      return buildTimeDisplayWindow(rows, "runaway", message);
     }
     if (!gridState.enabled && shouldUseStableDampingTimeWindow(phase, stability)) {
       return buildTimeDisplayWindow(rows, "equilibrium", "time window: stable damping");

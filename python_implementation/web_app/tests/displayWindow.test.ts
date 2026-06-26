@@ -4,9 +4,11 @@ import {
   displayAnimationEnd,
   displayMarkerX,
   rowAtDisplayPosition,
+  shouldUseRunawayGrowthWindow,
   terminalTimeWindowRows
 } from "../src/displayWindow";
 import { type Row } from "../src/model";
+import { type PhaseResult } from "../src/phase";
 
 function row(tau: number, luminosity = 1 + 0.2 * Math.sin(tau)): Row {
   return {
@@ -31,6 +33,15 @@ function equilibriumRow(tau: number, luminosity = 1): Row {
     Lr: luminosity,
     Lc: 0,
     L: luminosity
+  };
+}
+
+function unavailablePhase(reason: PhaseResult["reason"] = "not_enough_minima"): PhaseResult {
+  return {
+    rows: [],
+    reference: null,
+    period: null,
+    reason
   };
 }
 
@@ -167,5 +178,47 @@ describe("display windows", () => {
     expect(display.xlim[0]).toBeGreaterThan(25);
     expect(display.xlim[0]).toBeLessThan(35);
     expect(display.xlim[1]).toBeCloseTo(40);
+  });
+
+  it("flags fixed-time non-periodic growth for a runaway time window", () => {
+    const rows = Array.from({ length: 801 }, (_value, index) => {
+      const tau = index * 0.05;
+      const excess = 0.001 * Math.exp(tau / 4);
+      return {
+        ...equilibriumRow(tau, 1 + excess),
+        R: 1 + excess,
+        V: excess / 4,
+        H: 1 + excess,
+        Uc: 1 + excess
+      };
+    });
+
+    expect(shouldUseRunawayGrowthWindow(rows, unavailablePhase())).toBe(true);
+  });
+
+  it("does not flag flat phase-unavailable rows as runaway growth", () => {
+    const rows = Array.from({ length: 801 }, (_value, index) => equilibriumRow(index * 0.05));
+    expect(shouldUseRunawayGrowthWindow(rows, unavailablePhase())).toBe(false);
+  });
+
+  it("keeps valid folded phases in phase mode even when the state grows", () => {
+    const rows = Array.from({ length: 801 }, (_value, index) => {
+      const tau = index * 0.05;
+      const excess = 0.001 * Math.exp(tau / 4);
+      return {
+        ...equilibriumRow(tau, 1 + excess),
+        R: 1 + excess,
+        V: excess / 4,
+        H: 1 + excess
+      };
+    });
+    const phase: PhaseResult = {
+      rows,
+      reference: null,
+      period: 2,
+      reason: "ok"
+    };
+
+    expect(shouldUseRunawayGrowthWindow(rows, phase)).toBe(false);
   });
 });
