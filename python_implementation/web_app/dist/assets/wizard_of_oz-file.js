@@ -4,7 +4,7 @@
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/solvers.ts
+  // src/solvers.ts
   var DEFAULT_SOLVER = "rk45";
   var SOLVER_NAMES = ["rk45", "dop853", "midpoint"];
   function defaultSolverOptions(overrides = {}) {
@@ -256,7 +256,7 @@
     };
   }
 
-  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/model.ts
+  // src/model.ts
   var COLORS = {
     tau: "#8B949E",
     R: "#58A6FF",
@@ -594,7 +594,7 @@
     };
   }
 
-  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/grid.ts
+  // src/grid.ts
   var CONTROL_META = /* @__PURE__ */ new Map();
   Object.values(CONTROL_GROUPS).forEach((controls) => {
     controls.forEach(([key, _symbol, _name, min, max, step2, defaultValue]) => {
@@ -826,7 +826,7 @@
     return [.../* @__PURE__ */ new Set([...samples, center])].sort((a, b) => a - b);
   }
 
-  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/fourier.ts
+  // src/fourier.ts
   var TWO_PI = 2 * Math.PI;
   var FOURIER_HARMONICS = 7;
   var MIN_FOURIER_AMPLITUDE = 1e-4;
@@ -1020,7 +1020,7 @@
     return Boolean(fourier && fourier.amplitude1 >= minimum && fourier.amplitude2 >= minimum && fourier.amplitude3 >= minimum);
   }
 
-  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/phase.ts
+  // src/phase.ts
   var SAME_EXTREMUM_LUMINOSITY_TOLERANCE = 0.025;
   function defaultWarmupTau(rows) {
     const finalTau = rows.at(-1)?.tau ?? 0;
@@ -1301,7 +1301,7 @@
     return buildReference(rows, options);
   }
 
-  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/displayWindow.ts
+  // src/displayWindow.ts
   var AMPLITUDE_NOISE_FLOOR = 1e-5;
   var PARTIAL_CHANGE_FACTOR = 1.25;
   function isTimeWindowReason(message) {
@@ -1634,7 +1634,7 @@
     return Math.min(max, Math.max(min, value));
   }
 
-  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/gridCompute.ts
+  // src/gridCompute.ts
   async function computeGridWithMessages(request, callbacks) {
     const budget = request.budget ?? { mode: "timeout", timeoutMs: 2e3 };
     const nativeSamples = buildRangeSamples(request.ranges, request.loopKey, { stride: 1 });
@@ -1840,7 +1840,7 @@
     });
   }
 
-  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/visualization.ts
+  // src/visualization.ts
   var BLACKBODY_REFERENCE_TEMPERATURE = 6500;
   var BLACKBODY_RGB_10DEG_TABLE = [
     { temperature: 1e3, r: 255, g: 56, b: 0 },
@@ -1925,7 +1925,7 @@
     return shellGeometryFor(row.R, mAt(row.R, parameters));
   }
 
-  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/phaseLag.ts
+  // src/phaseLag.ts
   var PHASE_LAG_PAIRS = [
     { id: "R-L", reference: "R", target: "L" },
     { id: "R-V", reference: "R", target: "V" },
@@ -2010,7 +2010,7 @@
     return (value % 1 + 1) % 1;
   }
 
-  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/stability.ts
+  // src/stability.ts
   function condition(kind, value, expression) {
     return {
       kind,
@@ -2044,6 +2044,7 @@
     const secularResponse = parameters.zetac * restoring + parameters.zeta * secularCoupling;
     const dynamicCoupling = parameters.zeta * parameters.zetac * (radiativeThermal + 1.5 * gammaC) + restoring;
     const thermalResponse = parameters.zetac + parameters.zeta * radiativeThermal;
+    const reducedRadiativeMode = parameters.zetac <= 0 || gammaC <= 1e-9;
     const terms = {
       radiativeThermal,
       restoring,
@@ -2053,7 +2054,7 @@
       dynamicCoupling,
       thermalResponse
     };
-    if (parameters.zetac <= 0) {
+    if (reducedRadiativeMode) {
       const thermalMargin = parameters.zeta * radiativeThermal;
       const secular2 = condition(
         "secular",
@@ -2128,7 +2129,7 @@
     return Math.min(1, Math.max(0, (Math.log10(zetac / zeta) + 2) / 4));
   }
 
-  // ../../../AppData/Local/Temp/ozwizard-clean-build-7022e6a6109441c189a51c8a78c2b823/python_implementation/web_app/src/main.ts
+  // src/main.ts
   var state = { ...PRESETS[DEFAULT_PRESET_NAME] };
   var selectedPreset = DEFAULT_PRESET_NAME;
   var activePreset = DEFAULT_PRESET_NAME;
@@ -8592,6 +8593,49 @@
     if (Math.abs(work.net) <= scale * 0.08) return "limit cycle";
     return work.net > 0 ? "driving" : "damped";
   }
+  function heatEngineEventFraction(row, rows) {
+    if (latestDisplayWindow.mode === "phase") return clamp4(row.tau, 0, 1);
+    const first = rows[0]?.tau ?? 0;
+    const last = rows.at(-1)?.tau ?? first + 1;
+    return normalizedInRange(row.tau, first === last ? [first, first + 1] : [first, last]);
+  }
+  function heatEngineCurrentFraction(rows) {
+    if (latestDisplayWindow.mode === "phase") return phaseModOne2(currentAnimationPhase);
+    const coordinate = displayMarkerX(latestDisplayWindow, currentAnimationPhase);
+    const first = rows[0]?.tau ?? 0;
+    const last = rows.at(-1)?.tau ?? first + 1;
+    return normalizedInRange(coordinate, first === last ? [first, first + 1] : [first, last]);
+  }
+  function heatEngineConvectiveTurnoverPhase(rows, fraction) {
+    if (rows.length < 2) return phaseModOne2(fraction);
+    const finiteUcValues = rows.map((row) => Math.max(0, row.Uc)).filter(Number.isFinite);
+    const maxUc = Math.max(...finiteUcValues, 0);
+    if (maxUc <= 1e-12) return 0;
+    const rowFraction = (row) => latestDisplayWindow.mode === "phase" ? clamp4(row.tau, 0, 1) : heatEngineEventFraction(row, rows);
+    const speedLevel = (row) => clamp4(Math.max(0, row.Uc) / maxUc, 0, 1);
+    const currentFraction = phaseModOne2(fraction);
+    let totalAdvance = 0;
+    let currentAdvance = 0;
+    for (let index = 1; index < rows.length; index += 1) {
+      const left = rows[index - 1];
+      const right = rows[index];
+      const leftFraction = rowFraction(left);
+      const rightFraction = rowFraction(right);
+      const span = rightFraction - leftFraction;
+      if (!Number.isFinite(span) || span <= 1e-9) continue;
+      const leftSpeed = speedLevel(left);
+      const rightSpeed = speedLevel(right);
+      const segmentAdvance = 0.5 * (leftSpeed + rightSpeed) * span;
+      totalAdvance += segmentAdvance;
+      const covered = Math.min(Math.max(currentFraction - leftFraction, 0), span);
+      if (covered > 0) {
+        const localFraction = covered / span;
+        const localSpeed = leftSpeed + (rightSpeed - leftSpeed) * localFraction;
+        currentAdvance += 0.5 * (leftSpeed + localSpeed) * covered;
+      }
+    }
+    return totalAdvance > 1e-12 ? currentAdvance / totalAdvance : currentFraction;
+  }
   function roundedRectPath(ctx, x, y, width, height, radius) {
     const r = Math.min(radius, width / 2, height / 2);
     ctx.beginPath();
@@ -8809,34 +8853,6 @@
     ctx.lineTo(right, bottom);
     ctx.lineTo(right, chamber.top);
     ctx.stroke();
-    const radiativeLevel = luminosityLevel(terms.radiativeLeak);
-    const radiativeX = chamber.left + chamber.width * 0.95 - 10;
-    const radiativeBaseY = pistonY - pistonHeight / 2 - 2;
-    const radiativeTipY = Math.max(chamber.top - 12, radiativeBaseY - 28);
-    const radiativeLabelY = (radiativeBaseY + radiativeTipY) / 2;
-    ctx.strokeStyle = colorWithAlpha(COLORS.Lr, 0.26 + radiativeLevel * 0.62);
-    ctx.shadowColor = colorWithAlpha(COLORS.Lr, 0.2 + radiativeLevel * 0.52);
-    ctx.shadowBlur = 2 + radiativeLevel * 10;
-    ctx.lineWidth = 4.4;
-    ctx.lineCap = "butt";
-    ctx.beginPath();
-    ctx.moveTo(radiativeX, radiativeBaseY);
-    ctx.lineTo(radiativeX, radiativeTipY);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = colorWithAlpha(COLORS.Lr, 0.32 + radiativeLevel * 0.62);
-    ctx.lineWidth = 1.4;
-    ctx.lineCap = "round";
-    for (let ray = -1; ray <= 1; ray += 1) {
-      ctx.beginPath();
-      ctx.moveTo(radiativeX + ray * 7, radiativeTipY - 3);
-      ctx.lineTo(radiativeX + ray * 11, radiativeTipY - 15);
-      ctx.stroke();
-    }
-    drawHeatEngineMathLabel(ctx, [{ text: "L", subscript: "r", color: COLORS.Lr, weight: 800 }], radiativeX - 10, radiativeLabelY, {
-      align: "right",
-      fontSize: 11
-    });
     const fillGradient = ctx.createLinearGradient(0, gasTop, 0, bottom);
     fillGradient.addColorStop(0, colorWithAlpha(COLORS.H, 0.18 + hLevel * 0.22));
     fillGradient.addColorStop(1, colorWithAlpha(COLORS.H, 0.42 + hLevel * 0.38));
@@ -8848,46 +8864,12 @@
     drawHeatEngineCompressibilitySpring(
       ctx,
       centerX + 9,
-      gasTop + 7,
-      bottom - 13,
+      pistonY + pistonHeight / 2,
+      bottom - 3,
       terms.q
     );
     const pressureLength = forceArrowLength(terms.pressureForce);
-    const pressureX = centerX - 52;
-    const currentOpacityPoint = thermodynamicPoint(row, parameters);
-    if (currentOpacityPoint) {
-      const opacityValues = scaleRows.map((item) => thermodynamicPoint(item, parameters)?.logOpacity ?? NaN).filter(Number.isFinite);
-      const opacityRange = stableTimeEquilibriumDisplayActive() ? anchoredVisualRange([...opacityValues, currentOpacityPoint.logOpacity], 0, 0.05, 0.12) : range([...opacityValues, currentOpacityPoint.logOpacity, 0], 0.12);
-      const opacityLevel = normalizedInRange(currentOpacityPoint.logOpacity, opacityRange);
-      const ghostWidth = 48;
-      const ghostMaxHeight = 42;
-      const ghostHeight = 16 + opacityLevel * (ghostMaxHeight - 16);
-      const ghostX = clamp4(radiativeX - ghostWidth / 2, chamber.left + 10, right - ghostWidth - 8);
-      const ghostY = clamp4(
-        gasTop + Math.max(18, (bottom - gasTop) * 0.22),
-        gasTop + 14,
-        bottom - ghostMaxHeight - 24
-      );
-      const ghostTop = ghostY + ghostMaxHeight - ghostHeight;
-      const opacityConnectorX = radiativeX;
-      ctx.save();
-      ctx.strokeStyle = "rgba(180, 190, 205, 0.42)";
-      ctx.lineWidth = 1.3;
-      ctx.beginPath();
-      ctx.moveTo(opacityConnectorX, ghostTop);
-      ctx.lineTo(opacityConnectorX, gasTop);
-      ctx.stroke();
-      roundedRectPath(ctx, ghostX, ghostTop, ghostWidth, ghostHeight, 7);
-      ctx.fillStyle = "rgba(160, 172, 190, 0.09)";
-      ctx.fill();
-      ctx.setLineDash([4, 4]);
-      ctx.strokeStyle = "rgba(180, 190, 205, 0.52)";
-      ctx.lineWidth = 1.4;
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-      drawHeatEngineLabel(ctx, "opacity", ghostX + ghostWidth / 2, ghostTop + ghostHeight / 2, "rgba(210, 218, 232, 0.9)", "center", 9.4, 760);
-    }
+    const pressureX = Math.max(chamber.left + 12, centerX - 62);
     const temperatureValues = scaleRows.map((item) => effectiveTemperatureProxy(item) ?? NaN).filter(Number.isFinite);
     const currentTemperatureProxy = effectiveTemperatureProxy(row);
     const temperatureRange = stableTimeEquilibriumDisplayActive() ? anchoredVisualRange([...temperatureValues, currentTemperatureProxy ?? NaN], 1, 0.02, 0.08) : range([...temperatureValues, currentTemperatureProxy ?? NaN], 0.08);
@@ -8909,6 +8891,7 @@
     const gravityX = chamber.left + chamber.width * 0.05;
     const gravityEndY = pistonY - pistonHeight / 2 - 2;
     const gravityStartY = Math.max(3, gravityEndY - gravityLength);
+    const forceLabelY = pistonY - Math.max(12, pistonHeight * 0.9);
     drawHeatEngineArrow(
       ctx,
       gravityX,
@@ -8918,16 +8901,17 @@
       THEME.axisText,
       2.6
     );
-    drawHeatEngineLabel(ctx, "gravity", gravityX + 10, pistonY - Math.max(12, pistonHeight * 0.9), THEME.axisText, "left", 9.4, 760);
+    drawHeatEngineLabel(ctx, "gravity", gravityX + 10, forceLabelY, THEME.axisText, "left", 9.4, 760);
     if (Math.abs(parameters.cq) > 1e-9) {
       const dampingLevel = Math.sqrt(forceMagnitude(terms.dampingAcceleration));
       const dampingLength = Math.max(9, forceArrowLength(terms.dampingAcceleration));
       const velocitySign = Math.abs(row.V) < 1e-6 ? 1 : Math.sign(row.V);
       const dampingDirection = velocitySign >= 0 ? 1 : -1;
-      const dampingX = chamber.left - 10;
+      const dampingX = right - chamber.width * 0.05;
+      const dampingIndicatorLength = Math.max(9, Math.min(dampingLength, 32));
       const dampingColor = colorWithAlpha(COLORS.cq, 0.56 + dampingLevel * 0.34);
-      drawHeatEngineArrow(ctx, dampingX, pistonY - dampingDirection * dampingLength / 2, dampingX, pistonY + dampingDirection * dampingLength / 2, dampingColor, 2 + dampingLevel * 0.8, void 0, 12, 5);
-      drawHeatEngineLabel(ctx, "drag", dampingX - 3, pistonY, COLORS.cq, "right", 9.4, 760);
+      drawHeatEngineArrow(ctx, dampingX, forceLabelY - dampingDirection * dampingIndicatorLength / 2, dampingX, forceLabelY + dampingDirection * dampingIndicatorLength / 2, dampingColor, 2 + dampingLevel * 0.8, void 0, 12, 5);
+      drawHeatEngineLabel(ctx, "drag", dampingX - 6, forceLabelY, COLORS.cq, "right", 9.4, 760);
     }
     const sourceNorm = heatFlowMagnitude(terms.source);
     const sourceX = centerX - chamber.width * 0.22;
@@ -8935,6 +8919,98 @@
     drawHeatEngineArrow(ctx, sourceX, bottom + sourceLength + 3, sourceX, bottom + 3, sourceLuminosityColor(), 3);
     drawHeatEngineLabel(ctx, "source", sourceX + 10, bottom + 18, sourceLuminosityColor(), "left", 9.4, 760);
     drawHeatEngineLabel(ctx, "luminosity", sourceX + 10, bottom + 30, sourceLuminosityColor(), "left", 9.4, 760);
+    const radiativeLeakLevel = luminosityLevel(terms.radiativeLeak);
+    const currentOpacityPoint = thermodynamicPoint(row, parameters);
+    const opacityValues = scaleRows.map((item) => thermodynamicPoint(item, parameters)?.logOpacity ?? NaN).filter(Number.isFinite);
+    const opacityRange = currentOpacityPoint ? stableTimeEquilibriumDisplayActive() ? anchoredVisualRange([...opacityValues, currentOpacityPoint.logOpacity], 0, 0.05, 0.12) : range([...opacityValues, currentOpacityPoint.logOpacity, 0], 0.12) : range([0, 1], 0.12);
+    const opacityLevel = currentOpacityPoint ? normalizedInRange(currentOpacityPoint.logOpacity, opacityRange) : 0.5;
+    const equilibriumOpacityLevel = normalizedInRange(0, opacityRange);
+    const radiativeSlotWidth = 34;
+    const radiativeSlotHeight = Math.min(84, Math.max(62, chamber.height * 0.32));
+    const radiativeSlotRight = chamber.left - 14;
+    const radiativeSlotX = radiativeSlotRight - radiativeSlotWidth;
+    const radiativeSlotBottom = bottom - 34;
+    const radiativeSlotTop = radiativeSlotBottom - radiativeSlotHeight;
+    const radiativeDuctY = radiativeSlotTop + radiativeSlotHeight * 0.58;
+    const radiativeDuctHeight = 6;
+    const radiativeDuctWidth = Math.max(1, chamber.left - radiativeSlotRight);
+    ctx.fillStyle = colorWithAlpha(COLORS.Lr, 0.18);
+    ctx.fillRect(radiativeSlotRight, radiativeDuctY - radiativeDuctHeight / 2, radiativeDuctWidth, radiativeDuctHeight);
+    ctx.strokeStyle = colorWithAlpha(COLORS.Lr, 0.42);
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(radiativeSlotRight, radiativeDuctY - radiativeDuctHeight / 2, radiativeDuctWidth, radiativeDuctHeight);
+    const radiativeDuctArrowX = chamber.left - radiativeDuctWidth * 0.28;
+    const radiativeDuctArrowLength = Math.min(8, Math.max(4, radiativeDuctWidth * 0.48));
+    const radiativeDuctArrowHalfHeight = Math.max(3.5, radiativeDuctHeight * 0.65);
+    ctx.fillStyle = colorWithAlpha(COLORS.Lr, 0.72);
+    ctx.beginPath();
+    ctx.moveTo(radiativeDuctArrowX - radiativeDuctArrowLength / 2, radiativeDuctY);
+    ctx.lineTo(radiativeDuctArrowX + radiativeDuctArrowLength / 2, radiativeDuctY - radiativeDuctArrowHalfHeight);
+    ctx.lineTo(radiativeDuctArrowX + radiativeDuctArrowLength / 2, radiativeDuctY + radiativeDuctArrowHalfHeight);
+    ctx.closePath();
+    ctx.fill();
+    roundedRectPath(ctx, radiativeSlotX, radiativeSlotTop, radiativeSlotWidth, radiativeSlotHeight, 6);
+    ctx.fillStyle = "rgba(17, 27, 51, 0.66)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(192, 202, 232, 0.5)";
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    const equilibriumY = radiativeSlotBottom - equilibriumOpacityLevel * radiativeSlotHeight;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = colorWithAlpha(COLORS.Lr, 0.58);
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(radiativeSlotX - 4, equilibriumY);
+    ctx.lineTo(radiativeSlotX + radiativeSlotWidth, equilibriumY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    drawHeatEngineMathLabel(ctx, [{ text: "\u03BA", subscript: "0", color: colorWithAlpha(COLORS.Lr, 0.9), weight: 760 }], radiativeSlotX - 5, equilibriumY, {
+      align: "right",
+      fontSize: 8.8,
+      subscriptSize: 6.6
+    });
+    const opacityShutterY = radiativeSlotBottom - opacityLevel * radiativeSlotHeight;
+    const opacityShutterTop = Math.min(radiativeSlotBottom - 6, opacityShutterY + 2);
+    const opacityShutterHeight = Math.max(2, radiativeSlotBottom - opacityShutterTop - 4);
+    ctx.fillStyle = `rgba(160, 172, 190, ${0.2 + opacityLevel * 0.38})`;
+    roundedRectPath(ctx, radiativeSlotX + 4, opacityShutterTop, radiativeSlotWidth - 8, opacityShutterHeight, 4);
+    ctx.fill();
+    ctx.strokeStyle = COLORS.Lr;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(radiativeSlotX, opacityShutterY);
+    ctx.lineTo(radiativeSlotX + radiativeSlotWidth, opacityShutterY);
+    ctx.stroke();
+    drawHeatEngineLabel(ctx, "opacity", radiativeSlotX + radiativeSlotWidth / 2, radiativeSlotBottom + 12, colorWithAlpha(COLORS.Lr, 0.95), "center", 9.2, 760);
+    const radiativeLeakX = radiativeSlotX + radiativeSlotWidth / 2;
+    const radiativeLeakBaseY = radiativeSlotTop - 1;
+    const radiativeLeakTipY = Math.max(chamber.top - 8, radiativeLeakBaseY - 28);
+    const radiativeRayLength = 8 + radiativeLeakLevel * 10;
+    const radiativeRaySpread = 7 + radiativeLeakLevel * 5;
+    ctx.strokeStyle = colorWithAlpha(COLORS.Lr, 0.26 + radiativeLeakLevel * 0.62);
+    ctx.shadowColor = colorWithAlpha(COLORS.Lr, 0.2 + radiativeLeakLevel * 0.52);
+    ctx.shadowBlur = 2 + radiativeLeakLevel * 10;
+    ctx.lineWidth = 4.4;
+    ctx.lineCap = "butt";
+    ctx.beginPath();
+    ctx.moveTo(radiativeLeakX, radiativeLeakBaseY);
+    ctx.lineTo(radiativeLeakX, radiativeLeakTipY);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = colorWithAlpha(COLORS.Lr, 0.32 + radiativeLeakLevel * 0.62);
+    ctx.lineWidth = 1.1 + radiativeLeakLevel * 0.9;
+    ctx.lineCap = "round";
+    for (let ray = -1; ray <= 1; ray += 1) {
+      ctx.beginPath();
+      ctx.moveTo(radiativeLeakX + ray * 6, radiativeLeakTipY - 3);
+      ctx.lineTo(radiativeLeakX + ray * radiativeRaySpread, radiativeLeakTipY - radiativeRayLength);
+      ctx.stroke();
+    }
+    const radiativeLeakLabelY = (radiativeLeakBaseY + radiativeLeakTipY) / 2;
+    drawHeatEngineMathLabel(ctx, [{ text: "L", subscript: "r", color: COLORS.Lr, weight: 800 }], radiativeLeakX - 10, radiativeLeakLabelY, {
+      align: "right",
+      fontSize: 11
+    });
     const convectiveLeakLevel = luminosityLevel(terms.convectiveLeak);
     const hasConvectiveLeak = convectiveLuminosityAvailable(parameters);
     if (hasConvectiveLeak) {
@@ -8944,7 +9020,7 @@
       const slotX = right + 14;
       const slotBottom = bottom - 34;
       const slotTop = slotBottom - slotHeight;
-      const ductY = slotTop + slotHeight * 0.58;
+      const ductY = slotTop + Math.min(16, slotHeight * 0.24);
       const ductHeight = 6;
       const ductWidth = Math.max(1, slotX - right);
       ctx.fillStyle = colorWithAlpha(COLORS.Lc, 0.18);
@@ -8965,8 +9041,7 @@
       const targetValues = convectionResponsive ? scaleRows.map((item) => convectiveVelocityTarget(item, parameters)) : [];
       const ucValues = convectionResponsive ? [...scaleRows.map((item) => item.Uc), ...targetValues] : [...scaleRows.map((item) => item.Uc), 0];
       const ucRange = stableTimeEquilibriumDisplayActive() ? anchoredVisualRange(ucValues, 1, 0.05, 0.12) : range(ucValues, 0.12);
-      const currentAperture = normalizedInRange(row.Uc, ucRange);
-      const currentY = slotBottom - currentAperture * slotHeight;
+      const convectiveActivity = normalizedInRange(row.Uc, ucRange);
       roundedRectPath(ctx, slotX, slotTop, slotWidth, slotHeight, 6);
       ctx.fillStyle = "rgba(17, 27, 51, 0.66)";
       ctx.fill();
@@ -8975,26 +9050,95 @@
       ctx.stroke();
       if (convectionResponsive) {
         const targetAperture = normalizedInRange(terms.convectiveTarget, ucRange);
-        const targetY = slotBottom - targetAperture * slotHeight;
+        const targetHeight = targetAperture * slotHeight;
+        const targetLabelY = slotTop + targetHeight / 2;
         ctx.setLineDash([4, 4]);
         ctx.strokeStyle = colorWithAlpha(COLORS.Uc, 0.58);
-        roundedRectPath(ctx, slotX - 4, targetY, slotWidth + 8, slotBottom - targetY, 5);
+        roundedRectPath(ctx, slotX - 4, slotTop, slotWidth + 8, targetHeight, 5);
         ctx.stroke();
         ctx.setLineDash([]);
-        drawHeatEngineMathLabel(ctx, [{ text: "U", subscript: "c,*", color: colorWithAlpha(COLORS.Uc, 0.9) }], slotX + slotWidth + 10, targetY, {
+        drawHeatEngineMathLabel(ctx, [{ text: "U", subscript: "c,*", color: colorWithAlpha(COLORS.Uc, 0.9) }], slotX + slotWidth + 10, targetLabelY, {
           align: "left",
           fontSize: 9.4
         });
       }
-      ctx.fillStyle = colorWithAlpha(COLORS.Uc, 0.48 + currentAperture * 0.32);
-      roundedRectPath(ctx, slotX + 4, currentY, slotWidth - 8, slotBottom - currentY, 4);
+      const plumeHeight = Math.max(18, convectiveActivity * slotHeight);
+      const plumeTop = slotTop;
+      const plumeBottom = Math.min(slotBottom, plumeTop + plumeHeight);
+      const plumeLeft = slotX + 5;
+      const plumeRight = slotX + slotWidth - 5;
+      const plumeWidth = plumeRight - plumeLeft;
+      const plumeCenterX = slotX + slotWidth / 2;
+      const turbulenceLoopPhase = heatEngineConvectiveTurnoverPhase(rows, heatEngineCurrentFraction(rows));
+      const turbulencePhase = turbulenceLoopPhase * Math.PI * 2;
+      const plumeSway = (Math.sin(turbulencePhase) + 0.34 * Math.sin(turbulencePhase * 2 + 0.72)) * Math.min(1.8, slotWidth * 0.048) * convectiveActivity;
+      const plumeGradient = ctx.createLinearGradient(0, plumeBottom, 0, plumeTop);
+      plumeGradient.addColorStop(0, colorWithAlpha(COLORS.Uc, 0.16 + convectiveActivity * 0.2));
+      plumeGradient.addColorStop(0.52, colorWithAlpha(COLORS.Uc, 0.42 + convectiveActivity * 0.28));
+      plumeGradient.addColorStop(1, colorWithAlpha(COLORS.Lc, 0.26 + convectiveActivity * 0.22));
+      ctx.fillStyle = plumeGradient;
+      roundedRectPath(ctx, plumeLeft + plumeSway, plumeTop, plumeWidth, plumeHeight, 5.5);
       ctx.fill();
-      ctx.strokeStyle = COLORS.Uc;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(slotX, currentY);
-      ctx.lineTo(slotX + slotWidth, currentY);
+      ctx.strokeStyle = colorWithAlpha(COLORS.Uc, 0.42 + convectiveActivity * 0.3);
+      ctx.lineWidth = 1.35;
       ctx.stroke();
+      ctx.save();
+      roundedRectPath(ctx, slotX + 3, slotTop + 2, slotWidth - 6, Math.min(slotHeight - 4, plumeHeight + 4), 7);
+      ctx.clip();
+      ctx.strokeStyle = colorWithAlpha(COLORS.Lc, 0.42 + convectiveActivity * 0.42);
+      ctx.lineWidth = 1.35;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      for (let ribbon = 0; ribbon < 2; ribbon += 1) {
+        const ribbonPhase = turbulencePhase * (ribbon + 1) + ribbon * Math.PI;
+        const offset = (ribbon - 0.5) * slotWidth * 0.14 + Math.sin(ribbonPhase) * slotWidth * 0.035;
+        ctx.beginPath();
+        ctx.moveTo(plumeCenterX + plumeSway + offset, plumeBottom + 4);
+        const segments = 3;
+        for (let segment = 0; segment < segments; segment += 1) {
+          const y0 = plumeBottom - plumeHeight * segment / segments;
+          const y1 = plumeBottom - plumeHeight * (segment + 1) / segments;
+          const bend = (segment % 2 === 0 ? 1 : -1) * slotWidth * (0.2 + 0.035 * Math.sin(ribbonPhase + segment * 1.4));
+          const endX = plumeCenterX + plumeSway - offset * 0.35 - bend * 0.34;
+          ctx.bezierCurveTo(
+            plumeCenterX + plumeSway + offset + bend,
+            y0 - plumeHeight * 0.1,
+            plumeCenterX + plumeSway - offset - bend,
+            y1 + plumeHeight * 0.1,
+            endX,
+            y1
+          );
+        }
+        ctx.stroke();
+      }
+      const eddyColor = colorWithAlpha(COLORS.Lc, 0.34 + convectiveActivity * 0.42);
+      [
+        { x: -3.2, base: 0.29, rx: 8.6, ry: 4.6, rotation: -0.62, direction: 1, harmonic: 1 },
+        { x: 3.4, base: 0.55, rx: 8.4, ry: 4.8, rotation: 0.48, direction: -1, harmonic: 2 },
+        { x: -1.4, base: 0.8, rx: 7.8, ry: 4.2, rotation: 0.15, direction: 1, harmonic: 3 }
+      ].forEach((eddy, index) => {
+        const drift = Math.sin(turbulencePhase * eddy.harmonic + index * 1.8) * 0.07;
+        const centerX2 = plumeCenterX + plumeSway + eddy.x + Math.cos(turbulencePhase * eddy.harmonic + index) * 1.4;
+        const centerY = plumeBottom - plumeHeight * clamp4(eddy.base + drift, 0.14, 0.9);
+        const spin = turbulencePhase * eddy.harmonic * eddy.direction + index * 0.6;
+        const rotation = eddy.rotation + Math.sin(spin) * 0.25;
+        const start = eddy.direction > 0 ? Math.PI * 0.18 + spin : Math.PI * 1.18 + spin;
+        const end = eddy.direction > 0 ? Math.PI * 1.55 + spin : Math.PI * 2.55 + spin;
+        const innerStart = eddy.direction > 0 ? Math.PI * 0.78 + spin : Math.PI * 1.78 + spin;
+        const innerEnd = eddy.direction > 0 ? Math.PI * 1.9 + spin : Math.PI * 2.9 + spin;
+        const eddyScale = clamp4((plumeHeight - 8) / 48, 0.42, 1);
+        const eddyMargin = Math.min(plumeHeight * 0.4, 3 + eddy.ry * eddyScale);
+        const eddyMinY = plumeTop + eddyMargin;
+        const eddyMaxY = Math.max(eddyMinY, plumeBottom - eddyMargin);
+        const eddyY = clamp4(centerY, eddyMinY, eddyMaxY);
+        ctx.beginPath();
+        ctx.ellipse(centerX2, eddyY, eddy.rx * eddyScale, eddy.ry * eddyScale, rotation, start, end, eddy.direction < 0);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(centerX2 - eddy.direction * 2.2 * eddyScale, eddyY + 0.8 * eddyScale, eddy.rx * 0.42 * eddyScale, eddy.ry * 0.45 * eddyScale, rotation * 0.35, innerStart, innerEnd, eddy.direction < 0);
+        ctx.stroke();
+      });
+      ctx.restore();
       drawHeatEngineMathLabel(ctx, [{ text: "U", subscript: "c", color: COLORS.Uc }], slotX + slotWidth / 2, slotBottom + 12, {
         align: "center",
         fontSize: 10
@@ -9002,6 +9146,8 @@
       const leakX = slotX + slotWidth / 2;
       const leakBaseY = slotTop - 1;
       const leakTipY = Math.max(chamber.top - 8, leakBaseY - 28);
+      const leakRayLength = 8 + convectiveLeakLevel * 10;
+      const leakRaySpread = 7 + convectiveLeakLevel * 5;
       ctx.strokeStyle = colorWithAlpha(COLORS.Lc, 0.26 + convectiveLeakLevel * 0.62);
       ctx.shadowColor = colorWithAlpha(COLORS.Lc, 0.2 + convectiveLeakLevel * 0.52);
       ctx.shadowBlur = 2 + convectiveLeakLevel * 10;
@@ -9013,12 +9159,12 @@
       ctx.stroke();
       ctx.shadowBlur = 0;
       ctx.strokeStyle = colorWithAlpha(COLORS.Lc, 0.32 + convectiveLeakLevel * 0.62);
-      ctx.lineWidth = 1.4;
+      ctx.lineWidth = 1.1 + convectiveLeakLevel * 0.9;
       ctx.lineCap = "round";
       for (let ray = -1; ray <= 1; ray += 1) {
         ctx.beginPath();
-        ctx.moveTo(leakX + ray * 7, leakTipY - 3);
-        ctx.lineTo(leakX + ray * 11, leakTipY - 15);
+        ctx.moveTo(leakX + ray * 6, leakTipY - 3);
+        ctx.lineTo(leakX + ray * leakRaySpread, leakTipY - leakRayLength);
         ctx.stroke();
       }
       const leakLabelY = (leakBaseY + leakTipY) / 2;
@@ -9027,8 +9173,8 @@
         fontSize: 11
       });
     }
-    drawHeatEngineMathLabel(ctx, [{ text: "H", color: COLORS.H, weight: 800 }], chamber.left + 8, bottom - 17, {
-      align: "left",
+    drawHeatEngineMathLabel(ctx, [{ text: "H", color: COLORS.H, weight: 800 }], right - 13, bottom - 17, {
+      align: "right",
       fontSize: 13
     });
     ctx.restore();
@@ -9304,7 +9450,10 @@
     const heatEngineShowsUc = convectiveLuminosityAvailable(latestPhaseParameters);
     const heatEngineConvectionResponsive = heatEngineShowsUc && !convectiveResponseDisabled(latestPhaseParameters);
     canvas.dataset.heatFluxTerms = heatEngineShowsUc ? "source,L_r,L_c" : "source,L_r";
+    canvas.dataset.radiativeValve = "opacity";
+    canvas.dataset.radiativeValveQuantity = "log10(kappa/kappa0)";
     canvas.dataset.convectiveValve = heatEngineShowsUc ? heatEngineConvectionResponsive ? "time-dependent" : "frozen" : "hidden";
+    canvas.dataset.convectivePlumeClock = heatEngineShowsUc ? "Uc-integrated closed loop" : "hidden";
     if (heatEngineConvectionResponsive) {
       canvas.dataset.convectiveTarget = "U_c,*";
       canvas.dataset.convectiveLag = fmt(terms.convectiveLag, 6);
@@ -9329,9 +9478,11 @@
       canvas.dataset.currentPhase = fmtFixed(phaseModOne2(currentAnimationPhase), 3);
       delete canvas.dataset.currentTime;
     }
-    const chamberWidth = Math.max(160, Math.min(190, width - 128));
+    const chamberLeft = Math.min(78, Math.max(64, width * 0.25));
+    const rightReserve = heatEngineShowsUc ? 82 : 24;
+    const chamberWidth = Math.max(104, Math.min(160, width - chamberLeft - rightReserve));
     const chamber = {
-      left: 38,
+      left: chamberLeft,
       top: 44,
       width: chamberWidth,
       height: Math.max(142, height - 98)

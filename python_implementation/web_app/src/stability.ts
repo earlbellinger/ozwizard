@@ -91,6 +91,7 @@ export function analyticStabilityConditions(parameters: ModelParameters): Analyt
   const secularResponse = parameters.zetac * restoring + parameters.zeta * secularCoupling;
   const dynamicCoupling = parameters.zeta * parameters.zetac * (radiativeThermal + 1.5 * gammaC) + restoring;
   const thermalResponse = parameters.zetac + parameters.zeta * radiativeThermal;
+  const reducedRadiativeMode = parameters.zetac <= 0 || gammaC <= 1e-9;
   const terms = {
     radiativeThermal,
     restoring,
@@ -101,7 +102,7 @@ export function analyticStabilityConditions(parameters: ModelParameters): Analyt
     thermalResponse
   };
 
-  if (parameters.zetac <= 0) {
+  if (reducedRadiativeMode) {
     const thermalMargin = parameters.zeta * radiativeThermal;
     const secular = condition(
       "secular",

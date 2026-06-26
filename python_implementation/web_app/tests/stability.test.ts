@@ -74,6 +74,21 @@ describe("linear stability helpers", () => {
     expect(stability.allStable).toBe(false);
   });
 
+  it("ignores convective response timing when convective luminosity feedback is zero", () => {
+    const base = PRESETS["Instability-strip convection"];
+    const slow = analyticStabilityConditions({ ...base, gammac: 0, zetac: 0.01 });
+    const fast = analyticStabilityConditions({ ...base, gammac: 0, zetac: 100 });
+
+    expect(slow.physicsMode).toBe("radiative");
+    expect(fast.physicsMode).toBe("radiative");
+    expect(slow.convective).toBeUndefined();
+    expect(fast.convective).toBeUndefined();
+    expect(fast.kind).toBe(slow.kind);
+    expect(fast.secular.value).toBeCloseTo(slow.secular.value, 12);
+    expect(fast.dynamic.value).toBeCloseTo(slow.dynamic.value, 12);
+    expect(fast.pulsational.value).toBeCloseTo(slow.pulsational.value, 12);
+  });
+
   it("evaluates S72 criteria at the equilibrium thin shell form factor for radius-dependent geometry", () => {
     const base = PRESETS["Radius-dependent strip"];
     const stability = analyticStabilityConditions({ ...base, m: 15, n: 0, s: 8, gamma1: 1.5 });
