@@ -1,0 +1,1088 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Simplified Models for Cepheid Instability</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+      },
+      chtml: { scale: 0.98 },
+      startup: {
+        pageReady: () => MathJax.startup.defaultPageReady().then(() => {
+          document.documentElement.classList.add('math-ready');
+        })
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+  <style>
+    @page {
+      size: letter;
+      margin: 0.72in 0.78in 0.72in 0.78in;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: #151515;
+      background: #fff;
+      font-family: "Georgia", "Times New Roman", serif;
+      font-size: 10.8pt;
+      line-height: 1.36;
+      hyphens: none;
+      counter-reset: page;
+    }
+
+    main {
+      max-width: 7.1in;
+      margin: 0 auto;
+    }
+
+    h1, h2 {
+      font-family: "Georgia", "Times New Roman", serif;
+      text-align: center;
+      letter-spacing: 0;
+      margin: 0;
+      font-weight: 700;
+    }
+
+    h1 {
+      font-size: 20pt;
+      line-height: 1.05;
+      text-transform: uppercase;
+      margin-top: 0.05in;
+    }
+
+    .author {
+      text-align: center;
+      font-size: 13pt;
+      font-weight: 700;
+      margin: 0.26in 0 0.3in;
+    }
+
+    h2 {
+      font-size: 13.5pt;
+      text-transform: uppercase;
+      margin: 0.3in 0 0.12in;
+    }
+
+    p {
+      margin: 0 0 0.105in;
+      text-align: justify;
+      text-indent: 0.27in;
+    }
+
+    p.no-indent {
+      text-indent: 0;
+    }
+
+    .equation {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      column-gap: 0.14in;
+      margin: 0.1in 0 0.14in;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    .equation .math {
+      text-align: center;
+      min-width: 0;
+    }
+
+    .equation .math mjx-container[jax="CHTML"][display="true"] {
+      margin: 0 !important;
+    }
+
+    .equation .tag {
+      font-size: 10.4pt;
+      white-space: nowrap;
+      align-self: center;
+    }
+
+    .eq-stack {
+      margin: 0.08in 0 0.14in;
+    }
+
+    .small-note {
+      font-size: 9.6pt;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.08in 0 0.14in;
+      font-size: 9.5pt;
+      line-height: 1.18;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    caption {
+      caption-side: top;
+      text-align: center;
+      font-weight: 700;
+      font-size: 12pt;
+      margin-bottom: 0.08in;
+    }
+
+    thead {
+      border-top: 1px solid #222;
+      border-bottom: 1px solid #222;
+    }
+
+    tbody {
+      border-bottom: 1px solid #222;
+    }
+
+    th, td {
+      padding: 0.035in 0.045in;
+      vertical-align: middle;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    th:first-child,
+    td:first-child {
+      text-align: left;
+      width: 1.55in;
+      white-space: normal;
+    }
+
+    .refs {
+      font-size: 9.7pt;
+      line-height: 1.25;
+      margin-top: 0.08in;
+    }
+
+    .refs p {
+      text-indent: -0.22in;
+      padding-left: 0.22in;
+      margin-bottom: 0.055in;
+      text-align: left;
+    }
+
+    .source-note {
+      color: #555;
+      font-size: 8.5pt;
+      text-align: center;
+      margin-top: 0.18in;
+      text-indent: 0;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Simplified Models for Cepheid Instability</h1>
+  <div class="author">Norman Baker</div>
+
+  <h2>Introduction</h2>
+
+  <p>Of the various approaches which have been used to study stellar pulsation, the technique which in recent years has received the most attention is the stability analysis of the linearized equations of motion. An equilibrium configuration is assumed to exist, and oscillations of infinitesimal amplitude about this equilibrium are studied. Since the mechanical system is not conservative, the infinitesimal oscillations will, in general, tend to decrease or increase in amplitude. In the former case, the system is stable, in the sense that any small perturbation results in an oscillation which will eventually die out. In the latter case, it is supposed that the amplitude of the oscillation will increase with time until nonlinear effects, which are not discussed, set a limit to the size of the fluctuation. The system is in this case said to be "vibrationally unstable" or "overstable."</p>
+
+  <p>The complete equations of the problem in the spherically symmetrical case are a set of coupled nonlinear partial differential equations, the system being of fourth order in the space variable and third order in time. The chief advantage of the approach outlined above is that these equations are made linear, resulting in a very great simplification in the analysis. Furthermore, since the coefficients do not explicitly involve the time, it is possible to perform a harmonic analysis to separate the time. The system is thereby reduced to a fourth-order set of ordinary linear differential equations. This system can be solved numerically with presently available computers, even when the equilibrium models are quite elaborate.</p>
+
+  <p>Of course, one does not suppose that such an approach can provide a detailed model of cepheid oscillations, which are, in general, of large amplitude and clearly nonsinusoidal. On the other hand, it has proved to be possible to use the method to investigate the vibrational stability of specific stellar models and thus to begin to identify, from a theoretical viewpoint, the regions of instability in the H-R diagram. However, when the linear-pulsation theory is applied even to quite simple equilibrium models, a complex numerical calculation is necessary, and it is not easy to isolate the essential physics of the problem from the numerical details. It is the purpose of the present discussion to consider a model sufficiently simple to be solved analytically, but which nevertheless illustrates the physical basis of pulsational instability.</p>
+
+  <h2>General Formulation and Linearization of the Problem</h2>
+
+  <p>In our simplified model, we shall consider only the behavior of a thin layer or shell of gas in the star during a pulsation. It is convenient, however, to write general equations applicable to the entire star; the restriction to a small layer is made later. The independent variable is taken to be the mass \(M_r\) lying internal to the radius \(r\) in the equilibrium model: this is then a Lagrangian variable which moves with the gas in a radial pulsation. The mechanical behavior of the star is described by the equation of motion</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \frac{\partial P}{\partial M_r}
+      =
+      -\frac{1}{4\pi r^2}
+      \left(
+        \frac{GM_r}{r^2} + \frac{\partial^2 r}{\partial t^2}
+      \right)
+    \]</div>
+    <div class="tag">(1)</div>
+  </div>
+
+  <p class="no-indent">supplemented by a continuity equation</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \frac{\partial r}{\partial M_r}
+      =
+      \frac{1}{4\pi r^2\rho}
+    \]</div>
+    <div class="tag">(2)</div>
+  </div>
+
+  <p>The gas is characterized by an equation of state</p>
+
+  <div class="equation">
+    <div class="math">\[
+      P = \frac{\mathcal{R}}{\beta\mu}\rho T
+      \qquad
+      \hbox{where }
+      \beta = \frac{P_{\rm gas}}{P} = 1-\frac{aT^4}{3P}
+    \]</div>
+    <div class="tag">(3)</div>
+  </div>
+
+  <p class="no-indent">and by the specific heat at constant pressure \(C_p\), as well as the bulk moduli,</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \alpha =
+      \left.\frac{\partial \ln\rho}{\partial \ln P}\right|_T
+      \qquad
+      \delta =
+      -\left.\frac{\partial \ln\rho}{\partial \ln T}\right|_P
+    \]</div>
+    <div class="tag">(4)</div>
+  </div>
+
+  <p>The transport of radiation is described by the usual diffusion equation</p>
+
+  <div class="equation">
+    <div class="math">\[
+      L_r =
+      -\frac{64\pi^2ac r^4T^3}{3\chi}
+      \frac{\partial T}{\partial M_r}
+    \]</div>
+    <div class="tag">(5)</div>
+  </div>
+
+  <p class="no-indent">where \(\chi(P,T)\) is the Rosseland mean of the mass-absorption coefficient and \(L_r\) is the total radiation flux through a spherical surface of radius \(r\).</p>
+
+  <p>The energy equation is then</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \frac{\partial L_r}{\partial M_r}
+      =
+      \epsilon - \frac{\partial Q}{\partial t}
+      =
+      \epsilon - C_p\frac{\partial T}{\partial t}
+      +\frac{\delta}{\rho}\frac{\partial P}{\partial t}
+    \]</div>
+    <div class="tag">(6)</div>
+  </div>
+
+  <p class="no-indent">where \(\epsilon\) is the nuclear-energy production per unit mass per unit time and \(Q\) is the heat content per unit mass. It should be noticed that equation (1) contains the "dynamic" term \(\partial^2r/\partial t^2\) and equation (6) contains the "nonadiabatic" term \(\partial Q/\partial t\); these are the only time-dependent terms, since the composition is taken to be constant over the time scale we are considering. The effects of viscosity in the momentum and energy equations are also neglected.</p>
+
+  <p>With the help of equation (3), we eliminate \(\rho\) in equations (2) and (6); then equations (1), (2), (5), and (6) constitute a set of four first-order (in \(M_r\)) differential equations for the four dependent variables \(r\), \(P\), \(T\), and \(L_r\). We next assume that an "equilibrium" model, i.e., a solution to these four equations when the time derivatives are ignored, is available. This solution is specified by the quantities \(r_0\), \(P_0\), \(T_0\), and \(L_{r0}\); the solution to the full time-dependent problem is then defined to be</p>
+
+  <div class="equation">
+    <div class="math">\[
+      r(M_r,t) = r_0(M_r)\left[1+r'(M_r,t)\right]
+    \]</div>
+    <div class="tag">(7)</div>
+  </div>
+
+  <p>Thus, \(r'\) is a nondimensional variable describing the fluctuation of \(r\) from its equilibrium value. Writing similar expressions for \(P\), \(T\), and \(L_r\), we define corresponding fluctuations \(p'\), \(t'\), and \(l'\).</p>
+
+  <p>By neglecting all terms of higher than first order in the nondimensional quantities \(r'\), \(p'\), \(t'\), and \(l'\), which thus assume the meaning of small perturbations to the equilibrium model, we obtain linear differential equations for these quantities. Since we shall be interested only in the outer layers of a star, we assume \(\epsilon \equiv 0\). We further define</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \begin{gathered}
+      \sigma_0^2 = \frac{g_0}{r_0} = \frac{GM_r}{r_0^3},
+      \qquad
+      C = \frac{C_p\mu\beta}{\mathcal{R}\delta},
+      \\[3pt]
+      \chi_0 = \chi(P_0,T_0),
+      \qquad
+      \chi_p =
+      \left.\frac{\partial\ln\chi}{\partial\ln P}\right|_T,
+      \qquad
+      \chi_T =
+      \left.\frac{\partial\ln\chi}{\partial\ln T}\right|_P .
+      \end{gathered}
+    \]</div>
+    <div class="tag">(8)</div>
+  </div>
+
+  <p class="no-indent">The linearized equations thus become</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \frac{\partial p'}{\partial M_r}
+      =
+      \frac{1}{4\pi r_0P_0}
+      \left[
+        \sigma_0^2(4r'+p')-\ddot r'
+      \right]
+    \]</div>
+    <div class="tag">(9)</div>
+  </div>
+
+  <div class="equation">
+    <div class="math">\[
+      \frac{\partial r'}{\partial M_r}
+      =
+      -\frac{1}{4\pi r_0^3\rho_0}
+      \left(3r'+\alpha p'-\delta t'\right)
+    \]</div>
+    <div class="tag">(10)</div>
+  </div>
+
+  <div class="equation">
+    <div class="math">\[
+      \frac{\partial t'}{\partial M_r}
+      =
+      \left(\frac{1}{T_0}\frac{\partial T_0}{\partial M_r}\right)
+      \left[
+        l'-4r'+\chi_pp'+(\chi_T-4)t'
+      \right]
+    \]</div>
+    <div class="tag">(11)</div>
+  </div>
+
+  <div class="equation">
+    <div class="math">\[
+      \frac{\partial l'}{\partial M_r}
+      =
+      -\frac{P_0\delta}{L_{r0}\rho_0}
+      \left(C\dot t'-\dot p'\right)
+    \]</div>
+    <div class="tag">(12)</div>
+  </div>
+
+  <h2>The One-Zone Model</h2>
+
+  <p>Since the coefficients of this linear system are not time dependent, it is possible to perform a separation of the time and space variables. There remains, however, a fourth-order system in the space variable \(M_r\), whose coefficients are generally nonconstant. The essential simplification in the one-zone model is to ignore, so far as possible, the space dependence of both the coefficients and the variables. We consider a single layer, a spherical shell of gas having mass \(m\) and lying somewhere in the interior of the star. The equilibrium state of the layer is described by a single set of variables \(r_0\), \(P_0\), \(T_0\), and \(L_{r0}\). The fluctuations \(r'\), \(p'\), and \(t'\) are assumed to be constant through the layer at any given time, so that</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \frac{\partial r'}{\partial M_r}
+      =
+      \frac{\partial p'}{\partial M_r}
+      =
+      \frac{\partial t'}{\partial M_r}
+      =
+      0
+    \]</div>
+    <div class="tag">(13)</div>
+  </div>
+
+  <p>It is not possible, however, to make such a simple assumption for \(l'\) without losing essential physical properties of the system. If we set \(\partial l'/\partial M_r\) equal to zero, it means that the pulsation is completely adiabatic, and no damping or excitation is possible. In general, however, the flux passing through will be modified by the gas in the shell, and we wish to show that this effect can lead to either a positive or a negative damping of the pulsation. Let the flux variation at the lower boundary of the layer be \(l'_L\), and that at the upper boundary, \(l'_U\). Then we make the following approximations:</p>
+
+  <div class="equation">
+    <div class="math">\[
+      l'=\frac{l'_U+l'_L}{2}
+    \]</div>
+    <div class="tag">(14)</div>
+  </div>
+
+  <div class="equation">
+    <div class="math">\[
+      \frac{\partial l'}{\partial M_r}
+      =
+      \frac{l'_U-l'_L}{m}
+    \]</div>
+    <div class="tag">(15)</div>
+  </div>
+
+  <p>The system will now be completely soluble if some assumption is made about \(l'_L\). The simplest approach is to set</p>
+
+  <div class="equation">
+    <div class="math">\[
+      l'_L = 0
+    \]</div>
+    <div class="tag">(16)</div>
+  </div>
+
+  <p>In this case, the flux entering the layer at the bottom is constant; any variation of the emerging flux is due solely to the properties of the layer being considered.</p>
+
+  <p>It might be possible to obtain a somewhat more realistic one-zone model by allowing \(l'_L\) to be nonzero, since in fact there will be a variable flux impinging on any layer one might select in the star. We have chosen condition (16), however, because we wish our model to be as simple as possible and to be completely independent of the neighboring regions. Our approach will then be to try to understand the effects of interactions between different layers by comparing the one-zone model with the continuous model discussed later. Thus, the final condition defining the one-zone model, obtained by combining equations (14), (15), and (16), is</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \frac{\partial l'}{\partial M_r}
+      =
+      \frac{2l'}{m}
+    \]</div>
+    <div class="tag">(17)</div>
+  </div>
+
+  <p>In a formal sense, we may imagine that we are approximating the differential equations by difference equations, having divided up the star into a large number of small zones. In general, the values of the variables in a given zone depend upon the values in the neighboring zones. In the one-zone model, we have made special simplifying assumptions about the quantities in the neighboring zones in order that we may discuss the behavior of a single zone independently. In this way, we may illustrate certain physical properties which we believe to be important, while neglecting other complicating factors. We will discuss some of these neglected effects in the section on the distributed model.</p>
+
+  <p>In physical terms, we are considering a bulked mechanical system which is interacting with a thermodynamic system. The gas gives a "spring constant" to the shell; if set into motion, it will oscillate with a frequency of order of magnitude \(\sigma_0\). If the oscillation is adiabatic, the amplitude will remain constant. The essential nonadiabatic effect to be studied here is the interaction of the gas with the radiation passing through. The gas can modulate the constant flux entering at the bottom, producing a variable outward flux at the top; this can happen in such a way that energy is either removed from or fed into the mechanical modes. In the former case, the oscillation will be damped, much as a sound wave is damped in passing through a medium of finite thermal conductivity. In the latter case, the oscillation is "negatively damped" by a similar but inverse process, and the amplitude increases at the expense of a slight decrease in the mean radiative flux emerging.</p>
+
+  <p>Upon applying conditions (13) and (17), which characterize the one-zone model, equations (9) to (12) become</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \ddot r' = \sigma_0^2(4r'+p')
+    \]</div>
+    <div class="tag">(18)</div>
+  </div>
+
+  <div class="equation">
+    <div class="math">\[
+      3r'+\alpha p'-\delta t'=0
+    \]</div>
+    <div class="tag">(19)</div>
+  </div>
+
+  <div class="equation">
+    <div class="math">\[
+      l'-4r'+\chi_pp'+(\chi_T-4)t'=0
+    \]</div>
+    <div class="tag">(20)</div>
+  </div>
+
+  <div class="equation">
+    <div class="math">\[
+      C\dot t'-\dot p'=-K\sigma_0l'
+    \]</div>
+    <div class="tag">(21)</div>
+  </div>
+
+  <p class="no-indent">where we have defined</p>
+
+  <div class="equation">
+    <div class="math">\[
+      K=\frac{2L_{r0}\rho_0}{mP_0\delta\sigma_0}
+    \]</div>
+    <div class="tag">(22)</div>
+  </div>
+
+  <p>If \(K=0\) we have \(C\dot t'=\dot p'\). This is the fully adiabatic case, in which the thermal properties of the oscillations are essentially uncoupled from the mechanical behavior. Thus, the nondimensional parameter \(K\), which couples the mechanical and thermal modes, is a measure of the degree of departure from adiabacy.</p>
+
+  <p>Equations (18) to (21) may be combined to yield a single third-order equation</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \dddot r' + K\sigma_0A\ddot r'
+      +\sigma_0^2B\dot r' + K\sigma_0^3Dr' = 0
+    \]</div>
+    <div class="tag">(23)</div>
+  </div>
+
+  <p class="no-indent">The coefficients in this equation are</p>
+
+  <div class="equation">
+    <div class="math">\[
+      A=-\frac{(\chi_T-4)\alpha+\chi_p\delta}{\alpha C-\delta}
+    \]</div>
+    <div class="tag">(24)</div>
+  </div>
+
+  <div class="equation">
+    <div class="math">\[
+      B=\frac{3C-4(\alpha C-\delta)}{\alpha C-\delta}
+    \]</div>
+    <div class="tag">(25)</div>
+  </div>
+
+  <div class="equation">
+    <div class="math">\[
+      D=\frac{(4\alpha-3)(\chi_T-4)+4\delta(\chi_p+1)}
+      {\alpha C-\delta}
+    \]</div>
+    <div class="tag">(26)</div>
+  </div>
+
+  <p>It may be noted that the quantities \(\alpha\), \(\delta\), and \(C\) are related to the well-known adiabatic exponents (Chandrasekhar, 1938) by the following identities:</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \Gamma_1=\frac{C}{\alpha C-\delta}
+      \qquad
+      \Gamma_2=\frac{C}{C-1}
+      \qquad
+      \Gamma_3-1=\frac{1}{\alpha C-\delta}
+    \]</div>
+    <div class="tag">(27)</div>
+  </div>
+
+  <p>If \(r'\) is assumed to have an exponential time dependence</p>
+
+  <div class="equation">
+    <div class="math">\[
+      r'=\xi(M_r)e^{st}
+    \]</div>
+    <div class="tag">(28)</div>
+  </div>
+
+  <p class="no-indent">then equation (23) becomes a cubic equation in \(s\):</p>
+
+  <div class="equation">
+    <div class="math">\[
+      s^3+K\sigma_0As^2+\sigma_0^2Bs+K\sigma_0^3D=0
+    \]</div>
+    <div class="tag">(29)</div>
+  </div>
+
+  <p class="no-indent">This is the eigenvalue equation for the one-zone model.</p>
+
+  <p>In the adiabatic case (\(K=0\)), the equation reduces to one of second order, having the solutions</p>
+
+  <div class="equation">
+    <div class="math">\[
+      s_{\rm ad}=\pm i\sqrt{B}\,\sigma_0
+      =
+      \pm i\sqrt{3\Gamma_1-4}\,\sigma_0
+    \]</div>
+    <div class="tag">(30)</div>
+  </div>
+
+  <p class="no-indent">This is the period-mean density relation for the one-zone model. If \(\Pi\) is the period, and if we define the mean density of the sphere interior to \(r_0\) by</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \bar\rho_r=\frac{M_r}{\frac{4}{3}\pi r_0^3}
+    \]</div>
+    <div class="tag">(31)</div>
+  </div>
+
+  <p class="no-indent">then equation (30) may be written</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \Pi\bar\rho_r^{1/2}
+      =
+      \left(
+        \frac{3\pi}{(3\Gamma_1-4)G}
+      \right)^{1/2}
+    \]</div>
+    <div class="tag">(32)</div>
+  </div>
+
+  <p>If the entire star is considered, the mean density</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \bar\rho=\frac{M}{\frac{4}{3}\pi R^3}
+    \]</div>
+    <div class="tag">(33)</div>
+  </div>
+
+  <p class="no-indent">appears in place of \(\bar\rho_r\), and equation (32) is simply one form of the usual period-mean density relation. If \(3\Gamma_1-4&lt;0\), \(s_{\rm ad}\) in equation (30) is real, corresponding to an exponential increase or decrease in the perturbation. This is the well-known case of dynamic instability.</p>
+
+  <h2>The Stability Criteria</h2>
+
+  <p>If we consider equation (29) with \(K\ne0\), the criterion that all three roots have negative real parts (stability) is</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \sigma_0^2B>0
+    \]</div>
+    <div class="tag">(34a)</div>
+  </div>
+
+  <div class="equation">
+    <div class="math">\[
+      K\sigma_0^3D>0
+    \]</div>
+    <div class="tag">(34b)</div>
+  </div>
+
+  <div class="equation">
+    <div class="math">\[
+      K\sigma_0^3(AB-D)>0 .
+    \]</div>
+    <div class="tag">(34c)</div>
+  </div>
+
+  <p>We have seen above that condition (34a) is necessary for dynamic stability. It will be shown below that (34b) is the condition for secular stability. We now assume that both (a) and (b) are fulfilled; then condition (34c), necessary for vibrational stability, may be written</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \frac{4}{C}
+      -
+      \left(\frac{\chi_T}{C}+\chi_p\right)
+      -
+      \frac{4}{3\Gamma_1}
+      =
+      \frac{\Lambda}{C}
+      >0
+      \qquad
+      (\hbox{stability})
+    \]</div>
+    <div class="tag">(35)</div>
+  </div>
+
+  <p class="no-indent">which also defines the quantity \(\Lambda\).</p>
+
+  <p>By an inspection of equation (35), we can immediately see several factors which influence the vibrational stability. The first term is \(4/C\), which is always positive. This term reflects the fact that mechanical energy is lost through radiation when the gas heats during compression and cools during expansion. It is the analog of conductive damping of a sound wave. The quantity \(C\), which may be written as \(\Gamma_2/(\Gamma_2-1)\) according to equation (27), is a "dimensionless specific heat," having the value \(5/2\) for an ideal monatomic gas. In an ionization zone, \(C\) may become very large because the mechanical energy of compression can go into ionization energy as well as thermal energy. Thus, the temperature fluctuation is much smaller and the stabilizing effect of this term is diminished. In the limit \(C\to\infty\) (\(\Gamma_2\to1\)), the oscillation is isothermal and no energy is lost.</p>
+
+  <p>The second term in equation (35) is \(-(\chi_T/C+\chi_p)\); it shows the effect of the change in opacity during a pulsation. Since both pressure and temperature are greater during contraction than during expansion, positive values of \(\chi_T\) and \(\chi_p\) would imply that the opacity is greater in the contracted state and less when the shell is expanded. This means that the change in opacity is such that more energy is removed from the flux passing through during contraction than during expansion; energy is fed into the mechanical modes during contraction, which is the proper phase to provide a driving effect. This is the so-called \(\chi\)-mechanism (Baker and Kippenhahn, 1962); the destabilizing effect of positive \(\chi_T\) and \(\chi_p\) is obvious from equation (35). In fact, \(\chi_p\) is positive and \(\chi_T\) negative throughout most of a stellar envelope (for Kramer's opacity, \(\chi_p=1\), \(\chi_T=-5/2\)), and in general it turns out that \(-(\chi_T/C+\chi_p)>0\). On the other hand, this term can have a strongly destabilizing effect in an ionization zone where \(C\) is large. Thus, even though \(\chi_T&lt;0\), the specific heat may be so high that there is actually a net increase in opacity during compression because of the very small temperature increase. In addition, there are regions in the H\(^-\) and H ionization zones where \(\chi_T\) becomes positive (see Baker and Kippenhahn, 1962, Figures 1 and 2).</p>
+
+  <p>The third term in equation (35), \(-4/3\Gamma_1\), which is always destabilizing, is an effect of the spherical geometry. If one constructs a plane one-zone model by ignoring curvature effects in the basic equations, this term does not appear. It reflects the change in density of a spherical shell during pulsation. The thermal conductivity of the gas depends upon the density as well as upon \(\chi\). In the pulsation of a plane layer, the density also increases, but this increase is exactly canceled by the decrease in the total thickness of the layer; the mass per unit area remains constant. Thus, the total impedance to radiation of the layer is unchanged if \(\chi\) is constant. In the compression of a spherical layer, however, the increase in density more than compensates for the decrease in thickness; in this way, the spherical geometry exerts a "throttling effect."</p>
+
+  <h2>The Saturation Effect</h2>
+
+  <p>It was seen above that a large value of \(C\), which occurs in a region where an abundant element (hydrogen or helium) is partially ionized, can lead to instability in the sense of an exponentially increasing amplitude of infinitesimal oscillations. It is also apparent that the amplitude cannot increase indefinitely. In the linear model, \(C\) is determined by the equilibrium values of \(P\) and \(T\) and is assumed to be constant in time. However, when the amplitude becomes so large that the element in question is fully ionized in the contracted state or fully recombined in the expanded state, the effective value of \(C\) will decrease and the damping may become positive at the extremes of the fluctuation. This "saturation effect" may then limit the amplitude.</p>
+
+  <p>Thus, we might imagine a simple nonlinear one-zone model obtained by allowing the coefficients in equation (23) to be functions of the amplitude. A zone in which infinitesimal oscillations are negatively damped would then behave somewhat like a van der Pol oscillator: the positive damping at large amplitudes will set a limit to the size of the fluctuation. The nonlinear oscillations of such a model would then execute a sort of limit cycle. The analytic treatment of a third-order nonlinear equation such as equation (23) is very difficult. In a few specific cases it has been possible to show (see Rauch, 1950) that something like a limit cycle exists, in that the motion must be confined to a certain small region of the three-dimensional phase space. The present model seems reasonable, however, from a physical point of view, and equation (23) could easily be solved numerically. The variation of the coefficients \(A\), \(B\), and \(D\) would presumably be due principally to the change in \(C\).</p>
+
+  <p>Clearly, there will also be other layers, lying just above or below the ionization regions in the equilibrium model, which have quite the opposite behavior. Consider such a region, which might be positively damped in the linear theory. As the amplitude increases to the extent that the gas becomes partially ionized during part of the cycle, the damping might well decrease and even become negative. There might then be a range of amplitudes for which such a layer is negatively damped. As the amplitude increases still further, however, the saturation effect would take over and the damping must again become positive.</p>
+
+  <p>The rough physical picture of nonlinear cepheid oscillations suggested by the above considerations may be summarized as follows: We consider a layer of gas in the star lying between \(M_r\) and \(M_r+dM_r\). Such a layer undergoes oscillations whose frequency and amplitude are determined by the star as a whole. If the gas in the layer is fully ionized or fully un-ionized throughout the cycle, the layer will probably provide a positive damping - a drag on the rest of the star. A layer in which the gas is partially ionized during all or part of the cycle may produce a net negative damping over an entire cycle. This will depend, among other things, upon the mean pressure and temperature of the layer, the ionization potential of the atom or ion in question, and the amplitude of the oscillation. If the amplitude becomes sufficiently large, the saturation effect will assure that any layer will ultimately be positively damped.</p>
+
+  <p>It should be kept in mind that the saturation effect is not necessarily the only or even the principal mechanism which limits the amplitude in real stars. For example, it has been suggested that nonlinear effects might couple the unstable fundamental mode to higher radial modes or to nonradial modes. If these other modes are damped, the transfer of energy to them represents a net dissipation, and the amount of this dissipation depends on the strength of the coupling. The generation of shock waves can also help to limit the amplitude, since radiation from a shock front implies a net loss of mechanical energy. Christy (1964) has constructed nonlinear numerical models of pulsating stars, and he notes that, in his models, the energy dissipated in shock waves appears to become significant at an amplitude near to the limiting one.</p>
+
+  <h2>Discussion of the Eigenvalues</h2>
+
+  <p>Let us consider in somewhat more detail the roots of equation (29) in the case of small but finite \(K\). The eigenvalue \(s\) is then expanded:</p>
+
+  <div class="equation">
+    <div class="math">\[
+      s=s_0+s_1K+s_2K^2+\cdots
+    \]</div>
+    <div class="tag">(36)</div>
+  </div>
+
+  <p class="no-indent">We know that for two of the roots (call them \(s^{p\pm}\)), the zero-order term is</p>
+
+  <div class="equation">
+    <div class="math">\[
+      s_0=\pm i\sqrt{B}\sigma_0
+    \]</div>
+    <div class="tag">(37)</div>
+  </div>
+
+  <p>For the roots \(s^{p\pm}\), it is found that the first-order term is real and the second-order term imaginary. Thus, there is a second-order correction to the frequency, and a (positive or negative) damping which is of first-order in \(K\). The result for \(s_1\) is</p>
+
+  <div class="equation">
+    <div class="math">\[
+      s_1^{p\pm}
+      =
+      \frac{\sigma_0}{2B}(AB-D)
+      =
+      -\frac{3\sigma_0\delta}{2B(\alpha C-\delta)^2}\Lambda
+    \]</div>
+    <div class="tag">(38)</div>
+  </div>
+
+  <p>From this relation, it is again clear that, so long as \(B&gt;0\), the sign of the damping constant depends on the sign of \(\Lambda\): \(\Lambda&gt;0\) implies an exponential decrease in the amplitude, \(\Lambda&lt;0\) gives an increasing amplitude ("negative damping"). This agrees with the criterion (35). (Notice that equation (38) is only first order in \(K\), while equation (35) holds to all orders. \(s^{p\pm}\) have terms of higher order; all the real terms are proportional to \(\Lambda\).) The damping time is, in order of magnitude,</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \tau_d
+      \approx
+      \frac{1}{K\sigma_0}
+      \approx
+      \frac{mP_0}{L_0\rho_0}
+      \approx
+      \frac{m\mathcal{R}T_0}{\mu L_0}
+      \approx
+      \frac{E_{\rm th}}{L_0}
+    \]</div>
+    <div class="tag">(39)</div>
+  </div>
+
+  <p class="no-indent">where \(E_{\rm th}\) is the thermal energy of the layer. Thus, the damping time is in fact a thermal diffusion time, roughly the time required by the layer to exchange its entire thermal-energy content with the surrounding material. If we were to extend these considerations to the entire star, then from the virial theorem we know that \(E_{\rm th}\approx+E_{\rm gr}\), where \(E_{\rm gr}\) is the total gravitational energy of the star. Thus, the damping time for the star as a whole is</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \tau_d^*\approx\tau_{\rm gr}
+    \]</div>
+    <div class="tag">(40)</div>
+  </div>
+
+  <p class="no-indent">the gravitational (Helmholtz-Kelvin) contraction time scale. (This point is discussed in a more general case by Ledoux and Walraven, 1958, &sect;65.)</p>
+
+  <p>The third root, which is always real, is of the first order in \(K\). Neglecting terms of higher order, it is</p>
+
+  <div class="equation">
+    <div class="math">\[
+      s^s=Ks_1^s=-(K\sigma_0)\frac{D}{B}
+    \]</div>
+    <div class="tag">(41)</div>
+  </div>
+
+  <p class="no-indent">If \(D/B&gt;0\), this root is negative and the system is said to be secularly stable, that is, stable against gravitational contraction. If \(s^s&gt;0\), the gas will contract; for an entire star, this time scale is again</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \tau_s\approx\frac{1}{K\sigma_0}\approx\tau_{\rm gr}
+    \]</div>
+    <div class="tag">(42)</div>
+  </div>
+
+  <p class="no-indent">the gravitational time scale. As long as dynamic stability is present (\(B&gt;0\)), the criterion of secular stability is thus \(D&gt;0\), which requires</p>
+
+  <div class="equation">
+    <div class="math">\[
+      -(4\alpha-3)(4-\chi_T)+4\delta(\chi_p+1)>0
+    \]</div>
+    <div class="tag">(43)</div>
+  </div>
+
+  <p class="no-indent">If \(\alpha=\delta=1\), this becomes</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \chi_T+4\chi_p>0
+    \]</div>
+    <div class="tag">(43a)</div>
+  </div>
+
+  <p>In slightly different form, this is a well-known criterion for secular stability of a region in which there is no nuclear energy production. For more complete discussions of this point, see Ledoux (1958, &sect;14) and Ledoux (1963, &sect;2.2).</p>
+
+  <h2>Depth Dependence of the Nonadiabatic Effects</h2>
+
+  <p>We now wish to investigate the relative effect of different layers upon the stability. We consider a layer of mass \(m\) somewhere within a star of mass \(M\), which pulsates as a whole. The frequency of pulsation of the whole star is given approximately by</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \sigma^*=\sqrt{\frac{GM}{R^3}}
+    \]</div>
+    <div class="tag">(44)</div>
+  </div>
+
+  <p>We can now look upon the one-zone model as a layer within the star which is subject to an external force (from the rest of the star), driving the layer periodically with frequency \(\sigma^*\). Then the proper measure of adiabacy for the single layer is no longer \(K\), but rather</p>
+
+  <div class="equation">
+    <div class="math">\[
+      K'=\frac{K\sigma_0}{\sigma^*}
+      =
+      \frac{2L_0\rho_0}{mP_0\delta\sigma^*}
+    \]</div>
+    <div class="tag">(45)</div>
+  </div>
+
+  <p class="no-indent">According to (39), then</p>
+
+  <div class="equation">
+    <div class="math">\[
+      K'\approx\frac{L_0/E_{\rm th}}{\sigma^*}
+      \approx
+      \frac{\Pi}{\tau_d}
+    \]</div>
+    <div class="tag">(46)</div>
+  </div>
+
+  <p>The measure of the departure from adiabacy is thus the ratio of the pulsation period to the damping or thermal diffusion time of the layer. This is simply an expression of the physically obvious point that compression and expansion of a layer of gas will be an essentially adiabatic process if the change is carried out over a time short compared to the time needed for radiative exchange of the thermal energy of the layer with its surroundings. The fact that \(\tau_d\approx E_{\rm th}/L_0\) implies that the greater the thermal energy of a layer, the smaller will be its contribution to the nonadiabatic damping or excitation. (We are excluding from discussion the interior region of nuclear-energy production; thus, \(L_0=\) constant.) If we consider two layers of equal mass and having mean temperatures \(T_1\) and \(T_2\), then</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \frac{K'_1}{K'_2}=\frac{T_2}{T_1}
+    \]</div>
+    <div class="tag">(47)</div>
+  </div>
+
+  <p>In general, a layer lying deep in the star will be much less effective in producing radiative damping or excitation than a layer of the same mass lying in the surface regions. This means that in practice it is possible to neglect the effect of the interior regions in estimating the damping coefficient. The steeper the fall in temperature from center to surface, the smaller will be the proportion of the total mass which contributes significantly to the damping. In cool supergiants, such as the \(\delta\)-Cephei stars, it is found that only the outer 5% of the mass, at most, makes any contribution to the damping. Some of the pertinent quantities for an actual stellar model are given in Table I.</p>
+
+  <p>The table refers to one of the cepheid models investigated by Baker and Kippenhahn (1965). It has the following properties: \(M=7.0M_\odot\), \(L=4600L_\odot\), \(T_e=5320^\circ{\rm K}\). This model has a fundamental period of 11.5 days, and the detailed linear calculations show it to be vibrationally unstable. The various quantities are given at different levels in the stellar envelope, starting at the photosphere. In general, \(C\) is large in the ionization zones; \(\Lambda\) is seen to be negative in the center of all the ionization zones and tends to be positive in other regions (\(\Lambda\) is negative at the photosphere because of the large \(\chi_T\) due to H\(^-\) ionization). The quantity \(K''\) is the measure of nonadiabacy - it is exactly the same as \(K'\), except that we have used the total mass of the star instead of the mass of a single layer,</p>
+
+  <div class="equation">
+    <div class="math">\[
+      K''=K'\frac{m}{M}
+      =
+      \frac{2L_0\rho_0}{MP_0\delta\sigma^*}
+    \]</div>
+    <div class="tag">(48)</div>
+  </div>
+
+  <table>
+    <caption>Table I</caption>
+    <thead>
+      <tr>
+        <th>Region</th>
+        <th>\(\log P_0\)</th>
+        <th>\(\log T_0\)</th>
+        <th>\(C\)</th>
+        <th>\(\chi_T\)</th>
+        <th>\(\chi_p\)</th>
+        <th>\(\Gamma_1\)</th>
+        <th>\(\Lambda\)</th>
+        <th>\(K''\)</th>
+        <th>\(m'\)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Photosphere</td>
+        <td>3.422</td>
+        <td>3.726</td>
+        <td>2.51</td>
+        <td>6.02</td>
+        <td>0.667</td>
+        <td>1.67</td>
+        <td>-2.27</td>
+        <td>\(1.3\times10^{-3}\)</td>
+        <td>-</td>
+      </tr>
+      <tr>
+        <td>H-I ionization</td>
+        <td>3.717</td>
+        <td>4.004</td>
+        <td>12.36</td>
+        <td>6.89</td>
+        <td>0.367</td>
+        <td>1.14</td>
+        <td>-1.77</td>
+        <td>\(1.9\times10^{-4}\)</td>
+        <td>\(2.4\times10^{-6}\)</td>
+      </tr>
+      <tr>
+        <td></td>
+        <td>3.907</td>
+        <td>4.161</td>
+        <td>4.44</td>
+        <td>-3.58</td>
+        <td>0.820</td>
+        <td>1.34</td>
+        <td>-0.11</td>
+        <td>\(2.1\times10^{-4}\)</td>
+        <td>\(5.1\times10^{-6}\)</td>
+      </tr>
+      <tr>
+        <td>He-I ionization</td>
+        <td>3.957</td>
+        <td>4.236</td>
+        <td>6.53</td>
+        <td>-3.95</td>
+        <td>0.861</td>
+        <td>1.21</td>
+        <td>-0.74</td>
+        <td>\(1.4\times10^{-4}\)</td>
+        <td>\(6.0\times10^{-6}\)</td>
+      </tr>
+      <tr>
+        <td></td>
+        <td>4.077</td>
+        <td>4.377</td>
+        <td>2.99</td>
+        <td>-3.06</td>
+        <td>0.792</td>
+        <td>1.57</td>
+        <td>+0.74</td>
+        <td>\(1.0\times10^{-4}\)</td>
+        <td>\(8.5\times10^{-6}\)</td>
+      </tr>
+      <tr>
+        <td>He-II ionization</td>
+        <td>4.677</td>
+        <td>4.605</td>
+        <td>5.29</td>
+        <td>-2.94</td>
+        <td>0.869</td>
+        <td>1.23</td>
+        <td>-0.64</td>
+        <td>\(3.6\times10^{-5}\)</td>
+        <td>\(3.9\times10^{-5}\)</td>
+      </tr>
+      <tr>
+        <td></td>
+        <td>5.567</td>
+        <td>4.838</td>
+        <td>3.28</td>
+        <td>-3.83</td>
+        <td>0.865</td>
+        <td>1.53</td>
+        <td>+0.65</td>
+        <td>\(2.4\times10^{-5}\)</td>
+        <td>\(2.3\times10^{-4}\)</td>
+      </tr>
+      <tr>
+        <td></td>
+        <td>7.997</td>
+        <td>5.403</td>
+        <td>3.08</td>
+        <td>-3.44</td>
+        <td>0.740</td>
+        <td>1.56</td>
+        <td>+0.83</td>
+        <td>\(7.8\times10^{-6}\)</td>
+        <td>\(1.4\times10^{-2}\)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>The quantity \(m'\) is the fraction of the star's mass lying above the layer in question:</p>
+
+  <div class="equation">
+    <div class="math">\[
+      m'=\frac{M-M_r}{M}
+    \]</div>
+    <div class="tag">(49)</div>
+  </div>
+
+  <p>The detailed calculations show that the pulsations are strongly adiabatic at the last point given in the table, i.e., at the level given by \(P_0\approx10^8\) dynes/cm\(^2\). Thus, nonadiabatic effects are confined to the outer 1.4% of the star's mass. The He-II ionization zone lies slightly above the adiabatic interior, but deep enough so that it contains more than \(10^{-5}\) of the total mass of the star.</p>
+
+  <h2>General Discussion of the Cepheid Phenomenon</h2>
+
+  <p>In discussing the radiative damping or excitation in cepheids, it has proved convenient to speak of three separate regions of a star (Cox, 1961). The first is the inner adiabatic region, which can be neglected in calculating the damping. The second is an outer zone, which may contain a fairly large fraction of the radius and in which the variation in \(\Lambda\) may be quite large due to ionization of abundant elements, but whose mass is so small that it cannot make a significant contribution to the damping. The third region is the intermediate nonadiabatic zone; the behavior of \(\Lambda\) in this region determines whether the damping is positive or negative and thus whether the star as a whole is vibrationally stable or unstable.</p>
+
+  <p>In the course of a star's evolution, it will pass through the region of the classical cepheids in the H-R diagram several times (Hofmeister, Kippenhahn, and Weigert, 1964). In each crossing, the luminosity remains nearly constant, while the surface temperature undergoes a large increase or decrease. Let us consider a star lying to the left of the cepheid region, which is beginning one of its crossings from left to right. Initially, the surface temperature is very high (\(\approx8000^\circ\)). The H, He, and He\(^+\) ionization zones lie in the outermost layers of the star, and very little mass is in a partially ionized state. In the nonadiabatic zone, the abundant elements are fully ionized, \(C\) is very small (\(\approx5/2\)), and the star is strongly stable against pulsation. As the surface temperature decreases, first the He\(^+\) ionization zone, then the He and H ionization zones, come into the nonadiabatic region. Thus, there is a range of effective temperatures where stars are vibrationally unstable. At still lower surface temperatures, all three ionization zones are in the adiabatic interior and can effect only a small decrease in the positive damping from the nonadiabatic zone. The existence of a region of linear instability in the H-R diagram, due to the destabilizing effect of the second helium ionization, has been quite well substantiated by detailed numerical computations of Baker and Kippenhahn (1962 and 1965) and Cox (1963).</p>
+
+  <p>The actual situation is somewhat more complicated than that sketched above. By the time the surface temperature drops to the point that a significant amount of mass is in the H and He ionization zones, most of the energy transport in these zones occurs by convection. In this case, the above considerations, which assume radiative transport, are clearly invalid. The interaction of convection with the pulsations is not understood; it may well be that the onset of convection determines the right-hand limit of the cepheid strip in the H-R diagram (see Baker and Kippenhahn, 1962, and Baker, 1963).</p>
+
+  <h2>The Distributed Model</h2>
+
+  <p>Although it is encouraging that the one-zone model leads to physically reasonable results, it is appropriate to attempt to understand the interaction of one layer with its neighboring layers. In the one-zone model, it is assumed that the physical quantities in neighboring layers do not vary; in fact, of course, they do vary and this will affect the layer being considered.</p>
+
+  <p>In particular, it would seem to be important to consider the spatial variation of \(t'\) and \(l'\), the temperature fluctuation and the net radiative energy gained or lost in a layer will surely depend upon the temperature fluctuation in neighboring layers and upon the fact that the impinging radiative flux is not constant in time (\(l'_L\ne0\)). We expect the spatial variation of fluctuations in the mechanical quantities to be less important for the damping.</p>
+
+  <p>An approach to the problem may be made using the quasi-adiabatic approximation (Rosseland, 1949). Essentially, this amounts to assuming that \(K\ll1\) throughout the star and evaluating the damping coefficient to first order. Although it turns out that there are important regions in cepheids where this approximation is not valid, it has been very useful in qualitative discussions. In practice, the quasi-adiabatic approximation is carried out as follows: Assume that in zero-th order, \(\partial l'/\partial M_r=0\) (complete adiabacy). This gives a relation between \(p'\) and \(t'\), and by eliminating \(t'\) from the mechanical equations we can solve them for \(r'\) and \(p'\) throughout the star. Knowing \(r'\), \(\partial r'/\partial M_r\), and \(p'\), we can get \(t'\) and \(\partial t'/\partial M_r\) everywhere; these are then put into the linearized energy-transport equation to get \(l'\). Since \(\partial l'/\partial M_r\) is now nonzero, the damping may be finite. This procedure could be iterated to obtain higher approximations, although it is not clear that it would converge if there are regions of large departure from adiabacy.</p>
+
+  <p>Applying this procedure to the set (9 to 12), we find in zero-th order</p>
+
+  <div class="equation">
+    <div class="math">\[
+      t'=\frac{1}{C}p'
+    \]</div>
+    <div class="tag">(50)</div>
+  </div>
+
+  <p class="no-indent">Substituting this into equation (10), one finds</p>
+
+  <div class="equation">
+    <div class="math">\[
+      3r'-4\pi r_0^3\rho_0
+      \frac{\partial r'}{\partial M_r}
+      =
+      -\left(\alpha-\frac{\delta}{C}\right)p'
+    \]</div>
+    <div class="tag">(51)</div>
+  </div>
+
+  <p>One would then proceed to solve this equation together with (9). Then a first-order value of \(t'\) is found from (10) and substituted into (11) to get \(l'\). Instead of doing this, we make the additional simplification of assuming \(r'=\) constant for all \(M_r\). Then the second term in equation (51) vanishes, and upon substituting equations (50) and (51) into equation (11), we find</p>
+
+  <div class="equation">
+    <div class="math">\[
+      l'=-b\frac{\partial t'}{\partial M_r}+\Lambda r'
+    \]</div>
+    <div class="tag">(52)</div>
+  </div>
+
+  <p class="no-indent">where</p>
+
+  <div class="equation">
+    <div class="math">\[
+      b=-\frac{1}{T_0}\frac{\partial T_0}{\partial M_r}>0 .
+    \]</div>
+    <div class="tag">(53)</div>
+  </div>
+
+  <p>The discussion of the stability is most simply made by using Eddington's (1928) expression for the total change in the pulsation energy during one cycle:</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \begin{aligned}
+      \Delta W
+      &=
+      -\int_0^M \oint
+      t'\frac{\partial L_r}{\partial M_r}\,dt\,dM_r
+      \\[3pt]
+      &=
+      L_0\oint dt
+      \int_0^M
+      t'\frac{\partial l'}{\partial M_r}\,dM_r .
+      \end{aligned}
+    \]</div>
+    <div class="tag">(54)</div>
+  </div>
+
+  <p class="no-indent">where the time integral is taken over one complete period. If \(\Delta W&gt;0\), the pulsation energy is increasing in time and the star is vibrationally unstable, whereas \(\Delta W&lt;0\) implies positive damping. Thus, we wish to evaluate</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \begin{aligned}
+      -\int_0^M t'
+      \frac{\partial l'}{\partial M_r}\,dM_r
+      &=
+      -t'l'\big|_0^M
+      +
+      \int_0^M l'\frac{\partial t'}{\partial M_r}\,dM_r
+      \\[3pt]
+      &=
+      t'(M)l'(M)
+      -
+      \int_0^M
+      b\left(\frac{\partial t'}{\partial M_r}\right)^2\,dM_r
+      +
+      \int_0^M
+      \Lambda r'\frac{\partial t'}{\partial M_r}\,dM_r ,
+      \end{aligned}
+    \]</div>
+    <div class="tag">(55)</div>
+  </div>
+
+  <p class="no-indent">where we have applied the boundary condition \(l'(0)=0\). The first term on the right-hand side of equation (55) depends upon the surface boundary condition; as a good approximation we may take</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \frac{\partial t'}{\partial M_r}=0
+      \qquad
+      \hbox{at}
+      \qquad
+      M_r=M
+    \]</div>
+    <div class="tag">(56)</div>
+  </div>
+
+  <p class="no-indent">[This is a fairly realistic condition, valid if applied at an optical depth \(\tau\gg1\), i.e., if the oscillations of the atmosphere are neglected. The condition (56) was used for one of the models in Baker and Kippenhahn (1962). The correct boundary conditions for cepheids have been derived in detail by Unno (1964). He also has discussed the effect of the boundary conditions upon the stability calculations. A simple condition such as (56) appears to be entirely adequate for our present purpose.]</p>
+
+  <p>The last term in equation (55) may be integrated by parts. Then with the definition</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \left\langle\Lambda t'^2\right\rangle
+      =
+      \frac{1}{2}
+      \left[
+        (\Lambda t'^2)_M+(\Lambda t'^2)_0
+      \right]
+    \]</div>
+    <div class="tag">(57)</div>
+  </div>
+
+  <p class="no-indent">we finally have</p>
+
+  <div class="equation">
+    <div class="math">\[
+      \Delta W\propto
+      -\left\langle\Lambda t'^2\right\rangle
+      -
+      \int_0^M b
+      \left(\frac{\partial t'}{\partial M_r}\right)^2\,dM_r
+      +
+      \frac{1}{2}
+      \int_0^M t'^2
+      \left(\frac{\partial\Lambda}{\partial M_r}\right)\,dM_r .
+    \]</div>
+    <div class="tag">(58)</div>
+  </div>
+
+  <p>In the one-zone model, we assumed \(t'\) and \(\Lambda\) to be constant in space. In that case, the last two terms in equation (58) vanish and \(\Delta W\propto-\Lambda\); this stability condition agrees with that derived from the one-zone model [see equation (35)]. The second term in equation (58) is a correction for the spatial variation in the temperature fluctuation. It might be thought that this differential heating and cooling could be such as to provide either positive or negative damping; in fact, this effect always enhances the stability, since \(b\) is always positive. This term also illustrates another effect which is missing in the one-zone model: the "wavelength dependence" of the damping constant.</p>
+
+  <p>The function \(t'\) has an increasing number of nodes as the frequency increases, and thus \(|dt'/dM_r|\) will be, on the average, greater for the higher harmonics (this is especially true since the nodes appear first and are most numerous in the outer nonadiabatic regions, where the sound velocity is much smaller than in the interior). Hence, we expect the positive damping represented by the second term in equation (58) to be the greater, the higher the harmonic considered. This is one reason that the numerical linear calculations usually show that the higher harmonics (although often not the first) are damped, even though the fundamental is unstable. Physically, this comes about because the distance between hotter-than-average and cooler-than-average regions is smaller, leading to an increase in the amount of radiative diffusion between these regions. The last term depends on the variation of \(\Lambda\). If we ignore the change in \(t'^2\), the term is proportional to \([\Lambda(M)-\Lambda(0)]\). A general decrease in \(\Lambda\) from center to surface contributes to instability, whereas an increase stabilizes. This may possibly be related to the fact that the luminosity fluctuation is zero at the center and tends generally to grow with increasing \(M_r\). Thus, the stabilizing or destabilizing effect of the outer layers would be relatively larger because \(|l'|\) is larger there. In any case, it appears that in a simple two-zone model, where only the specific heat \(C\) differs from one zone to the other, the configuration in which the layer with high \(C\) is on top of the other would be less stable than the reverse situation.</p>
+
+  <h2>Acknowledgments</h2>
+
+  <p>The author wishes to thank L. B. Lucy for many useful discussions. The section on the distributed model arose from discussions with W. Unno, who also made other helpful suggestions which are gratefully acknowledged. The manuscript was completed during a stay at the Max-Planck-Institut f&uuml;r Physik und Astrophysik, Munich, for whose hospitality the author wishes to thank Prof. L. Biermann. This work has received financial support from the United States Air Force Office of Scientific Research under Contract No. AF-AFOSR-62-386.</p>
+
+  <h2>References</h2>
+
+  <div class="refs">
+    <p>N. Baker (1963), in: <em>Star Evolution</em>, Proc. Internat. School Phys. E. Fermi, Varenna, 1962, Academic Press, Inc., New York and London.</p>
+    <p>N. Baker and R. Kippenhahn (1962), <em>Zschr. Astrophys.</em> <strong>54</strong>: 114.</p>
+    <p>N. Baker and R. Kippenhahn (1965), <em>Astrophys. J.</em>, in press.</p>
+    <p>S. Chandrasekhar (1939), <em>An Introduction to the Study of Stellar Structure</em>, Chicago University Press, Chicago, Illinois.</p>
+    <p>J. P. Cox (1961), Report to Commission 35, Eleventh General Assembly I.A.U., Berkeley, Calif.</p>
+    <p>J. P. Cox (1963), <em>Astrophys. J.</em> <strong>138</strong>: 487.</p>
+    <p>R. F. Christy (1964), <em>Rev. Mod. Phys.</em> <strong>36</strong>: 555; this volume, p. 359; and private communications.</p>
+    <p>A. S. Eddington (1962), <em>The Internal Constitution of the Stars</em>, Cambridge University Press, England.</p>
+    <p>E. Hofmeister, R. Kippenhahn, and A. Weigert (1964), <em>Zschr. Astrophys.</em> <strong>59</strong>: 215 and 242; <strong>60</strong>: 57; and this volume, p. 263.</p>
+    <p>P. Ledoux (1958), <em>Handbuch der Physik</em>, Vol. 51, Springer Verlag, Berlin-G&ouml;ttingen-Heidelberg, p. 605.</p>
+    <p>P. Ledoux (1963), in: <em>Star Evolution</em>, Proc. Internat. School Phys. E. Fermi, Varenna, 1962, Academic Press, Inc., New York and London.</p>
+    <p>P. Ledoux and Th. Walraven (1958), <em>Handbuch der Physik</em>, Vol. 51, Springer Verlag, Berlin-G&ouml;ttingen-Heidelberg, p. 353.</p>
+    <p>L. L. Rauch (1950), in: S. Lefschetz (ed.), <em>Contributions to the Theory of Nonlinear Oscillations</em>, Annals of Mathematics Studies No. 20, Princeton University Press, Princeton, N.J.</p>
+    <p>S. Rosseland (1949), <em>The Pulsation Theory of Variable Stars</em>, Oxford University Press, England.</p>
+    <p>W. Unno (1964), In preparation.</p>
+  </div>
+
+  <p class="source-note">Transcribed from repository images 1.png through 14.png.</p>
+</main>
+</body>
+</html>

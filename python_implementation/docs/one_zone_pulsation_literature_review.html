@@ -1,0 +1,912 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>One-Zone Stellar Pulsation Models: Literature Review and Wizard of OZ Comparison</title>
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [["\\(", "\\)"]],
+        displayMath: [["\\[", "\\]"]],
+        processEscapes: true,
+        tags: "ams"
+      },
+      chtml: { scale: 0.96 },
+      startup: {
+        pageReady: () => MathJax.startup.defaultPageReady().then(() => {
+          document.documentElement.classList.add("math-ready");
+        })
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+  <style>
+    @page {
+      size: letter;
+      margin: 0.68in 0.72in 0.72in 0.72in;
+    }
+
+    :root {
+      --ink: #15191d;
+      --muted: #59636e;
+      --line: #cfd7df;
+      --soft: #f3f6f8;
+      --panel: #ffffff;
+      --accent: #1f5f8f;
+      --accent-dark: #173a56;
+      --warm: #7a5a00;
+      --green: #255f47;
+      --red: #8f2d2d;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      background: #e9edf1;
+      color: var(--ink);
+      font-family: "Segoe UI", Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.44;
+    }
+
+    body {
+      margin: 0;
+    }
+
+    main {
+      max-width: 8.15in;
+      margin: 0 auto;
+      background: var(--panel);
+      padding: 0.45in 0.52in 0.6in;
+      box-shadow: 0 8px 28px rgba(20, 35, 50, 0.12);
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      letter-spacing: 0;
+      line-height: 1.15;
+      margin: 0;
+      color: var(--accent-dark);
+    }
+
+    h1 {
+      font-size: 25pt;
+      margin-bottom: 0.09in;
+    }
+
+    h2 {
+      font-size: 17pt;
+      margin: 0.28in 0 0.11in;
+      padding-top: 0.04in;
+      border-top: 1px solid var(--line);
+    }
+
+    h3 {
+      font-size: 13.2pt;
+      margin: 0.2in 0 0.08in;
+      color: #214b6b;
+    }
+
+    h4 {
+      font-size: 11.5pt;
+      margin: 0.14in 0 0.05in;
+      color: #2e4d63;
+    }
+
+    p {
+      margin: 0 0 0.08in;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 0.8px;
+      text-underline-offset: 2px;
+    }
+
+    code {
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 0.93em;
+      background: #eef2f5;
+      border: 1px solid #d8e0e7;
+      border-radius: 4px;
+      padding: 0 4px;
+    }
+
+    ul,
+    ol {
+      margin: 0.05in 0 0.11in 0.24in;
+      padding: 0;
+    }
+
+    li {
+      margin: 0 0 0.04in;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 0.11in 0 0.16in;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      font-size: 9.6pt;
+      line-height: 1.28;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 7px 8px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: #eef3f7;
+      color: #263b4d;
+      font-weight: 700;
+    }
+
+    caption {
+      caption-side: top;
+      text-align: left;
+      font-weight: 700;
+      color: var(--accent-dark);
+      margin-bottom: 5px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 12.1pt;
+      max-width: 7.1in;
+      margin-bottom: 0.16in;
+    }
+
+    .metadata {
+      border: 1px solid var(--line);
+      background: var(--soft);
+      padding: 0.12in 0.14in;
+      margin: 0.12in 0 0.2in;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.08in 0.18in;
+      font-size: 9.7pt;
+    }
+
+    .toc {
+      border: 1px solid var(--line);
+      padding: 0.14in 0.16in;
+      background: #fbfcfd;
+      margin: 0.16in 0 0.22in;
+    }
+
+    .toc strong {
+      display: block;
+      margin-bottom: 0.06in;
+      color: var(--accent-dark);
+    }
+
+    .toc a {
+      display: block;
+      margin: 0.025in 0;
+    }
+
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: #f3f7fa;
+      padding: 0.11in 0.14in;
+      margin: 0.12in 0 0.16in;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    .equation {
+      border: 1px solid #dbe3ea;
+      background: #fbfdff;
+      padding: 0.08in 0.12in;
+      margin: 0.09in 0 0.13in;
+      overflow-x: auto;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    .equation mjx-container[jax="CHTML"][display="true"] {
+      margin: 0.3em 0 !important;
+    }
+
+    .paper-card {
+      border: 1px solid var(--line);
+      padding: 0.14in 0.16in;
+      margin: 0.12in 0 0.18in;
+      background: #fff;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    .paper-meta {
+      color: var(--muted);
+      font-size: 9.4pt;
+      margin-bottom: 0.08in;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 7px;
+      border: 1px solid #c9d6df;
+      background: #f4f7f9;
+      border-radius: 999px;
+      font-size: 8.7pt;
+      margin: 0 4px 4px 0;
+      color: #385064;
+    }
+
+    .status-covered {
+      color: var(--green);
+      font-weight: 700;
+    }
+
+    .status-add {
+      color: var(--accent-dark);
+      font-weight: 700;
+    }
+
+    .status-doc {
+      color: var(--warm);
+      font-weight: 700;
+    }
+
+    .status-no {
+      color: var(--red);
+      font-weight: 700;
+    }
+
+    .refs p {
+      margin-left: 0.24in;
+      text-indent: -0.24in;
+      font-size: 9.5pt;
+    }
+
+    .page-break {
+      break-before: page;
+      page-break-before: always;
+    }
+
+    @media print {
+      html {
+        background: #fff;
+      }
+
+      main {
+        box-shadow: none;
+        max-width: none;
+        padding: 0;
+      }
+
+      a {
+        color: #1f5f8f;
+      }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>One-Zone Stellar Pulsation Models</h1>
+    <p class="subtitle">A historical and technical synthesis of six core papers, with a comparison to the Wizard of OZ web app implementation.</p>
+    <div class="metadata">
+      <div><strong>Repository:</strong> OZwizard</div>
+      <div><strong>Prepared from:</strong> local `bibliography/` papers and `python_implementation/web_app` source</div>
+      <div><strong>Output:</strong> static MathJax HTML plus rendered PDF</div>
+      <div><strong>Scope:</strong> explanatory report only; no app source changes</div>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Table of contents">
+    <strong>Contents</strong>
+    <a href="#source-method">Source Method</a>
+    <a href="#historical-synthesis">Historical Synthesis</a>
+    <a href="#shared-notation">Shared Notation</a>
+    <a href="#paper-baker">1. Baker: Simplified Models for Cepheid Instability</a>
+    <a href="#paper-rudd">2. Rudd and Rosenberg: A Simple Model for Cepheid Variability</a>
+    <a href="#paper-stellingwerf-1986">3. Stellingwerf: Coupled Convection and Pulsation</a>
+    <a href="#paper-fourier-1986">4. Stellingwerf and Donohoe: Fourier Coefficients I</a>
+    <a href="#paper-overtone-1987">5. Stellingwerf, Gautschy, and Dickens: Overtone Pulsation</a>
+    <a href="#paper-fourier-1987">6. Stellingwerf and Donohoe: Fourier Coefficients II</a>
+    <a href="#web-app-comparison">Wizard of OZ Comparison</a>
+    <a href="#recommendations">Recommendations</a>
+  </nav>
+
+  <section id="source-method">
+    <h2>Source Method</h2>
+    <p>The report uses the local bibliography as the substantive source of truth. The 1986 and 1987 Astrophysical Journal PDFs extract text cleanly enough for searching, with visual checks around equations, figures, and tables. The 1970 Rudd and Rosenberg paper is image-based, so it was rendered page by page and read visually. Baker's chapter is represented by the local MathJax transcription `bibliography/simplified_models_for_cepheid_instability.html`.</p>
+    <p>Bibliographic metadata for Baker and Rudd and Rosenberg was cross-checked against stable web records: the Springer reference listing for Baker's 1966 chapter and the ADS record for Rudd and Rosenberg's 1970 article. All technical claims below come from the local source files and the local web app implementation.</p>
+  </section>
+
+  <section id="historical-synthesis">
+    <h2>Historical Synthesis</h2>
+    <p>The six works form a coherent arc. Baker's 1966 chapter is the analytic seed: it asks what remains of linear stellar pulsation theory when a full radiative stellar envelope is compressed into one thermodynamic layer. The answer is not a toy in the dismissive sense. By carrying the dynamic term from the equation of motion and the nonadiabatic term from the energy equation into a single-zone linearization, Baker obtains a third-order oscillator whose stability is governed by geometry, opacity, and heat capacity. This gives a compact explanation of the classical instability strip: ionization zones reduce effective thermal damping and can reverse it.</p>
+    <p>Rudd and Rosenberg then take a different mathematical route. They want a tractable nonlinear model that exhibits an actual limit cycle resembling delta Cephei. Instead of retaining an explicit thermal state, they replace the smooth energy equation with two related force laws, one for expansion and one for compression. The discontinuity is small but essential: it creates a negative-hysteresis loop that pumps mechanical energy at small amplitude. Quadratic corrections then saturate the growth and produce a stable limit cycle. This paper is historically important because it confronts the nonlinear amplitude problem directly, but it does so by deliberately stepping away from the smooth state-vector formulation used in the later Stellingwerf line.</p>
+    <p>Stellingwerf's 1972 model, reflected in the later papers and in the current app, unifies the radiative one-zone model in a more physically legible nonlinear form. The shell radius \(R\), velocity \(V\), and nonadiabatic pressure factor \(H\) become state variables. The luminosity is not an abstract damping coefficient; it is an explicit power of radius and pressure. The 1986 convection paper adds a fourth state variable, \(U_c\), to represent delayed convective velocity. This is the direct ancestor of the Wizard of OZ ODE system.</p>
+    <p>The remaining three papers show what one-zone models are good for after the basic physics is in hand. Stellingwerf and Donohoe's 1986 Fourier paper strips the problem down to adiabatic velocity curves to learn which Fourier coefficients measure mechanical shape. Their answer is that relative Fourier amplitudes mostly measure skewness, while phase patterns are constrained by symmetry and do not explain the smooth observed phase progressions by themselves. The 1987 light-curve paper restores nonadiabatic luminosity and introduces acuteness, a second morphology parameter controlled by deep luminosity variation. Acuteness explains the smooth phase trends in RR Lyrae and many Cepheids. The 1987 overtone Letter uses the same one-zone logic to show that overtone light-curve shapes arise naturally when the luminosity variation at the base of the shell is reversed by a pulsation node.</p>
+    <p>The Wizard of OZ web app sits at the synthesis point: it implements the Stellingwerf-style four-state nonlinear model, modern adaptive solvers, analytic stability checks, phase folding, Fourier amplitudes/phases, skewness/acuteness, and parameter-grid exploration. The literature suggests that the app already captures the central Stellingwerf physics, while several historically important ideas remain better suited as added diagnostics, presets, and explanatory overlays than as changes to the core ODE.</p>
+  </section>
+
+  <section id="shared-notation">
+    <h2>Shared Notation and Baseline Equations</h2>
+    <p>The papers use several notational conventions. This report follows the app's notation where possible: \(R\) or \(X\) for shell radius, \(V=dR/d\tau\) for velocity, \(H\) for the nonadiabatic pressure factor, \(U_c\) for convective velocity, \(m\) or \(\chi_0\) for the shell-thickness form factor, and \(\zeta\), \(\zeta_c\), \(\gamma_c\) for thermal response, convective response, and convective flux fraction.</p>
+    <div class="equation">
+      \[
+      \begin{aligned}
+      \frac{dR}{d\tau} &= V,\\
+      \frac{dV}{d\tau} &= \frac{H}{R^q}-\frac{1}{R^2}-C_qV^3,\\
+      \frac{dH}{d\tau} &=
+      \zeta R^{m(\Gamma_1-1)}
+      \left(R^U-(1-\gamma_c)R^bH^{s+4}-\gamma_cR^{-c}U_c^3\right),\\
+      \frac{dU_c}{d\tau} &= \zeta_c\left(R^{-d}\sqrt{H}-U_c\right).
+      \end{aligned}
+      \]
+    </div>
+    <p>With constant shell thickness the powers are</p>
+    <div class="equation">
+      \[
+      b=4+m\left[n-(s+4)(\Gamma_1-1)\right],\qquad
+      q=m\Gamma_1-2,\qquad
+      c=m-2,\qquad
+      d=\frac{m(\Gamma_1-1)}{2}.
+      \]
+    </div>
+    <p>The web app optionally replaces \(m\) by a radius-dependent \(m_{\rm eff}(R)=3/[1-(\eta/R)^3]\), where \(\eta=(1-3/m)^{1/3}\). That option tracks the later local code variants and the 1987 light-curve/overtone papers more closely than the constant-\(m\) 1986 convection paper.</p>
+  </section>
+
+  <section id="paper-baker" class="page-break">
+    <h2>1. Baker: Simplified Models for Cepheid Instability</h2>
+    <div class="paper-card">
+      <div class="paper-meta">Norman H. Baker, 1966, in <em>Stellar Evolution</em>, pp. 333-346. Local source: `simplified_models_for_cepheid_instability.html`.</div>
+      <span class="tag">linear stability</span>
+      <span class="tag">radiative one-zone model</span>
+      <span class="tag">kappa mechanism</span>
+      <span class="tag">distributed corrections</span>
+    </div>
+
+    <h3>Main Findings</h3>
+    <p>Baker reduces the full radial stellar pulsation problem to a single thermodynamic layer and shows that the essential destabilizing and stabilizing terms can be read analytically. The one-zone model reproduces the qualitative physics of Cepheid instability: ionization zones can drive pulsation because high effective heat capacity suppresses ordinary radiative damping, opacity changes can feed energy into compression at the right phase, and spherical geometry contributes an additional throttling effect.</p>
+    <p>The model is explicitly linear. It predicts whether infinitesimal perturbations grow or decay; it does not compute the eventual finite-amplitude cycle. Baker treats amplitude saturation as a plausible nonlinear extension, mainly through the reduction of effective specific heat once ionization becomes exhausted at large amplitude.</p>
+
+    <h3>Cases Investigated</h3>
+    <p>The analysis begins with the full radiative stellar equations in Lagrangian mass coordinate \(M_r\), then specializes to an outer shell with constant perturbations \(r'\), \(p'\), and \(t'\). Baker also discusses how the one-zone conclusion changes in a distributed envelope, using a quasi-adiabatic approximation and Eddington's work integral.</p>
+
+    <h3>Equation Modification and Insight</h3>
+    <p>The key one-zone approximation is not simply setting all spatial derivatives to zero. Baker keeps a luminosity gradient across the shell by relating the upper and lower luminosity perturbations:</p>
+    <div class="equation">
+      \[
+      l'=\frac{l'_U+l'_L}{2},\qquad
+      \frac{\partial l'}{\partial M_r}=\frac{l'_U-l'_L}{m},\qquad
+      l'_L=0
+      \quad\Rightarrow\quad
+      \frac{\partial l'}{\partial M_r}=\frac{2l'}{m}.
+      \]
+    </div>
+    <p>That choice makes the one-zone model nonadiabatic. The reduced linear system combines to a third-order equation for the radius perturbation:</p>
+    <div class="equation">
+      \[
+      \dddot r'
+      +K\sigma_0A\ddot r'
+      +\sigma_0^2B\dot r'
+      +K\sigma_0^3Dr'=0,
+      \]
+    </div>
+    <p>or, with \(r'\propto e^{st}\),</p>
+    <div class="equation">
+      \[
+      s^3+K\sigma_0As^2+\sigma_0^2Bs+K\sigma_0^3D=0.
+      \]
+    </div>
+    <p>The stability conditions separate into dynamic, secular, and vibrational constraints. Baker's vibrational stability criterion can be written in terms of a diagnostic quantity \(\Lambda\):</p>
+    <div class="equation">
+      \[
+      \Lambda=
+      \frac{4}{C}
+      -\left(\frac{\chi_T}{C}+\chi_p\right)
+      -\frac{4}{3\Gamma_1},
+      \qquad
+      \Lambda>0\ \hbox{stable},\quad
+      \Lambda<0\ \hbox{overstable}.
+      \]
+    </div>
+    <p>This is the compact physics result. The first term is radiative/conductive damping; the second is the opacity or kappa mechanism; the third is the spherical geometry term. In ionization zones, \(C\) becomes large, damping weakens, and \(\Lambda\) can become negative.</p>
+
+    <h3>Distributed Model Insight</h3>
+    <p>Baker's distributed correction explains why one-zone models are informative but incomplete. In the quasi-adiabatic limit, the work integral becomes</p>
+    <div class="equation">
+      \[
+      \Delta W\propto
+      -\left\langle\Lambda t'^2\right\rangle
+      -\int_0^M b\left(\frac{\partial t'}{\partial M_r}\right)^2\,dM_r
+      +\frac{1}{2}\int_0^M t'^2\frac{\partial\Lambda}{\partial M_r}\,dM_r .
+      \]
+    </div>
+    <p>The one-zone term is the first term. The second term is always stabilizing and grows with spatial structure, explaining why higher harmonics are more strongly damped. The third term depends on how the driving/damping function \(\Lambda\) varies with depth. Baker also emphasizes that nonadiabatic effects are concentrated in a shallow outer mass fraction: deep layers have too much thermal inertia to exchange heat appreciably over a pulsation period.</p>
+
+    <h3>Implication for the Web App</h3>
+    <p>The app already contains the Stellingwerf descendant of Baker's radiative one-zone model. What it does not expose is Baker's \(\Lambda\)-style decomposition into heat-capacity, opacity, and geometry contributions, nor the distributed-model correction terms. Those would be valuable as explanatory diagnostics or documentation overlays, but they should not replace the current nonlinear ODE system.</p>
+  </section>
+
+  <section id="paper-rudd" class="page-break">
+    <h2>2. Rudd and Rosenberg: A Simple Model for Cepheid Variability</h2>
+    <div class="paper-card">
+      <div class="paper-meta">T. J. Rudd and R. M. Rosenberg, 1970, <em>Astronomy and Astrophysics</em> 6, 193-205. Local source: `1970A&amp;A.....6.pdf`.</div>
+      <span class="tag">nonlinear limit cycle</span>
+      <span class="tag">piecewise force law</span>
+      <span class="tag">negative hysteresis</span>
+      <span class="tag">delta Cephei fit</span>
+    </div>
+
+    <h3>Main Findings</h3>
+    <p>Rudd and Rosenberg construct a mathematically tractable one-zone oscillator that reproduces the observed phase-plane loop of delta Cephei. Their central claim is that the equations governing expansion and compression are quantitatively different. The difference may be small near equilibrium, but it supplies the mechanism for self-excitation. With suitable nonlinear terms the growth saturates into a stable limit cycle.</p>
+
+    <h3>Basic Assumptions</h3>
+    <p>The paper starts from three assumptions: Cepheid pulsation is a self-excited oscillation largely independent of initial conditions; a one-zone model can capture the dominant motion of the outer envelope; and the compression and expansion phases are governed by similar but not identical equations. They justify the last assumption from the observed delta Cephei phase plane: the upper and lower half-loops have slightly different apparent equilibrium radii.</p>
+
+    <h3>Equation Modification and Insight</h3>
+    <p>Starting from a one-zone momentum equation and a density-radius relation, they write the nondimensional shell radius as \(Q=r/r_0\). If nonadiabaticity is represented by a function \(h(1-Q)\), the basic equation is</p>
+    <div class="equation">
+      \[
+      \frac{d^2Q}{d\tau^2}
+      =
+      \frac{h(1-Q)}{Q^n}-\frac{1}{Q^2}.
+      \]
+    </div>
+    <p>Instead of one smooth function \(h\), they use different functions for expansion and compression:</p>
+    <div class="equation">
+      \[
+      \begin{aligned}
+      \frac{d^2Q}{d\tau^2} &= \frac{h_e(1-Q)}{Q^n}-\frac{1}{Q^2},\qquad \dot Q>0,\\
+      \frac{d^2Q}{d\tau^2} &= \frac{h_c(1-Q)}{Q^n}-\frac{1}{Q^2},\qquad \dot Q<0.
+      \end{aligned}
+      \]
+    </div>
+    <p>The shell radius \(Q\) and velocity \(\dot Q\) are continuous, but the acceleration law changes when the motion crosses from one phase to the other. Near \(Q=1\), constants \(H_{e0}\) and \(H_{c0}\) are chosen so that</p>
+    <div class="equation">
+      \[
+      H_{e0}>1>H_{c0},\qquad n\ge 3.
+      \]
+    </div>
+    <p>This creates a negative-hysteresis loop. In the pressure-force diagram, the expansion branch lies above the compression branch in the relevant sense, so a small oscillation gains energy over one cycle. The work difference can be written schematically as</p>
+    <div class="equation">
+      \[
+      W=
+      \int_{Q_1}^{Q_2}\frac{H_{e0}}{Q^n}\,dQ
+      -
+      \int_{Q_1}^{Q_2}\frac{H_{c0}}{Q^n}\,dQ
+      >0.
+      \]
+    </div>
+    <p>To obtain a limit cycle rather than unbounded growth, the paper expands \(h_e\) and \(h_c\) in powers of \(1-Q\). For physical sign reasons and tractability, the linear terms are suppressed and quadratic terms are retained:</p>
+    <div class="equation">
+      \[
+      h_e=H_{e0}+H_{e2}(1-Q)^2,\qquad
+      h_c=H_{c0}+H_{c2}(1-Q)^2.
+      \]
+    </div>
+    <p>A necessary condition for the limit cycle is</p>
+    <div class="equation">
+      \[
+      H_{c2}-H_{e2}>0.
+      \]
+    </div>
+    <p>The interpretation is simple: the small-amplitude loop feeds energy in, while the larger-amplitude loop contains a compensating loss region. The limit cycle is the fixed point of the mapping from one rest radius to the next.</p>
+
+    <h3>Application to Delta Cephei</h3>
+    <p>For delta Cephei, they convert observed radius and radial velocity data into \(Q\) and \(\dot Q\). They choose an equilibrium radius midway between the apparent expansion and compression equilibria, use the period-mean-density relation to infer a mass around \(5.236M_\odot\), and choose a high \(n\) value to match the sharp asymmetry. Their tabulated parameters include \(H_{e0}=1.016\), \(H_{c0}=0.984\), \(H_{e2}=283.7\), \(H_{c2}=308.5\), and \(n=18\). The resulting model reproduces the main observed phase-plane loop, radius curve, and velocity curve.</p>
+
+    <h3>Implication for the Web App</h3>
+    <p>This model is historically important but not a natural drop-in replacement for Wizard of OZ. The app uses a smooth state vector in which nonadiabaticity lives in \(H\) and luminosity feedback, while Rudd and Rosenberg encode it as a phase-dependent discontinuity in the acceleration law. Incorporating it as a core mode would change the model class. A better use would be an optional historical comparison page or a separate "piecewise hysteresis oscillator" diagnostic, not a modification of the Stellingwerf ODE.</p>
+  </section>
+
+  <section id="paper-stellingwerf-1986" class="page-break">
+    <h2>3. Stellingwerf: A Simple Model for Coupled Convection and Pulsation</h2>
+    <div class="paper-card">
+      <div class="paper-meta">R. F. Stellingwerf, 1986, <em>The Astrophysical Journal</em> 303, 119-129. Local source: `1986ApJ...303.pdf`.</div>
+      <span class="tag">time-dependent convection</span>
+      <span class="tag">four-state ODE</span>
+      <span class="tag">Hurwitz stability</span>
+      <span class="tag">blue/strip/red cases</span>
+    </div>
+
+    <h3>Main Findings</h3>
+    <p>This is the central paper for the web app. Stellingwerf generalizes the radiative one-zone model by adding a time-dependent convective velocity \(U_c\). The convective flux generally stabilizes pulsation, especially toward the red edge, while turbulent pressure is destabilizing with strongest phasing when the convective response time is comparable to the dynamical time. The model also reveals dynamic instabilities in fully convective configurations, warning that naive time-dependent mixing-length prescriptions can behave badly.</p>
+
+    <h3>Equation Modification</h3>
+    <p>The paper begins with the Stellingwerf 1972 radiative shell and adds a convective phase-lag equation. With \(X=r/r_0\), \(H\) the nonadiabatic pressure factor, and \(U_c\) the normalized convective velocity, the nonlinear convective system is</p>
+    <div class="equation">
+      \[
+      \begin{aligned}
+      \frac{d^2X}{d\tau^2} &= \frac{H}{X^q}-\frac{1}{X^2},\\
+      \frac{dH}{d\tau} &=
+      \zeta X^{m(\Gamma_1-1)}
+      \left(1-\gamma_rX^bH^{s+4}-\gamma_cX^{-c}U_c^3\right),\\
+      \frac{dU_c}{d\tau} &= \zeta_c\left(X^{-d}H^{1/2}-U_c\right),
+      \end{aligned}
+      \]
+    </div>
+    <p>where \(\gamma_c\) is the equilibrium convective luminosity fraction and \(\gamma_r=1-\gamma_c\). The \(U_c\) equation interpolates between frozen convection at small \(\zeta_c\) and instantaneous mixing-length response at large \(\zeta_c\).</p>
+
+    <h3>Stability Analysis</h3>
+    <p>Linearization about \(X=H=U_c=1\) gives a quartic eigenvalue equation</p>
+    <div class="equation">
+      \[
+      \sigma^4+D\sigma^3+C\sigma^2+B\sigma+A=0.
+      \]
+    </div>
+    <p>The Hurwitz criteria for all roots to have negative real parts are</p>
+    <div class="equation">
+      \[
+      A>0,\qquad B>0,\qquad BC-AD>0,\qquad D(BC-AD)-B^2>0.
+      \]
+    </div>
+    <p>Stellingwerf interprets these as convective/turbulent, secular, dynamic, and pulsational stability conditions. The new first condition predicts instability when the shell is too thick; in the fully convective limit it requires roughly \(m>8\). The analysis reproduces the radiative dynamic, secular, and pulsational criteria when convection is turned off.</p>
+
+    <h3>Cases Investigated</h3>
+    <table>
+      <caption>Stellingwerf 1986 nonlinear cases</caption>
+      <thead>
+        <tr>
+          <th>Case</th>
+          <th>Parameters</th>
+          <th>Behavior</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Blue</td>
+          <td>\(\zeta=10,\ \zeta_c=0.1,\ \gamma_c=0.1\)</td>
+          <td>Linearly unstable but only mildly. \(H\) varies strongly and nearly opposite radius; \(U_c\) variation is small and velocity-like.</td>
+        </tr>
+        <tr>
+          <td>Instability strip</td>
+          <td>\(\zeta=1,\ \zeta_c=1,\ \gamma_c=0.2\)</td>
+          <td>Strongly unstable. \(U_c\) variation grows and the phase loops show significant driving.</td>
+        </tr>
+        <tr>
+          <td>Red</td>
+          <td>\(\zeta=0.1,\ \zeta_c=10,\ \gamma_c=0.5\)</td>
+          <td>Stable. \(U_c\) is large and nearly opposite radius; \(H\) is small and multi-peaked.</td>
+        </tr>
+        <tr>
+          <td>Fully convective dynamic instability</td>
+          <td>\(\zeta=2,\ \zeta_c=1,\ \gamma_c=1\)</td>
+          <td>Initially damps, then switches into runaway collapse or expansion.</td>
+        </tr>
+        <tr>
+          <td>Thick convective shell</td>
+          <td>\(m=5,\ \zeta=0.1,\ \zeta_c=10,\ \gamma_c=1\)</td>
+          <td>Shows a slow secular growth after initial pulsation quenching; the shell eventually ejects.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Insights</h3>
+    <p>The paper's main physical insight is phase-based. In blue models convection peaks near maximum velocity and can destabilize if turbulent pressure matters. In red models convection peaks near minimum radius and stabilizes the pulsation through convective luminosity. The model contains three independent time scales: dynamical, thermal, and convective. Much of the phenomenology is determined by their relative phasing.</p>
+
+    <h3>Implication for the Web App</h3>
+    <p>Wizard of OZ already implements this paper's core. The presets named Blue-edge convection, Instability-strip convection, Red-edge convection, Fully convective runaway, and Thick convective shell are direct descendants of the paper's cases. The app's analytic stability module also encodes the Hurwitz-style criteria, and its numerical root finder provides a useful cross-check. The most valuable remaining improvement is not new physics but clearer educational presentation of the criteria and the phase-loop interpretation.</p>
+  </section>
+
+  <section id="paper-fourier-1986" class="page-break">
+    <h2>4. Stellingwerf and Donohoe: Fourier Coefficients of Variable Stars</h2>
+    <div class="paper-card">
+      <div class="paper-meta">R. F. Stellingwerf and M. Donohoe, 1986, <em>The Astrophysical Journal</em> 306, 183-198. Local source: `1986ApJ...306.pdf`.</div>
+      <span class="tag">adiabatic velocity curves</span>
+      <span class="tag">Fourier amplitudes</span>
+      <span class="tag">skewness</span>
+      <span class="tag">phase patterns</span>
+    </div>
+
+    <h3>Main Findings</h3>
+    <p>This paper asks what Fourier coefficients measure when the underlying oscillator is extremely simple. Using adiabatic one-zone velocity curves, it finds that relative Fourier amplitudes correlate poorly with raw amplitude but very well with skewness. Fourier phases, however, do not vary smoothly in the model. They are constrained to a small set of phase patterns by the symmetry and nodes of the curves. Observed large phase shifts therefore require physics beyond this simple adiabatic model.</p>
+
+    <h3>Method and Equations</h3>
+    <p>The Fourier fit is written as</p>
+    <div class="equation">
+      \[
+      m(t)=m_0+\sum_{k=1}^{N}\left[a_k\sin(k\omega t)+b_k\cos(k\omega t)\right],
+      \]
+    </div>
+    <p>or equivalently</p>
+    <div class="equation">
+      \[
+      m(t)=m_0+\sum_{k=1}^{N}H_k\cos(k\omega t+\phi_k).
+      \]
+    </div>
+    <p>The derived quantities are amplitude ratios and relative phases:</p>
+    <div class="equation">
+      \[
+      R_{k1}=\frac{H_k}{H_1},\qquad
+      \phi_{k1}=\phi_k-k\phi_1 .
+      \]
+    </div>
+    <p>For the model shape, skewness is defined as the ratio of the long branch duration to the short rising branch duration:</p>
+    <div class="equation">
+      \[
+      {\rm Sk}=\frac{1-\phi_{\max}+\phi_{\min}}{\phi_{\max}-\phi_{\min}} .
+      \]
+    </div>
+
+    <h3>Cases Investigated</h3>
+    <p>The model is an adiabatic homogeneous shell with equation</p>
+    <div class="equation">
+      \[
+      \frac{d^2X}{d\tau^2}=\frac{1}{X^q}-\frac{1}{X^2},
+      \qquad
+      q=m\Gamma_1-2.
+      \]
+    </div>
+    <p>The survey uses five shell thickness values \(m=3,5,10,20,100\) and five initial radii \(X_0=1.01,1.10,1.25,1.50,2.00\), plus a near-linear case and an idealized sawtooth. Tenth-order Fourier fits are computed for all cases.</p>
+
+    <h3>Insights</h3>
+    <p>The relative amplitudes \(R_{21}\) through high harmonics become orderly when plotted against skewness. This explains why observed RR Lyrae amplitude ratios can look highly structured even when period or amplitude alone gives a messy plot. The phase results are more subtle: the raw phases tend to be either \(\pi/2\) or \(3\pi/2\), and the harmonic at which the pattern switches is controlled by skewness. Observed smooth phase shifts are real but not reproduced by the adiabatic one-zone model. A test in which a small third-harmonic "bump" is inserted at varying phase produces only small, essentially random phase changes, so a simple reflected-bump prescription cannot explain the large observed phase progressions.</p>
+
+    <h3>Implication for the Web App</h3>
+    <p>The app already computes Fourier amplitudes, phases, relative phases, skewness, and acuteness up to seven harmonics. This paper supports showing skewness as a primary x-axis for Fourier amplitude interpretation. A worthwhile addition would be a phase-pattern diagnostic: mark the harmonic where \(\phi_k\) switches between the sinusoidal-like and sawtooth-like patterns, and explain when a smooth observed phase progression indicates missing physics rather than a failure of Fourier fitting.</p>
+  </section>
+
+  <section id="paper-overtone-1987" class="page-break">
+    <h2>5. Stellingwerf, Gautschy, and Dickens: Overtone Pulsation in Stars</h2>
+    <div class="paper-card">
+      <div class="paper-meta">R. F. Stellingwerf, A. Gautschy, and R. J. Dickens, 1987, <em>The Astrophysical Journal Letters</em> 313, L75-L79. Local source: `1987ApJ...313L.pdf`.</div>
+      <span class="tag">RR Lyrae modes</span>
+      <span class="tag">overtone light curves</span>
+      <span class="tag">inner luminosity phase reversal</span>
+      <span class="tag">mode diagnostics</span>
+    </div>
+
+    <h3>Main Findings</h3>
+    <p>The Letter shows that the distinctive light curve of first-overtone RR Lyrae stars is a direct consequence of the mode geometry. In an overtone, the pulsation node lies inside the star; the luminosity variation below the shell is therefore reversed in phase relative to the surface motion. A one-zone shell placed above that node naturally produces the type c RR Lyrae light curve. The same logic predicts a second-overtone curve, called type e in the paper.</p>
+
+    <h3>Equation Modification</h3>
+    <p>The model uses the nonlinear nonadiabatic one-zone equations, with the dynamic time as the unit. The shell radius equation is</p>
+    <div class="equation">
+      \[
+      \frac{d^2X}{d\tau^2}=\frac{h}{X^q}-\frac{1}{X^2},
+      \]
+    </div>
+    <p>and the energy equation is driven by the difference between an inner and outer luminosity:</p>
+    <div class="equation">
+      \[
+      \frac{dh}{d\tau}
+      =
+      \zeta X^{m(\Gamma_1-1)}
+      \left(\frac{L_i}{L_0}-\frac{L_o}{L_0}\right).
+      \]
+    </div>
+    <p>The outer luminosity follows the diffusion-like power law</p>
+    <div class="equation">
+      \[
+      \frac{L_o}{L_0}=X^b h^{s+4},
+      \qquad
+      b=4+m[n-(s+4)(\Gamma_1-1)].
+      \]
+    </div>
+    <p>The key mode switch is the inner luminosity term</p>
+    <div class="equation">
+      \[
+      \frac{L_i}{L_0}=X^u .
+      \]
+    </div>
+    <p>For the fundamental cases, \(u<0\); for the overtone cases, the sign changes to represent the 180 degree phase reversal at the pulsation node.</p>
+
+    <h3>Cases Investigated</h3>
+    <p>The paper compares a high-amplitude fundamental, a low-amplitude fundamental, a first overtone, a high-amplitude first overtone, and a second overtone. Representative values include \(m=10,u=-2\) for the fundamental, \(m=15,u=2\) for the first overtone, and \(m=20,u=1\) for the second overtone. The first-overtone shell is thinner and has smaller driving, consistent with the observed lower amplitude and shorter period. The computed first-overtone/fundamental period ratio is about 0.740, a plausible RR Lyrae value.</p>
+
+    <h3>Insights</h3>
+    <p>The strongest insight is morphological: a low-amplitude fundamental does not become an overtone merely by shrinking its amplitude. The overtone has a different phase relationship between the interior luminosity and the surface radius. In the fundamental, the inner luminosity peaks near minimum radius; in the overtone, it dips at that phase. The resulting curve is rounder and more sinusoidal and often has a feature near maximum light. This lets light-curve shape act as a mode diagnostic.</p>
+
+    <h3>Implication for the Web App</h3>
+    <p>The app already contains RR Lyrae fundamental, first-overtone, and second-overtone presets using different \(m\), source exponent \(U\), and initial amplitudes. It would benefit from explicitly teaching the overtone mechanism: the source exponent is not just a shape knob but a proxy for inner luminosity phase reversal at a node. A dedicated "mode explanation" overlay, or a plot showing inner source versus outer luminosity phase, would make the existing presets much more meaningful.</p>
+  </section>
+
+  <section id="paper-fourier-1987" class="page-break">
+    <h2>6. Stellingwerf and Donohoe: Fourier Coefficients of Variable Stars. II. Light-Curve Analysis</h2>
+    <div class="paper-card">
+      <div class="paper-meta">R. F. Stellingwerf and M. Donohoe, 1987, <em>The Astrophysical Journal</em> 314, 252-260. Local source: `1987ApJ...314.pdf`.</div>
+      <span class="tag">nonadiabatic light curves</span>
+      <span class="tag">acuteness</span>
+      <span class="tag">deep opacity structure</span>
+      <span class="tag">Fourier phases</span>
+    </div>
+
+    <h3>Main Findings</h3>
+    <p>This paper explains the smooth Fourier phase variations missing from the 1986 adiabatic velocity study. The missing parameter is acuteness: the narrowness of the light curve above its mean. Relative Fourier amplitudes still depend mainly on skewness for low harmonics, but Fourier phases depend strongly on acuteness. The model reproduces RR Lyrae phase trends remarkably well and follows Cepheid trends except near the known resonance region around 10 days.</p>
+
+    <h3>Equation Modification</h3>
+    <p>The paper uses the nonadiabatic Stellingwerf 1972 model rather than the adiabatic shell. It also uses a variable density exponent \(m\), tied to changing shell geometry, and produces periodic light curves by iterating shell thickness and initial \(h\). Most importantly, it varies the amplitude of the luminosity variation at the base of the pulsating shell:</p>
+    <div class="equation">
+      \[
+      \frac{L_i}{L_0}=X^u,\qquad u=0,2,5,10,15,20
+      \]
+    </div>
+    <p>for the main sequence of models. This changes the light-curve acuteness while keeping skewness nearly fixed.</p>
+
+    <h3>Skewness and Acuteness</h3>
+    <p>Skewness is the branch-duration asymmetry. Acuteness is the ratio of the time spent below the mid-brightness level to the time spent above it. If \(\phi_{rb}\) is the rising-branch duration and \(\phi_{fw}\) is the full width at half maximum, the paper writes the shape measures as</p>
+    <div class="equation">
+      \[
+      {\rm Sk}=\frac{1}{\phi_{rb}}-1,\qquad
+      {\rm Ac}=\frac{1}{\phi_{fw}}-1 .
+      \]
+    </div>
+    <p>Along the chosen model sequence, \( {\rm Sk} \) remains near 2-2.5 while \( {\rm Ac} \) ranges from below 1 to above 4. This isolates acuteness as the phase-control parameter.</p>
+
+    <h3>Physical Interpretation</h3>
+    <p>Skewness is mechanical: it measures nonlinear envelope motion and is mostly controlled by pulsation amplitude. Acuteness is thermal: it is controlled by luminosity variation in deeper, nearly adiabatic layers below the ionization zones. The paper relates the inner luminosity exponent to interior opacity exponents:</p>
+    <div class="equation">
+      \[
+      u=m[(s+4)(\Gamma_1-1)-n]-4 .
+      \]
+    </div>
+    <p>For interior \(m\) near 3, \(n\approx1\), and \(s\) ranging from 0 to 3, this gives a plausible \(u\) range from about 1 to 9, corresponding to the acuteness values inferred from RR Lyrae observations. Thus Fourier phase behavior becomes a probe of deep envelope opacity structure.</p>
+
+    <h3>Implication for the Web App</h3>
+    <p>This paper is already partly incorporated: the app computes skewness and acuteness from folded light curves and Fourier parameters through \(R_{71}\) and \(\phi_{71}\). The opportunity is interpretive. The app could plot Fourier quantities against acuteness by default, explain \(u\) as a deep-luminosity/opacity proxy, and provide model families that vary \(U\) or source exponent while holding other parameters fixed to reproduce the 1987 experiment.</p>
+  </section>
+
+  <section id="web-app-comparison" class="page-break">
+    <h2>Wizard of OZ Web App Comparison</h2>
+    <p>The web app is closest to the Stellingwerf 1986 model but includes later practical extensions from the local S_Tran lineage: optional radius-dependent geometry, source exponent variation, turbulent damping, modern adaptive solvers, stability auto-stop, Fourier diagnostics, phase folding, and parameter grids.</p>
+
+    <h3>What the App Already Captures</h3>
+    <table>
+      <caption>Literature features already present in the app</caption>
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>Literature origin</th>
+          <th>App implementation</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Radiative shell ODE</td>
+          <td>Baker and Stellingwerf radiative one-zone line</td>
+          <td>`model.ts` evolves \(R,V,H\) and luminosity \(L_r=R^bH^{s+4}\).</td>
+        </tr>
+        <tr>
+          <td>Time-dependent convection</td>
+          <td>Stellingwerf 1986</td>
+          <td>`Uc` state, convective luminosity \(L_c=R^{-c}U_c^3\), \(\zeta_c\), and \(\gamma_c\).</td>
+        </tr>
+        <tr>
+          <td>Blue, strip, red, runaway, thick-shell examples</td>
+          <td>Stellingwerf 1986 nonlinear integrations</td>
+          <td>Named presets reproduce these regimes.</td>
+        </tr>
+        <tr>
+          <td>Hurwitz stability criteria</td>
+          <td>Stellingwerf 1986 quartic analysis</td>
+          <td>`analyticStabilityConditions` computes convective, secular, dynamic, and pulsational margins.</td>
+        </tr>
+        <tr>
+          <td>Numerical eigenvalue classification</td>
+          <td>Linear stability tradition</td>
+          <td>`linearStability` computes a numerical Jacobian and polynomial roots.</td>
+        </tr>
+        <tr>
+          <td>Fourier morphology</td>
+          <td>Stellingwerf and Donohoe 1986/1987</td>
+          <td>`fourier.ts` computes \(R_{k1}\), \(\phi_k\), \(\phi_{k1}\), skewness, and acuteness.</td>
+        </tr>
+        <tr>
+          <td>Overtone-like presets</td>
+          <td>Stellingwerf, Gautschy, and Dickens 1987</td>
+          <td>RR Lyrae fundamental, first-overtone, and second-overtone presets vary \(m\), source exponent, and amplitude.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Where the App Goes Beyond the Papers</h3>
+    <p>The app's numerical implementation is more robust than the historical integrations. It offers RK45 and DOP853 in addition to the midpoint-style legacy solver, stores dense output for interactive plotting, compares solver results, and can auto-stop at equilibrium or stable limit cycle. The grid machinery also lets users scan many parameter combinations, which none of the papers could do interactively.</p>
+
+    <h3>Important Differences</h3>
+    <ul>
+      <li>The app uses \(H\) and \(U_c\) as smooth state variables; it does not implement Rudd and Rosenberg's phase-dependent acceleration discontinuity.</li>
+      <li>The app includes cubic turbulent damping \(-C_qV^3\), useful for local S_Tran variants and bounded RR Lyrae presets, but this is not part of Stellingwerf 1986's printed equations.</li>
+      <li>The app can use radius-dependent \(m_{\rm eff}(R)\), while Stellingwerf 1986's stability derivation assumes constant \(m\) evaluated at equilibrium.</li>
+      <li>The app has Fourier diagnostics but does not yet guide users through the historical interpretation: skewness for amplitudes, acuteness for phases, and overtone source-phase reversal for mode identity.</li>
+      <li>The app uses \(\sqrt{H}\) as the convective velocity driver by default and retains an `abs-v` diagnostic. This is consistent with the printed 1986 model and avoids the literal local-code `sqrt(V)` domain problem.</li>
+    </ul>
+  </section>
+
+  <section id="recommendations" class="page-break">
+    <h2>Recommendations</h2>
+    <table>
+      <caption>Candidate additions classified by usefulness</caption>
+      <thead>
+        <tr>
+          <th>Candidate</th>
+          <th>Status</th>
+          <th>Rationale</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Stellingwerf 1986 ODEs and blue/strip/red/runaway/thick-shell cases</td>
+          <td class="status-covered">Already covered</td>
+          <td>The core equations, presets, stability criteria, and nonlinear examples are already represented.</td>
+        </tr>
+        <tr>
+          <td>Baker \(\Lambda\) decomposition</td>
+          <td class="status-doc">Useful as documentation/analysis</td>
+          <td>It would help users understand heat-capacity, opacity, and geometry contributions, but it is a linear diagnostic rather than a new nonlinear ODE.</td>
+        </tr>
+        <tr>
+          <td>Baker distributed-model work-integral terms</td>
+          <td class="status-doc">Useful as documentation/analysis</td>
+          <td>The stabilizing spatial-gradient term explains why one-zone models overstate some driving and why higher harmonics damp. It belongs in explanatory material or an advanced diagnostic panel.</td>
+        </tr>
+        <tr>
+          <td>Rudd and Rosenberg piecewise hysteresis oscillator</td>
+          <td class="status-no">Not appropriate for the core app</td>
+          <td>It is a different model class with phase-dependent acceleration laws. It could be a separate historical demo, not a modification of the Stellingwerf model.</td>
+        </tr>
+        <tr>
+          <td>Fourier amplitude plots against skewness</td>
+          <td class="status-add">Worth adding</td>
+          <td>The app computes the quantities already; default grid plots or annotations should reflect the 1986 result that amplitudes are primarily skewness diagnostics.</td>
+        </tr>
+        <tr>
+          <td>Fourier phase plots against acuteness</td>
+          <td class="status-add">Worth adding</td>
+          <td>The app computes acuteness already. The 1987 paper makes this the natural explanatory axis for smooth phase trends.</td>
+        </tr>
+        <tr>
+          <td>Phase-pattern or switch-harmonic diagnostic</td>
+          <td class="status-add">Worth adding</td>
+          <td>This would expose the key 1986 Fourier phase insight and help distinguish one-zone symmetry effects from missing resonance physics.</td>
+        </tr>
+        <tr>
+          <td>Overtone inner-luminosity phase explanation</td>
+          <td class="status-add">Worth adding</td>
+          <td>The app has overtone presets, but should explain that source exponent changes represent luminosity phase reversal at a pulsation node.</td>
+        </tr>
+        <tr>
+          <td>Interactive source-exponent family based on \(u=m[(s+4)(\Gamma_1-1)-n]-4\)</td>
+          <td class="status-add">Worth adding</td>
+          <td>This would connect the 1987 acuteness paper to an app-controlled deep-opacity proxy.</td>
+        </tr>
+        <tr>
+          <td>Full resonance physics for 10-day Cepheid phase anomalies</td>
+          <td class="status-no">Not appropriate for one-zone app</td>
+          <td>The Fourier papers explicitly identify these anomalies as likely resonance effects outside a one-zone model.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Recommended Implementation Priority</h3>
+    <ol>
+      <li>Add educational annotations to the stability panel: map each margin to convective, secular, dynamic, and pulsational interpretations.</li>
+      <li>Add Fourier morphology views that default to \(R_{k1}\) versus skewness and \(\phi_{k1}\) versus acuteness.</li>
+      <li>Add an overtone explanation mode showing inner source phase and outer luminosity phase for fundamental and overtone presets.</li>
+      <li>Add a Baker-style linear diagnostic page or sidebar explaining \(\Lambda\), depth dependence, and the limits of the one-zone approximation.</li>
+      <li>Keep Rudd and Rosenberg as historical context unless a separate non-Stellingwerf demo is explicitly desired.</li>
+    </ol>
+  </section>
+
+  <section id="bibliography">
+    <h2>Bibliography</h2>
+    <div class="refs">
+      <p>Baker, N. H. 1966, "Simplified Models for Cepheid Instability," in <em>Stellar Evolution</em>, eds. R. F. Stein and A. G. W. Cameron, Plenum Press, 333-346. Local transcription: <a href="../../bibliography/simplified_models_for_cepheid_instability.html">bibliography/simplified_models_for_cepheid_instability.html</a>.</p>
+      <p>Rudd, T. J., and Rosenberg, R. M. 1970, "A Simple Model for Cepheid Variability," <em>Astronomy and Astrophysics</em>, 6, 193-205. Local scan: <a href="../../bibliography/1970A&amp;A.....6.pdf">bibliography/1970A&amp;A.....6.pdf</a>.</p>
+      <p>Stellingwerf, R. F. 1986, "A Simple Model for Coupled Convection and Pulsation," <em>The Astrophysical Journal</em>, 303, 119-129. Local PDF: <a href="../../bibliography/1986ApJ...303.pdf">bibliography/1986ApJ...303.pdf</a>.</p>
+      <p>Stellingwerf, R. F., and Donohoe, M. 1986, "Fourier Coefficients of Variable Stars," <em>The Astrophysical Journal</em>, 306, 183-198. Local PDF: <a href="../../bibliography/1986ApJ...306.pdf">bibliography/1986ApJ...306.pdf</a>.</p>
+      <p>Stellingwerf, R. F., Gautschy, A., and Dickens, R. J. 1987, "Overtone Pulsation in Stars," <em>The Astrophysical Journal Letters</em>, 313, L75-L79. Local PDF: <a href="../../bibliography/1987ApJ...313L.pdf">bibliography/1987ApJ...313L.pdf</a>.</p>
+      <p>Stellingwerf, R. F., and Donohoe, M. 1987, "Fourier Coefficients of Variable Stars. II. Light-Curve Analysis," <em>The Astrophysical Journal</em>, 314, 252-260. Local PDF: <a href="../../bibliography/1987ApJ...314.pdf">bibliography/1987ApJ...314.pdf</a>.</p>
+      <p>Wizard of OZ web app implementation: <a href="../web_app/src/model.ts">model.ts</a>, <a href="../web_app/src/stability.ts">stability.ts</a>, <a href="../web_app/src/fourier.ts">fourier.ts</a>, <a href="../web_app/src/phase.ts">phase.ts</a>, and <a href="../web_app/src/gridCompute.ts">gridCompute.ts</a>.</p>
+    </div>
+  </section>
+</main>
+</body>
+</html>
