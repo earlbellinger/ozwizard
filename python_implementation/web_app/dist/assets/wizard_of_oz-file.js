@@ -9040,9 +9040,10 @@
       ctx.closePath();
       ctx.fill();
       const targetValues = convectionResponsive ? scaleRows.map((item) => convectiveVelocityTarget(item, parameters)) : [];
-      const ucValues = convectionResponsive ? [...scaleRows.map((item) => item.Uc), ...targetValues] : [...scaleRows.map((item) => item.Uc), 0];
+      const ucValues = convectionResponsive ? [...scaleRows.map((item) => item.Uc), row.Uc, terms.convectiveTarget, ...targetValues] : [...scaleRows.map((item) => item.Uc), row.Uc, 0];
       const ucRange = stableTimeEquilibriumDisplayActive() ? anchoredVisualRange(ucValues, 1, 0.05, 0.12) : range(ucValues, 0.12);
       const convectiveActivity = normalizedInRange(row.Uc, ucRange);
+      const convectiveVisualHeight = (level) => Math.min(slotHeight, Math.max(0, level * slotHeight));
       roundedRectPath(ctx, slotX, slotTop, slotWidth, slotHeight, 6);
       ctx.fillStyle = "rgba(17, 27, 51, 0.66)";
       ctx.fill();
@@ -9051,7 +9052,7 @@
       ctx.stroke();
       if (convectionResponsive) {
         const targetAperture = normalizedInRange(terms.convectiveTarget, ucRange);
-        const targetHeight = targetAperture * slotHeight;
+        const targetHeight = convectiveVisualHeight(targetAperture);
         const targetTop = slotCenterY - targetHeight / 2;
         const targetLabelY = slotCenterY;
         ctx.setLineDash([4, 4]);
@@ -9064,7 +9065,7 @@
           fontSize: 9.4
         });
       }
-      const plumeHeight = Math.min(slotHeight, Math.max(18, convectiveActivity * slotHeight));
+      const plumeHeight = convectiveVisualHeight(convectiveActivity);
       const plumeTop = slotCenterY - plumeHeight / 2;
       const plumeBottom = slotCenterY + plumeHeight / 2;
       const plumeLeft = slotX + 5;
