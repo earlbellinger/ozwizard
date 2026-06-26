@@ -9020,7 +9020,8 @@
       const slotX = right + 14;
       const slotBottom = bottom - 34;
       const slotTop = slotBottom - slotHeight;
-      const ductY = slotTop + Math.min(16, slotHeight * 0.24);
+      const slotCenterY = slotTop + slotHeight / 2;
+      const ductY = slotCenterY;
       const ductHeight = 6;
       const ductWidth = Math.max(1, slotX - right);
       ctx.fillStyle = colorWithAlpha(COLORS.Lc, 0.18);
@@ -9051,10 +9052,11 @@
       if (convectionResponsive) {
         const targetAperture = normalizedInRange(terms.convectiveTarget, ucRange);
         const targetHeight = targetAperture * slotHeight;
-        const targetLabelY = slotTop + targetHeight / 2;
+        const targetTop = slotCenterY - targetHeight / 2;
+        const targetLabelY = slotCenterY;
         ctx.setLineDash([4, 4]);
         ctx.strokeStyle = colorWithAlpha(COLORS.Uc, 0.58);
-        roundedRectPath(ctx, slotX - 4, slotTop, slotWidth + 8, targetHeight, 5);
+        roundedRectPath(ctx, slotX - 4, targetTop, slotWidth + 8, targetHeight, 5);
         ctx.stroke();
         ctx.setLineDash([]);
         drawHeatEngineMathLabel(ctx, [{ text: "U", subscript: "c,*", color: colorWithAlpha(COLORS.Uc, 0.9) }], slotX + slotWidth + 10, targetLabelY, {
@@ -9062,9 +9064,9 @@
           fontSize: 9.4
         });
       }
-      const plumeHeight = Math.max(18, convectiveActivity * slotHeight);
-      const plumeTop = slotTop;
-      const plumeBottom = Math.min(slotBottom, plumeTop + plumeHeight);
+      const plumeHeight = Math.min(slotHeight, Math.max(18, convectiveActivity * slotHeight));
+      const plumeTop = slotCenterY - plumeHeight / 2;
+      const plumeBottom = slotCenterY + plumeHeight / 2;
       const plumeLeft = slotX + 5;
       const plumeRight = slotX + slotWidth - 5;
       const plumeWidth = plumeRight - plumeLeft;
@@ -9083,7 +9085,9 @@
       ctx.lineWidth = 1.35;
       ctx.stroke();
       ctx.save();
-      roundedRectPath(ctx, slotX + 3, slotTop + 2, slotWidth - 6, Math.min(slotHeight - 4, plumeHeight + 4), 7);
+      const plumeClipTop = Math.max(slotTop + 2, plumeTop - 2);
+      const plumeClipBottom = Math.min(slotBottom - 2, plumeBottom + 2);
+      roundedRectPath(ctx, slotX + 3, plumeClipTop, slotWidth - 6, Math.max(1, plumeClipBottom - plumeClipTop), 7);
       ctx.clip();
       ctx.strokeStyle = colorWithAlpha(COLORS.Lc, 0.42 + convectiveActivity * 0.42);
       ctx.lineWidth = 1.35;
