@@ -40,7 +40,7 @@ export interface GridModelResult {
 }
 
 export type GridBudget =
-  | { mode: "timeout"; timeoutMs: number }
+  | { mode: "timeout"; timeoutMs: number; modelMsEstimate?: number }
   | { mode: "models"; maxModels: number };
 
 export interface GridComputeRequest {

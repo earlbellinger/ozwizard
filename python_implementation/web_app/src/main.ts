@@ -138,6 +138,10 @@ const GRID_TIMEOUT_STEP_SECONDS = 0.25;
 const GRID_MODEL_BUDGET_DEFAULT = 50;
 const GRID_MODEL_BUDGET_MIN = 3;
 const GRID_MODEL_BUDGET_MAX = 2000;
+const GRID_MODEL_TIMING_SAFETY_FACTOR = 1.2;
+const GRID_MODEL_TIMING_BLEND = 0.35;
+const GRID_MODEL_TIMING_MIN_MS = 0.25;
+const GRID_MODEL_TIMING_MAX_MS = 60000;
 const GRID_PHASE_BACKGROUND_MAX_MODELS = 96;
 const GRID_PHASE_BACKGROUND_MAX_POINTS = 160;
 const GRID_PHASE_PATH_MAX_POINTS = 260;
@@ -196,6 +200,7 @@ let gridLoopSpeed = 1;
 let gridBudgetMode: GridBudgetMode = "timeout";
 let gridTimeoutSeconds = GRID_TIMEOUT_DEFAULT_SECONDS;
 let gridModelBudget = GRID_MODEL_BUDGET_DEFAULT;
+let gridModelMsEstimate: number | null = null;
 let modelAnimationFrame = 0;
 let modelAnimationStartTime: number | null = null;
 let latestDisplayWindow: DisplayWindow = {
@@ -2051,9 +2056,29 @@ function updateGridBudgetControls(): void {
 }
 
 function gridBudgetRequest(): GridBudget {
-  return gridBudgetMode === "models"
-    ? { mode: "models", maxModels: gridModelBudget }
-    : { mode: "timeout", timeoutMs: gridTimeoutSeconds * 1000 };
+  if (gridBudgetMode === "models") return { mode: "models", maxModels: gridModelBudget };
+  const modelMsEstimate = currentGridModelMsEstimate();
+  return modelMsEstimate === undefined
+    ? { mode: "timeout", timeoutMs: gridTimeoutSeconds * 1000 }
+    : { mode: "timeout", timeoutMs: gridTimeoutSeconds * 1000, modelMsEstimate };
+}
+
+function recordGridModelTiming(elapsedMs: number, attempted = 1): void {
+  if (!Number.isFinite(elapsedMs) || !Number.isFinite(attempted) || attempted <= 0 || elapsedMs <= 0) return;
+  const sample = clamp(
+    (elapsedMs / attempted) * GRID_MODEL_TIMING_SAFETY_FACTOR,
+    GRID_MODEL_TIMING_MIN_MS,
+    GRID_MODEL_TIMING_MAX_MS
+  );
+  gridModelMsEstimate = gridModelMsEstimate === null
+    ? sample
+    : gridModelMsEstimate * (1 - GRID_MODEL_TIMING_BLEND) + sample * GRID_MODEL_TIMING_BLEND;
+}
+
+function currentGridModelMsEstimate(): number | undefined {
+  return gridModelMsEstimate !== null && Number.isFinite(gridModelMsEstimate) && gridModelMsEstimate > 0
+    ? gridModelMsEstimate
+    : undefined;
 }
 
 function clampGridTimeoutSeconds(value: number): number {
@@ -2216,6 +2241,13 @@ function setDefaultGammaGridRange(): void {
   gridState.selectedLoopKey = key;
 }
 
+function setOnlyGridRange(key: ControlParameterKey): void {
+  gridState.ranges.forEach((range, rangeKey) => gridState.savedRanges.set(rangeKey, range));
+  gridState.ranges.clear();
+  enableGridRange(key);
+  gridState.selectedLoopKey = key;
+}
+
 function toggleGridRange(key: ControlParameterKey): void {
   if (gridState.ranges.has(key)) {
     const current = gridState.ranges.get(key);
@@ -2244,8 +2276,8 @@ function enableGridRange(key: ControlParameterKey): void {
 
 function toggleGridRangeFromSliderGesture(key: ControlParameterKey): void {
   if (!gridState.enabled) {
+    setOnlyGridRange(key);
     setGridModeEnabled(true);
-    enableGridRange(key);
     return;
   }
   toggleGridRange(key);
@@ -2540,12 +2572,14 @@ function startGridFallbackCompute(request: {
 function handleGridWorkerMessage(message: GridWorkerMessage): void {
   if (message.requestId !== gridState.requestId) return;
   if (message.type === "grid-progress") {
+    recordGridModelTiming(message.elapsedMs, message.completed);
     gridState.status = "running";
     gridState.statusText = `Grid running: ${message.completed}/${message.total} models`;
     updateGridStatusUi();
     return;
   }
   if (message.type === "grid-canceled-for-coarsening") {
+    recordGridModelTiming(message.elapsedMs, message.completed);
     gridState.status = "coarsening";
     gridState.statusText = `Grid coarsening: stride ${message.stride}`;
     updateGridStatusUi();
@@ -2555,6 +2589,7 @@ function handleGridWorkerMessage(message: GridWorkerMessage): void {
     return;
   }
   gridState.lastComplete = message;
+  recordGridModelTiming(message.elapsedMs, message.attempted);
   gridState.results = message.results;
   gridState.pathResults = message.pathResults;
   gridState.status = "complete";
@@ -4035,7 +4070,9 @@ function scheduleSolve(): void {
 }
 
 function solveAndDraw(): void {
+  const started = window.performance.now();
   latestResult = solveModel(state);
+  recordGridModelTiming(window.performance.now() - started);
   latestRows = latestResult.rows;
   drawAll();
 }

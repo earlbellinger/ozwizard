@@ -1043,7 +1043,10 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await fluxControl.dispatchEvent("contextmenu");
   await expect(page.getByLabel("Enable grid mode")).toBeChecked();
   await expect(fluxControl).toHaveClass(/is-grid-range/);
+  await expect(page.locator(".slider-control.is-grid-range")).toHaveCount(1);
+  await expect(page.locator("#gridLoopControls")).toBeHidden();
   await radiusControl.dispatchEvent("contextmenu");
+  await expect(page.locator(".slider-control.is-grid-range")).toHaveCount(2);
   const ensureGridRange = async (control: Locator) => {
     if (!(await page.getByLabel("Enable grid mode").isChecked())) await page.getByLabel("Enable grid mode").check();
     if (!((await control.getAttribute("class")) || "").includes("is-grid-range")) await control.dispatchEvent("contextmenu");

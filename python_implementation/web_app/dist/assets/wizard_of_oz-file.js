@@ -1653,6 +1653,26 @@
       await runCoarsenedGrid(request, estimate2, callbacks);
       return;
     }
+    const modelMsEstimate = Number(budget.modelMsEstimate);
+    if (Number.isFinite(modelMsEstimate) && modelMsEstimate > 0) {
+      const estimate2 = estimateGridBudgetFromTiming(request.ranges, request.loopKey, 1, modelMsEstimate, budget.timeoutMs);
+      if (estimate2.stride > 1 || estimate2.coarsenedModelCount.total < estimate2.fullModelCount.total) {
+        postCoarsening(request, 0, gridTotal(nativeSamples), 0, estimate2, callbacks);
+        const coarsened = await runCoarsenedGridPass(request, estimate2, callbacks, budget.timeoutMs);
+        if (callbacks.isCanceled()) {
+          callbacks.post({ type: "grid-canceled", requestId: request.requestId });
+          return;
+        }
+        if (coarsened.completed) {
+          await postGridCompleteFromPass(request, coarsened, estimate2.stride, true, estimate2.zeroCompletedFallback, callbacks);
+          return;
+        }
+        const corrected = estimateGridBudgetFromTiming(request.ranges, request.loopKey, coarsened.attempted, coarsened.elapsedMs, budget.timeoutMs);
+        postCoarsening(request, coarsened.attempted, coarsened.total, coarsened.elapsedMs, corrected, callbacks);
+        await runCoarsenedGrid(request, corrected, callbacks);
+        return;
+      }
+    }
     const native = await runGridPass(request, nativeSamples, callbacks, budget.timeoutMs);
     if (callbacks.isCanceled()) {
       callbacks.post({ type: "grid-canceled", requestId: request.requestId });
@@ -1678,16 +1698,19 @@
     });
   }
   async function runCoarsenedGrid(request, estimate, callbacks) {
-    const coarsenedSamples = buildRangeSamples(request.ranges, request.loopKey, {
-      stride: estimate.stride,
-      zeroCompletedFallback: estimate.zeroCompletedFallback
-    });
-    const coarsened = await runGridPass(request, coarsenedSamples, callbacks);
+    const coarsened = await runCoarsenedGridPass(request, estimate, callbacks);
     if (callbacks.isCanceled()) {
       callbacks.post({ type: "grid-canceled", requestId: request.requestId });
       return;
     }
     await postGridCompleteFromPass(request, coarsened, estimate.stride, true, estimate.zeroCompletedFallback, callbacks);
+  }
+  async function runCoarsenedGridPass(request, estimate, callbacks, deadlineMs) {
+    const coarsenedSamples = buildRangeSamples(request.ranges, request.loopKey, {
+      stride: estimate.stride,
+      zeroCompletedFallback: estimate.zeroCompletedFallback
+    });
+    return runGridPass(request, coarsenedSamples, callbacks, deadlineMs);
   }
   async function postGridCompleteFromPass(request, stats, stride, coarsened, zeroCompletedFallback, callbacks) {
     const path = request.ranges.length <= 1 ? stats : await runLoopPathPass(request, callbacks, stride, zeroCompletedFallback);
@@ -2177,6 +2200,10 @@
   var GRID_MODEL_BUDGET_DEFAULT = 50;
   var GRID_MODEL_BUDGET_MIN = 3;
   var GRID_MODEL_BUDGET_MAX = 2e3;
+  var GRID_MODEL_TIMING_SAFETY_FACTOR = 1.2;
+  var GRID_MODEL_TIMING_BLEND = 0.35;
+  var GRID_MODEL_TIMING_MIN_MS = 0.25;
+  var GRID_MODEL_TIMING_MAX_MS = 6e4;
   var GRID_PHASE_BACKGROUND_MAX_MODELS = 96;
   var GRID_PHASE_BACKGROUND_MAX_POINTS = 160;
   var GRID_PHASE_PATH_MAX_POINTS = 260;
@@ -2233,6 +2260,7 @@
   var gridBudgetMode = "timeout";
   var gridTimeoutSeconds = GRID_TIMEOUT_DEFAULT_SECONDS;
   var gridModelBudget = GRID_MODEL_BUDGET_DEFAULT;
+  var gridModelMsEstimate = null;
   var modelAnimationFrame = 0;
   var modelAnimationStartTime = null;
   var latestDisplayWindow = {
@@ -3697,7 +3725,21 @@
     if (modelControl instanceof HTMLElement) modelControl.classList.toggle("is-grid-budget-active", gridBudgetMode === "models");
   }
   function gridBudgetRequest() {
-    return gridBudgetMode === "models" ? { mode: "models", maxModels: gridModelBudget } : { mode: "timeout", timeoutMs: gridTimeoutSeconds * 1e3 };
+    if (gridBudgetMode === "models") return { mode: "models", maxModels: gridModelBudget };
+    const modelMsEstimate = currentGridModelMsEstimate();
+    return modelMsEstimate === void 0 ? { mode: "timeout", timeoutMs: gridTimeoutSeconds * 1e3 } : { mode: "timeout", timeoutMs: gridTimeoutSeconds * 1e3, modelMsEstimate };
+  }
+  function recordGridModelTiming(elapsedMs, attempted = 1) {
+    if (!Number.isFinite(elapsedMs) || !Number.isFinite(attempted) || attempted <= 0 || elapsedMs <= 0) return;
+    const sample2 = clamp4(
+      elapsedMs / attempted * GRID_MODEL_TIMING_SAFETY_FACTOR,
+      GRID_MODEL_TIMING_MIN_MS,
+      GRID_MODEL_TIMING_MAX_MS
+    );
+    gridModelMsEstimate = gridModelMsEstimate === null ? sample2 : gridModelMsEstimate * (1 - GRID_MODEL_TIMING_BLEND) + sample2 * GRID_MODEL_TIMING_BLEND;
+  }
+  function currentGridModelMsEstimate() {
+    return gridModelMsEstimate !== null && Number.isFinite(gridModelMsEstimate) && gridModelMsEstimate > 0 ? gridModelMsEstimate : void 0;
   }
   function clampGridTimeoutSeconds(value) {
     const clamped = clamp4(value, GRID_TIMEOUT_MIN_SECONDS, GRID_TIMEOUT_MAX_SECONDS);
@@ -3843,6 +3885,12 @@
     gridState.savedRanges.set(key, range2);
     gridState.selectedLoopKey = key;
   }
+  function setOnlyGridRange(key) {
+    gridState.ranges.forEach((range2, rangeKey) => gridState.savedRanges.set(rangeKey, range2));
+    gridState.ranges.clear();
+    enableGridRange(key);
+    gridState.selectedLoopKey = key;
+  }
   function toggleGridRange(key) {
     if (gridState.ranges.has(key)) {
       const current = gridState.ranges.get(key);
@@ -3869,8 +3917,8 @@
   }
   function toggleGridRangeFromSliderGesture(key) {
     if (!gridState.enabled) {
+      setOnlyGridRange(key);
       setGridModeEnabled(true);
-      enableGridRange(key);
       return;
     }
     toggleGridRange(key);
@@ -4118,12 +4166,14 @@
   function handleGridWorkerMessage(message) {
     if (message.requestId !== gridState.requestId) return;
     if (message.type === "grid-progress") {
+      recordGridModelTiming(message.elapsedMs, message.completed);
       gridState.status = "running";
       gridState.statusText = `Grid running: ${message.completed}/${message.total} models`;
       updateGridStatusUi();
       return;
     }
     if (message.type === "grid-canceled-for-coarsening") {
+      recordGridModelTiming(message.elapsedMs, message.completed);
       gridState.status = "coarsening";
       gridState.statusText = `Grid coarsening: stride ${message.stride}`;
       updateGridStatusUi();
@@ -4133,6 +4183,7 @@
       return;
     }
     gridState.lastComplete = message;
+    recordGridModelTiming(message.elapsedMs, message.attempted);
     gridState.results = message.results;
     gridState.pathResults = message.pathResults;
     gridState.status = "complete";
@@ -5453,7 +5504,9 @@
     scheduleGridCompute();
   }
   function solveAndDraw() {
+    const started = window.performance.now();
     latestResult = solveModel(state);
+    recordGridModelTiming(window.performance.now() - started);
     latestRows = latestResult.rows;
     drawAll();
   }

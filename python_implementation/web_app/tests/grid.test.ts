@@ -14,7 +14,7 @@ import {
   type GridWorkerMessage
 } from "../src/grid";
 import { computeGridWithMessages } from "../src/gridCompute";
-import { PRESETS, type Row } from "../src/model";
+import { DEFAULT_PRESET_NAME, PRESETS, type Row } from "../src/model";
 
 function syntheticFourierRows(phi1: number, phi2: number, phi3: number, phi4 = 0): Row[] {
   const amplitudes = [0.5, 0.15, 0.05, 0.025];
@@ -240,6 +240,56 @@ describe("grid range helpers", () => {
 });
 
 describe("grid computation", () => {
+  it("uses a model timing estimate to coarsen timeout grids before probing the full grid", async () => {
+    const messages: GridWorkerMessage[] = [];
+    await computeGridWithMessages({
+      requestId: 1,
+      baseParameters: {
+        ...PRESETS[DEFAULT_PRESET_NAME],
+        tEnd: 2,
+        runUntilStable: false
+      },
+      ranges: [
+        {
+          key: "gammac",
+          lowerSliderValue: 0,
+          upperSliderValue: 0.05,
+          centerSliderValue: 0,
+          nativeStep: 0.01
+        },
+        {
+          key: "r0",
+          lowerSliderValue: 1.08,
+          upperSliderValue: 1.12,
+          centerSliderValue: 1.1,
+          nativeStep: 0.01
+        }
+      ],
+      loopKey: "gammac",
+      budget: { mode: "timeout", timeoutMs: 100, modelMsEstimate: 100 },
+      phase: {
+        warmupTau: 0,
+        minAmplitude: 1e-4,
+        selection: "first",
+        anchor: "min"
+      }
+    }, {
+      post: (message) => messages.push(message),
+      isCanceled: () => false
+    });
+
+    expect(messages[0]).toMatchObject({
+      type: "grid-canceled-for-coarsening",
+      completed: 0,
+      elapsedMs: 0
+    });
+    const complete = messages.find((message) => message.type === "grid-complete");
+    expect(complete).toMatchObject({
+      type: "grid-complete",
+      coarsened: true
+    });
+  });
+
   it("excludes dynamically runaway models from phase and Fourier diagnostics", async () => {
     const messages: GridWorkerMessage[] = [];
     await computeGridWithMessages({

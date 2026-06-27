@@ -53,6 +53,27 @@ export async function computeGridWithMessages(request: GridComputeRequest, callb
     return;
   }
 
+  const modelMsEstimate = Number(budget.modelMsEstimate);
+  if (Number.isFinite(modelMsEstimate) && modelMsEstimate > 0) {
+    const estimate = estimateGridBudgetFromTiming(request.ranges, request.loopKey, 1, modelMsEstimate, budget.timeoutMs);
+    if (estimate.stride > 1 || estimate.coarsenedModelCount.total < estimate.fullModelCount.total) {
+      postCoarsening(request, 0, gridTotal(nativeSamples), 0, estimate, callbacks);
+      const coarsened = await runCoarsenedGridPass(request, estimate, callbacks, budget.timeoutMs);
+      if (callbacks.isCanceled()) {
+        callbacks.post({ type: "grid-canceled", requestId: request.requestId });
+        return;
+      }
+      if (coarsened.completed) {
+        await postGridCompleteFromPass(request, coarsened, estimate.stride, true, estimate.zeroCompletedFallback, callbacks);
+        return;
+      }
+      const corrected = estimateGridBudgetFromTiming(request.ranges, request.loopKey, coarsened.attempted, coarsened.elapsedMs, budget.timeoutMs);
+      postCoarsening(request, coarsened.attempted, coarsened.total, coarsened.elapsedMs, corrected, callbacks);
+      await runCoarsenedGrid(request, corrected, callbacks);
+      return;
+    }
+  }
+
   const native = await runGridPass(request, nativeSamples, callbacks, budget.timeoutMs);
   if (callbacks.isCanceled()) {
     callbacks.post({ type: "grid-canceled", requestId: request.requestId });
@@ -93,16 +114,25 @@ async function runCoarsenedGrid(
   estimate: GridBudgetCoarsenessEstimate,
   callbacks: GridComputeCallbacks
 ): Promise<void> {
-  const coarsenedSamples = buildRangeSamples(request.ranges, request.loopKey, {
-    stride: estimate.stride,
-    zeroCompletedFallback: estimate.zeroCompletedFallback
-  });
-  const coarsened = await runGridPass(request, coarsenedSamples, callbacks);
+  const coarsened = await runCoarsenedGridPass(request, estimate, callbacks);
   if (callbacks.isCanceled()) {
     callbacks.post({ type: "grid-canceled", requestId: request.requestId });
     return;
   }
   await postGridCompleteFromPass(request, coarsened, estimate.stride, true, estimate.zeroCompletedFallback, callbacks);
+}
+
+async function runCoarsenedGridPass(
+  request: GridComputeRequest,
+  estimate: GridBudgetCoarsenessEstimate,
+  callbacks: GridComputeCallbacks,
+  deadlineMs?: number
+): Promise<GridRunStats> {
+  const coarsenedSamples = buildRangeSamples(request.ranges, request.loopKey, {
+    stride: estimate.stride,
+    zeroCompletedFallback: estimate.zeroCompletedFallback
+  });
+  return runGridPass(request, coarsenedSamples, callbacks, deadlineMs);
 }
 
 async function postGridCompleteFromPass(
