@@ -270,6 +270,33 @@ test("terminal runaway models use time windows instead of phase windows", async 
   expect(pageErrors).toEqual([]);
 });
 
+test("theme toggle switches between GitHub dark and light modes", async ({ page }) => {
+  await page.goto("/wizard_of_oz.html");
+  await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
+  const themeToggle = page.locator("#themeToggle");
+  await expect(themeToggle).toBeVisible();
+  await expect(themeToggle).toHaveAttribute("aria-label", "Switch to light mode");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  const themeButtonBox = await themeToggle.boundingBox();
+  const viewport = page.viewportSize();
+  expect(themeButtonBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(themeButtonBox!.x + themeButtonBox!.width).toBeLessThanOrEqual(viewport!.width - 8);
+  expect(themeButtonBox!.y).toBeLessThanOrEqual(16);
+
+  await themeToggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(themeToggle).toHaveAttribute("aria-label", "Switch to dark mode");
+  await expect.poll(async () => page.evaluate(() => getComputedStyle(document.body).backgroundColor))
+    .toBe("rgb(246, 248, 250)");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await themeToggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(themeToggle).toHaveAttribute("aria-label", "Switch to light mode");
+});
+
 test("grid mode falls back when workers are blocked", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -877,11 +904,11 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-stellingwerf-labels", "R,H,U_c,current_phase");
   await expect(page.locator("#phasePortraitCanvas")).toHaveAttribute("data-axis-labels", "radius R,thermal-pressure state H and convective velocity U_c");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-tp-opacity-mode", "single");
-  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-axis-labels", "log10(T/T0),log10(P/P0)");
-  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-color-variable", "log10(kappa/kappa0)");
-  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-colorbar", "log10(kappa/kappa0)");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-axis-labels", "log10(T/T_0),log10(P/P_0)");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-color-variable", "log10(kappa/kappa_0)");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-colorbar", "log10(kappa/kappa_0)");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-palette", "blue-gold");
-  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-contours", "log10(kappa/kappa0)");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-contours", "log10(kappa/kappa_0)");
   await expect(page.locator("#tpOpacityCanvas")).not.toHaveAttribute("data-opacity-vector-field");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-colorbar-marker", "current-phase");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-current-opacity", /-?\d+\.\d+/);
@@ -1121,7 +1148,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-tp-opacity-mode", "grid");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-tp-opacity-tracks", /[2-9]\d*/);
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-color-variable", "grid parameter");
-  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-contours", "log10(kappa/kappa0)");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-opacity-contours", "log10(kappa/kappa_0)");
   await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-grid-colorbar", "ready");
   await expect(page.locator("#tpOpacityCanvas")).not.toHaveAttribute("data-opacity-colorbar");
   await expect(page.locator("#tpOpacityCanvas")).not.toHaveAttribute("data-opacity-palette");

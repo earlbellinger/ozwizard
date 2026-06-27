@@ -75,7 +75,7 @@ describe("phase lag helpers", () => {
     expect(phaseLagForPair(rows, { id: "R-L", reference: "R", target: "L" }, parameters)).toBeCloseTo(0.17, 3);
   });
 
-  it("uses thermodynamic temperature T/T0 rather than effective temperature", () => {
+  it("uses thermodynamic temperature T/T_0 rather than effective temperature", () => {
     const row: Row = { tau: 0, R: 1.6, V: 0, H: 0.82, Uc: 1, Lr: 1.4, Lc: 0.2, L: 1.6 };
     const expected = row.R ** (-mAt(row.R, parameters) * (parameters.gamma1 - 1)) * row.H;
     expect(thermodynamicTemperatureRatio(row, parameters)).toBeCloseTo(expected);

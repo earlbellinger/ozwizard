@@ -2304,13 +2304,61 @@
   var thermodynamicGridBackdropCache = null;
   var TAU_SCALE_MAX = 1e3;
   var TAU_TICKS = [1, 3, 10, 30, 100, 300];
+  var TP_TEMPERATURE_DATA_LABEL = "log10(T/T_0)";
+  var TP_PRESSURE_DATA_LABEL = "log10(P/P_0)";
+  var TP_OPACITY_DATA_LABEL = "log10(kappa/kappa_0)";
+  function cssVariable(name, fallback) {
+    const value = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback;
+  }
+  function themeSurface(alpha) {
+    return colorWithAlpha(cssVariable("--paper-high", "#212830"), alpha);
+  }
+  function themeBorder(alpha) {
+    return colorWithAlpha(cssVariable("--line-strong", "#656C76"), alpha);
+  }
+  function themeRule(alpha) {
+    return colorWithAlpha(cssVariable("--muted", "#9198A1"), alpha);
+  }
+  function floatingCanvasPanelFill(alpha = 0.9) {
+    const variableName = lightThemeActive() ? "--paper" : "--paper-high";
+    const fallback = lightThemeActive() ? "#FFFFFF" : "#212830";
+    return colorWithAlpha(cssVariable(variableName, fallback), alpha);
+  }
+  function floatingCanvasPanelBorder(alpha = 0.72) {
+    return colorWithAlpha(cssVariable("--line", "#3D444D"), alpha);
+  }
+  function lightThemeActive() {
+    return document.documentElement.dataset.theme === "light";
+  }
+  function canvasTextHaloColor(alpha = 0.9) {
+    return colorWithAlpha(cssVariable("--canvas", "#0D1117"), alpha);
+  }
+  function canvasTextHaloWidth(width) {
+    return lightThemeActive() ? Math.min(width, 1.8) : width;
+  }
+  function canvasMarkerOutlineColor(alpha = 0.9) {
+    return lightThemeActive() ? colorWithAlpha(cssVariable("--line-strong", "#656C76"), alpha) : canvasTextHaloColor(alpha);
+  }
   var THEME = {
-    axisGrid: "#30363D",
-    axisText: "#9198A1",
-    axisBorder: "#3D444D",
-    selectionFill: "#388BFD1A",
-    selectionStroke: "#1F6FEB",
-    neutralSymbol: "#F0F6FC"
+    get axisGrid() {
+      return cssVariable("--canvas-grid", "#30363D");
+    },
+    get axisText() {
+      return cssVariable("--muted", "#9198A1");
+    },
+    get axisBorder() {
+      return cssVariable("--line", "#3D444D");
+    },
+    get selectionFill() {
+      return cssVariable("--selection-fill", "#388BFD1A");
+    },
+    get selectionStroke() {
+      return cssVariable("--focus", "#1F6FEB");
+    },
+    get neutralSymbol() {
+      return cssVariable("--neutral-symbol", "#F0F6FC");
+    }
   };
   var PHASE_LAG_YLIM = [-0.5, 0.5];
   var PHASE_LAG_AXIS_LABEL = "phase lag \u0394\u03C6";
@@ -3553,6 +3601,41 @@
     input.addEventListener("input", sync);
     sync();
   }
+  function currentThemeMode() {
+    return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  }
+  function setupThemeToggle() {
+    const button = document.getElementById("themeToggle");
+    if (!(button instanceof HTMLButtonElement)) return;
+    syncThemeToggleButton();
+    button.addEventListener("click", () => {
+      setThemeMode(currentThemeMode() === "light" ? "dark" : "light");
+    });
+  }
+  function setThemeMode(mode) {
+    document.documentElement.dataset.theme = mode;
+    document.documentElement.style.colorScheme = mode;
+    try {
+      window.localStorage.setItem("ozwizard-theme", mode);
+    } catch (_error) {
+    }
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = mode === "light" ? "#ffffff" : "#0d1117";
+    syncThemeToggleButton();
+    thermodynamicGridBackdropCache = null;
+    drawAdsrVisualization();
+    drawAll();
+  }
+  function syncThemeToggleButton() {
+    const button = document.getElementById("themeToggle");
+    if (!(button instanceof HTMLButtonElement)) return;
+    const mode = currentThemeMode();
+    const nextMode = mode === "light" ? "dark" : "light";
+    const label = `Switch to ${nextMode} mode`;
+    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-pressed", String(mode === "light"));
+    button.title = label;
+  }
   function setupPhaseAnnotationControls() {
     const toggle = document.getElementById("phaseAnnotationsToggle");
     if (!(toggle instanceof HTMLInputElement)) return;
@@ -4341,18 +4424,18 @@
       zeta: "\u03B6",
       zetac: "\u03B6c",
       gammac: "\u03B3c",
-      m: "\u03C70",
-      gamma1: "\u03931",
+      m: "\u03C7\u2080",
+      gamma1: "\u0393\u2081",
       n: "n",
       s: "s",
       sourceExp: "U",
       cq: "Cq",
-      r0: "R0",
-      v0: "V0",
-      h0: "H0",
-      uc0: "Uc0",
+      r0: "R\u2080",
+      v0: "V\u2080",
+      h0: "H\u2080",
+      uc0: "Uc\u2080",
       tEnd: "\u03C4max",
-      step: "\u0394\u03C40",
+      step: "\u0394\u03C4\u2080",
       maxStep: "\u0394\u03C4max",
       logRtol: "log10 rtol",
       logAtol: "log10 atol",
@@ -6075,16 +6158,20 @@
     gradient.addColorStop(0, "#6080D0");
     gradient.addColorStop(1, "#FFD166");
     ctx.save();
-    ctx.fillStyle = "rgba(13, 17, 23, 0.68)";
-    ctx.fillRect(left - 8, top - 8, width + 16, 58);
+    roundedRectPath(ctx, left - 8, top - 8, width + 16, 58, 5);
+    ctx.fillStyle = floatingCanvasPanelFill(0.92);
+    ctx.fill();
+    ctx.strokeStyle = floatingCanvasPanelBorder(0.68);
+    ctx.lineWidth = 1;
+    ctx.stroke();
     ctx.fillStyle = gradient;
     ctx.fillRect(left, top, width, height);
-    ctx.strokeStyle = "rgba(240, 246, 252, 0.62)";
+    ctx.strokeStyle = floatingCanvasPanelBorder(0.78);
     ctx.strokeRect(left, top, width, height);
     const fraction = clamp4((sliderValue - range2.lowerSliderValue) / Math.max(1e-12, range2.upperSliderValue - range2.lowerSliderValue), 0, 1);
     const markerX = left + fraction * width;
     ctx.fillStyle = parameterColorAt(value, range2);
-    ctx.strokeStyle = "#0D1117";
+    ctx.strokeStyle = canvasMarkerOutlineColor();
     ctx.lineWidth = 1.3;
     ctx.beginPath();
     ctx.moveTo(markerX, top + height + 2);
@@ -6504,8 +6591,8 @@
     const drawText = (text, textX, textY) => {
       if (options.strokeWidth && options.strokeWidth > 0) {
         ctx.lineJoin = "round";
-        ctx.strokeStyle = options.strokeColor || "rgba(13, 17, 23, 0.9)";
-        ctx.lineWidth = options.strokeWidth;
+        ctx.strokeStyle = options.strokeColor || canvasTextHaloColor();
+        ctx.lineWidth = canvasTextHaloWidth(options.strokeWidth);
         ctx.strokeText(text, textX, textY);
       }
       ctx.fillText(text, textX, textY);
@@ -6746,7 +6833,7 @@
   function drawReferenceMarker(ctx, x, y, color, radius = 4) {
     ctx.save();
     ctx.fillStyle = color;
-    ctx.strokeStyle = "#0D1117";
+    ctx.strokeStyle = canvasMarkerOutlineColor();
     ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, 2 * Math.PI);
@@ -7168,10 +7255,10 @@
     const width = ctx.measureText(label).width;
     const x = plot.left + plot.width - width - 30;
     const y = plot.top + 14;
-    ctx.fillStyle = "rgba(13, 17, 23, 0.58)";
+    ctx.fillStyle = themeSurface(0.78);
     ctx.fillRect(x - 21, y - 11, width + 30, 22);
     ctx.fillStyle = PHASE_MARKER_COLOR;
-    ctx.strokeStyle = "#0D1117";
+    ctx.strokeStyle = canvasMarkerOutlineColor();
     ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.arc(x - 10, y, 4.8, 0, 2 * Math.PI);
@@ -7247,7 +7334,7 @@
     ctx.restore();
   }
   function setOpacityColorbarDataset(canvas, opacityRange, currentLogOpacity) {
-    canvas.dataset.opacityColorbar = "log10(kappa/kappa0)";
+    canvas.dataset.opacityColorbar = TP_OPACITY_DATA_LABEL;
     canvas.dataset.opacityPalette = "blue-gold";
     canvas.dataset.opacityRange = `${fmtFixed(opacityRange[0], 3)},${fmtFixed(opacityRange[1], 3)}`;
     if (Number.isFinite(currentLogOpacity)) {
@@ -7272,10 +7359,20 @@
     delete canvas.dataset.gridColorbarHit;
   }
   function drawOpacityColorbar(ctx, plot, opacityRange, canvas, currentLogOpacity) {
-    const width = Math.min(138, Math.max(108, plot.width * 0.22));
+    const labelFragments = [
+      { text: "log", subscript: "10", color: THEME.axisText },
+      { text: " \u03BA/\u03BA", subscript: "0", color: THEME.axisText, weight: 600 }
+    ];
+    ctx.save();
+    const labelWidth = canvasMathWidth(ctx, labelFragments, 10.5, 7.2);
+    ctx.restore();
+    const width = Math.min(Math.max(120, labelWidth + 20, plot.width * 0.24), Math.max(96, plot.width - 24));
     const height = 9;
-    const left = plot.left + plot.width - width - 12;
+    const left = plot.left + 12;
     const top = plot.top + 12;
+    const panelPadX = 7;
+    const panelPadTop = 7;
+    const panelHeight = 52;
     const gradient = ctx.createLinearGradient(left, top, left + width, top);
     for (let index = 0; index <= 24; index += 1) {
       const fraction = index / 24;
@@ -7283,16 +7380,20 @@
       gradient.addColorStop(fraction, opacityColor(value, opacityRange, 1));
     }
     ctx.save();
-    ctx.fillStyle = "rgba(1, 4, 9, 0.42)";
-    ctx.fillRect(left - 7, top - 7, width + 14, 42);
+    roundedRectPath(ctx, left - panelPadX, top - panelPadTop, width + panelPadX * 2, panelHeight, 5);
+    ctx.fillStyle = floatingCanvasPanelFill(0.92);
+    ctx.fill();
+    ctx.strokeStyle = floatingCanvasPanelBorder(0.68);
+    ctx.lineWidth = 1;
+    ctx.stroke();
     ctx.fillStyle = gradient;
     ctx.fillRect(left, top, width, height);
-    ctx.strokeStyle = "rgba(240, 246, 252, 0.62)";
+    ctx.strokeStyle = floatingCanvasPanelBorder(0.78);
     ctx.lineWidth = 1;
     ctx.strokeRect(left, top, width, height);
     if (Number.isFinite(currentLogOpacity)) {
       const markerX = left + normalizedInRange(currentLogOpacity, opacityRange) * width;
-      ctx.strokeStyle = "rgba(1, 4, 9, 0.9)";
+      ctx.strokeStyle = canvasTextHaloColor();
       ctx.lineWidth = 3.8;
       ctx.beginPath();
       ctx.moveTo(markerX, top - 3);
@@ -7312,9 +7413,11 @@
     ctx.fillText(fmt(opacityRange[0], 2), left, top + height + 8);
     ctx.textAlign = "right";
     ctx.fillText(fmt(opacityRange[1], 2), left + width, top + height + 8);
-    ctx.textAlign = "center";
-    ctx.font = "600 10.5px Inter, sans-serif";
-    ctx.fillText("log10 \u03BA/\u03BA0", left + width / 2, top + height + 23);
+    drawCanvasMathFragments(ctx, labelFragments, left + width / 2, top + height + 27, {
+      fontSize: 10.5,
+      subscriptSize: 7.2,
+      strokeWidth: 0
+    });
     ctx.restore();
     setOpacityColorbarDataset(canvas, opacityRange, currentLogOpacity);
   }
@@ -7382,8 +7485,8 @@
     drawCanvasMathFragments(
       ctx,
       [
-        { text: "log10 ", color: THEME.axisText },
-        { text: "T/T0", color: PHASE_MARKER_COLOR, weight: 600 }
+        { text: "log", subscript: "10", color: THEME.axisText },
+        { text: " T/T", subscript: "0", color: PHASE_MARKER_COLOR, weight: 600 }
       ],
       plot.left + plot.width / 2,
       plot.top + plot.height + 42
@@ -7391,8 +7494,8 @@
     drawCanvasMathFragments(
       ctx,
       [
-        { text: "log10 ", color: THEME.axisText },
-        { text: "P/P0", color: COLORS.H, weight: 600 }
+        { text: "log", subscript: "10", color: THEME.axisText },
+        { text: " P/P", subscript: "0", color: COLORS.H, weight: 600 }
       ],
       22,
       plot.top + plot.height / 2,
@@ -7406,7 +7509,7 @@
     drawAxes(ctx, plot, xlim, ylim, "", "", THEME.axisText, THEME.axisText, 22);
     tracks.forEach((track) => drawThermodynamicTrack(ctx, track.points, plot, xlim, ylim, opacityRange, track.width, track.alpha, sx, sy, track.color));
     if (options.showOpacityColorbar ?? true) drawOpacityColorbar(ctx, plot, opacityRange, canvas, options.currentLogOpacity);
-    canvas.dataset.opacityContours = "log10(kappa/kappa0)";
+    canvas.dataset.opacityContours = TP_OPACITY_DATA_LABEL;
     delete canvas.dataset.opacityVectorField;
     drawThermodynamicAxisLabels(ctx, plot);
   }
@@ -7492,8 +7595,8 @@
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
     canvas.dataset.tpOpacityMode = gridState.enabled ? "grid" : "single";
-    canvas.dataset.axisLabels = "log10(T/T0),log10(P/P0)";
-    canvas.dataset.colorVariable = gridState.enabled ? "grid parameter" : "log10(kappa/kappa0)";
+    canvas.dataset.axisLabels = `${TP_TEMPERATURE_DATA_LABEL},${TP_PRESSURE_DATA_LABEL}`;
+    canvas.dataset.colorVariable = gridState.enabled ? "grid parameter" : TP_OPACITY_DATA_LABEL;
     if (gridState.enabled) {
       delete canvas.dataset.currentPhase;
       delete canvas.dataset.currentTime;
@@ -7528,7 +7631,7 @@
       }
       ctx.drawImage(backdrop.canvas, 0, 0, width, height);
       clearOpacityColorbarDataset(canvas);
-      canvas.dataset.opacityContours = "log10(kappa/kappa0)";
+      canvas.dataset.opacityContours = TP_OPACITY_DATA_LABEL;
       delete canvas.dataset.opacityVectorField;
       drawGridColorbar(ctx, backdrop.plot, backdrop.xlim, backdrop.ylim, "tpOpacityCanvas");
       const sx = (x) => backdrop.plot.left + (x - backdrop.xlim[0]) / (backdrop.xlim[1] - backdrop.xlim[0]) * backdrop.plot.width;
@@ -8150,6 +8253,17 @@
       b: clamp4(Math.round(color.b * scale), 0, 255)
     };
   }
+  function lightModeInvertedSurfaceRgb(color) {
+    if (!lightThemeActive()) return color;
+    return {
+      r: 255 - color.r,
+      g: 255 - color.g,
+      b: 255 - color.b
+    };
+  }
+  function physicalSurfaceOutlineColor(alpha = 0.88) {
+    return lightThemeActive() ? colorWithAlpha(cssVariable("--line-strong", "#818B98"), alpha) : `rgba(240, 245, 255, ${alpha})`;
+  }
   function phaseMarker() {
     if (gridState.enabled) return void 0;
     return latestPhaseRows.length ? { x: displayMarkerX(latestDisplayWindow, currentAnimationPhase), color: PHASE_MARKER_COLOR } : void 0;
@@ -8247,14 +8361,15 @@
   function drawPhaseAnnotationSymbol(ctx, x, y, annotation) {
     ctx.save();
     ctx.lineWidth = 1.7;
-    ctx.strokeStyle = "#0D1117";
+    ctx.strokeStyle = canvasMarkerOutlineColor();
     ctx.fillStyle = annotation.color;
     if (annotation.kind === "maxTeff" || annotation.kind === "minTeff") {
       ctx.font = "700 18px Inter, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       const symbol = annotation.kind === "maxTeff" ? "\u2191" : "\u2193";
-      ctx.lineWidth = 2.8;
+      ctx.strokeStyle = canvasTextHaloColor();
+      ctx.lineWidth = canvasTextHaloWidth(2.8);
       ctx.strokeText(symbol, x, y);
       ctx.fillText(symbol, x, y);
     } else if (annotation.kind === "maxR" || annotation.kind === "minR") {
@@ -8413,8 +8528,8 @@
     ctx.save();
     ctx.textBaseline = "alphabetic";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(6, 11, 24, 0.92)";
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = canvasTextHaloColor(0.92);
+    ctx.lineWidth = canvasTextHaloWidth(4);
     ctx.fillStyle = colorWithAlpha(color, 0.98);
     const widths = symbols.map((symbol) => measureLuminosityLabelSymbol(ctx, symbol));
     const totalWidth = widths.reduce((sum, width) => sum + width, 0) + gap * (symbols.length - 1);
@@ -8709,8 +8824,8 @@
     ctx.textAlign = align;
     ctx.textBaseline = "middle";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(13, 17, 23, 0.9)";
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = canvasTextHaloColor();
+    ctx.lineWidth = canvasTextHaloWidth(4);
     ctx.fillStyle = color;
     ctx.strokeText(text, x, y);
     ctx.fillText(text, x, y);
@@ -8723,7 +8838,7 @@
       align: options.align,
       color: options.color,
       rotate: options.rotate,
-      strokeColor: options.strokeColor || "rgba(13, 17, 23, 0.9)",
+      strokeColor: options.strokeColor || canvasTextHaloColor(),
       strokeWidth: options.strokeWidth ?? 4
     });
   }
@@ -8928,13 +9043,14 @@
     const temperatureRange = stableTimeEquilibriumDisplayActive() ? anchoredVisualRange([...temperatureValues, currentTemperatureProxy ?? NaN], 1, 0.02, 0.08) : range([...temperatureValues, currentTemperatureProxy ?? NaN], 0.08);
     const pistonTemperatureLevel = normalizedInRange(currentTemperatureProxy ?? 1, temperatureRange);
     const pistonTemperatureColor = blackbodyRgbForTemperature(inferEffectiveTemperature(row.L, row.R));
+    const pistonDisplayColor = lightModeInvertedSurfaceRgb(pistonTemperatureColor);
     roundedRectPath(ctx, chamber.left - 5, pistonY - pistonHeight / 2, chamber.width + 10, pistonHeight, 3);
-    ctx.shadowColor = rgbCss(pistonTemperatureColor, 0.2 + pistonTemperatureLevel * 0.5);
+    ctx.shadowColor = rgbCss(pistonDisplayColor, 0.2 + pistonTemperatureLevel * 0.5);
     ctx.shadowBlur = 4 + pistonTemperatureLevel * 13;
-    ctx.fillStyle = rgbCss(pistonTemperatureColor, 0.44 + pistonTemperatureLevel * 0.42);
+    ctx.fillStyle = rgbCss(pistonDisplayColor, 0.44 + pistonTemperatureLevel * 0.42);
     ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = "rgba(240, 245, 255, 0.88)";
+    ctx.strokeStyle = physicalSurfaceOutlineColor(0.88);
     ctx.lineWidth = 1.2;
     ctx.stroke();
     const pressureEndY = gasTop + 2;
@@ -9005,9 +9121,9 @@
     ctx.closePath();
     ctx.fill();
     roundedRectPath(ctx, radiativeSlotX, radiativeSlotTop, radiativeSlotWidth, radiativeSlotHeight, 6);
-    ctx.fillStyle = "rgba(21, 27, 35, 0.66)";
+    ctx.fillStyle = themeSurface(0.78);
     ctx.fill();
-    ctx.strokeStyle = "rgba(145, 152, 161, 0.5)";
+    ctx.strokeStyle = themeRule(0.5);
     ctx.lineWidth = 1.4;
     ctx.stroke();
     const equilibriumY = radiativeSlotBottom - equilibriumOpacityLevel * radiativeSlotHeight;
@@ -9100,9 +9216,9 @@
       const convectiveActivity = normalizedInRange(row.Uc, ucRange);
       const convectiveVisualHeight = (level) => Math.min(slotHeight, Math.max(0, level * slotHeight));
       roundedRectPath(ctx, slotX, slotTop, slotWidth, slotHeight, 6);
-      ctx.fillStyle = "rgba(21, 27, 35, 0.66)";
+      ctx.fillStyle = themeSurface(0.78);
       ctx.fill();
-      ctx.strokeStyle = "rgba(145, 152, 161, 0.5)";
+      ctx.strokeStyle = themeRule(0.5);
       ctx.lineWidth = 1.4;
       ctx.stroke();
       if (convectionResponsive) {
@@ -9273,7 +9389,7 @@
       plot.top - 15,
       { align: "right", fontSize: 10.8, subscriptSize: 8.8, strokeWidth: 2.6 }
     );
-    ctx.strokeStyle = "rgba(48, 54, 61, 0.9)";
+    ctx.strokeStyle = colorWithAlpha(THEME.axisGrid, 0.9);
     ctx.lineWidth = 1;
     for (let i = 0; i <= 3; i += 1) {
       const x = plot.left + plot.width * i / 3;
@@ -9308,7 +9424,7 @@
     const currentForce = pressureSupport(currentRow, parameters);
     if (Number.isFinite(currentRow.R + currentForce)) {
       ctx.fillStyle = PHASE_MARKER_COLOR;
-      ctx.strokeStyle = "#0D1117";
+      ctx.strokeStyle = canvasMarkerOutlineColor();
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(sx(currentRow.R), sy(currentForce), 5.6, 0, Math.PI * 2);
@@ -9348,8 +9464,8 @@
     let cursor = -totalWidth / 2;
     parts.forEach((part) => {
       ctx.font = canvasMathFont(part.size, 760);
-      ctx.strokeStyle = "rgba(13, 17, 23, 0.9)";
-      ctx.lineWidth = part.size === exponentSize ? 2 : 2.4;
+      ctx.strokeStyle = canvasTextHaloColor();
+      ctx.lineWidth = canvasTextHaloWidth(part.size === exponentSize ? 2 : 2.4);
       ctx.fillStyle = part.color;
       ctx.strokeText(part.text, cursor, part.y);
       ctx.fillText(part.text, cursor, part.y);
@@ -9368,11 +9484,11 @@
     const barLimit = width * 0.22;
     ctx.save();
     roundedRectPath(ctx, x, y, width, height, 5);
-    ctx.fillStyle = "rgba(13, 17, 23, 0.28)";
+    ctx.fillStyle = themeSurface(0.7);
     ctx.fill();
-    ctx.strokeStyle = "rgba(101, 108, 118, 0.58)";
+    ctx.strokeStyle = themeBorder(0.58);
     ctx.stroke();
-    ctx.strokeStyle = "rgba(145, 152, 161, 0.42)";
+    ctx.strokeStyle = themeRule(0.42);
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(center, y + 6);
@@ -9382,7 +9498,7 @@
     rows.forEach((row, index) => {
       const laneY = y + laneGap * (index + 0.5);
       const bar = clamp4(row.value / maxAbs, -1, 1) * barLimit;
-      ctx.strokeStyle = "rgba(101, 108, 118, 0.5)";
+      ctx.strokeStyle = themeBorder(0.5);
       ctx.lineWidth = 1;
       ctx.lineCap = "round";
       ctx.beginPath();
@@ -9511,7 +9627,7 @@
     const heatEngineConvectionResponsive = heatEngineShowsUc && !convectiveResponseDisabled(latestPhaseParameters);
     canvas.dataset.heatFluxTerms = heatEngineShowsUc ? "source,L_r,L_c" : "source,L_r";
     canvas.dataset.radiativeValve = "opacity";
-    canvas.dataset.radiativeValveQuantity = "log10(kappa/kappa0)";
+    canvas.dataset.radiativeValveQuantity = TP_OPACITY_DATA_LABEL;
     canvas.dataset.convectiveValve = heatEngineShowsUc ? heatEngineConvectionResponsive ? "time-dependent" : "frozen" : "hidden";
     canvas.dataset.convectivePlumeClock = heatEngineShowsUc ? "Uc-integrated closed loop" : "hidden";
     if (heatEngineConvectionResponsive) {
@@ -9588,6 +9704,8 @@
     const temperature = inferEffectiveTemperature(row.L, row.R);
     const blackbody = blackbodyRgbForTemperature(temperature);
     const shellColor = scaledRgb(blackbody, 0.58 + luminosityLevel * 0.52);
+    const shellDisplayColor = lightModeInvertedSurfaceRgb(shellColor);
+    const shellShadowColor = lightModeInvertedSurfaceRgb(blackbody);
     const outerRadius = Math.max(2, geometry.outerRadius * radiusScale);
     const innerRadius = Math.max(0, geometry.innerRadius * radiusScale);
     const convectionActive = convectiveLuminosityAvailable();
@@ -9607,7 +9725,7 @@
     delete canvas.dataset.radiusLabel;
     ctx.save();
     drawModelReferenceGuides(ctx, modelScaleRows, centerX, centerY, radiusScale);
-    ctx.shadowColor = rgbCss(blackbody, 0.65);
+    ctx.shadowColor = rgbCss(shellShadowColor, 0.65);
     ctx.shadowBlur = 12 + luminosityLevel * 22;
     drawAnnularSegment(
       ctx,
@@ -9617,7 +9735,7 @@
       innerRadius,
       convectionActive ? Math.PI / 2 : 0,
       Math.PI * 2,
-      rgbCss(shellColor, shellAlpha)
+      rgbCss(shellDisplayColor, shellAlpha)
     );
     ctx.shadowBlur = 0;
     if (convectionActive) drawConvectionArcs(ctx, row, centerX, centerY, radiusScale);
@@ -9846,6 +9964,7 @@
     drawStellingwerfReferencePanel();
   }
   function startApp() {
+    setupThemeToggle();
     buildControls();
     solveAndDraw();
     startModelAnimationLoop();

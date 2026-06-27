@@ -244,13 +244,61 @@ const gridPhaseRowCache = new WeakMap<GridModelResult, Map<string, Row[]>>();
 let thermodynamicGridBackdropCache: ThermodynamicGridBackdrop | null = null;
 const TAU_SCALE_MAX = 1000;
 const TAU_TICKS = [1, 3, 10, 30, 100, 300];
+const TP_TEMPERATURE_DATA_LABEL = "log10(T/T_0)";
+const TP_PRESSURE_DATA_LABEL = "log10(P/P_0)";
+const TP_OPACITY_DATA_LABEL = "log10(kappa/kappa_0)";
+type ThemeMode = "dark" | "light";
+
+function cssVariable(name: string, fallback: string): string {
+  const value = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+function themeSurface(alpha: number): string {
+  return colorWithAlpha(cssVariable("--paper-high", "#212830"), alpha);
+}
+
+function themeBorder(alpha: number): string {
+  return colorWithAlpha(cssVariable("--line-strong", "#656C76"), alpha);
+}
+
+function themeRule(alpha: number): string {
+  return colorWithAlpha(cssVariable("--muted", "#9198A1"), alpha);
+}
+
+function floatingCanvasPanelFill(alpha = 0.9): string {
+  const variableName = lightThemeActive() ? "--paper" : "--paper-high";
+  const fallback = lightThemeActive() ? "#FFFFFF" : "#212830";
+  return colorWithAlpha(cssVariable(variableName, fallback), alpha);
+}
+
+function floatingCanvasPanelBorder(alpha = 0.72): string {
+  return colorWithAlpha(cssVariable("--line", "#3D444D"), alpha);
+}
+
+function lightThemeActive(): boolean {
+  return document.documentElement.dataset.theme === "light";
+}
+
+function canvasTextHaloColor(alpha = 0.9): string {
+  return colorWithAlpha(cssVariable("--canvas", "#0D1117"), alpha);
+}
+
+function canvasTextHaloWidth(width: number): number {
+  return lightThemeActive() ? Math.min(width, 1.8) : width;
+}
+
+function canvasMarkerOutlineColor(alpha = 0.9): string {
+  return lightThemeActive() ? colorWithAlpha(cssVariable("--line-strong", "#656C76"), alpha) : canvasTextHaloColor(alpha);
+}
+
 const THEME = {
-  axisGrid: "#30363D",
-  axisText: "#9198A1",
-  axisBorder: "#3D444D",
-  selectionFill: "#388BFD1A",
-  selectionStroke: "#1F6FEB",
-  neutralSymbol: "#F0F6FC"
+  get axisGrid() { return cssVariable("--canvas-grid", "#30363D"); },
+  get axisText() { return cssVariable("--muted", "#9198A1"); },
+  get axisBorder() { return cssVariable("--line", "#3D444D"); },
+  get selectionFill() { return cssVariable("--selection-fill", "#388BFD1A"); },
+  get selectionStroke() { return cssVariable("--focus", "#1F6FEB"); },
+  get neutralSymbol() { return cssVariable("--neutral-symbol", "#F0F6FC"); }
 } as const;
 
 type PlotBox = { left: number; top: number; width: number; height: number };
@@ -1872,6 +1920,44 @@ function setupModelSpeedControl(): void {
   sync();
 }
 
+function currentThemeMode(): ThemeMode {
+  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+}
+
+function setupThemeToggle(): void {
+  const button = document.getElementById("themeToggle");
+  if (!(button instanceof HTMLButtonElement)) return;
+  syncThemeToggleButton();
+  button.addEventListener("click", () => {
+    setThemeMode(currentThemeMode() === "light" ? "dark" : "light");
+  });
+}
+
+function setThemeMode(mode: ThemeMode): void {
+  document.documentElement.dataset.theme = mode;
+  document.documentElement.style.colorScheme = mode;
+  try {
+    window.localStorage.setItem("ozwizard-theme", mode);
+  } catch (_error) {}
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (meta) meta.content = mode === "light" ? "#ffffff" : "#0d1117";
+  syncThemeToggleButton();
+  thermodynamicGridBackdropCache = null;
+  drawAdsrVisualization();
+  drawAll();
+}
+
+function syncThemeToggleButton(): void {
+  const button = document.getElementById("themeToggle");
+  if (!(button instanceof HTMLButtonElement)) return;
+  const mode = currentThemeMode();
+  const nextMode = mode === "light" ? "dark" : "light";
+  const label = `Switch to ${nextMode} mode`;
+  button.setAttribute("aria-label", label);
+  button.setAttribute("aria-pressed", String(mode === "light"));
+  button.title = label;
+}
+
 function setupPhaseAnnotationControls(): void {
   const toggle = document.getElementById("phaseAnnotationsToggle");
   if (!(toggle instanceof HTMLInputElement)) return;
@@ -2769,18 +2855,18 @@ function controlCanvasSymbol(key: ControlParameterKey): string {
     zeta: "ζ",
     zetac: "ζc",
     gammac: "γc",
-    m: "χ0",
-    gamma1: "Γ1",
+    m: "χ₀",
+    gamma1: "Γ₁",
     n: "n",
     s: "s",
     sourceExp: "U",
     cq: "Cq",
-    r0: "R0",
-    v0: "V0",
-    h0: "H0",
-    uc0: "Uc0",
+    r0: "R₀",
+    v0: "V₀",
+    h0: "H₀",
+    uc0: "Uc₀",
     tEnd: "τmax",
-    step: "Δτ0",
+    step: "Δτ₀",
     maxStep: "Δτmax",
     logRtol: "log10 rtol",
     logAtol: "log10 atol",
@@ -4798,16 +4884,20 @@ function drawGridColorbar(
   gradient.addColorStop(0, "#6080D0");
   gradient.addColorStop(1, "#FFD166");
   ctx.save();
-  ctx.fillStyle = "rgba(13, 17, 23, 0.68)";
-  ctx.fillRect(left - 8, top - 8, width + 16, 58);
+  roundedRectPath(ctx, left - 8, top - 8, width + 16, 58, 5);
+  ctx.fillStyle = floatingCanvasPanelFill(0.92);
+  ctx.fill();
+  ctx.strokeStyle = floatingCanvasPanelBorder(0.68);
+  ctx.lineWidth = 1;
+  ctx.stroke();
   ctx.fillStyle = gradient;
   ctx.fillRect(left, top, width, height);
-  ctx.strokeStyle = "rgba(240, 246, 252, 0.62)";
+  ctx.strokeStyle = floatingCanvasPanelBorder(0.78);
   ctx.strokeRect(left, top, width, height);
   const fraction = clamp((sliderValue - range.lowerSliderValue) / Math.max(1e-12, range.upperSliderValue - range.lowerSliderValue), 0, 1);
   const markerX = left + fraction * width;
   ctx.fillStyle = parameterColorAt(value, range);
-  ctx.strokeStyle = "#0D1117";
+  ctx.strokeStyle = canvasMarkerOutlineColor();
   ctx.lineWidth = 1.3;
   ctx.beginPath();
   ctx.moveTo(markerX, top + height + 2);
@@ -5334,8 +5424,8 @@ function drawCanvasMathFragments(
   const drawText = (text: string, textX: number, textY: number) => {
     if (options.strokeWidth && options.strokeWidth > 0) {
       ctx.lineJoin = "round";
-      ctx.strokeStyle = options.strokeColor || "rgba(13, 17, 23, 0.9)";
-      ctx.lineWidth = options.strokeWidth;
+      ctx.strokeStyle = options.strokeColor || canvasTextHaloColor();
+      ctx.lineWidth = canvasTextHaloWidth(options.strokeWidth);
       ctx.strokeText(text, textX, textY);
     }
     ctx.fillText(text, textX, textY);
@@ -5653,7 +5743,7 @@ function drawReferenceMarker(
 ): void {
   ctx.save();
   ctx.fillStyle = color;
-  ctx.strokeStyle = "#0D1117";
+  ctx.strokeStyle = canvasMarkerOutlineColor();
   ctx.lineWidth = 1.6;
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, 2 * Math.PI);
@@ -6140,10 +6230,10 @@ function drawPhasePortraitPhaseLabel(ctx: CanvasRenderingContext2D, plot: PlotBo
   const width = ctx.measureText(label).width;
   const x = plot.left + plot.width - width - 30;
   const y = plot.top + 14;
-  ctx.fillStyle = "rgba(13, 17, 23, 0.58)";
+  ctx.fillStyle = themeSurface(0.78);
   ctx.fillRect(x - 21, y - 11, width + 30, 22);
   ctx.fillStyle = PHASE_MARKER_COLOR;
-  ctx.strokeStyle = "#0D1117";
+  ctx.strokeStyle = canvasMarkerOutlineColor();
   ctx.lineWidth = 1.2;
   ctx.beginPath();
   ctx.arc(x - 10, y, 4.8, 0, 2 * Math.PI);
@@ -6241,7 +6331,7 @@ function setOpacityColorbarDataset(
   opacityRange: NumericRange,
   currentLogOpacity?: number
 ): void {
-  canvas.dataset.opacityColorbar = "log10(kappa/kappa0)";
+  canvas.dataset.opacityColorbar = TP_OPACITY_DATA_LABEL;
   canvas.dataset.opacityPalette = "blue-gold";
   canvas.dataset.opacityRange = `${fmtFixed(opacityRange[0], 3)},${fmtFixed(opacityRange[1], 3)}`;
   if (Number.isFinite(currentLogOpacity)) {
@@ -6275,10 +6365,20 @@ function drawOpacityColorbar(
   canvas: HTMLCanvasElement,
   currentLogOpacity?: number
 ): void {
-  const width = Math.min(138, Math.max(108, plot.width * 0.22));
+  const labelFragments: CanvasMathFragment[] = [
+    { text: "log", subscript: "10", color: THEME.axisText },
+    { text: " κ/κ", subscript: "0", color: THEME.axisText, weight: 600 }
+  ];
+  ctx.save();
+  const labelWidth = canvasMathWidth(ctx, labelFragments, 10.5, 7.2);
+  ctx.restore();
+  const width = Math.min(Math.max(120, labelWidth + 20, plot.width * 0.24), Math.max(96, plot.width - 24));
   const height = 9;
-  const left = plot.left + plot.width - width - 12;
+  const left = plot.left + 12;
   const top = plot.top + 12;
+  const panelPadX = 7;
+  const panelPadTop = 7;
+  const panelHeight = 52;
   const gradient = ctx.createLinearGradient(left, top, left + width, top);
   for (let index = 0; index <= 24; index += 1) {
     const fraction = index / 24;
@@ -6286,16 +6386,20 @@ function drawOpacityColorbar(
     gradient.addColorStop(fraction, opacityColor(value, opacityRange, 1));
   }
   ctx.save();
-  ctx.fillStyle = "rgba(1, 4, 9, 0.42)";
-  ctx.fillRect(left - 7, top - 7, width + 14, 42);
+  roundedRectPath(ctx, left - panelPadX, top - panelPadTop, width + panelPadX * 2, panelHeight, 5);
+  ctx.fillStyle = floatingCanvasPanelFill(0.92);
+  ctx.fill();
+  ctx.strokeStyle = floatingCanvasPanelBorder(0.68);
+  ctx.lineWidth = 1;
+  ctx.stroke();
   ctx.fillStyle = gradient;
   ctx.fillRect(left, top, width, height);
-  ctx.strokeStyle = "rgba(240, 246, 252, 0.62)";
+  ctx.strokeStyle = floatingCanvasPanelBorder(0.78);
   ctx.lineWidth = 1;
   ctx.strokeRect(left, top, width, height);
   if (Number.isFinite(currentLogOpacity)) {
     const markerX = left + normalizedInRange(currentLogOpacity as number, opacityRange) * width;
-    ctx.strokeStyle = "rgba(1, 4, 9, 0.9)";
+    ctx.strokeStyle = canvasTextHaloColor();
     ctx.lineWidth = 3.8;
     ctx.beginPath();
     ctx.moveTo(markerX, top - 3);
@@ -6315,9 +6419,11 @@ function drawOpacityColorbar(
   ctx.fillText(fmt(opacityRange[0], 2), left, top + height + 8);
   ctx.textAlign = "right";
   ctx.fillText(fmt(opacityRange[1], 2), left + width, top + height + 8);
-  ctx.textAlign = "center";
-  ctx.font = "600 10.5px Inter, sans-serif";
-  ctx.fillText("log10 \u03BA/\u03BA0", left + width / 2, top + height + 23);
+  drawCanvasMathFragments(ctx, labelFragments, left + width / 2, top + height + 27, {
+    fontSize: 10.5,
+    subscriptSize: 7.2,
+    strokeWidth: 0
+  });
   ctx.restore();
   setOpacityColorbarDataset(canvas, opacityRange, currentLogOpacity);
 }
@@ -6410,8 +6516,8 @@ function drawThermodynamicAxisLabels(ctx: CanvasRenderingContext2D, plot: PlotBo
   drawCanvasMathFragments(
     ctx,
     [
-      { text: "log10 ", color: THEME.axisText },
-      { text: "T/T0", color: PHASE_MARKER_COLOR, weight: 600 }
+      { text: "log", subscript: "10", color: THEME.axisText },
+      { text: " T/T", subscript: "0", color: PHASE_MARKER_COLOR, weight: 600 }
     ],
     plot.left + plot.width / 2,
     plot.top + plot.height + 42
@@ -6419,8 +6525,8 @@ function drawThermodynamicAxisLabels(ctx: CanvasRenderingContext2D, plot: PlotBo
   drawCanvasMathFragments(
     ctx,
     [
-      { text: "log10 ", color: THEME.axisText },
-      { text: "P/P0", color: COLORS.H, weight: 600 }
+      { text: "log", subscript: "10", color: THEME.axisText },
+      { text: " P/P", subscript: "0", color: COLORS.H, weight: 600 }
     ],
     22,
     plot.top + plot.height / 2,
@@ -6445,7 +6551,7 @@ function drawThermodynamicStaticLayer(
   drawAxes(ctx, plot, xlim, ylim, "", "", THEME.axisText, THEME.axisText, 22);
   tracks.forEach((track) => drawThermodynamicTrack(ctx, track.points, plot, xlim, ylim, opacityRange, track.width, track.alpha, sx, sy, track.color));
   if (options.showOpacityColorbar ?? true) drawOpacityColorbar(ctx, plot, opacityRange, canvas, options.currentLogOpacity);
-  canvas.dataset.opacityContours = "log10(kappa/kappa0)";
+  canvas.dataset.opacityContours = TP_OPACITY_DATA_LABEL;
   delete canvas.dataset.opacityVectorField;
   drawThermodynamicAxisLabels(ctx, plot);
 }
@@ -6545,8 +6651,8 @@ function drawThermodynamicPanel(): void {
   ctx.clearRect(0, 0, width, height);
 
   canvas.dataset.tpOpacityMode = gridState.enabled ? "grid" : "single";
-  canvas.dataset.axisLabels = "log10(T/T0),log10(P/P0)";
-  canvas.dataset.colorVariable = gridState.enabled ? "grid parameter" : "log10(kappa/kappa0)";
+  canvas.dataset.axisLabels = `${TP_TEMPERATURE_DATA_LABEL},${TP_PRESSURE_DATA_LABEL}`;
+  canvas.dataset.colorVariable = gridState.enabled ? "grid parameter" : TP_OPACITY_DATA_LABEL;
   if (gridState.enabled) {
     delete canvas.dataset.currentPhase;
     delete canvas.dataset.currentTime;
@@ -6582,7 +6688,7 @@ function drawThermodynamicPanel(): void {
     }
     ctx.drawImage(backdrop.canvas, 0, 0, width, height);
     clearOpacityColorbarDataset(canvas);
-    canvas.dataset.opacityContours = "log10(kappa/kappa0)";
+    canvas.dataset.opacityContours = TP_OPACITY_DATA_LABEL;
     delete canvas.dataset.opacityVectorField;
     drawGridColorbar(ctx, backdrop.plot, backdrop.xlim, backdrop.ylim, "tpOpacityCanvas");
     const sx = (x: number) => backdrop.plot.left + ((x - backdrop.xlim[0]) / (backdrop.xlim[1] - backdrop.xlim[0])) * backdrop.plot.width;
@@ -7323,6 +7429,21 @@ function scaledRgb(color: RgbColor, scale: number): RgbColor {
   };
 }
 
+function lightModeInvertedSurfaceRgb(color: RgbColor): RgbColor {
+  if (!lightThemeActive()) return color;
+  return {
+    r: 255 - color.r,
+    g: 255 - color.g,
+    b: 255 - color.b
+  };
+}
+
+function physicalSurfaceOutlineColor(alpha = 0.88): string {
+  return lightThemeActive()
+    ? colorWithAlpha(cssVariable("--line-strong", "#818B98"), alpha)
+    : `rgba(240, 245, 255, ${alpha})`;
+}
+
 function phaseMarker(): { x: number; color: string } | undefined {
   if (gridState.enabled) return undefined;
   return latestPhaseRows.length ? { x: displayMarkerX(latestDisplayWindow, currentAnimationPhase), color: PHASE_MARKER_COLOR } : undefined;
@@ -7447,14 +7568,15 @@ function drawPhaseAnnotationSymbol(
 ): void {
   ctx.save();
   ctx.lineWidth = 1.7;
-  ctx.strokeStyle = "#0D1117";
+  ctx.strokeStyle = canvasMarkerOutlineColor();
   ctx.fillStyle = annotation.color;
   if (annotation.kind === "maxTeff" || annotation.kind === "minTeff") {
     ctx.font = "700 18px Inter, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const symbol = annotation.kind === "maxTeff" ? "↑" : "↓";
-    ctx.lineWidth = 2.8;
+    ctx.strokeStyle = canvasTextHaloColor();
+    ctx.lineWidth = canvasTextHaloWidth(2.8);
     ctx.strokeText(symbol, x, y);
     ctx.fillText(symbol, x, y);
   } else if (annotation.kind === "maxR" || annotation.kind === "minR") {
@@ -7679,8 +7801,8 @@ function drawLuminosityArcLabel(
   ctx.save();
   ctx.textBaseline = "alphabetic";
   ctx.lineJoin = "round";
-  ctx.strokeStyle = "rgba(6, 11, 24, 0.92)";
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = canvasTextHaloColor(0.92);
+  ctx.lineWidth = canvasTextHaloWidth(4);
   ctx.fillStyle = colorWithAlpha(color, 0.98);
   const widths = symbols.map((symbol) => measureLuminosityLabelSymbol(ctx, symbol));
   const totalWidth = widths.reduce((sum, width) => sum + width, 0) + gap * (symbols.length - 1);
@@ -7704,8 +7826,8 @@ function drawModelPlainLabel(
   ctx.textBaseline = "middle";
   ctx.font = "700 13px Inter, sans-serif";
   ctx.lineJoin = "round";
-  ctx.strokeStyle = "rgba(6, 11, 24, 0.92)";
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = canvasTextHaloColor(0.92);
+  ctx.lineWidth = canvasTextHaloWidth(4);
   ctx.fillStyle = colorWithAlpha(color, 0.98);
   ctx.strokeText(text, x, y);
   ctx.fillText(text, x, y);
@@ -8186,8 +8308,8 @@ function drawHeatEngineLabel(
   ctx.textAlign = align;
   ctx.textBaseline = "middle";
   ctx.lineJoin = "round";
-  ctx.strokeStyle = "rgba(13, 17, 23, 0.9)";
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = canvasTextHaloColor();
+  ctx.lineWidth = canvasTextHaloWidth(4);
   ctx.fillStyle = color;
   ctx.strokeText(text, x, y);
   ctx.fillText(text, x, y);
@@ -8207,7 +8329,7 @@ function drawHeatEngineMathLabel(
     align: options.align,
     color: options.color,
     rotate: options.rotate,
-    strokeColor: options.strokeColor || "rgba(13, 17, 23, 0.9)",
+    strokeColor: options.strokeColor || canvasTextHaloColor(),
     strokeWidth: options.strokeWidth ?? 4
   });
 }
@@ -8647,13 +8769,14 @@ function drawHeatEnginePistonCausal(
     : range([...temperatureValues, currentTemperatureProxy ?? NaN], 0.08);
   const pistonTemperatureLevel = normalizedInRange(currentTemperatureProxy ?? 1, temperatureRange);
   const pistonTemperatureColor = blackbodyRgbForTemperature(inferEffectiveTemperature(row.L, row.R));
+  const pistonDisplayColor = lightModeInvertedSurfaceRgb(pistonTemperatureColor);
   roundedRectPath(ctx, chamber.left - 5, pistonY - pistonHeight / 2, chamber.width + 10, pistonHeight, 3);
-  ctx.shadowColor = rgbCss(pistonTemperatureColor, 0.2 + pistonTemperatureLevel * 0.5);
+  ctx.shadowColor = rgbCss(pistonDisplayColor, 0.2 + pistonTemperatureLevel * 0.5);
   ctx.shadowBlur = 4 + pistonTemperatureLevel * 13;
-  ctx.fillStyle = rgbCss(pistonTemperatureColor, 0.44 + pistonTemperatureLevel * 0.42);
+  ctx.fillStyle = rgbCss(pistonDisplayColor, 0.44 + pistonTemperatureLevel * 0.42);
   ctx.fill();
   ctx.shadowBlur = 0;
-  ctx.strokeStyle = "rgba(240, 245, 255, 0.88)";
+  ctx.strokeStyle = physicalSurfaceOutlineColor(0.88);
   ctx.lineWidth = 1.2;
   ctx.stroke();
 
@@ -8737,9 +8860,9 @@ function drawHeatEnginePistonCausal(
   ctx.fill();
 
   roundedRectPath(ctx, radiativeSlotX, radiativeSlotTop, radiativeSlotWidth, radiativeSlotHeight, 6);
-  ctx.fillStyle = "rgba(21, 27, 35, 0.66)";
+  ctx.fillStyle = themeSurface(0.78);
   ctx.fill();
-  ctx.strokeStyle = "rgba(145, 152, 161, 0.5)";
+  ctx.strokeStyle = themeRule(0.5);
   ctx.lineWidth = 1.4;
   ctx.stroke();
 
@@ -8843,9 +8966,9 @@ function drawHeatEnginePistonCausal(
     const convectiveVisualHeight = (level: number) => Math.min(slotHeight, Math.max(0, level * slotHeight));
 
     roundedRectPath(ctx, slotX, slotTop, slotWidth, slotHeight, 6);
-    ctx.fillStyle = "rgba(21, 27, 35, 0.66)";
+    ctx.fillStyle = themeSurface(0.78);
     ctx.fill();
-    ctx.strokeStyle = "rgba(145, 152, 161, 0.5)";
+    ctx.strokeStyle = themeRule(0.5);
     ctx.lineWidth = 1.4;
     ctx.stroke();
     if (convectionResponsive) {
@@ -9004,7 +9127,7 @@ function drawHeatEngineLoop(
   const loopColor = state === "driving" ? COLORS.Lc : state === "damping" ? NEGATIVE_VELOCITY_COLOR : PHASE_MARKER_COLOR;
 
   ctx.save();
-  ctx.strokeStyle = "rgba(48, 54, 61, 0.9)";
+  ctx.strokeStyle = colorWithAlpha(THEME.axisGrid, 0.9);
   ctx.lineWidth = 1;
   for (let i = 0; i <= 3; i += 1) {
     const x = plot.left + (plot.width * i) / 3;
@@ -9056,7 +9179,7 @@ function drawHeatEngineLoop(
   const currentForce = pressureSupport(currentRow, parameters);
   if (Number.isFinite(currentRow.R + currentForce)) {
     ctx.fillStyle = PHASE_MARKER_COLOR;
-    ctx.strokeStyle = "#0D1117";
+    ctx.strokeStyle = canvasMarkerOutlineColor();
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(sx(currentRow.R), sy(currentForce), 5.6, 0, Math.PI * 2);
@@ -9091,7 +9214,7 @@ function drawHeatEngineWorkLoop(
     .filter((point): point is { x: number; y: number } => Boolean(point));
 
   ctx.save();
-  ctx.strokeStyle = "rgba(48, 54, 61, 0.9)";
+  ctx.strokeStyle = colorWithAlpha(THEME.axisGrid, 0.9);
   ctx.lineWidth = 1;
   for (let i = 0; i <= 3; i += 1) {
     const x = plot.left + (plot.width * i) / 3;
@@ -9140,7 +9263,7 @@ function drawHeatEngineWorkLoop(
   const currentForce = pressureSupport(currentRow, parameters);
   if (Number.isFinite(currentRow.R + currentForce)) {
     ctx.fillStyle = PHASE_MARKER_COLOR;
-    ctx.strokeStyle = "#0D1117";
+    ctx.strokeStyle = canvasMarkerOutlineColor();
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(sx(currentRow.R), sy(currentForce), 5.8, 0, Math.PI * 2);
@@ -9200,11 +9323,11 @@ function drawHeatEnginePowerStrip(
   const center = x + width / 2;
   ctx.save();
   roundedRectPath(ctx, x, y, width, height, 5);
-  ctx.fillStyle = "rgba(13, 17, 23, 0.36)";
+  ctx.fillStyle = themeSurface(0.72);
   ctx.fill();
-  ctx.strokeStyle = "rgba(101, 108, 118, 0.72)";
+  ctx.strokeStyle = themeBorder(0.72);
   ctx.stroke();
-  ctx.strokeStyle = "rgba(145, 152, 161, 0.48)";
+  ctx.strokeStyle = themeRule(0.48);
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(center, y + 6);
@@ -9254,13 +9377,13 @@ function drawHeatEngineCycleWorkLedger(
 
   ctx.save();
   roundedRectPath(ctx, x, y, width, height, 6);
-  ctx.fillStyle = "rgba(13, 17, 23, 0.36)";
+  ctx.fillStyle = themeSurface(0.72);
   ctx.fill();
-  ctx.strokeStyle = "rgba(101, 108, 118, 0.72)";
+  ctx.strokeStyle = themeBorder(0.72);
   ctx.stroke();
   drawHeatEngineLabel(ctx, "cycle work", x + 12, y + 13, THEME.axisText, "left", 10.5, 800);
   drawHeatEngineLabel(ctx, "+ adds mechanical energy", x + width - 12, y + 13, colorWithAlpha(THEME.axisText, 0.72), "right", 9.3, 650);
-  ctx.strokeStyle = "rgba(145, 152, 161, 0.54)";
+  ctx.strokeStyle = themeRule(0.54);
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(center, y + 22);
@@ -9336,7 +9459,7 @@ function drawWorkLoopPanel(
     { align: "right", fontSize: 10.8, subscriptSize: 8.8, strokeWidth: 2.6 }
   );
 
-  ctx.strokeStyle = "rgba(48, 54, 61, 0.9)";
+  ctx.strokeStyle = colorWithAlpha(THEME.axisGrid, 0.9);
   ctx.lineWidth = 1;
   for (let i = 0; i <= 3; i += 1) {
     const x = plot.left + (plot.width * i) / 3;
@@ -9373,7 +9496,7 @@ function drawWorkLoopPanel(
   const currentForce = pressureSupport(currentRow, parameters);
   if (Number.isFinite(currentRow.R + currentForce)) {
     ctx.fillStyle = PHASE_MARKER_COLOR;
-    ctx.strokeStyle = "#0D1117";
+    ctx.strokeStyle = canvasMarkerOutlineColor();
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(sx(currentRow.R), sy(currentForce), 5.6, 0, Math.PI * 2);
@@ -9421,8 +9544,8 @@ function drawWorkPressureSupportAxisLabel(
   let cursor = -totalWidth / 2;
   parts.forEach((part) => {
     ctx.font = canvasMathFont(part.size, 760);
-    ctx.strokeStyle = "rgba(13, 17, 23, 0.9)";
-    ctx.lineWidth = part.size === exponentSize ? 2 : 2.4;
+    ctx.strokeStyle = canvasTextHaloColor();
+    ctx.lineWidth = canvasTextHaloWidth(part.size === exponentSize ? 2 : 2.4);
     ctx.fillStyle = part.color;
     ctx.strokeText(part.text, cursor, part.y);
     ctx.fillText(part.text, cursor, part.y);
@@ -9451,11 +9574,11 @@ function drawWorkSummaryBars(
 
   ctx.save();
   roundedRectPath(ctx, x, y, width, height, 5);
-  ctx.fillStyle = "rgba(13, 17, 23, 0.28)";
+  ctx.fillStyle = themeSurface(0.7);
   ctx.fill();
-  ctx.strokeStyle = "rgba(101, 108, 118, 0.58)";
+  ctx.strokeStyle = themeBorder(0.58);
   ctx.stroke();
-  ctx.strokeStyle = "rgba(145, 152, 161, 0.42)";
+  ctx.strokeStyle = themeRule(0.42);
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(center, y + 6);
@@ -9466,7 +9589,7 @@ function drawWorkSummaryBars(
   rows.forEach((row, index) => {
     const laneY = y + laneGap * (index + 0.5);
     const bar = clamp(row.value / maxAbs, -1, 1) * barLimit;
-    ctx.strokeStyle = "rgba(101, 108, 118, 0.5)";
+    ctx.strokeStyle = themeBorder(0.5);
     ctx.lineWidth = 1;
     ctx.lineCap = "round";
     ctx.beginPath();
@@ -9658,7 +9781,7 @@ function drawHeatEnginePanel(): void {
   const heatEngineConvectionResponsive = heatEngineShowsUc && !convectiveResponseDisabled(latestPhaseParameters);
   canvas.dataset.heatFluxTerms = heatEngineShowsUc ? "source,L_r,L_c" : "source,L_r";
   canvas.dataset.radiativeValve = "opacity";
-  canvas.dataset.radiativeValveQuantity = "log10(kappa/kappa0)";
+  canvas.dataset.radiativeValveQuantity = TP_OPACITY_DATA_LABEL;
   canvas.dataset.convectiveValve = heatEngineShowsUc ? (heatEngineConvectionResponsive ? "time-dependent" : "frozen") : "hidden";
   canvas.dataset.convectivePlumeClock = heatEngineShowsUc ? "Uc-integrated closed loop" : "hidden";
   if (heatEngineConvectionResponsive) {
@@ -9740,6 +9863,8 @@ function drawModelVisualization(): void {
   const temperature = inferEffectiveTemperature(row.L, row.R);
   const blackbody = blackbodyRgbForTemperature(temperature);
   const shellColor = scaledRgb(blackbody, 0.58 + luminosityLevel * 0.52);
+  const shellDisplayColor = lightModeInvertedSurfaceRgb(shellColor);
+  const shellShadowColor = lightModeInvertedSurfaceRgb(blackbody);
   const outerRadius = Math.max(2, geometry.outerRadius * radiusScale);
   const innerRadius = Math.max(0, geometry.innerRadius * radiusScale);
   const convectionActive = convectiveLuminosityAvailable();
@@ -9762,7 +9887,7 @@ function drawModelVisualization(): void {
   ctx.save();
   drawModelReferenceGuides(ctx, modelScaleRows, centerX, centerY, radiusScale);
 
-  ctx.shadowColor = rgbCss(blackbody, 0.65);
+  ctx.shadowColor = rgbCss(shellShadowColor, 0.65);
   ctx.shadowBlur = 12 + luminosityLevel * 22;
   drawAnnularSegment(
     ctx,
@@ -9772,7 +9897,7 @@ function drawModelVisualization(): void {
     innerRadius,
     convectionActive ? Math.PI / 2 : 0,
     Math.PI * 2,
-    rgbCss(shellColor, shellAlpha)
+    rgbCss(shellDisplayColor, shellAlpha)
   );
   ctx.shadowBlur = 0;
 
@@ -10027,6 +10152,7 @@ function drawAll(): void {
 }
 
 function startApp(): void {
+  setupThemeToggle();
   buildControls();
   solveAndDraw();
   startModelAnimationLoop();
