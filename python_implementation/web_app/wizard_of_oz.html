@@ -7,7 +7,7 @@
   <meta name="description" content="Interactive one-zone convection and pulsation explorer for Stellingwerf-style stellar-envelope models.">
   <meta name="application-name" content="OZwizard">
   <meta name="apple-mobile-web-app-title" content="OZwizard">
-  <meta name="theme-color" content="#050814">
+  <meta name="theme-color" content="#0d1117">
   <link rel="canonical" href="https://earlbellinger.com/apps/ozwizard/">
   <link rel="icon" href="./assets/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32x32.png">
@@ -121,30 +121,30 @@
   <style>
     :root {
       color-scheme: dark;
-      --bg: #050814;
-      --bg-deep: #02040a;
-      --paper: #0c1324;
-      --paper-raised: #111b33;
-      --paper-high: #17233d;
-      --paper-warm: #18140c;
-      --ink: #eef5ff;
-      --muted: #a8b4c7;
-      --subtle: #75839a;
-      --line: #26334e;
-      --line-strong: #3f5180;
-      --line-warm: #5a461a;
-      --canvas: #07101f;
-      --canvas-grid: #26334e;
-      --focus: #9ea7ff;
-      --shadow: rgba(0, 0, 0, 0.42);
-      --logo-night: #08102f;
-      --logo-blue: #6080d0;
-      --logo-blue-bright: #9ea7ff;
-      --logo-ice: #d9e7ff;
-      --logo-gold: #f0bd3d;
-      --logo-gold-bright: #ffd166;
-      --logo-violet: #8b7cff;
-      --logo-leaf: #65d68a;
+      --bg: #0d1117;
+      --bg-deep: #010409;
+      --paper: #151b23;
+      --paper-raised: #151b23;
+      --paper-high: #212830;
+      --paper-warm: #151b23;
+      --ink: #f0f6fc;
+      --muted: #9198a1;
+      --subtle: #656c76;
+      --line: #3d444d;
+      --line-strong: #656c76;
+      --line-warm: #bb800966;
+      --canvas: #010409;
+      --canvas-grid: #30363d;
+      --focus: #1f6feb;
+      --shadow: rgba(1, 4, 9, 0.66);
+      --logo-night: #010409;
+      --logo-blue: #1f6feb;
+      --logo-blue-bright: #4493f8;
+      --logo-ice: #f0f6fc;
+      --logo-gold: #d29922;
+      --logo-gold-bright: #e3b341;
+      --logo-violet: #8957e5;
+      --logo-leaf: #3fb950;
       --tau: #8b949e;
       --radius: #58a6ff;
       --velocity: #e69f00;
@@ -165,10 +165,10 @@
       --s: #ff9bce;
       --source: #d18616;
       --cq: #8b949e;
-      --neutral-symbol: #c0cae8;
-      --warn: #f0bd3d;
-      --bad: #ff6f91;
-      --good: #65d68a;
+      --neutral-symbol: #f0f6fc;
+      --warn: #d29922;
+      --bad: #f85149;
+      --good: #3fb950;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
@@ -201,7 +201,7 @@
     }
 
     aside {
-      background: linear-gradient(180deg, var(--paper-raised), var(--paper));
+      background: var(--paper);
       border-right: 1px solid var(--line);
       padding: 12px;
       overflow-y: auto;
@@ -214,9 +214,7 @@
     }
 
     main {
-      background:
-        linear-gradient(180deg, rgba(96, 128, 208, 0.08), rgba(5, 8, 20, 0) 220px),
-        var(--bg);
+      background: var(--bg);
       padding: 16px 18px 28px;
       min-width: 0;
       container-type: inline-size;
@@ -271,7 +269,7 @@
     }
 
     .sonification-control {
-      --accent: var(--logo-gold-bright);
+      --accent: var(--focus);
       display: grid;
       grid-template-columns: 26px 26px minmax(34px, 1fr) 48px;
       align-items: center;
@@ -306,9 +304,10 @@
 
     .piano-toggle.active,
     .speaker-toggle.active {
-      border-color: rgba(255, 209, 102, 0.72);
-      color: var(--logo-gold-bright);
-      background: rgba(240, 189, 61, 0.12);
+      border-color: var(--focus);
+      color: var(--ink);
+      background: #388bfd1a;
+      box-shadow: none;
     }
 
     .piano-toggle:disabled,
@@ -393,7 +392,7 @@
       font-size: 12px;
       min-height: 24px;
       padding: 3px 8px;
-      box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.04);
+      box-shadow: none;
     }
 
     .sonify-source-control button:hover {
@@ -402,10 +401,10 @@
     }
 
     .sonify-source-control button.active {
-      border-color: rgba(240, 189, 61, 0.74);
-      background: linear-gradient(180deg, rgba(240, 189, 61, 0.24), rgba(96, 128, 208, 0.16)), var(--paper-high);
-      color: var(--logo-gold-bright);
-      box-shadow: inset 0 1px 0 rgba(255, 209, 102, 0.2), 0 0 0 1px rgba(240, 189, 61, 0.08);
+      border-color: var(--focus);
+      background: #388bfd1a;
+      color: var(--ink);
+      box-shadow: none;
     }
 
     .piano-panel-layout {
@@ -421,7 +420,7 @@
       min-height: 168px;
       border: 1px solid var(--line);
       border-radius: 7px;
-      background: #050814;
+      background: var(--canvas);
       overflow: hidden;
       touch-action: none;
     }
@@ -458,9 +457,9 @@
       min-width: 0;
       min-height: 168px;
       border: 0;
-      border-right: 1px solid #1b2436;
-      background: linear-gradient(180deg, #f3f7ff, #b8c3d9);
-      color: #121827;
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, #f0f6fc, #9198a1);
+      color: var(--bg-deep);
     }
 
     .white-key:last-child {
@@ -473,9 +472,9 @@
       top: 0;
       width: var(--black-key-width);
       height: 62%;
-      border: 1px solid #050814;
+      border: 1px solid var(--bg-deep);
       border-radius: 0 0 5px 5px;
-      background: linear-gradient(180deg, #1d2638, #050814);
+      background: linear-gradient(180deg, var(--paper-high), var(--bg-deep));
       color: var(--ink);
       z-index: 2;
       padding-bottom: 8px;
@@ -484,11 +483,11 @@
 
     .piano-key.active {
       filter: brightness(1.16);
-      box-shadow: inset 0 0 0 2px rgba(255, 209, 102, 0.82);
+      box-shadow: inset 0 0 0 2px var(--focus);
     }
 
     .black-key.active {
-      box-shadow: inset 0 0 0 2px rgba(255, 209, 102, 0.82), 0 8px 16px rgba(0, 0, 0, 0.34);
+      box-shadow: inset 0 0 0 2px var(--focus), 0 8px 16px rgba(1, 4, 9, 0.66);
     }
 
     .piano-note-label {
@@ -548,13 +547,13 @@
     }
 
     .subtitle a {
-      color: var(--logo-gold-bright);
+      color: var(--logo-blue-bright);
       text-decoration: underline;
       text-underline-offset: 3px;
     }
 
     .subtitle a:hover {
-      color: var(--logo-ice);
+      color: #58a6ff;
     }
 
     .subtitle:empty {
@@ -601,7 +600,7 @@
     .grid-mode-control input {
       width: 14px;
       height: 14px;
-      accent-color: var(--logo-gold);
+      accent-color: var(--focus);
     }
 
     .grid-budget-controls {
@@ -613,7 +612,7 @@
     }
 
     .grid-budget-slider.is-grid-budget-active {
-      border-color: color-mix(in srgb, var(--logo-gold-bright) 24%, var(--line));
+      border-color: color-mix(in srgb, var(--focus) 42%, var(--line));
     }
 
     .grid-budget-mode {
@@ -628,7 +627,7 @@
       width: 14px;
       height: 14px;
       margin: 0;
-      accent-color: var(--logo-gold);
+      accent-color: var(--focus);
     }
 
     .control-section > summary.section-title {
@@ -749,7 +748,7 @@
       cursor: pointer;
       font-size: 13px;
       min-height: 36px;
-      box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.04);
+      box-shadow: none;
     }
 
     .section-action-row button {
@@ -769,10 +768,10 @@
 
     .preset-grid button.active,
     .driver-row button.active {
-      border-color: rgba(240, 189, 61, 0.74);
-      background: linear-gradient(180deg, rgba(240, 189, 61, 0.24), rgba(96, 128, 208, 0.16)), var(--paper-high);
-      color: var(--logo-gold-bright);
-      box-shadow: inset 0 1px 0 rgba(255, 209, 102, 0.2), 0 0 0 1px rgba(240, 189, 61, 0.08);
+      border-color: var(--focus);
+      background: #388bfd1a;
+      color: var(--ink);
+      box-shadow: none;
     }
 
     .toggle-line {
@@ -793,7 +792,7 @@
     .toggle-line input {
       width: 18px;
       height: 18px;
-      accent-color: var(--logo-gold);
+      accent-color: var(--focus);
     }
 
     .slider-list {
@@ -813,7 +812,7 @@
       border-radius: 7px;
       padding: 4px 6px;
       background: var(--paper-raised);
-      box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.03);
+      box-shadow: none;
       min-height: 32px;
     }
 
@@ -831,8 +830,8 @@
     }
 
     .slider-control.is-grid-range {
-      background: linear-gradient(180deg, rgba(240, 189, 61, 0.08), rgba(17, 27, 51, 0.92));
-      border-color: color-mix(in srgb, var(--logo-gold-bright) 30%, var(--line));
+      background: color-mix(in srgb, var(--accent, var(--focus)) 12%, var(--paper-raised));
+      border-color: color-mix(in srgb, var(--accent, var(--focus)) 48%, var(--line));
     }
 
     .slider-label {
@@ -953,7 +952,7 @@
       --grid-range-left: 0%;
       --grid-range-right: 100%;
       --grid-loop-position: 50%;
-      --grid-loop-color: var(--logo-gold-bright);
+      --grid-loop-color: var(--focus);
       display: block;
       height: 18px;
       inset: 0 0 auto;
@@ -978,9 +977,9 @@
     }
 
     .grid-range-fill {
-      background: linear-gradient(90deg, rgba(255, 209, 102, 0.78), color-mix(in srgb, var(--accent, var(--focus)) 60%, var(--logo-gold-bright)));
+      background: var(--accent, var(--focus));
       border-radius: 999px;
-      box-shadow: 0 0 0 1px rgba(255, 209, 102, 0.24);
+      box-shadow: none;
       height: 4px;
       left: var(--grid-range-left);
       pointer-events: none;
@@ -993,7 +992,7 @@
       background: var(--grid-loop-color);
       border: 2px solid var(--canvas);
       border-radius: 50%;
-      box-shadow: 0 0 0 1px rgba(238, 245, 255, 0.8), 0 0 12px color-mix(in srgb, var(--grid-loop-color) 76%, transparent);
+      box-shadow: none;
       height: 10px;
       left: var(--grid-loop-position);
       pointer-events: none;
@@ -1040,10 +1039,10 @@
     .grid-range-inputs input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      background: var(--logo-gold-bright);
+      background: var(--accent, var(--focus));
       border: 2px solid var(--canvas);
       border-radius: 50%;
-      box-shadow: 0 0 0 1px rgba(255, 209, 102, 0.72), 0 2px 5px rgba(0, 0, 0, 0.4);
+      box-shadow: none;
       cursor: ew-resize;
       height: 16px;
       margin-top: -6px;
@@ -1052,10 +1051,10 @@
     }
 
     .grid-range-inputs input[type="range"]::-moz-range-thumb {
-      background: var(--logo-gold-bright);
+      background: var(--accent, var(--focus));
       border: 2px solid var(--canvas);
       border-radius: 50%;
-      box-shadow: 0 0 0 1px rgba(255, 209, 102, 0.72), 0 2px 5px rgba(0, 0, 0, 0.4);
+      box-shadow: none;
       cursor: ew-resize;
       height: 12px;
       pointer-events: auto;
@@ -1080,11 +1079,11 @@
     .metric {
       border: 1px solid var(--line);
       border-radius: 7px;
-      background: rgba(17, 27, 51, 0.92);
+      background: var(--paper-high);
       padding: 6px 9px;
       font-size: 12px;
       color: var(--muted);
-      box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.03);
+      box-shadow: none;
     }
 
     .metric b {
@@ -1143,9 +1142,9 @@
 
     .metric[data-stability-expanded]:focus-visible,
     .metric[data-stability-expanded][aria-expanded="true"] {
-      border-color: rgba(255, 209, 102, 0.7);
+      border-color: var(--focus);
       outline: none;
-      box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.18), inset 0 1px 0 rgba(238, 245, 255, 0.03);
+      box-shadow: none;
     }
 
     .hidden-plot-controls {
@@ -1218,7 +1217,7 @@
     .plot-enable-control input {
       width: 15px;
       height: 15px;
-      accent-color: var(--logo-gold);
+      accent-color: var(--focus);
       cursor: pointer;
       flex: 0 0 auto;
     }
@@ -1240,7 +1239,7 @@
       border-radius: 7px;
       background: var(--paper-raised);
       padding: 6px 9px;
-      box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.03);
+      box-shadow: none;
     }
 
     .hidden-plot-controls .plot-enable-control:hover {
@@ -1277,7 +1276,7 @@
       gap: 10px;
       border: 1px solid var(--line);
       border-radius: 7px;
-      background: rgba(17, 27, 51, 0.74);
+      background: var(--paper-high);
       color: var(--muted);
       font-size: 12px;
       margin: -4px 0 12px;
@@ -1333,7 +1332,7 @@
     }
 
     .grid-loop-speed-control input {
-      accent-color: var(--logo-gold);
+      accent-color: var(--focus);
       width: 86px;
     }
 
@@ -1399,7 +1398,7 @@
       font-size: 12px;
       min-height: 24px;
       padding: 3px 8px;
-      box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.04);
+      box-shadow: none;
     }
 
     .phase-anchor-control button:hover {
@@ -1408,10 +1407,10 @@
     }
 
     .phase-anchor-control button.active {
-      border-color: rgba(240, 189, 61, 0.74);
-      background: linear-gradient(180deg, rgba(240, 189, 61, 0.24), rgba(96, 128, 208, 0.16)), var(--paper-high);
-      color: var(--logo-gold-bright);
-      box-shadow: inset 0 1px 0 rgba(255, 209, 102, 0.2), 0 0 0 1px rgba(240, 189, 61, 0.08);
+      border-color: var(--focus);
+      background: #388bfd1a;
+      color: var(--ink);
+      box-shadow: none;
     }
 
     .model-speed-control {
@@ -1434,7 +1433,7 @@
       width: 52px;
       height: 18px;
       margin: 0;
-      accent-color: var(--logo-gold);
+      accent-color: var(--focus);
       cursor: pointer;
     }
 
@@ -1568,11 +1567,11 @@
     .legend-toggle {
       border: 1px solid var(--line);
       border-radius: 6px;
-      background: rgba(17, 27, 51, 0.72);
+      background: var(--paper-raised);
       color: var(--ink);
       cursor: pointer;
       padding: 4px 7px;
-      box-shadow: inset 0 1px 0 rgba(238, 245, 255, 0.03);
+      box-shadow: none;
     }
 
     .legend-toggle:hover {
@@ -1767,14 +1766,14 @@
     }
 
     .content-panel a {
-      color: var(--logo-gold-bright);
+      color: var(--logo-blue-bright);
       text-decoration: none;
-      border-bottom: 1px solid rgba(255, 209, 102, 0.38);
+      border-bottom: 1px solid rgba(68, 147, 248, 0.55);
     }
 
     .content-panel a:hover {
-      color: var(--logo-ice);
-      border-bottom-color: rgba(217, 231, 255, 0.62);
+      color: #58a6ff;
+      border-bottom-color: rgba(88, 166, 255, 0.78);
     }
 
     .derivation-panel {

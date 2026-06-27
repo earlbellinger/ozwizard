@@ -2277,12 +2277,12 @@
   var TAU_SCALE_MAX = 1e3;
   var TAU_TICKS = [1, 3, 10, 30, 100, 300];
   var THEME = {
-    axisGrid: "#26334E",
-    axisText: "#A8B4C7",
-    axisBorder: "#526489",
-    selectionFill: "rgba(158, 167, 255, 0.16)",
-    selectionStroke: "#9EA7FF",
-    neutralSymbol: "#C0CAE8"
+    axisGrid: "#30363D",
+    axisText: "#9198A1",
+    axisBorder: "#3D444D",
+    selectionFill: "#388BFD1A",
+    selectionStroke: "#1F6FEB",
+    neutralSymbol: "#F0F6FC"
   };
   var PHASE_LAG_YLIM = [-0.5, 0.5];
   var PHASE_LAG_AXIS_LABEL = "phase lag \u0394\u03C6";
@@ -6022,16 +6022,16 @@
     gradient.addColorStop(0, "#6080D0");
     gradient.addColorStop(1, "#FFD166");
     ctx.save();
-    ctx.fillStyle = "rgba(5, 8, 20, 0.68)";
+    ctx.fillStyle = "rgba(13, 17, 23, 0.68)";
     ctx.fillRect(left - 8, top - 8, width + 16, 58);
     ctx.fillStyle = gradient;
     ctx.fillRect(left, top, width, height);
-    ctx.strokeStyle = "rgba(238, 245, 255, 0.62)";
+    ctx.strokeStyle = "rgba(240, 246, 252, 0.62)";
     ctx.strokeRect(left, top, width, height);
     const fraction = clamp4((sliderValue - range2.lowerSliderValue) / Math.max(1e-12, range2.upperSliderValue - range2.lowerSliderValue), 0, 1);
     const markerX = left + fraction * width;
     ctx.fillStyle = parameterColorAt(value, range2);
-    ctx.strokeStyle = "#050814";
+    ctx.strokeStyle = "#0D1117";
     ctx.lineWidth = 1.3;
     ctx.beginPath();
     ctx.moveTo(markerX, top + height + 2);
@@ -6451,7 +6451,7 @@
     const drawText = (text, textX, textY) => {
       if (options.strokeWidth && options.strokeWidth > 0) {
         ctx.lineJoin = "round";
-        ctx.strokeStyle = options.strokeColor || "rgba(5, 8, 20, 0.9)";
+        ctx.strokeStyle = options.strokeColor || "rgba(13, 17, 23, 0.9)";
         ctx.lineWidth = options.strokeWidth;
         ctx.strokeText(text, textX, textY);
       }
@@ -6693,7 +6693,7 @@
   function drawReferenceMarker(ctx, x, y, color, radius = 4) {
     ctx.save();
     ctx.fillStyle = color;
-    ctx.strokeStyle = "#050814";
+    ctx.strokeStyle = "#0D1117";
     ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, 2 * Math.PI);
@@ -6870,7 +6870,7 @@
     ctx.save();
     ctx.setLineDash([8, 5]);
     ctx.lineWidth = 1.8;
-    ctx.strokeStyle = "rgba(238, 245, 255, 0.82)";
+    ctx.strokeStyle = "rgba(240, 246, 252, 0.82)";
     ctx.beginPath();
     points.forEach((point, index) => {
       if (index === 0) ctx.moveTo(point.x, point.y);
@@ -7115,10 +7115,10 @@
     const width = ctx.measureText(label).width;
     const x = plot.left + plot.width - width - 30;
     const y = plot.top + 14;
-    ctx.fillStyle = "rgba(5, 8, 20, 0.58)";
+    ctx.fillStyle = "rgba(13, 17, 23, 0.58)";
     ctx.fillRect(x - 21, y - 11, width + 30, 22);
     ctx.fillStyle = PHASE_MARKER_COLOR;
-    ctx.strokeStyle = "#050814";
+    ctx.strokeStyle = "#0D1117";
     ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.arc(x - 10, y, 4.8, 0, 2 * Math.PI);
@@ -7230,16 +7230,16 @@
       gradient.addColorStop(fraction, opacityColor(value, opacityRange, 1));
     }
     ctx.save();
-    ctx.fillStyle = "rgba(3, 7, 18, 0.42)";
+    ctx.fillStyle = "rgba(1, 4, 9, 0.42)";
     ctx.fillRect(left - 7, top - 7, width + 14, 42);
     ctx.fillStyle = gradient;
     ctx.fillRect(left, top, width, height);
-    ctx.strokeStyle = "rgba(238, 245, 255, 0.62)";
+    ctx.strokeStyle = "rgba(240, 246, 252, 0.62)";
     ctx.lineWidth = 1;
     ctx.strokeRect(left, top, width, height);
     if (Number.isFinite(currentLogOpacity)) {
       const markerX = left + normalizedInRange(currentLogOpacity, opacityRange) * width;
-      ctx.strokeStyle = "rgba(3, 7, 18, 0.9)";
+      ctx.strokeStyle = "rgba(1, 4, 9, 0.9)";
       ctx.lineWidth = 3.8;
       ctx.beginPath();
       ctx.moveTo(markerX, top - 3);
@@ -7282,7 +7282,7 @@
       const y1 = sy(current.logP);
       if (![x0, y0, x1, y1].every(Number.isFinite)) continue;
       if (width >= 2.2 && alpha > 0.7) {
-        ctx.strokeStyle = "rgba(3, 7, 18, 0.72)";
+        ctx.strokeStyle = "rgba(1, 4, 9, 0.72)";
         ctx.lineWidth = width + 2.4;
         ctx.beginPath();
         ctx.moveTo(x0, y0);
@@ -7666,7 +7666,7 @@
     });
     const zeroY = sy(0);
     if (Number.isFinite(zeroY)) {
-      ctx.strokeStyle = "rgba(238, 245, 255, 0.48)";
+      ctx.strokeStyle = "rgba(240, 246, 252, 0.48)";
       ctx.lineWidth = 1.2;
       ctx.setLineDash([5, 4]);
       ctx.beginPath();
@@ -8194,7 +8194,7 @@
   function drawPhaseAnnotationSymbol(ctx, x, y, annotation) {
     ctx.save();
     ctx.lineWidth = 1.7;
-    ctx.strokeStyle = "#050814";
+    ctx.strokeStyle = "#0D1117";
     ctx.fillStyle = annotation.color;
     if (annotation.kind === "maxTeff" || annotation.kind === "minTeff") {
       ctx.font = "700 18px Inter, sans-serif";
@@ -8319,7 +8319,7 @@
       drawGuideCircle(ctx, centerX, centerY, minRadius * radiusScale, colorWithAlpha(COLORS.R, 0.18), [3, 5]);
       drawGuideCircle(ctx, centerX, centerY, maxRadius * radiusScale, colorWithAlpha(COLORS.R, 0.24), [7, 5]);
     }
-    drawGuideCircle(ctx, centerX, centerY, radiusScale, "rgba(82, 100, 137, 0.42)");
+    drawGuideCircle(ctx, centerX, centerY, radiusScale, "rgba(101, 108, 118, 0.42)");
     const innerReferenceRadius = equilibriumGeometry.innerRadius * radiusScale;
     if (innerReferenceRadius > 1) {
       drawGuideCircle(ctx, centerX, centerY, innerReferenceRadius, "rgba(255, 184, 108, 0.34)", [4, 4]);
@@ -8656,7 +8656,7 @@
     ctx.textAlign = align;
     ctx.textBaseline = "middle";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(5, 8, 20, 0.9)";
+    ctx.strokeStyle = "rgba(13, 17, 23, 0.9)";
     ctx.lineWidth = 4;
     ctx.fillStyle = color;
     ctx.strokeText(text, x, y);
@@ -8670,7 +8670,7 @@
       align: options.align,
       color: options.color,
       rotate: options.rotate,
-      strokeColor: options.strokeColor || "rgba(5, 8, 20, 0.9)",
+      strokeColor: options.strokeColor || "rgba(13, 17, 23, 0.9)",
       strokeWidth: options.strokeWidth ?? 4
     });
   }
@@ -8778,8 +8778,8 @@
     const amplitude = 6.2 + stiffness * 2.4;
     const alpha = 0.2 + stiffness * 0.18;
     ctx.save();
-    ctx.strokeStyle = `rgba(210, 218, 232, ${alpha})`;
-    ctx.shadowColor = `rgba(210, 218, 232, ${alpha * 0.6})`;
+    ctx.strokeStyle = `rgba(145, 152, 161, ${alpha})`;
+    ctx.shadowColor = `rgba(145, 152, 161, ${alpha * 0.6})`;
     ctx.shadowBlur = 2 + stiffness * 4;
     ctx.lineWidth = 1.05 + stiffness * 1.15;
     ctx.lineJoin = "round";
@@ -8797,7 +8797,7 @@
     ctx.stroke();
     ctx.restore();
   }
-  function drawHeatEnginePistonCausal(ctx, row, rows, terms, chamber, parameters) {
+  function drawHeatEnginePistonCausal(ctx, row, rows, terms, chamber, parameters, canvasHeight) {
     const right = chamber.left + chamber.width;
     const bottom = chamber.top + chamber.height;
     const centerX = chamber.left + chamber.width / 2;
@@ -8845,7 +8845,7 @@
     const gasTop = pistonY + pistonHeight / 2;
     const hLevel = normalizedInRange(row.H, hRange);
     ctx.save();
-    ctx.strokeStyle = "rgba(82, 100, 137, 0.88)";
+    ctx.strokeStyle = "rgba(101, 108, 118, 0.88)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(chamber.left, chamber.top);
@@ -8915,8 +8915,10 @@
     }
     const sourceNorm = heatFlowMagnitude(terms.source);
     const sourceX = centerX - chamber.width * 0.22;
-    const sourceLength = sourceNorm * 42;
-    drawHeatEngineArrow(ctx, sourceX, bottom + sourceLength + 3, sourceX, bottom + 3, sourceLuminosityColor(), 3);
+    const sourceRoom = Math.max(14, canvasHeight - bottom - 8);
+    const sourceLength = sourceNorm * Math.min(42, sourceRoom);
+    const sourceTailY = Math.min(canvasHeight - 4, bottom + sourceLength + 3);
+    drawHeatEngineArrow(ctx, sourceX, sourceTailY, sourceX, bottom + 3, sourceLuminosityColor(), 3);
     drawHeatEngineLabel(ctx, "source", sourceX + 10, bottom + 18, sourceLuminosityColor(), "left", 9.4, 760);
     drawHeatEngineLabel(ctx, "luminosity", sourceX + 10, bottom + 30, sourceLuminosityColor(), "left", 9.4, 760);
     const radiativeLeakLevel = luminosityLevel(terms.radiativeLeak);
@@ -8950,9 +8952,9 @@
     ctx.closePath();
     ctx.fill();
     roundedRectPath(ctx, radiativeSlotX, radiativeSlotTop, radiativeSlotWidth, radiativeSlotHeight, 6);
-    ctx.fillStyle = "rgba(17, 27, 51, 0.66)";
+    ctx.fillStyle = "rgba(21, 27, 35, 0.66)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(192, 202, 232, 0.5)";
+    ctx.strokeStyle = "rgba(145, 152, 161, 0.5)";
     ctx.lineWidth = 1.4;
     ctx.stroke();
     const equilibriumY = radiativeSlotBottom - equilibriumOpacityLevel * radiativeSlotHeight;
@@ -9045,9 +9047,9 @@
       const convectiveActivity = normalizedInRange(row.Uc, ucRange);
       const convectiveVisualHeight = (level) => Math.min(slotHeight, Math.max(0, level * slotHeight));
       roundedRectPath(ctx, slotX, slotTop, slotWidth, slotHeight, 6);
-      ctx.fillStyle = "rgba(17, 27, 51, 0.66)";
+      ctx.fillStyle = "rgba(21, 27, 35, 0.66)";
       ctx.fill();
-      ctx.strokeStyle = "rgba(192, 202, 232, 0.5)";
+      ctx.strokeStyle = "rgba(145, 152, 161, 0.5)";
       ctx.lineWidth = 1.4;
       ctx.stroke();
       if (convectionResponsive) {
@@ -9218,7 +9220,7 @@
       plot.top - 15,
       { align: "right", fontSize: 10.8, subscriptSize: 8.8, strokeWidth: 2.6 }
     );
-    ctx.strokeStyle = "rgba(38, 51, 78, 0.9)";
+    ctx.strokeStyle = "rgba(48, 54, 61, 0.9)";
     ctx.lineWidth = 1;
     for (let i = 0; i <= 3; i += 1) {
       const x = plot.left + plot.width * i / 3;
@@ -9253,7 +9255,7 @@
     const currentForce = pressureSupport(currentRow, parameters);
     if (Number.isFinite(currentRow.R + currentForce)) {
       ctx.fillStyle = PHASE_MARKER_COLOR;
-      ctx.strokeStyle = "#050814";
+      ctx.strokeStyle = "#0D1117";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(sx(currentRow.R), sy(currentForce), 5.6, 0, Math.PI * 2);
@@ -9293,7 +9295,7 @@
     let cursor = -totalWidth / 2;
     parts.forEach((part) => {
       ctx.font = canvasMathFont(part.size, 760);
-      ctx.strokeStyle = "rgba(5, 8, 20, 0.9)";
+      ctx.strokeStyle = "rgba(13, 17, 23, 0.9)";
       ctx.lineWidth = part.size === exponentSize ? 2 : 2.4;
       ctx.fillStyle = part.color;
       ctx.strokeText(part.text, cursor, part.y);
@@ -9313,11 +9315,11 @@
     const barLimit = width * 0.22;
     ctx.save();
     roundedRectPath(ctx, x, y, width, height, 5);
-    ctx.fillStyle = "rgba(5, 8, 20, 0.28)";
+    ctx.fillStyle = "rgba(13, 17, 23, 0.28)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(82, 100, 137, 0.58)";
+    ctx.strokeStyle = "rgba(101, 108, 118, 0.58)";
     ctx.stroke();
-    ctx.strokeStyle = "rgba(192, 202, 232, 0.42)";
+    ctx.strokeStyle = "rgba(145, 152, 161, 0.42)";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(center, y + 6);
@@ -9327,7 +9329,7 @@
     rows.forEach((row, index) => {
       const laneY = y + laneGap * (index + 0.5);
       const bar = clamp4(row.value / maxAbs, -1, 1) * barLimit;
-      ctx.strokeStyle = "rgba(82, 100, 137, 0.5)";
+      ctx.strokeStyle = "rgba(101, 108, 118, 0.5)";
       ctx.lineWidth = 1;
       ctx.lineCap = "round";
       ctx.beginPath();
@@ -9492,7 +9494,7 @@
       width: chamberWidth,
       height: Math.max(142, height - 98)
     };
-    drawHeatEnginePistonCausal(ctx, row, cycleRows, terms, chamber, latestPhaseParameters);
+    drawHeatEnginePistonCausal(ctx, row, cycleRows, terms, chamber, latestPhaseParameters, height);
   }
   function drawModelVisualization() {
     const canvas = el("modelCanvas");
