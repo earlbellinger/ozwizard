@@ -667,6 +667,11 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(pulsationalChip).toHaveAttribute("data-stability-view", "formula");
   await expect(pulsationalChip.locator(".stability-summary")).toContainText("pulsationally unstable");
   await expect(pulsationalChip.locator(".stability-formula")).toBeVisible();
+  await expect.poll(async () => pulsationalChip.evaluate((chip) => {
+    const root = document.documentElement;
+    return chip.scrollWidth <= chip.clientWidth + 1
+      && root.scrollWidth <= root.clientWidth + 1;
+  })).toBe(true);
   const expandedStabilityFitsMobile = await pulsationalChip.evaluate((chip) => {
     const page = document.documentElement;
     return {

@@ -361,6 +361,13 @@ async function runPlaywrightChecks() {
     assertOk((await pulsationalChip.getAttribute("data-stability-view")) === "formula", "clicking the pulsational chip should persist formula mode");
     assertOk(await pulsationalChip.locator(".stability-summary").isVisible(), "expanded pulsational chip should keep the summary visible");
     assertOk(await pulsationalChip.locator(".stability-formula").isVisible(), "expanded pulsational chip should show the formula");
+    await page.waitForFunction(() => {
+      const chip = document.querySelector("#metrics [data-stability-kind='pulsational']");
+      const root = document.documentElement;
+      return chip instanceof HTMLElement
+        && chip.scrollWidth <= chip.clientWidth + 1
+        && root.scrollWidth <= root.clientWidth + 1;
+    }, null, { timeout: 5000 });
     const expandedStabilityFitsMobile = await pulsationalChip.evaluate((chip) => {
       const page = document.documentElement;
       return {
