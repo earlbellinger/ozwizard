@@ -2033,6 +2033,110 @@
     return (value % 1 + 1) % 1;
   }
 
+  // src/periodogram.ts
+  var DEFAULT_FREQUENCY_COUNT = 360;
+  var DEFAULT_MAX_SAMPLES = 1800;
+  var TWO_PI2 = 2 * Math.PI;
+  function periodogramQuantityValue(row, quantity) {
+    if (quantity === "L") return row.L - 1;
+    return row[quantity];
+  }
+  function rowsAfterCut(rows, cutTau) {
+    return rows.filter(
+      (row) => Number.isFinite(row.tau) && Number.isFinite(periodogramQuantityValue(row, "L")) && row.tau >= cutTau
+    );
+  }
+  function finiteSortedSamples(rows, quantity, maxSamples) {
+    const samples = rows.map((row) => ({ tau: row.tau, value: periodogramQuantityValue(row, quantity) })).filter((sample2) => Number.isFinite(sample2.tau) && Number.isFinite(sample2.value)).sort((a, b) => a.tau - b.tau);
+    if (samples.length <= maxSamples) return samples;
+    const stride = Math.ceil(samples.length / maxSamples);
+    const downsampled = samples.filter((_sample, index) => index % stride === 0);
+    const last = samples.at(-1);
+    if (last && downsampled.at(-1) !== last) downsampled.push(last);
+    return downsampled;
+  }
+  function medianPositiveSpacing(samples) {
+    const spacings = [];
+    for (let index = 1; index < samples.length; index += 1) {
+      const spacing = samples[index].tau - samples[index - 1].tau;
+      if (Number.isFinite(spacing) && spacing > 0) spacings.push(spacing);
+    }
+    if (!spacings.length) return null;
+    spacings.sort((a, b) => a - b);
+    const middle = Math.floor(spacings.length / 2);
+    return spacings.length % 2 ? spacings[middle] : 0.5 * (spacings[middle - 1] + spacings[middle]);
+  }
+  function frequencyBounds(samples, periodHint, minFrequency, maxFrequency) {
+    const firstTau = samples[0]?.tau;
+    const finalTau = samples[samples.length - 1]?.tau;
+    if (!Number.isFinite(firstTau) || !Number.isFinite(finalTau)) return null;
+    const duration = finalTau - firstTau;
+    if (!(duration > 0)) return null;
+    const medianSpacing = medianPositiveSpacing(samples);
+    const nyquist = medianSpacing ? 0.5 / medianSpacing : 24 / duration;
+    const hintedFundamental = periodHint && periodHint > 0 ? 1 / periodHint : null;
+    const fallbackMax = hintedFundamental ? Math.max(8 * hintedFundamental, 12 / duration) : 24 / duration;
+    const lower = minFrequency ?? Math.max(1 / duration, hintedFundamental ? hintedFundamental / 8 : 1 / duration);
+    const upper = maxFrequency ?? Math.min(nyquist, fallbackMax);
+    if (!(upper > lower) || !Number.isFinite(lower + upper)) return null;
+    return { minFrequency: lower, maxFrequency: upper, duration };
+  }
+  function computePeriodogram(rows, options = {}) {
+    const quantity = options.quantity ?? "L";
+    const samples = finiteSortedSamples(rows, quantity, options.maxSamples ?? DEFAULT_MAX_SAMPLES);
+    if (samples.length < 8) return null;
+    const bounds = frequencyBounds(samples, options.periodHint, options.minFrequency, options.maxFrequency);
+    if (!bounds) return null;
+    const signalPower = samples.reduce((sum, sample2) => sum + sample2.value ** 2, 0);
+    if (!(signalPower > 0)) return null;
+    const frequencyCount = Math.max(16, Math.round(options.frequencyCount ?? DEFAULT_FREQUENCY_COUNT));
+    const points = [];
+    let peak = null;
+    for (let index = 0; index < frequencyCount; index += 1) {
+      const fraction = frequencyCount === 1 ? 0 : index / (frequencyCount - 1);
+      const frequency = bounds.minFrequency + fraction * (bounds.maxFrequency - bounds.minFrequency);
+      const omega = TWO_PI2 * frequency;
+      let sin2 = 0;
+      let cos2 = 0;
+      samples.forEach((sample2) => {
+        sin2 += Math.sin(2 * omega * sample2.tau);
+        cos2 += Math.cos(2 * omega * sample2.tau);
+      });
+      const tauShift = Math.atan2(sin2, cos2) / (2 * omega);
+      let yc = 0;
+      let ys = 0;
+      let cc = 0;
+      let ss = 0;
+      samples.forEach((sample2) => {
+        const angle = omega * (sample2.tau - tauShift);
+        const cosine = Math.cos(angle);
+        const sine = Math.sin(angle);
+        yc += sample2.value * cosine;
+        ys += sample2.value * sine;
+        cc += cosine ** 2;
+        ss += sine ** 2;
+      });
+      if (cc <= 0 || ss <= 0) continue;
+      const cosineAmplitude = yc / cc;
+      const sineAmplitude = ys / ss;
+      const power = 0.5 * (cosineAmplitude ** 2 + sineAmplitude ** 2);
+      if (!Number.isFinite(power)) continue;
+      const point = { frequency, period: 1 / frequency, power };
+      points.push(point);
+      if (!peak || point.power > peak.power) peak = point;
+    }
+    if (!points.length || !peak) return null;
+    return {
+      points,
+      quantity,
+      sampleCount: samples.length,
+      duration: bounds.duration,
+      minFrequency: bounds.minFrequency,
+      maxFrequency: bounds.maxFrequency,
+      peak
+    };
+  }
+
   // src/stability.ts
   function condition(kind, value, expression) {
     return {
@@ -2276,6 +2380,10 @@
   var latestPhasePeriodLabel = "phase (period = n/a \u03C4)";
   var latestPhaseLuminosityRange = [0, 1];
   var latestPhaseParameters = state;
+  var latestPeriodogramRows = [];
+  var latestPeriodogramCutTau = 0;
+  var latestPeriodogramPeriod = null;
+  var latestPeriodogramWindow = "post-relaxation";
   var phaseAnnotationsVisible = false;
   var sonificationReferenceNote = MIDDLE_C_NOTE;
   var sonificationReferenceHz = noteToFrequency(MIDDLE_C_NOTE);
@@ -2405,11 +2513,12 @@
     model: "Shell",
     light: "Lightcurve",
     velocity: "RV Curve",
-    heatEngine: "Heat Engine",
+    heatEngine: "Piston",
     work: "Work",
     time: "History",
     lum: "Luminosity Evolution",
     tpOpacity: "T-P Loop",
+    periodogram: "Periodogram",
     phaseLag: "Phase Lag",
     stability: "Stability Map",
     strip: "Instability Strip",
@@ -2424,6 +2533,7 @@
     time: true,
     lum: true,
     tpOpacity: true,
+    periodogram: true,
     phaseLag: true,
     stability: true,
     strip: true,
@@ -7682,6 +7792,202 @@
     });
     drawThermodynamicCurrentMarker(ctx, plot, xlim, ylim, opacityRange, latestPhaseParameters, currentPoint);
   }
+  function foldedRowsAsTimeRows(rows, period) {
+    return rows.map((row) => ({ ...row, tau: row.tau * period }));
+  }
+  function updateLatestPeriodogramData(rawRows, displayWindow, phase, gridResult) {
+    if (gridResult) {
+      latestPeriodogramRows = foldedRowsAsTimeRows(gridResult.phaseRows, gridResult.period);
+      latestPeriodogramCutTau = 0;
+      latestPeriodogramPeriod = gridResult.period;
+      latestPeriodogramWindow = "grid phase window";
+      return;
+    }
+    if (displayWindow.mode === "time") {
+      latestPeriodogramRows = [...displayWindow.rows];
+      latestPeriodogramCutTau = latestPeriodogramRows[0]?.tau ?? 0;
+      latestPeriodogramPeriod = null;
+      latestPeriodogramWindow = displayWindow.message || "time window";
+      return;
+    }
+    const cutTau = phase.reference?.startTau ?? phaseWarmupTau(rawRows, state.phaseWarmupTau);
+    latestPeriodogramRows = rowsAfterCut(rawRows, cutTau);
+    latestPeriodogramCutTau = cutTau;
+    latestPeriodogramPeriod = phase.period;
+    latestPeriodogramWindow = "post-relaxation";
+  }
+  function periodogramPowerLabel(value) {
+    if (!Number.isFinite(value)) return "";
+    const magnitude = Math.abs(value);
+    if (magnitude > 0 && magnitude < 0.01) return value.toExponential(1);
+    if (magnitude >= 100) return value.toExponential(1);
+    return fmt(value, magnitude < 0.1 ? 3 : 2);
+  }
+  var PERIODOGRAM_FREQUENCY_AXIS_LABEL = "frequency (\u03C4\u207B\xB9)";
+  var PERIODOGRAM_POWER_AXIS_LABEL = "power [(\u0394L/L\u2080)\xB2]";
+  var PERIODOGRAM_PLOT_LEFT = PLOT_LAYOUT.left + 24;
+  function drawPeriodogramAxes(ctx, plot, xlim, ylim) {
+    ctx.save();
+    ctx.strokeStyle = THEME.axisBorder;
+    ctx.lineWidth = 1;
+    ctx.fillStyle = THEME.axisText;
+    ctx.font = "12px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    for (let index = 0; index <= 4; index += 1) {
+      const x = plot.left + plot.width * index / 4;
+      const value = xlim[0] + (xlim[1] - xlim[0]) * index / 4;
+      ctx.beginPath();
+      ctx.moveTo(x, plot.top + plot.height);
+      ctx.lineTo(x, plot.top + plot.height + 5);
+      ctx.stroke();
+      ctx.fillText(fmt(value, 2), x, plot.top + plot.height + 8);
+    }
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    for (let index = 0; index <= 4; index += 1) {
+      const y = plot.top + plot.height * index / 4;
+      const value = ylim[1] - (ylim[1] - ylim[0]) * index / 4;
+      ctx.beginPath();
+      ctx.moveTo(plot.left - 5, y);
+      ctx.lineTo(plot.left, y);
+      ctx.stroke();
+      ctx.fillText(periodogramPowerLabel(value), plot.left - PLOT_LAYOUT.yTickGap, y);
+    }
+    ctx.strokeStyle = THEME.axisBorder;
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = THEME.axisText;
+    ctx.fillText(PERIODOGRAM_FREQUENCY_AXIS_LABEL, plot.left + plot.width / 2, plot.top + plot.height + 42);
+    ctx.save();
+    ctx.translate(PLOT_LAYOUT.yLabelX, plot.top + plot.height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText(PERIODOGRAM_POWER_AXIS_LABEL, 0, 0);
+    ctx.restore();
+    ctx.restore();
+  }
+  function drawPeriodogramHarmonics(ctx, plot, xlim, fundamental) {
+    if (!fundamental || !Number.isFinite(fundamental) || fundamental <= 0) return 0;
+    const sx = (frequency) => plot.left + (frequency - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
+    let count = 0;
+    for (let harmonic = 1; harmonic <= 8; harmonic += 1) {
+      const frequency = harmonic * fundamental;
+      if (frequency < xlim[0] || frequency > xlim[1]) continue;
+      const x = sx(frequency);
+      ctx.save();
+      ctx.strokeStyle = harmonic === 1 ? colorWithAlpha(PHASE_MARKER_COLOR, 0.78) : colorWithAlpha(PHASE_MARKER_COLOR, 0.34);
+      ctx.lineWidth = harmonic === 1 ? 1.4 : 1;
+      ctx.setLineDash(harmonic === 1 ? [] : [3, 5]);
+      ctx.beginPath();
+      ctx.moveTo(x, plot.top);
+      ctx.lineTo(x, plot.top + plot.height);
+      ctx.stroke();
+      ctx.restore();
+      if (harmonic === 1) {
+        drawCanvasMathFragments(ctx, [{ text: "f", subscript: "0", color: PHASE_MARKER_COLOR, weight: 700 }], x + 5, plot.top + 10, {
+          align: "left",
+          fontSize: 10.5,
+          strokeWidth: 2
+        });
+      }
+      count += 1;
+    }
+    return count;
+  }
+  function drawPeriodogramCurve(ctx, plot, result, xlim, ylim) {
+    const sx = (frequency) => plot.left + (frequency - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
+    const sy = (power) => plot.top + plot.height - (power - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
+    const points = result.points.filter(
+      (point) => Number.isFinite(point.frequency + point.power) && point.frequency >= xlim[0] && point.frequency <= xlim[1]
+    );
+    if (points.length < 2) return;
+    ctx.save();
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      const x = sx(point.frequency);
+      const y = sy(point.power);
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.lineTo(sx(points.at(-1).frequency), sy(0));
+    ctx.lineTo(sx(points[0].frequency), sy(0));
+    ctx.closePath();
+    ctx.fillStyle = colorWithAlpha(COLORS.L, 0.16);
+    ctx.fill();
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      const x = sx(point.frequency);
+      const y = sy(point.power);
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = COLORS.L;
+    ctx.lineWidth = 2.2;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.stroke();
+    ctx.restore();
+  }
+  function drawPeriodogramPanel() {
+    const canvas = document.getElementById("periodogramCanvas");
+    if (!(canvas instanceof HTMLCanvasElement)) return;
+    const panel = canvas.closest(".plot-panel");
+    if (panel?.hidden) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(360, rect.width || 720);
+    const height = Math.max(260, rect.height || 300);
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+    canvas.dataset.periodogramQuantity = "delta_L_over_L0";
+    canvas.dataset.periodogramWindow = latestPeriodogramWindow;
+    canvas.dataset.periodogramCutTau = fmtFixed(latestPeriodogramCutTau, 3);
+    canvas.dataset.periodogramNormalization = "amplitude_squared";
+    canvas.dataset.periodogramVarianceNormalized = "false";
+    canvas.dataset.periodogramMeanRemoved = "false";
+    canvas.dataset.periodogramGrid = "none";
+    canvas.dataset.periodogramFrequencyUnit = "tau^-1";
+    canvas.dataset.periodogramPowerUnit = "(delta_L_over_L0)^2";
+    if (latestPeriodogramPeriod) canvas.dataset.periodogramFundamental = fmtFixed(1 / latestPeriodogramPeriod, 6);
+    else delete canvas.dataset.periodogramFundamental;
+    const result = computePeriodogram(latestPeriodogramRows, {
+      quantity: "L",
+      periodHint: latestPeriodogramPeriod
+    });
+    canvas.dataset.periodogramSamples = String(result?.sampleCount ?? 0);
+    canvas.dataset.periodogramPointCount = String(result?.points.length ?? 0);
+    if (!result) {
+      delete canvas.dataset.periodogramPeakFrequency;
+      delete canvas.dataset.periodogramPeakPower;
+      delete canvas.dataset.periodogramHarmonics;
+      drawCanvasMessage(ctx, width, height, latestPhaseMessage || "periodogram unavailable");
+      return;
+    }
+    const plot = {
+      left: PERIODOGRAM_PLOT_LEFT,
+      top: PLOT_LAYOUT.top,
+      width: width - PERIODOGRAM_PLOT_LEFT - PLOT_LAYOUT.right,
+      height: height - PLOT_LAYOUT.top - PLOT_LAYOUT.bottom
+    };
+    const maxPower = Math.max(...result.points.map((point) => point.power).filter(Number.isFinite), Number.EPSILON);
+    const xlim = [result.minFrequency, result.maxFrequency];
+    const ylim = [0, maxPower * 1.08];
+    canvas.dataset.axisLabels = `${PERIODOGRAM_FREQUENCY_AXIS_LABEL},${PERIODOGRAM_POWER_AXIS_LABEL}`;
+    canvas.dataset.xlim = `${fmtFixed(xlim[0], 4)},${fmtFixed(xlim[1], 4)}`;
+    canvas.dataset.ylim = `${fmtFixed(ylim[0], 6)},${fmtFixed(ylim[1], 6)}`;
+    canvas.dataset.periodogramPeakFrequency = fmtFixed(result.peak.frequency, 6);
+    canvas.dataset.periodogramPeakPower = fmtFixed(result.peak.power, 8);
+    drawPeriodogramAxes(ctx, plot, xlim, ylim);
+    const harmonicCount = drawPeriodogramHarmonics(ctx, plot, xlim, latestPeriodogramPeriod ? 1 / latestPeriodogramPeriod : null);
+    canvas.dataset.periodogramHarmonics = String(harmonicCount);
+    drawPeriodogramCurve(ctx, plot, result, xlim, ylim);
+  }
   function phaseLagQuantityColor(key) {
     switch (key) {
       case "R":
@@ -9616,7 +9922,7 @@
     const terms = heatEngineTerms(row, latestPhaseParameters);
     if (!terms) {
       canvas.dataset.heatEngineMode = "domain-error";
-      drawCanvasMessage(ctx, width, height, "heat engine terms unavailable");
+      drawCanvasMessage(ctx, width, height, "piston visualization unavailable");
       return;
     }
     const cycleRows = downsample(heatEngineCycleRows(latestPhaseRows), 1100, ["R", "V", "H", "Uc", "L", "Lr", "Lc"]);
@@ -9783,9 +10089,11 @@
     );
     updateGridLoopSliderMarkers();
     updateLatestPhaseDisplay(displayWindow, gridResult);
+    updateLatestPeriodogramData(latestRows, displayWindow, { reason: "ok", reference: null, rows: gridResult.phaseRows, period: gridResult.period }, gridResult);
     syncSonificationCurve(displayWindow, gridResult, latestRows);
     drawPhasePlots();
     drawThermodynamicPanel();
+    drawPeriodogramPanel();
     drawPhaseLagPanel();
     drawFourierPanel();
     drawStellingwerfReferencePanel();
@@ -9889,12 +10197,14 @@
     stageMathHtml(metricsNode, metricsHtml);
     queueMathTypeset([metricsNode]);
     updateLatestPhaseDisplay(displayWindow, gridResult);
+    updateLatestPeriodogramData(rows, displayWindow, phase, gridResult);
     syncSonificationCurve(displayWindow, gridResult, rows);
     drawModelVisualization();
     drawPhasePlots();
     drawHeatEnginePanel();
     drawWorkPanel();
     drawThermodynamicPanel();
+    drawPeriodogramPanel();
     drawPhaseLagPanel();
     const timeXlim = integrationTimeRange(rows);
     const showUcSeries = convectiveVelocityHistoryAvailable(rows);
