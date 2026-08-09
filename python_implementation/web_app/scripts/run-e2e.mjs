@@ -58,6 +58,31 @@ async function runPlaywrightChecks() {
     await page.goto("/wizard_of_oz.html");
     await page.getByRole("heading", { name: "OZwizard" }).waitFor({ state: "visible", timeout: 15000 });
     console.log("page loaded");
+    const themeToggle = page.locator("#themeToggle");
+    assertOk((await page.locator("html").getAttribute("data-theme")) === "dark", "theme should start dark");
+    await themeToggle.click();
+    assertOk((await page.locator("html").getAttribute("data-theme")) === "light", "theme should cycle to light");
+    await themeToggle.click();
+    assertOk((await page.locator("html").getAttribute("data-theme")) === "paper", "theme should cycle to paper");
+    assertOk(await page.locator("#paperModeBar").isVisible(), "paper phase bar should be visible");
+    assertOk(!(await page.locator(".model-speed-control").isVisible()), "Shell speed should hide in paper mode");
+    assertOk(!(await page.locator(".sonification-control").isVisible()), "sonification controls should hide in paper mode");
+    assertOk((await page.locator("#modelCanvas").getAttribute("data-paper-snapshot-count")) === "4", "paper Shell should show four default states");
+    assertOk((await page.locator("#heatEngineCanvas").getAttribute("data-paper-snapshot-count")) === "4", "paper Piston should show four default states");
+    for (const canvas of ["#lightCanvas", "#velocityCanvas", "#timeCanvas", "#lumCanvas"]) {
+      assertOk((await page.locator(canvas).getAttribute("data-paper-series-markers")) === "off", `${canvas} should omit paper sample markers`);
+    }
+    const paperEventOptions = await page.locator("#paperAddEvent option").evaluateAll((options) => options.map((option) => option.value));
+    assertOk(
+      paperEventOptions.join("|") === "|minL|minV|maxL|maxV|minLr|maxLr|minLc|maxLc|minR|maxR|minTeff|maxTeff",
+      "paper event selector should include every Lightcurve annotation"
+    );
+    const staticShellBefore = await page.locator("#modelCanvas").evaluate((canvas) => canvas.toDataURL());
+    await delay(180);
+    const staticShellAfter = await page.locator("#modelCanvas").evaluate((canvas) => canvas.toDataURL());
+    assertOk(staticShellAfter === staticShellBefore, "paper Shell should remain static");
+    await themeToggle.click();
+    assertOk((await page.locator("html").getAttribute("data-theme")) === "dark", "paper theme should cycle back to dark");
     const metadata = await page.evaluate(() => {
       const meta = (selector) => document.querySelector(selector)?.getAttribute("content") || "";
       const link = (selector) => document.querySelector(selector)?.getAttribute("href") || "";
@@ -211,13 +236,13 @@ async function runPlaywrightChecks() {
         };
       })
     );
-    assertOk(sectionActionLayouts.map((layout) => layout?.label).join("|") === "Physical Parameters|Integration|Convective Driver|Phase Window", "expected compact action rows in four section headers");
+    assertOk(sectionActionLayouts.map((layout) => layout?.label).join("|") === "Physical Parameters|Integration|Phase Window|Convective Driver", "expected compact action rows in four section headers");
     sectionActionLayouts.forEach((layout) => {
       assertOk(layout?.actionsCenterY === layout?.labelCenterY, `${layout?.label || "section"} buttons should sit on the header line`);
       assertOk(Math.max(...layout.buttonHeights) <= 30, `${layout?.label || "section"} buttons should be compact`);
     });
     assertOk(await page.locator("#physicalControlSection").evaluate((node) => node.open), "physical controls should start open");
-    assertOk(await page.locator("#integrationControlSection").evaluate((node) => node.open), "integration controls should start open");
+    assertOk(!(await page.locator("#integrationControlSection").evaluate((node) => node.open)), "integration controls should start collapsed");
     assertOk(!(await page.locator("#initialControlSection").evaluate((node) => node.open)), "initial conditions should start collapsed");
     assertOk(!(await page.locator("#initialControls").isVisible()), "initial condition sliders should start hidden");
     assertOk(!(await page.locator("#presetButtons").isVisible()), "preset buttons should start hidden");
@@ -230,6 +255,8 @@ async function runPlaywrightChecks() {
     await page.locator("#initialControlSection > summary").click();
     assertOk(await page.locator("#initialControlSection").evaluate((node) => node.open), "initial conditions should open from its summary");
     assertOk(await page.locator("#initialControls").isVisible(), "initial condition sliders should show after opening");
+    await page.locator("#integrationControlSection > summary").click();
+    assertOk(await page.locator("#integrationControlSection").evaluate((node) => node.open), "integration controls should open from its summary");
     const solverRows = await page.locator("#solverButtons button").evaluateAll((buttons) =>
       buttons.map((button) => Math.round(button.getBoundingClientRect().top))
     );
@@ -281,6 +308,10 @@ async function runPlaywrightChecks() {
     assertOk(!initialMetrics?.includes("reference"), "metrics should not duplicate reference metadata");
     assertOk(!initialMetrics?.includes("driver"), "metrics should not duplicate driver controls");
     assertOk(!initialMetrics?.includes("solver"), "metrics should not duplicate solver controls");
+    await page.waitForFunction(() => {
+      const history = document.querySelector("#timeCanvas")?.getAttribute("data-xlim");
+      return Boolean(history) && document.querySelector("#lumCanvas")?.getAttribute("data-xlim") === history;
+    });
     const stoppedTimeXlim = (await page.locator("#timeCanvas").getAttribute("data-xlim"))?.split(",").map(Number);
     assertOk(stoppedTimeXlim?.length === 2, "history plot should expose its x limits");
     assertOk(stoppedTimeXlim[0] === 0, "history plot should start at tau 0");
@@ -865,6 +896,21 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#fourierCanvas").getAttribute("data-fourier-phase-ticks")) === "pi-multiples", "Fourier phase axes should use pi-multiple ticks");
     assertOk((await page.locator("#fourierCanvas").getAttribute("data-fourier-structural-panels")) === null, "Fourier canvas should omit structural phase diagnostics");
     assertOk((await page.locator("#fourierCanvas").getAttribute("data-fourier-adiabatic-reference")) === null, "Fourier canvas should omit the adiabatic reference");
+    await themeToggle.click();
+    await themeToggle.click();
+    assertOk((await page.locator("html").getAttribute("data-theme")) === "paper", "grid view should enter paper mode");
+    assertOk(!(await page.locator(".grid-loop-speed-control").isVisible()), "grid speed should hide in paper mode");
+    assertOk(await page.locator("[data-control-key='gammac'] [data-grid-loop-marker]").isHidden(), "grid loop marker should hide in paper mode");
+    assertOk((await page.locator("#lightCanvas").getAttribute("data-grid-colorbar")) === "ready", "paper grid should retain its colorbar");
+    assertOk((await page.locator("#lightCanvas").getAttribute("data-grid-colorbar-hit")) === null, "paper grid colorbar should not expose a scrub target");
+    assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-grid-colorbar-hit")) === null, "paper T-P colorbar should not expose a scrub target");
+    await delay(250);
+    const staticGridBefore = await page.locator("#lightCanvas").evaluate((canvas) => canvas.toDataURL());
+    await delay(180);
+    const staticGridAfter = await page.locator("#lightCanvas").evaluate((canvas) => canvas.toDataURL());
+    assertOk(staticGridAfter === staticGridBefore, "paper grid phase family should remain static");
+    await themeToggle.click();
+    assertOk((await page.locator("html").getAttribute("data-theme")) === "dark", "paper grid should return to dark mode");
     await page.locator("#lightCanvas").scrollIntoViewIfNeeded();
     const lightCanvasBox = await page.locator("#lightCanvas").boundingBox();
     assertOk(Boolean(lightCanvasBox), "light canvas bounds were unavailable for colorbar scrub");
@@ -897,7 +943,7 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("[data-plot-panel='phaseLag']").isHidden(), "Phase Lag should hide after grid mode exits");
     assertOk(await page.locator("#adsrCanvas").count() === 1, "expected one ADSR canvas");
     assertOk(await page.getByRole("heading", { name: "Lightcurve" }).isVisible(), "Lightcurve heading was not visible");
-    assertOk((await page.locator("[data-plot-panel='light'] .plot-title #phaseAnnotationToggleLabel").textContent())?.includes("Annotations"), "annotation toggle should sit in the Lightcurve header");
+    assertOk((await page.locator("[data-plot-panel='light'] .plot-title #phaseAnnotationToggleLabel").textContent())?.includes("annotations"), "annotation toggle should sit in the Lightcurve header");
     assertOk((await page.locator("[data-plot-panel='velocity'] .phase-anchor-control").textContent())?.includes("phase to"), "phase anchor control should sit in the RV Curve header");
     assertOk((await page.getByRole("button", { name: "min light" }).getAttribute("aria-pressed")) === "true", "min-light phase anchor should start active");
     await page.getByRole("button", { name: "max light" }).click();
@@ -913,11 +959,11 @@ async function runPlaywrightChecks() {
     assertOk(await page.locator("#lightLegend").count() === 0, "phase luminosity legend should be removed");
     assertOk(await page.locator("#velocityLegend").count() === 0, "phase velocity legend should be removed");
     assertOk(await page.locator("#phaseLegend").count() === 0, "combined phase legend should be removed");
-    assertOk(!(await page.getByLabel("Annotations").isChecked()), "annotations should start off");
+    assertOk(!(await page.getByLabel("annotations").isChecked()), "annotations should start off");
     assertOk(!(await page.locator("#phaseAnnotationLegendItems").isVisible()), "annotation legend should start hidden");
     assertOk((await page.locator("#lightCanvas").getAttribute("data-annotations")) === "off", "lightcurve annotations should start off");
-    await page.getByLabel("Annotations").check();
-    assertOk(await page.getByLabel("Annotations").isChecked(), "annotations should turn on");
+    await page.getByLabel("annotations").check();
+    assertOk(await page.getByLabel("annotations").isChecked(), "annotations should turn on");
     assertOk(await page.locator("#phaseAnnotationLegendItems").isVisible(), "annotation legend should show when annotations are enabled");
     assertOk((await page.locator("#lightCanvas").getAttribute("data-annotations")) === "on", "lightcurve annotations should turn on");
     const annotationLabels = await page.locator("#phaseAnnotationLegendItems .annotation-symbol-item").evaluateAll((items) =>
@@ -926,7 +972,7 @@ async function runPlaywrightChecks() {
     assertOk(annotationLabels === "max L|min L|max R|min R|×max V|×min V|↑max T|↓min T", `annotation legend order changed: ${annotationLabels}`);
     await page.waitForFunction(() => Number(document.querySelector("#lightCanvas")?.getAttribute("data-annotation-count") || "0") === 16);
     await page.waitForFunction(() => Number(document.querySelector("#velocityCanvas")?.getAttribute("data-annotation-count") || "0") === 16);
-    await page.getByLabel("Annotations").uncheck();
+    await page.getByLabel("annotations").uncheck();
     assertOk(!(await page.locator("#phaseAnnotationLegendItems").isVisible()), "annotation legend should hide again when annotations are disabled");
     assertOk((await page.locator("#lightCanvas").getAttribute("data-annotations")) === "off", "lightcurve annotations should turn off after unchecking");
     const hasPaint = await page.locator("#lightCanvas").evaluate((canvas) => {

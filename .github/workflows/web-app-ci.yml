@@ -37,6 +37,11 @@ jobs:
           cache: npm
           cache-dependency-path: python_implementation/web_app/package-lock.json
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install dependencies
         run: npm ci
 
@@ -51,3 +56,22 @@ jobs:
 
       - name: End-to-end checks
         run: npm run test:e2e
+
+      - name: Verify paper reproduction script
+        run: |
+          python -m pip install -r tests/reproduction/requirements.txt
+          python -m py_compile src/reproduce.py
+          cp src/reproduce.py tests/reproduction/reproduce.py
+          python tests/reproduction/reproduce.py
+          python - <<'PY'
+          from pathlib import Path
+          output = Path("tests/reproduction/reproduced")
+          expected = {
+              output / f"periodogram-{size}.{extension}"
+              for size in ("single", "double")
+              for extension in ("pdf", "svg", "png")
+          }
+          missing = sorted(str(path) for path in expected if not path.is_file() or path.stat().st_size == 0)
+          if missing:
+              raise SystemExit("Missing reproduced figures: " + ", ".join(missing))
+          PY

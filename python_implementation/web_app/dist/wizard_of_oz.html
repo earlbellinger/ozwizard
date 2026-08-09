@@ -7,13 +7,16 @@
   <meta name="description" content="Interactive one-zone convection and pulsation explorer for Stellingwerf-style stellar-envelope models.">
   <meta name="application-name" content="OZwizard">
   <meta name="apple-mobile-web-app-title" content="OZwizard">
-  <meta name="theme-color" content="#0d1117">
+  <meta name="theme-color" content="#161512">
   <link rel="canonical" href="https://earlbellinger.com/apps/ozwizard/">
   <link rel="icon" href="./assets/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="./assets/favicon-16x16.png">
   <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png">
   <link rel="manifest" href="./site.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&amp;display=swap" rel="stylesheet">
   <meta property="og:site_name" content="Earl Bellinger">
   <meta property="og:type" content="website">
   <meta property="og:title" content="OZwizard | Interactive Stellar Pulsation Explorer">
@@ -32,12 +35,13 @@
     (function () {
       var theme = "dark";
       try {
-        theme = window.localStorage.getItem("ozwizard-theme") === "light" ? "light" : "dark";
+        var storedTheme = window.localStorage.getItem("ozwizard-theme");
+        theme = storedTheme === "light" || storedTheme === "paper" ? storedTheme : "dark";
       } catch (_error) {}
       document.documentElement.dataset.theme = theme;
-      document.documentElement.style.colorScheme = theme;
+      document.documentElement.style.colorScheme = theme === "dark" ? "dark" : "light";
       var meta = document.querySelector('meta[name="theme-color"]');
-      if (meta) meta.setAttribute("content", theme === "light" ? "#ffffff" : "#0d1117");
+      if (meta) meta.setAttribute("content", theme === "dark" ? "#161512" : "#ffffff");
     }());
   </script>
   <script>
@@ -133,39 +137,65 @@
   <style>
     :root {
       color-scheme: dark;
-      --bg: #0d1117;
-      --bg-deep: #010409;
-      --paper: #151b23;
-      --paper-raised: #151b23;
-      --paper-high: #212830;
-      --paper-warm: #151b23;
-      --ink: #f0f6fc;
-      --muted: #9198a1;
-      --subtle: #656c76;
-      --line: #3d444d;
-      --line-strong: #656c76;
-      --line-warm: #bb800966;
-      --canvas: #010409;
-      --canvas-grid: #30363d;
-      --focus: #1f6feb;
-      --active-bg: #388bfd1a;
-      --selection-fill: #388bfd1a;
-      --shadow: rgba(1, 4, 9, 0.66);
-      --panel-shadow: 0 14px 34px var(--shadow), inset 0 1px 0 rgba(238, 245, 255, 0.03);
-      --sidebar-shadow: 12px 0 28px rgba(0, 0, 0, 0.18);
+      --bg: #050c16;
+      --surface: #161e25;
+      --surface-2: #2c2926;
+      --surface-high: #3c3934;
+      --control-bg: #141c23;
+      --plot-panel-bg: #141c23;
+      --plot-canvas-frame-bg: var(--bg);
+      --body-gradient: #2e2a24;
+      --border: #404040;
+      --text: #bababa;
+      --muted: #949494;
+      --cyan: #3692e7;
+      --green: #629924;
+      --amber: #bf811d;
+      --red: #cc3333;
+      --status-green: #7ddb66;
+      --status-amber: #f2b84b;
+      --status-red: #ff5a4f;
+      --orange: #d64f00;
+      --sidebar-bg: var(--bg);
+      --link-color: #5070c9;
+      --checkbox-color: #5070c9;
+      --radius-control: 4px;
+      --radius-panel: 3px;
+      --font-heading: Roboto, sans-serif;
+      --font-body: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: var(--font-body);
+      --bg-deep: var(--bg);
+      --paper: var(--surface);
+      --paper-raised: var(--surface-2);
+      --paper-high: var(--surface-high);
+      --paper-warm: var(--surface);
+      --ink: var(--text);
+      --subtle: #6b6b6b;
+      --line: var(--border);
+      --line-strong: #666666;
+      --line-warm: color-mix(in srgb, var(--amber) 42%, transparent);
+      --canvas: var(--bg);
+      --plot-canvas-bg: #000000;
+      --canvas-grid: transparent;
+      --focus: var(--cyan);
+      --active-bg: color-mix(in srgb, var(--cyan) 14%, transparent);
+      --selection-fill: color-mix(in srgb, var(--cyan) 22%, transparent);
+      --shadow: rgba(0, 0, 0, 0.3);
+      --panel-shadow: none;
+      --sidebar-shadow: none;
       --control-shadow: none;
       --control-hover-shadow: none;
-      --slider-track: #30363d;
-      --slider-track-border: #3d444d;
-      --slider-thumb-border: #010409;
-      --logo-night: #010409;
-      --logo-blue: #1f6feb;
-      --logo-blue-bright: #4493f8;
-      --logo-ice: #f0f6fc;
-      --logo-gold: #d29922;
-      --logo-gold-bright: #e3b341;
+      --slider-track: var(--surface-2);
+      --slider-track-border: var(--border);
+      --slider-thumb-border: var(--bg);
+      --logo-night: var(--bg);
+      --logo-blue: var(--cyan);
+      --logo-blue-bright: var(--cyan);
+      --logo-ice: var(--text);
+      --logo-gold: var(--amber);
+      --logo-gold-bright: var(--amber);
       --logo-violet: #8957e5;
-      --logo-leaf: #3fb950;
+      --logo-leaf: var(--green);
       --tau: #8b949e;
       --radius: #58a6ff;
       --velocity: #e69f00;
@@ -186,20 +216,24 @@
       --s: #ff9bce;
       --source: #d18616;
       --cq: #8b949e;
-      --neutral-symbol: #f0f6fc;
-      --warn: #d29922;
-      --bad: #f85149;
-      --good: #3fb950;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --neutral-symbol: var(--text);
+      --warn: var(--amber);
+      --bad: var(--red);
+      --good: var(--green);
+      font-family: var(--font-body);
     }
 
-    :root[data-theme="light"] {
+    :root[data-theme="light"],
+    :root[data-theme="paper"] {
       color-scheme: light;
       --bg: #ffffff;
       --bg-deep: #f6f8fa;
       --paper: #ffffff;
       --paper-raised: #f6f8fa;
       --paper-high: #eff2f5;
+      --control-bg: var(--paper-raised);
+      --plot-panel-bg: var(--paper);
+      --plot-canvas-frame-bg: var(--paper);
       --paper-warm: #ffffff;
       --ink: #1f2328;
       --muted: #59636e;
@@ -208,15 +242,16 @@
       --line-strong: #818b98;
       --line-warm: #d4a72c66;
       --canvas: #ffffff;
-      --canvas-grid: #d8dee4;
+      --plot-canvas-bg: #ffffff;
+      --canvas-grid: transparent;
       --focus: #0969da;
       --active-bg: #0969da1a;
       --selection-fill: #0969da1a;
       --shadow: rgba(31, 35, 40, 0.12);
-      --panel-shadow: 0 8px 24px rgba(31, 35, 40, 0.08);
-      --sidebar-shadow: 12px 0 24px rgba(31, 35, 40, 0.06);
-      --control-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
-      --control-hover-shadow: 0 1px 2px rgba(31, 35, 40, 0.08);
+      --panel-shadow: none;
+      --sidebar-shadow: none;
+      --control-shadow: none;
+      --control-hover-shadow: none;
       --slider-track: #d0d7de;
       --slider-track-border: #afb8c1;
       --slider-thumb-border: #ffffff;
@@ -232,6 +267,36 @@
       --warn: #9a6700;
       --bad: #cf222e;
       --good: #1a7f37;
+      --status-green: var(--good);
+      --status-amber: var(--warn);
+      --status-red: var(--bad);
+      --sidebar-bg: var(--paper);
+      --link-color: #0969da;
+      --checkbox-color: var(--focus);
+    }
+
+    :root[data-theme="paper"] {
+      --bg-deep: #ffffff;
+      --paper-raised: #ffffff;
+      --paper-high: #f7f7f7;
+      --muted: #3f4852;
+      --subtle: #626b74;
+      --line: #aeb6be;
+      --line-strong: #59636e;
+      --canvas-grid: transparent;
+      --focus: #005ea8;
+      --shadow: transparent;
+      --panel-shadow: none;
+      --sidebar-shadow: none;
+      --control-shadow: none;
+      --control-hover-shadow: none;
+    }
+
+    :root[data-theme="paper"] *,
+    :root[data-theme="paper"] *::before,
+    :root[data-theme="paper"] *::after {
+      animation: none !important;
+      transition: none !important;
     }
 
     * {
@@ -263,21 +328,20 @@
     }
 
     aside {
-      background: var(--paper);
-      border-right: 1px solid var(--line);
-      padding: 12px;
+      background: var(--sidebar-bg);
+      padding: 12px 8px 12px 12px;
       overflow-y: auto;
       max-height: 100vh;
       position: sticky;
       top: 0;
       box-shadow: var(--sidebar-shadow);
-      scrollbar-color: var(--line-strong) var(--canvas);
+      scrollbar-color: var(--line) transparent;
       scrollbar-width: thin;
     }
 
     main {
       background: var(--bg);
-      padding: 16px 18px 28px;
+      padding: 16px 18px 28px 12px;
       min-width: 0;
       container-type: inline-size;
     }
@@ -306,7 +370,7 @@
       height: 72px;
       object-fit: contain;
       image-rendering: auto;
-      filter: drop-shadow(0 10px 14px var(--shadow));
+      filter: none;
       flex: 0 0 auto;
     }
 
@@ -362,7 +426,6 @@
     .speaker-toggle:hover:not(:disabled),
     .theme-toggle:hover {
       border-color: var(--line-strong);
-      background: var(--paper-high);
       color: var(--ink);
     }
 
@@ -400,9 +463,9 @@
       width: 34px;
       height: 34px;
       color: var(--muted);
-      background: color-mix(in srgb, var(--paper) 92%, transparent);
-      backdrop-filter: blur(8px);
-      box-shadow: 0 8px 24px var(--shadow);
+      background: var(--paper);
+      backdrop-filter: none;
+      box-shadow: none;
     }
 
     .theme-toggle svg {
@@ -414,12 +477,137 @@
       display: none;
     }
 
+    .theme-toggle .theme-icon-paper {
+      display: none;
+    }
+
     :root[data-theme="light"] .theme-toggle .theme-icon-dark {
       display: none;
     }
 
     :root[data-theme="light"] .theme-toggle .theme-icon-light {
       display: block;
+    }
+
+    :root[data-theme="paper"] .theme-toggle .theme-icon-dark,
+    :root[data-theme="paper"] .theme-toggle .theme-icon-light {
+      display: none;
+    }
+
+    :root[data-theme="paper"] .theme-toggle .theme-icon-paper {
+      display: block;
+    }
+
+    :root[data-theme="paper"] .model-speed-control,
+    :root[data-theme="paper"] .grid-loop-speed-control,
+    :root[data-theme="paper"] .sonification-control,
+    :root[data-theme="paper"] .piano-panel {
+      display: none !important;
+    }
+
+    :root[data-theme="paper"] canvas {
+      cursor: default !important;
+    }
+
+    .paper-mode-bar {
+      display: none;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 0 0 12px;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--paper);
+    }
+
+    :root[data-theme="paper"] .paper-mode-bar {
+      display: flex;
+    }
+
+    .paper-phase-presets,
+    .paper-phase-actions,
+    .paper-phase-points {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+
+    .paper-phase-points {
+      flex: 1 1 320px;
+    }
+
+    .paper-mode-bar button,
+    .paper-mode-bar select,
+    .paper-phase-chip {
+      min-height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--canvas);
+      color: var(--ink);
+      padding: 4px 7px;
+    }
+
+    .paper-mode-bar button {
+      cursor: pointer;
+    }
+
+    .paper-mode-bar button.active {
+      border-color: var(--focus);
+      background: var(--active-bg);
+    }
+
+    .paper-phase-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+    }
+
+    .paper-phase-chip input {
+      width: 58px;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+      color: inherit;
+      text-align: right;
+    }
+
+    .paper-phase-chip button {
+      min-height: 20px;
+      padding: 0 3px;
+      border: 0;
+      color: var(--muted);
+    }
+
+    .paper-export-status {
+      min-width: 120px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    :root[data-theme="paper"] .plot-panel[data-plot-panel="model"],
+    :root[data-theme="paper"] .plot-panel[data-plot-panel="heatEngine"] {
+      flex-basis: 610px;
+      max-width: none;
+    }
+
+    :root[data-theme="paper"] .model-canvas,
+    :root[data-theme="paper"] .heat-engine-canvas {
+      height: 520px;
+    }
+
+    :root[data-theme="paper"] .model-canvas-wrap {
+      width: 100%;
+      height: auto;
+      aspect-ratio: auto;
+      margin: 0;
+    }
+
+    :root[data-theme="paper"] canvas.model-canvas {
+      width: 100%;
+      height: 520px;
     }
 
     .speaker-toggle::after {
@@ -481,7 +669,7 @@
     .sonify-source-control button {
       border: 1px solid var(--line);
       border-radius: 6px;
-      background: var(--paper-raised);
+      background: var(--control-bg);
       color: var(--ink);
       cursor: pointer;
       font-size: 12px;
@@ -492,7 +680,6 @@
 
     .sonify-source-control button:hover {
       border-color: var(--line-strong);
-      background: var(--paper-high);
     }
 
     .sonify-source-control button.active {
@@ -553,7 +740,7 @@
       min-height: 168px;
       border: 0;
       border-right: 1px solid var(--line);
-      background: linear-gradient(180deg, #f0f6fc, #9198a1);
+      background: #c4cbd2;
       color: var(--bg-deep);
     }
 
@@ -569,20 +756,22 @@
       height: 62%;
       border: 1px solid var(--bg-deep);
       border-radius: 0 0 5px 5px;
-      background: linear-gradient(180deg, var(--paper-high), var(--bg-deep));
+      background: var(--paper-high);
       color: var(--ink);
       z-index: 2;
       padding-bottom: 8px;
-      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.34);
+      box-shadow: none;
     }
 
     .piano-key.active {
-      filter: brightness(1.16);
-      box-shadow: inset 0 0 0 2px var(--focus);
+      filter: none;
+      box-shadow: none;
+      outline: 2px solid var(--focus);
+      outline-offset: -2px;
     }
 
     .black-key.active {
-      box-shadow: inset 0 0 0 2px var(--focus), 0 8px 16px rgba(1, 4, 9, 0.66);
+      box-shadow: none;
     }
 
     .piano-note-label {
@@ -642,13 +831,13 @@
     }
 
     .subtitle a {
-      color: var(--logo-blue-bright);
+      color: var(--link-color);
       text-decoration: underline;
       text-underline-offset: 3px;
     }
 
     .subtitle a:hover {
-      color: #58a6ff;
+      color: color-mix(in srgb, var(--link-color) 78%, white);
     }
 
     .subtitle:empty {
@@ -668,7 +857,7 @@
     .section-title-with-actions {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 0;
     }
 
     .section-title-with-actions > span {
@@ -829,7 +1018,7 @@
     }
 
     .section-action-row.solver-row {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr) minmax(0, 0.8fr);
     }
 
     .preset-grid button,
@@ -837,7 +1026,7 @@
     .preset-actions button {
       border: 1px solid var(--line);
       border-radius: 7px;
-      background: var(--paper-raised);
+      background: var(--control-bg);
       color: var(--ink);
       padding: 8px 9px;
       cursor: pointer;
@@ -859,7 +1048,6 @@
     .driver-row button:hover,
     .preset-actions button:hover {
       border-color: var(--line-strong);
-      background: var(--paper-high);
       box-shadow: var(--control-hover-shadow);
     }
 
@@ -876,13 +1064,15 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      min-height: 38px;
+      min-height: 32px;
       border: 1px solid var(--line);
       border-radius: 7px;
-      padding: 8px 10px;
-      background: var(--paper-raised);
+      padding: 4px 6px;
+      background: var(--control-bg);
       margin-top: 5px;
-      font-size: 13px;
+      font-family: var(--font-body);
+      font-size: 11.5px;
+      font-weight: 400;
       color: var(--muted);
       box-shadow: var(--control-shadow);
     }
@@ -909,7 +1099,7 @@
       border-left: 4px solid var(--accent, var(--focus));
       border-radius: 7px;
       padding: 4px 6px;
-      background: var(--paper-raised);
+      background: var(--control-bg);
       box-shadow: var(--control-shadow);
       min-height: 32px;
     }
@@ -919,8 +1109,7 @@
     }
 
     .slider-control:hover {
-      border-color: color-mix(in srgb, var(--accent, var(--focus)) 46%, var(--line));
-      background: var(--paper-high);
+      border-color: var(--accent, var(--focus));
       box-shadow: var(--control-hover-shadow);
     }
 
@@ -1027,7 +1216,7 @@
       border: 0;
       border-radius: 999px;
       background: color-mix(in srgb, var(--accent, var(--focus)) 18%, var(--slider-track));
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--slider-track-border) 64%, transparent);
+      box-shadow: none;
     }
 
     input[type="range"]::-moz-range-track {
@@ -1035,7 +1224,7 @@
       border: 0;
       border-radius: 999px;
       background: color-mix(in srgb, var(--accent, var(--focus)) 18%, var(--slider-track));
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--slider-track-border) 64%, transparent);
+      box-shadow: none;
     }
 
     input[type="range"]::-moz-range-progress {
@@ -1053,7 +1242,7 @@
       border: 2px solid var(--slider-thumb-border);
       border-radius: 50%;
       background: var(--accent, var(--focus));
-      box-shadow: 0 1px 2px rgba(31, 35, 40, 0.18);
+      box-shadow: none;
     }
 
     input[type="range"]::-moz-range-thumb {
@@ -1062,7 +1251,7 @@
       border: 2px solid var(--slider-thumb-border);
       border-radius: 50%;
       background: var(--accent, var(--focus));
-      box-shadow: 0 1px 2px rgba(31, 35, 40, 0.18);
+      box-shadow: none;
     }
 
     input[type="range"]:disabled {
@@ -1245,6 +1434,49 @@
       margin-left: 4px;
     }
 
+    .status-summary-card {
+      appearance: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      cursor: pointer;
+      line-height: inherit;
+      text-align: left;
+      touch-action: manipulation;
+    }
+
+    .status-summary-label {
+      font-weight: 700;
+    }
+
+    .status-disclosure-icon {
+      width: 0;
+      height: 0;
+      margin-left: 8px;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+      border-left: 5px solid currentColor;
+      transition: transform 120ms ease;
+    }
+
+    .status-summary-card[aria-expanded="true"] .status-disclosure-icon {
+      transform: rotate(90deg);
+    }
+
+    .status-summary-card:focus-visible,
+    .status-summary-card[aria-expanded="true"] {
+      border-color: var(--focus);
+      outline: none;
+    }
+
+    .status-metric-details {
+      display: contents;
+    }
+
+    .status-metric-details[hidden] {
+      display: none;
+    }
+
     .metric.status-ok b,
     .metric.status-warn b,
     .metric.status-bad b {
@@ -1390,14 +1622,13 @@
     .hidden-plot-controls .plot-enable-control {
       border: 1px solid var(--line);
       border-radius: 7px;
-      background: var(--paper-raised);
+      background: var(--control-bg);
       padding: 6px 9px;
       box-shadow: var(--control-shadow);
     }
 
     .hidden-plot-controls .plot-enable-control:hover {
       border-color: var(--line-strong);
-      background: var(--paper-high);
       box-shadow: var(--control-hover-shadow);
     }
 
@@ -1546,7 +1777,7 @@
     .phase-anchor-control button {
       border: 1px solid var(--line);
       border-radius: 6px;
-      background: var(--paper-raised);
+      background: var(--control-bg);
       color: var(--ink);
       cursor: pointer;
       font-size: 12px;
@@ -1557,7 +1788,6 @@
 
     .phase-anchor-control button:hover {
       border-color: var(--line-strong);
-      background: var(--paper-high);
       box-shadow: var(--control-hover-shadow);
     }
 
@@ -1617,7 +1847,6 @@
 
     .plot-reset:hover:not(:disabled) {
       border-color: var(--line-strong);
-      background: var(--paper-high);
       box-shadow: var(--control-hover-shadow);
     }
 
@@ -1636,6 +1865,18 @@
       border-radius: 6px;
     }
 
+    canvas.model-canvas {
+      background: var(--plot-canvas-bg);
+    }
+
+    canvas.heat-engine-canvas {
+      background: var(--plot-canvas-bg);
+    }
+
+    canvas:not(.model-canvas):not(.heat-engine-canvas):not(.adsr-canvas) {
+      background: var(--plot-canvas-frame-bg);
+    }
+
     .model-canvas-wrap {
       width: min(100%, 260px);
       height: 260px;
@@ -1644,7 +1885,7 @@
     }
 
     .plot-panel[data-plot-panel="model"] {
-      --model-panel-size: 316px;
+      --model-panel-size: 286px;
       width: min(100%, var(--model-panel-size));
       flex: 0 0 min(100%, var(--model-panel-size));
       min-width: 0;
@@ -1688,6 +1929,16 @@
       cursor: ew-resize;
     }
 
+    #lightCanvas.phase-scrub-canvas.phase-scrub-enabled,
+    #velocityCanvas.phase-scrub-canvas.phase-scrub-enabled {
+      cursor: default;
+    }
+
+    #lightCanvas.phase-scrub-canvas.phase-scrub-enabled.phase-scrub-hover,
+    #velocityCanvas.phase-scrub-canvas.phase-scrub-enabled.phase-scrub-hover {
+      cursor: ew-resize;
+    }
+
     .fourier-grid-panel {
       margin-top: 14px;
     }
@@ -1724,7 +1975,7 @@
     .legend-toggle {
       border: 1px solid var(--line);
       border-radius: 6px;
-      background: var(--paper-raised);
+      background: var(--control-bg);
       color: var(--ink);
       cursor: pointer;
       padding: 4px 7px;
@@ -1733,7 +1984,6 @@
 
     .legend-toggle:hover {
       border-color: var(--line-strong);
-      background: var(--paper-high);
       box-shadow: var(--control-hover-shadow);
     }
 
@@ -1759,7 +2009,18 @@
       align-items: center;
     }
 
+    .annotation-toggle {
+      min-height: 24px;
+      padding: 3px 8px;
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.025em;
+    }
+
     .annotation-toggle input {
+      width: 15px;
+      height: 15px;
       accent-color: var(--accent);
       margin: 0;
     }
@@ -1838,7 +2099,7 @@
     }
 
     .reference-grid {
-      --equations-panel-min-width: 324px;
+      --equations-panel-min-width: 334px;
       --variables-panel-min-width: 434px;
       --parameters-panel-min-width: 414px;
       display: grid;
@@ -1924,14 +2185,14 @@
     }
 
     .content-panel a {
-      color: var(--logo-blue-bright);
+      color: var(--link-color);
       text-decoration: none;
-      border-bottom: 1px solid rgba(68, 147, 248, 0.55);
+      border-bottom: 1px solid color-mix(in srgb, var(--link-color) 55%, transparent);
     }
 
     .content-panel a:hover {
-      color: #58a6ff;
-      border-bottom-color: rgba(88, 166, 255, 0.78);
+      color: color-mix(in srgb, var(--link-color) 78%, white);
+      border-bottom-color: color-mix(in srgb, var(--link-color) 78%, transparent);
     }
 
     .derivation-panel {
@@ -2122,8 +2383,14 @@
         max-height: none;
         border-right: 0;
         border-bottom: 1px solid var(--line);
+        padding: 12px;
         min-width: 0;
         overflow-x: hidden;
+      }
+
+      main {
+        padding-left: 14px;
+        padding-right: 14px;
       }
 
       .slider-list {
@@ -2188,6 +2455,14 @@
 
       .plot-grid > .plot-panel {
         flex: 0 1 auto;
+      }
+
+      :root[data-theme="paper"] .plot-grid > .plot-panel[data-plot-panel="model"],
+      :root[data-theme="paper"] .plot-grid > .plot-panel[data-plot-panel="heatEngine"] {
+        width: 100%;
+        max-width: none;
+        flex: 0 1 auto;
+        overflow-y: visible;
       }
 
       .brand {
@@ -2281,6 +2556,268 @@
         height: 230px;
       }
     }
+
+    /* Mission-control visual system. Layout and visualization geometry stay unchanged. */
+    body {
+      font-family: var(--font-body);
+      font-weight: 400;
+      scrollbar-color: var(--line) transparent;
+      scrollbar-width: thin;
+    }
+
+    main {
+      background: var(--sidebar-bg);
+    }
+
+    ::selection {
+      background: var(--selection-fill);
+      color: var(--ink);
+    }
+
+    .section-title,
+    .preset-summary,
+    .sidebar-controls-summary {
+      font-family: var(--font-heading) !important;
+      font-weight: 400 !important;
+      letter-spacing: 0.035em !important;
+    }
+
+    .metric,
+    .grid-status-bar,
+    .paper-mode-bar,
+    .paper-export-status,
+    button {
+      font-family: var(--font-body) !important;
+      font-weight: 500 !important;
+      letter-spacing: 0.025em !important;
+    }
+
+    h1 {
+      font-family: var(--font-body) !important;
+      font-size: 24px;
+      font-weight: 700 !important;
+      letter-spacing: 0.025em !important;
+    }
+
+    .plot-title h3,
+    .content-panel h3 {
+      font-family: var(--font-body) !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.03em !important;
+    }
+
+    .metric[data-stability-expanded] .stability-summary,
+    .metric[data-stability-expanded] .stability-formula {
+      letter-spacing: 0.025em;
+    }
+
+    .metric[data-stability-expanded] b {
+      font-family: var(--font-body);
+      font-weight: 500;
+    }
+
+    label,
+    select,
+    .subtitle,
+    .slider-name,
+    .content-panel p,
+    .content-panel li,
+    .variable-table th,
+    .variable-table td:not(.symbol-cell) {
+      font-family: var(--font-body);
+    }
+
+    output,
+    .sonification-reading,
+    .piano-slider-value,
+    .slider-reading,
+    .metric b,
+    .grid-loop-speed-control output,
+    .model-speed-control output,
+    .initial-cell,
+    .symbol-cell,
+    .equation-block,
+    .derivation-equations,
+    .stability-formula,
+    .paper-phase-chip {
+      font-family: var(--font-mono);
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+
+    button,
+    select,
+    .paper-phase-chip,
+    .hidden-plot-controls .plot-enable-control,
+    .legend-toggle {
+      border-radius: var(--radius-control) !important;
+    }
+
+    .paper-mode-bar,
+    .piano-panel,
+    .plot-panel,
+    .content-panel {
+      border-radius: var(--radius-panel) !important;
+    }
+
+    .plot-panel {
+      border-radius: var(--radius-control) !important;
+    }
+
+    .piano-keyboard,
+    .toggle-line,
+    .slider-control,
+    .metric,
+    .grid-status-bar,
+    canvas,
+    .equation-block {
+      border-radius: var(--radius-control) !important;
+    }
+
+    .content-panel,
+    .piano-panel {
+      background: var(--paper);
+      border-color: color-mix(in srgb, var(--line) 88%, transparent);
+    }
+
+    .plot-panel {
+      background: var(--plot-panel-bg);
+      border-color: color-mix(in srgb, var(--line) 88%, transparent);
+    }
+
+    .metric,
+    .grid-status-bar {
+      background: var(--control-bg);
+    }
+
+    .slider-control,
+    .toggle-line {
+      background: var(--control-bg);
+    }
+
+    :root:is([data-theme="light"], [data-theme="paper"]) .plot-panel {
+      background: var(--plot-panel-bg);
+    }
+
+    :root:is([data-theme="light"], [data-theme="paper"]) .metric,
+    :root:is([data-theme="light"], [data-theme="paper"]) .grid-status-bar,
+    :root:is([data-theme="light"], [data-theme="paper"]) .slider-control,
+    :root:is([data-theme="light"], [data-theme="paper"]) .toggle-line {
+      background: var(--control-bg);
+    }
+
+    :root:is([data-theme="light"], [data-theme="paper"]) main,
+    :root:is([data-theme="light"], [data-theme="paper"]) .plot-panel,
+    :root:is([data-theme="light"], [data-theme="paper"]) .content-panel,
+    :root:is([data-theme="light"], [data-theme="paper"]) .piano-panel {
+      background: #ffffff;
+    }
+
+    :root:is([data-theme="light"], [data-theme="paper"]) .plot-panel,
+    :root:is([data-theme="light"], [data-theme="paper"]) .content-panel,
+    :root:is([data-theme="light"], [data-theme="paper"]) .piano-panel {
+      border-color: transparent;
+      box-shadow: none;
+    }
+
+    :root:not([data-theme="light"]):not([data-theme="paper"]) .plot-panel {
+      background: var(--bg);
+      border-color: transparent;
+    }
+
+    button.active,
+    button[aria-pressed="true"],
+    .legend-toggle:has(input:checked) {
+      box-shadow: none;
+    }
+
+    input[type="checkbox"] {
+      -webkit-appearance: none;
+      appearance: none;
+      display: inline-grid;
+      place-content: center;
+      border: 1px solid var(--line-strong);
+      border-radius: 3px !important;
+      background: var(--canvas);
+      box-shadow: none;
+      flex: 0 0 auto;
+      accent-color: var(--checkbox-color);
+    }
+
+    input[type="checkbox"]::before {
+      content: "";
+      width: 4px;
+      height: 8px;
+      border: solid var(--checkbox-color);
+      border-width: 0 2px 2px 0;
+      transform: translateY(-1px) rotate(45deg) scale(0);
+      transform-origin: center;
+      transition: transform 100ms ease;
+    }
+
+    input[type="checkbox"]:checked {
+      border-color: var(--checkbox-color);
+      background: color-mix(in srgb, var(--checkbox-color) 10%, var(--canvas));
+    }
+
+    input[type="checkbox"]:checked::before {
+      transform: translateY(-1px) rotate(45deg) scale(1);
+    }
+
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 3px;
+    }
+
+    input[type="range"]::-moz-range-track,
+    input[type="range"]::-moz-range-progress {
+      height: 3px;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      width: 12px;
+      height: 12px;
+      margin-top: -4.5px;
+      border-width: 1px;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 10px;
+      height: 10px;
+      border-width: 1px;
+    }
+
+    *::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    *::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    *::-webkit-scrollbar-thumb {
+      border: 2px solid transparent;
+      border-radius: 999px;
+      background: var(--line);
+      background-clip: padding-box;
+    }
+
+    *::-webkit-scrollbar-thumb:hover {
+      background: var(--line-strong);
+      background-clip: padding-box;
+    }
+
+    .status-ok {
+      color: var(--status-green);
+    }
+
+    .status-warn {
+      color: var(--status-amber);
+    }
+
+    .status-bad {
+      color: var(--status-red);
+    }
   </style>
 </head>
 <body>
@@ -2298,6 +2835,12 @@
     </svg>
     <svg class="theme-icon-light" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M20.99 12.79A8 8 0 1 1 11.21 3 6.5 6.5 0 0 0 20.99 12.79z"></path>
+    </svg>
+    <svg class="theme-icon-paper" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 3h9l3 3v15H6z"></path>
+      <path d="M15 3v4h4"></path>
+      <path d="M9 12h6"></path>
+      <path d="M9 16h6"></path>
     </svg>
   </button>
   <div class="app-shell">
@@ -2367,12 +2910,7 @@
             </label>
           </details>
 
-          <details class="control-section" id="initialControlSection">
-            <summary class="section-title">Initial Conditions</summary>
-            <div class="slider-list" id="initialControls"></div>
-          </details>
-
-          <details class="control-section" id="integrationControlSection" open>
+          <details class="control-section" id="integrationControlSection">
             <summary class="section-title section-title-with-actions">
               <span>Integration</span>
               <div class="driver-row solver-row section-action-row" id="solverButtons"></div>
@@ -2382,23 +2920,26 @@
               <input id="runUntilStable" type="checkbox">
             </label>
             <div class="slider-list" id="integrationControls"></div>
+            <div class="section-title section-title-with-actions">
+              <span>Phase Window</span>
+              <div class="driver-row section-action-row" id="phaseModeButtons">
+                <button type="button" data-phase-mode="reference">Reference</button>
+                <button type="button" data-phase-mode="final" class="active">Final</button>
+              </div>
+            </div>
           </details>
 
-          <div class="section-title section-title-with-actions">
-            <span>Convective Driver</span>
-            <div class="driver-row section-action-row" id="driverButtons">
-              <button type="button" data-driver="h" class="active">\(\sqrt{\ozPressure{H}}\)</button>
-              <button type="button" data-driver="abs-v">\(\sqrt{|\ozVelocity{V}|}\)</button>
+          <details class="control-section" id="initialControlSection">
+            <summary class="section-title">Initial Conditions</summary>
+            <div class="slider-list" id="initialControls"></div>
+            <div class="section-title section-title-with-actions">
+              <span>Convective Driver</span>
+              <div class="driver-row section-action-row" id="driverButtons">
+                <button type="button" data-driver="h" class="active">\(\sqrt{\ozPressure{H}}\)</button>
+                <button type="button" data-driver="abs-v">\(\sqrt{|\ozVelocity{V}|}\)</button>
+              </div>
             </div>
-          </div>
-
-          <div class="section-title section-title-with-actions">
-            <span>Phase Window</span>
-            <div class="driver-row section-action-row" id="phaseModeButtons">
-              <button type="button" data-phase-mode="reference">Reference</button>
-              <button type="button" data-phase-mode="final" class="active">Final</button>
-            </div>
-          </div>
+          </details>
 
         </div>
       </details>
@@ -2407,6 +2948,34 @@
     <main>
       <div class="plots-header">
         <div class="metrics" id="metrics"></div>
+      </div>
+      <div class="paper-mode-bar" id="paperModeBar" aria-label="Paper mode phase and export controls">
+        <span>Static phases</span>
+        <div class="paper-phase-presets" role="group" aria-label="Static phase presets">
+          <button type="button" id="paperExtremaPreset">Physical extrema</button>
+          <button type="button" id="paperQuarterPreset">Quarter phases</button>
+        </div>
+        <div class="paper-phase-points" id="paperPhasePoints"></div>
+        <div class="paper-phase-actions">
+          <select id="paperAddEvent" aria-label="Add static phase event">
+            <option value="">+ event</option>
+            <option value="minL">min light</option>
+            <option value="minV">min V</option>
+            <option value="maxL">max light</option>
+            <option value="maxV">max V</option>
+            <option value="minLr">min Lr</option>
+            <option value="maxLr">max Lr</option>
+            <option value="minLc">min Lc</option>
+            <option value="maxLc">max Lc</option>
+            <option value="minR">min R</option>
+            <option value="maxR">max R</option>
+            <option value="minTeff">min T</option>
+            <option value="maxTeff">max T</option>
+          </select>
+          <button type="button" id="paperAddPhase">+ phase</button>
+          <button type="button" id="paperExportBundle">Export paper bundle</button>
+        </div>
+        <span class="paper-export-status" id="paperExportStatus" role="status" aria-live="polite"></span>
       </div>
       <div class="hidden-plot-controls" id="hiddenPlotControls" aria-label="Hidden plot controls" hidden></div>
       <div class="grid-status-bar" id="gridStatusBar" hidden>
@@ -2517,8 +3086,8 @@
               <h3>Lightcurve</h3>
             </div>
             <label class="legend-item legend-toggle annotation-toggle" id="phaseAnnotationToggleLabel" style="--accent:#FFD166">
-              <input id="phaseAnnotationsToggle" type="checkbox" aria-label="Annotations">
-              <span>Annotations</span>
+              <input id="phaseAnnotationsToggle" type="checkbox" aria-label="annotations">
+              <span>annotations</span>
             </label>
           </div>
           <canvas id="lightCanvas"></canvas>

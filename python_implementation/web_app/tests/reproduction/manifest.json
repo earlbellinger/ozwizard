@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "panels": [
+    {
+      "id": "periodogram",
+      "title": "Periodogram",
+      "dataFile": "data/01-periodogram.csv",
+      "files": [],
+      "metadata": {
+        "axisLimits": { "x": [0.1, 1.0], "y": [0.0, 0.5] },
+        "units": { "periodogramFrequency": "tau^-1", "periodogramPower": "(delta_L/L0)^2" },
+        "seriesStyling": [
+          { "series": "power", "color": "#D55E00", "dash": [], "marker": "circle" }
+        ],
+        "downsampling": "none"
+      }
+    }
+  ]
+}

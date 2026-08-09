@@ -83,6 +83,38 @@ import {
   type StabilityPhysicsMode,
   type StabilityKind
 } from "./stability";
+import {
+  PAPER_PHASE_POINT_MAX,
+  PAPER_PHASE_STORAGE_KEY,
+  addPaperPhasePoint,
+  centerGridPathIndex,
+  extremaPaperPhaseSelection,
+  isPaperPhaseEvent,
+  nextThemeMode,
+  normalizePaperPhaseSelection,
+  paperPhaseEventLabel,
+  parseThemeMode,
+  quarterPaperPhaseSelection,
+  removePaperPhasePoint,
+  resolvePaperSnapshots,
+  updateNumericPaperPhase,
+  type PaperPhaseEvent,
+  type PaperPhaseSelectionV1,
+  type ResolvedPaperSnapshot,
+  type ThemeMode
+} from "./paperMode";
+import {
+  createPaperBundle,
+  downloadPaperBundle,
+  type PaperExportManifestV1,
+  type PaperFigureSize,
+  type PaperPanelRenderer,
+  type PaperRenderResult
+} from "./paperExport";
+import { Context as SvgCanvasContext } from "svgcanvas";
+
+declare const __OZWIZARD_VERSION__: string;
+declare const __OZWIZARD_COMMIT__: string;
 
 declare global {
   interface Window {
@@ -108,6 +140,7 @@ let mathTypesetPending = false;
 let mathTypesetWholeRoot = false;
 let mathRenderVersion = 0;
 let lastDerivationSignature = "";
+let statusMetricsExpanded = false;
 const mathTypesetTargets = new Set<HTMLElement>();
 const stagedMathUpdates = new Map<HTMLElement, StagedMathUpdate>();
 
@@ -221,6 +254,7 @@ let latestPhaseMessage: string | undefined;
 let latestPhasePeriodLabel = "phase (period = n/a τ)";
 let latestPhaseLuminosityRange: NumericRange = [0, 1];
 let latestPhaseParameters: ModelParameters = state;
+let paperPhaseSelection: PaperPhaseSelectionV1 = extremaPaperPhaseSelection();
 let latestPeriodogramRows: Row[] = [];
 let latestPeriodogramCutTau = 0;
 let latestPeriodogramPeriod: number | null = null;
@@ -256,7 +290,6 @@ const TAU_TICKS = [1, 3, 10, 30, 100, 300];
 const TP_TEMPERATURE_DATA_LABEL = "log10(T/T_0)";
 const TP_PRESSURE_DATA_LABEL = "log10(P/P_0)";
 const TP_OPACITY_DATA_LABEL = "log10(kappa/kappa_0)";
-type ThemeMode = "dark" | "light";
 
 function cssVariable(name: string, fallback: string): string {
   const value = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -286,7 +319,11 @@ function floatingCanvasPanelBorder(alpha = 0.72): string {
 }
 
 function lightThemeActive(): boolean {
-  return document.documentElement.dataset.theme === "light";
+  return document.documentElement.dataset.theme === "light" || paperModeActive();
+}
+
+function paperModeActive(): boolean {
+  return document.documentElement.dataset.theme === "paper";
 }
 
 function canvasTextHaloColor(alpha = 0.9): string {
@@ -305,6 +342,7 @@ const THEME = {
   get axisGrid() { return cssVariable("--canvas-grid", "#30363D"); },
   get axisText() { return cssVariable("--muted", "#9198A1"); },
   get axisBorder() { return cssVariable("--line", "#3D444D"); },
+  get plotBackground() { return cssVariable("--plot-canvas-bg", "#000000"); },
   get selectionFill() { return cssVariable("--selection-fill", "#388BFD1A"); },
   get selectionStroke() { return cssVariable("--focus", "#1F6FEB"); },
   get neutralSymbol() { return cssVariable("--neutral-symbol", "#F0F6FC"); }
@@ -434,6 +472,7 @@ interface CanvasMathOptions {
   strokeColor?: string;
   strokeWidth?: number;
   subscriptSize?: number;
+  weight?: string | number;
 }
 
 interface GridCanvasInteraction {
@@ -622,6 +661,7 @@ const PLOT_LAYOUT = {
 function fmt(value: number, digits = 4): string {
   if (!Number.isFinite(value)) return "n/a";
   const fixed = Number(value).toFixed(digits);
+  if (Number(fixed) === 0) return "0";
   const decimal = digits === 0 ? fixed : fixed.replace(/\.?0+$/, "");
   const scientific = value.toExponential(2).replace(/\.?0+e/, "e");
   return scientific.length < decimal.length ? scientific : decimal;
@@ -1361,14 +1401,15 @@ function drawAdsrVisualization(): void {
   const releaseStart = decayEnd + hold;
   const releaseEnd = releaseStart + pianoEnvelope.release;
 
-  ctx.strokeStyle = THEME.axisGrid;
+  ctx.strokeStyle = THEME.axisBorder;
   ctx.lineWidth = 1;
   ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
   ctx.fillStyle = THEME.axisText;
-  ctx.font = "11px Inter, sans-serif";
+  ctx.font = "700 11px Inter, sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
   ctx.fillText("amp", 0, plot.top - 2);
+  ctx.font = "11px Inter, sans-serif";
   ctx.textAlign = "right";
   ctx.textBaseline = "bottom";
   ctx.fillText(`${formatDuration(total)}`, width - 2, height - 2);
@@ -1803,6 +1844,23 @@ function stabilityChipFromEvent(event: Event): HTMLElement | null {
   return target.closest<HTMLElement>("#metrics [data-stability-expanded]");
 }
 
+function statusSummaryFromEvent(event: Event): HTMLButtonElement | null {
+  const target = event.target;
+  if (!(target instanceof Element)) return null;
+  return target.closest<HTMLButtonElement>("#metrics [data-status-summary]");
+}
+
+function setStatusMetricsExpanded(expanded: boolean): void {
+  statusMetricsExpanded = expanded;
+  const metrics = el<HTMLDivElement>("metrics");
+  const summary = metrics.querySelector<HTMLButtonElement>("[data-status-summary]");
+  const details = metrics.querySelector<HTMLElement>("#statusMetricDetails");
+  if (!summary || !details) return;
+  summary.setAttribute("aria-expanded", String(expanded));
+  summary.setAttribute("aria-label", `${expanded ? "Hide" : "Show"} status details`);
+  details.hidden = !expanded;
+}
+
 function setStabilityChipExpanded(chip: HTMLElement, expanded: boolean): void {
   chip.setAttribute("aria-expanded", expanded ? "true" : "false");
   if (expanded) chip.dataset.stabilityView = "formula";
@@ -1816,12 +1874,24 @@ function toggleStabilityChip(chip: HTMLElement): void {
 function setupStabilityChipInteractions(): void {
   const metrics = el<HTMLDivElement>("metrics");
   metrics.addEventListener("click", (event) => {
+    const summary = statusSummaryFromEvent(event);
+    if (summary) {
+      event.preventDefault();
+      setStatusMetricsExpanded(summary.getAttribute("aria-expanded") !== "true");
+      return;
+    }
     const chip = stabilityChipFromEvent(event);
     if (!chip) return;
     event.preventDefault();
     toggleStabilityChip(chip);
   });
   metrics.addEventListener("keydown", (event) => {
+    const summary = statusSummaryFromEvent(event);
+    if (summary && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      setStatusMetricsExpanded(summary.getAttribute("aria-expanded") !== "true");
+      return;
+    }
     const chip = stabilityChipFromEvent(event);
     if (!chip || (event.key !== "Enter" && event.key !== " ")) return;
     event.preventDefault();
@@ -1932,7 +2002,7 @@ function setupModelSpeedControl(): void {
 }
 
 function currentThemeMode(): ThemeMode {
-  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  return parseThemeMode(document.documentElement.dataset.theme);
 }
 
 function setupThemeToggle(): void {
@@ -1940,33 +2010,610 @@ function setupThemeToggle(): void {
   if (!(button instanceof HTMLButtonElement)) return;
   syncThemeToggleButton();
   button.addEventListener("click", () => {
-    setThemeMode(currentThemeMode() === "light" ? "dark" : "light");
+    setThemeMode(nextThemeMode(currentThemeMode()));
   });
 }
 
 function setThemeMode(mode: ThemeMode): void {
+  const leavingPaper = paperModeActive() && mode !== "paper";
   document.documentElement.dataset.theme = mode;
-  document.documentElement.style.colorScheme = mode;
+  document.documentElement.style.colorScheme = mode === "dark" ? "dark" : "light";
   try {
     window.localStorage.setItem("ozwizard-theme", mode);
   } catch (_error) {}
   const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-  if (meta) meta.content = mode === "light" ? "#ffffff" : "#0d1117";
+  if (meta) meta.content = mode === "dark" ? "#161512" : "#ffffff";
+  if (mode === "paper") {
+    stopModelAnimationLoop();
+    stopGridAnimation();
+    stopSonification();
+    releaseAllPianoNotes();
+    pianoModeActive = false;
+    setPianoPanelVisible(false);
+    activePhaseScrub = null;
+    activePhaseHoverCanvasId = null;
+    selectPaperGridCenter();
+  }
   syncThemeToggleButton();
+  updatePianoToggleUi();
+  updatePaperModeControls();
   thermodynamicGridBackdropCache = null;
   drawAdsrVisualization();
   drawAll();
+  if (leavingPaper) {
+    startModelAnimationLoop();
+    if (gridState.enabled && gridPathResults().length > 1) startGridAnimation();
+  }
 }
 
 function syncThemeToggleButton(): void {
   const button = document.getElementById("themeToggle");
   if (!(button instanceof HTMLButtonElement)) return;
   const mode = currentThemeMode();
-  const nextMode = mode === "light" ? "dark" : "light";
-  const label = `Switch to ${nextMode} mode`;
+  const nextMode = nextThemeMode(mode);
+  const label = `Theme: ${mode}. Switch to ${nextMode} mode`;
   button.setAttribute("aria-label", label);
-  button.setAttribute("aria-pressed", String(mode === "light"));
+  button.dataset.themeMode = mode;
   button.title = label;
+}
+
+function loadPaperPhaseSelection(): PaperPhaseSelectionV1 {
+  try {
+    const stored = window.localStorage.getItem(PAPER_PHASE_STORAGE_KEY);
+    return stored ? normalizePaperPhaseSelection(JSON.parse(stored)) : extremaPaperPhaseSelection();
+  } catch {
+    return extremaPaperPhaseSelection();
+  }
+}
+
+function savePaperPhaseSelection(): void {
+  try {
+    window.localStorage.setItem(PAPER_PHASE_STORAGE_KEY, JSON.stringify(paperPhaseSelection));
+  } catch (_error) {}
+}
+
+function applyPaperPhaseSelection(selection: PaperPhaseSelectionV1): void {
+  paperPhaseSelection = normalizePaperPhaseSelection(selection);
+  savePaperPhaseSelection();
+  updatePaperModeControls();
+  if (paperModeActive()) {
+    drawModelVisualization();
+    drawHeatEnginePanel();
+  }
+}
+
+function nextAvailablePaperPhase(): number {
+  const used = paperPhaseSelection.points.flatMap((point) => point.kind === "phase" ? [point.phase] : []);
+  for (const candidate of [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875]) {
+    if (!used.some((phase) => Math.abs(phase - candidate) < 1e-6)) return candidate;
+  }
+  return 0;
+}
+
+function setupPaperModeControls(): void {
+  paperPhaseSelection = loadPaperPhaseSelection();
+  document.getElementById("paperExtremaPreset")?.addEventListener("click", () => applyPaperPhaseSelection(extremaPaperPhaseSelection()));
+  document.getElementById("paperQuarterPreset")?.addEventListener("click", () => applyPaperPhaseSelection(quarterPaperPhaseSelection()));
+  document.getElementById("paperAddPhase")?.addEventListener("click", () => {
+    applyPaperPhaseSelection(addPaperPhasePoint(paperPhaseSelection, { kind: "phase", phase: nextAvailablePaperPhase() }));
+  });
+  document.getElementById("paperAddEvent")?.addEventListener("change", (event) => {
+    const select = event.currentTarget as HTMLSelectElement;
+    const value = select.value as PaperPhaseEvent;
+    if (isPaperPhaseEvent(value)) {
+      applyPaperPhaseSelection(addPaperPhasePoint(paperPhaseSelection, { kind: "event", event: value }));
+    }
+    select.value = "";
+  });
+  document.getElementById("paperExportBundle")?.addEventListener("click", () => {
+    void exportPaperBundle();
+  });
+  updatePaperModeControls();
+}
+
+function updatePaperModeControls(): void {
+  const bar = document.getElementById("paperModeBar");
+  if (bar instanceof HTMLElement) bar.dataset.active = String(paperModeActive());
+  const extrema = document.getElementById("paperExtremaPreset");
+  const quarters = document.getElementById("paperQuarterPreset");
+  extrema?.classList.toggle("active", paperPhaseSelection.preset === "extrema");
+  quarters?.classList.toggle("active", paperPhaseSelection.preset === "quarters");
+  const addPhase = document.getElementById("paperAddPhase") as HTMLButtonElement | null;
+  const addEvent = document.getElementById("paperAddEvent") as HTMLSelectElement | null;
+  const atLimit = paperPhaseSelection.points.length >= PAPER_PHASE_POINT_MAX;
+  if (addPhase) addPhase.disabled = atLimit;
+  if (addEvent) addEvent.disabled = atLimit;
+  const container = document.getElementById("paperPhasePoints");
+  if (!(container instanceof HTMLElement)) return;
+  container.replaceChildren();
+  paperPhaseSelection.points.forEach((point, index) => {
+    const chip = document.createElement("span");
+    chip.className = "paper-phase-chip";
+    chip.dataset.paperPhasePoint = point.id;
+    const indexLabel = document.createElement("span");
+    indexLabel.textContent = `${String.fromCharCode(97 + index)})`;
+    chip.append(indexLabel);
+    if (point.kind === "event") {
+      const label = document.createElement("span");
+      label.textContent = paperPhaseEventLabel(point.event);
+      chip.append(label);
+    } else {
+      const label = document.createElement("label");
+      label.textContent = "φ ";
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = "0";
+      input.max = "0.999";
+      input.step = "0.01";
+      input.value = point.phase.toFixed(2);
+      input.setAttribute("aria-label", `Static phase ${index + 1}`);
+      input.addEventListener("change", () => applyPaperPhaseSelection(updateNumericPaperPhase(paperPhaseSelection, point.id, Number(input.value))));
+      label.append(input);
+      chip.append(label);
+    }
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "×";
+    remove.disabled = paperPhaseSelection.points.length <= 1;
+    remove.setAttribute("aria-label", `Remove ${point.kind === "event" ? paperPhaseEventLabel(point.event) : `phase ${point.phase.toFixed(2)}`}`);
+    remove.addEventListener("click", () => applyPaperPhaseSelection(removePaperPhasePoint(paperPhaseSelection, point.id)));
+    chip.append(remove);
+    container.append(chip);
+  });
+}
+
+type PaperPanelId = UserPlotId | "fourier";
+
+interface PaperPanelDefinition {
+  id: PaperPanelId;
+  title: string;
+  canvasId: string;
+  draw: () => void;
+}
+
+const PAPER_PANEL_DEFINITIONS: PaperPanelDefinition[] = [
+  { id: "model", title: "Shell", canvasId: "modelCanvas", draw: drawModelVisualization },
+  { id: "heatEngine", title: "Piston", canvasId: "heatEngineCanvas", draw: drawHeatEnginePanel },
+  { id: "work", title: "Work", canvasId: "workCanvas", draw: drawWorkPanel },
+  { id: "light", title: "Lightcurve", canvasId: "lightCanvas", draw: drawPhasePlots },
+  { id: "velocity", title: "RV Curve", canvasId: "velocityCanvas", draw: drawPhasePlots },
+  { id: "tpOpacity", title: "T-P Loop", canvasId: "tpOpacityCanvas", draw: drawThermodynamicPanel },
+  { id: "periodogram", title: "Periodogram", canvasId: "periodogramCanvas", draw: drawPeriodogramPanel },
+  { id: "phaseLag", title: "Phase Lag", canvasId: "phaseLagCanvas", draw: drawPhaseLagPanel },
+  { id: "phasePortrait", title: "Thermal-Convection Loop", canvasId: "phasePortraitCanvas", draw: drawPhasePortraitPanel },
+  { id: "time", title: "History", canvasId: "timeCanvas", draw: () => drawPaperHistoryCanvas("time") },
+  { id: "lum", title: "Luminosity Evolution", canvasId: "lumCanvas", draw: () => drawPaperHistoryCanvas("lum") },
+  { id: "stability", title: "Stability Map", canvasId: "stabilityMapCanvas", draw: drawStabilityMap },
+  { id: "strip", title: "Instability Strip", canvasId: "cepheidGuideCanvas", draw: drawCepheidGuide },
+  { id: "fourier", title: "Fourier Diagnostics", canvasId: "fourierCanvas", draw: drawFourierPanel }
+];
+
+const PAPER_SERIES_STYLES: Record<string, { color: string; dash: number[]; marker: string }> = {
+  R: { color: "#0072B2", dash: [], marker: "circle" },
+  V: { color: "#E69F00", dash: [8, 4], marker: "square" },
+  H: { color: "#CC79A7", dash: [2, 3], marker: "diamond" },
+  Uc: { color: "#009E73", dash: [10, 3, 2, 3], marker: "triangle" },
+  L: { color: "#D55E00", dash: [], marker: "circle" },
+  Lr: { color: "#56B4E9", dash: [8, 4], marker: "square" },
+  Lc: { color: "#009E73", dash: [2, 3], marker: "triangle" },
+  Lb: { color: "#000000", dash: [10, 3, 2, 3], marker: "diamond" },
+  power: { color: "#D55E00", dash: [], marker: "circle" }
+};
+
+const PAPER_MARKERLESS_PANEL_IDS = new Set<PaperPanelId>(["light", "velocity", "time", "lum"]);
+const PAPER_MARKERLESS_CANVAS_IDS = new Set(["lightCanvas", "velocityCanvas", "timeCanvas", "lumCanvas"]);
+
+function paperStyle(series: string, index = 0): { color: string; dash: number[]; marker: string } {
+  const known = PAPER_SERIES_STYLES[series];
+  if (known) return known;
+  const fallback = [PAPER_SERIES_STYLES.R, PAPER_SERIES_STYLES.V, PAPER_SERIES_STYLES.H, PAPER_SERIES_STYLES.Uc];
+  return fallback[index % fallback.length];
+}
+
+function csvCell(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const text = typeof value === "number" && Number.isFinite(value) ? String(value) : String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function csvDocument(headers: readonly string[], rows: readonly Record<string, unknown>[]): string {
+  return `${headers.join(",")}\n${rows.map((row) => headers.map((header) => csvCell(row[header])).join(",")).join("\n")}\n`;
+}
+
+function paperGridColumns(result: GridModelResult): Record<string, unknown> {
+  const ranges = activeGridRanges();
+  return {
+    model_id: result.id,
+    varied_parameters: ranges.map((range) => range.key).join(";"),
+    varied_values: ranges.map((range) => `${range.key}=${result.parameters[range.key]}`).join(";")
+  };
+}
+
+function paperPhaseSeriesRows(quantity: "L" | "V"): Record<string, unknown>[] {
+  if (gridState.enabled) {
+    return gridState.results.flatMap((result) => result.phaseRows.map((row) => ({
+      ...paperGridColumns(result),
+      coordinate: row.tau,
+      coordinate_unit: "phase",
+      [quantity]: row[quantity],
+      [`${quantity}_unit`]: "dimensionless"
+    })));
+  }
+  return latestPhaseRows.map((row) => ({
+    model_id: "current",
+    varied_parameters: "",
+    varied_values: "",
+    coordinate: row.tau,
+    coordinate_unit: latestDisplayWindow.mode === "phase" ? "phase" : "tau",
+    [quantity]: row[quantity],
+    [`${quantity}_unit`]: "dimensionless"
+  }));
+}
+
+function paperSnapshotCsv(panel: "model" | "heatEngine"): string {
+  const rows = resolvePaperSnapshots(paperPhaseSelection, latestDisplayWindow).map((snapshot, index) => {
+    const terms = heatEngineTerms(snapshot.row, latestPhaseParameters);
+    const thermo = thermodynamicPoint(snapshot.row, latestPhaseParameters);
+    return {
+      snapshot_index: index + 1,
+      snapshot_label: snapshot.label,
+      coordinate_label: snapshot.coordinateLabel,
+      coordinate: snapshot.coordinate,
+      coordinate_unit: latestDisplayWindow.mode === "phase" ? "phase" : "tau",
+      tau: snapshot.row.tau,
+      R: snapshot.row.R,
+      V: snapshot.row.V,
+      H: snapshot.row.H,
+      Uc: snapshot.row.Uc,
+      Lr: snapshot.row.Lr,
+      Lc: snapshot.row.Lc,
+      L: snapshot.row.L,
+      pressure_force: panel === "heatEngine" ? terms?.pressureForce : "",
+      gravity_force: panel === "heatEngine" ? terms?.gravityForce : "",
+      damping_acceleration: panel === "heatEngine" ? terms?.dampingAcceleration : "",
+      source_luminosity: panel === "heatEngine" ? terms?.source : "",
+      log10_T_over_T0: thermo?.logT,
+      log10_P_over_P0: thermo?.logP,
+      log10_kappa_over_kappa0: thermo?.logOpacity
+    };
+  });
+  return csvDocument([
+    "snapshot_index", "snapshot_label", "coordinate_label", "coordinate", "coordinate_unit", "tau",
+    "R", "V", "H", "Uc", "Lr", "Lc", "L", "pressure_force", "gravity_force",
+    "damping_acceleration", "source_luminosity", "log10_T_over_T0", "log10_P_over_P0", "log10_kappa_over_kappa0"
+  ], rows);
+}
+
+function paperPanelCsv(id: PaperPanelId): string {
+  if (id === "model" || id === "heatEngine") return paperSnapshotCsv(id);
+  if (id === "light" || id === "velocity") {
+    const quantity = id === "light" ? "L" : "V";
+    return csvDocument(
+      ["model_id", "varied_parameters", "varied_values", "coordinate", "coordinate_unit", quantity, `${quantity}_unit`],
+      paperPhaseSeriesRows(quantity)
+    );
+  }
+  if (id === "work") {
+    const { selectedRows } = heatEngineWorkRows(latestPhaseRows);
+    return csvDocument(["tau", "R", "R_unit", "pressure_support", "pressure_support_unit", "V", "H"], selectedRows.map((row) => ({
+      tau: row.tau, R: row.R, R_unit: "dimensionless", pressure_support: pressureSupport(row, latestPhaseParameters),
+      pressure_support_unit: "dimensionless", V: row.V, H: row.H
+    })));
+  }
+  if (id === "tpOpacity") {
+    const sourceRows = gridState.enabled
+      ? gridState.results.flatMap((result) => thermodynamicPointsForGridResult(result, TP_OPACITY_PATH_MAX_POINTS).map((point) => ({ point, grid: paperGridColumns(result) })))
+      : thermodynamicPoints(closedLoopPanelRows(latestPhaseRows), latestPhaseParameters).map((point) => ({ point, grid: { model_id: "current", varied_parameters: "", varied_values: "" } }));
+    return csvDocument(["model_id", "varied_parameters", "varied_values", "tau", "log10_T_over_T0", "log10_P_over_P0", "log10_kappa_over_kappa0"], sourceRows.map(({ point, grid }) => ({
+      ...grid, tau: point.row.tau, log10_T_over_T0: point.logT, log10_P_over_P0: point.logP, log10_kappa_over_kappa0: point.logOpacity
+    })));
+  }
+  if (id === "periodogram") {
+    const result = computePeriodogram(latestPeriodogramRows, { quantity: "L", periodHint: latestPeriodogramPeriod });
+    return csvDocument(["frequency", "frequency_unit", "period", "period_unit", "power", "power_unit"], (result?.points || []).map((point) => ({
+      frequency: point.frequency, frequency_unit: "tau^-1", period: point.period, period_unit: "tau",
+      power: point.power, power_unit: "(delta_L/L0)^2"
+    })));
+  }
+  if (id === "phaseLag") {
+    const loopRange = currentLoopRange();
+    const rows = loopRange ? visiblePhaseLagPairs().flatMap((pair) => phaseLagSeriesPoints(gridPathResults(), pair, loopRange.key).map((point) => ({
+      pair: phaseLagPairLabel(pair), grid_parameter: loopRange.key, slider_value: point.x,
+      parameter_value: point.result.parameters[loopRange.key], phase_lag: point.lag, phase_lag_unit: "cycle"
+    }))) : [];
+    return csvDocument(["pair", "grid_parameter", "slider_value", "parameter_value", "phase_lag", "phase_lag_unit"], rows);
+  }
+  if (id === "phasePortrait") {
+    return csvDocument(["tau", "R", "H", "Uc", "unit"], closedLoopPanelRows(latestPhaseRows).map((row) => ({ tau: row.tau, R: row.R, H: row.H, Uc: row.Uc, unit: "dimensionless" })));
+  }
+  if (id === "time") {
+    return csvDocument(["tau", "tau_unit", "R", "V", "H", "Uc"], latestRows.map((row) => ({ tau: row.tau, tau_unit: "dynamical time", R: row.R, V: row.V, H: row.H, Uc: row.Uc })));
+  }
+  if (id === "lum") {
+    return csvDocument(["tau", "tau_unit", "L", "Lr", "Lc", "L_source"], latestRows.map((row) => ({ tau: row.tau, tau_unit: "dynamical time", L: row.L, Lr: row.Lr, Lc: row.Lc, L_source: baseLuminosity(row, state) })));
+  }
+  if (id === "stability") {
+    const kinds = stabilityKindsForMap(stabilityDisplayParameters());
+    return csvDocument(["log10_zeta_c", "log10_zeta", "stability_kind"], kinds.map((kind, index) => ({
+      log10_zeta_c: RESPONSE_LOG_MIN + ((index % STABILITY_MAP_RESOLUTION) + 0.5) * (RESPONSE_LOG_MAX - RESPONSE_LOG_MIN) / STABILITY_MAP_RESOLUTION,
+      log10_zeta: RESPONSE_LOG_MIN + (Math.floor(index / STABILITY_MAP_RESOLUTION) + 0.5) * (RESPONSE_LOG_MAX - RESPONSE_LOG_MIN) / STABILITY_MAP_RESOLUTION,
+      stability_kind: kind
+    })));
+  }
+  if (id === "strip") {
+    const strip = instabilityKindsForStrip(stabilityDisplayParameters());
+    return csvDocument(["log10_zeta_c_over_zeta", "gamma_c", "stability_kind"], strip.kinds.map((kind, index) => ({
+      log10_zeta_c_over_zeta: STRIP_LOG_RATIO_MIN + ((index % INSTABILITY_STRIP_X_RESOLUTION) + 0.5) * (STRIP_LOG_RATIO_MAX - STRIP_LOG_RATIO_MIN) / INSTABILITY_STRIP_X_RESOLUTION,
+      gamma_c: (Math.floor(index / INSTABILITY_STRIP_X_RESOLUTION) + 0.5) / INSTABILITY_STRIP_Y_RESOLUTION,
+      stability_kind: kind
+    })));
+  }
+  const rows = gridState.results.filter((result) => result.fourier).flatMap((result) => [
+    { ...paperGridColumns(result), period: result.period, diagnostic: "r21", value: result.fourier!.r21, unit: "dimensionless" },
+    { ...paperGridColumns(result), period: result.period, diagnostic: "r31", value: result.fourier!.r31, unit: "dimensionless" },
+    { ...paperGridColumns(result), period: result.period, diagnostic: "phi21", value: result.fourier!.phi21, unit: "radian" },
+    { ...paperGridColumns(result), period: result.period, diagnostic: "phi31", value: result.fourier!.phi31, unit: "radian" }
+  ]);
+  return csvDocument(["model_id", "varied_parameters", "varied_values", "period", "diagnostic", "value", "unit"], rows);
+}
+
+function drawPaperHistoryCanvas(id: "time" | "lum"): void {
+  const timeXlim = integrationTimeRange(latestRows);
+  if (id === "time") {
+    const showUc = convectiveVelocityHistoryAvailable(latestRows);
+    const keys: PlotSeriesKey[] = showUc ? ["R", "V", "H", "Uc"] : ["R", "V", "H"];
+    const rows = rowsForInteractivePlot("time", latestRows, keys);
+    const series: Series[] = [
+      { label: "R", color: COLORS.R, rows: visibleRows("time", "R", rows), x: (row) => row.tau, y: (row) => row.R },
+      { label: "V", color: COLORS.V, rows: visibleRows("time", "V", rows), x: (row) => row.tau, y: (row) => row.V },
+      { label: "H", color: COLORS.H, rows: visibleRows("time", "H", rows), x: (row) => row.tau, y: (row) => row.H }
+    ];
+    if (showUc) series.push({ label: "Uc", color: COLORS.Uc, rows: visibleRows("time", "Uc", rows), x: (row) => row.tau, y: (row) => row.Uc });
+    drawSeries("timeCanvas", series, {
+      xlabel: "time τ", ylabel: "state", xlabelColor: COLORS.tau, fallbackXlim: timeXlim,
+      view: plotViews.time, interactivePlotId: "time", denseEnvelope: true, message: "all series hidden"
+    });
+    return;
+  }
+  const showSplit = convectiveLuminosityAvailable();
+  const keys: PlotSeriesKey[] = showSplit ? ["L", "Lr", "Lc", "Lb"] : ["L", "Lb"];
+  const rows = rowsForInteractivePlot("lum", latestRows, keys);
+  const series: Series[] = [
+    { label: "L", color: COLORS.L, rows: visibleRows("lum", "L", rows), x: (row) => row.tau, y: (row) => row.L },
+    { label: "Lb", color: sourceLuminosityColor(), rows: visibleRows("lum", "Lb", rows), x: (row) => row.tau, y: (row) => baseLuminosity(row, state), dash: [7, 5] }
+  ];
+  if (showSplit) series.push(
+    { label: "Lr", color: COLORS.Lr, rows: visibleRows("lum", "Lr", rows), x: (row) => row.tau, y: (row) => row.Lr },
+    { label: "Lc", color: COLORS.Lc, rows: visibleRows("lum", "Lc", rows), x: (row) => row.tau, y: (row) => row.Lc }
+  );
+  drawSeries("lumCanvas", series, {
+    xlabel: "time τ", ylabel: "luminosity", xlabelColor: COLORS.tau, fallbackXlim: timeXlim,
+    view: plotViews.lum, interactivePlotId: "lum", denseEnvelope: true, message: "all luminosity variables hidden"
+  });
+}
+
+function paperPanelElement(definition: PaperPanelDefinition): HTMLElement | null {
+  if (definition.id === "fourier") return document.getElementById("fourierGridPanel");
+  return document.querySelector<HTMLElement>(`[data-plot-panel="${definition.id}"]`);
+}
+
+function paperPanelAvailable(id: PaperPanelId): boolean {
+  if (id === "model" || id === "heatEngine") return resolvePaperSnapshots(paperPhaseSelection, latestDisplayWindow).length > 0;
+  if (id === "work") return heatEngineWorkRows(latestPhaseRows).selectedRows.length > 2;
+  if (id === "light" || id === "velocity" || id === "phasePortrait") return latestPhaseRows.length > 1;
+  if (id === "time" || id === "lum") return latestRows.length > 1;
+  if (id === "tpOpacity") return gridState.enabled ? gridState.results.length > 0 : latestPhaseRows.length > 1;
+  if (id === "periodogram") return Boolean(computePeriodogram(latestPeriodogramRows, { quantity: "L", periodHint: latestPeriodogramPeriod }));
+  if (id === "phaseLag") return gridState.enabled && Boolean(currentLoopRange()) && gridPathResults().length > 0;
+  if (id === "fourier") return gridState.enabled && gridState.results.some((result) => Boolean(result.fourier));
+  return true;
+}
+
+function numericDatasetRange(value: string | undefined): number[] | null {
+  if (!value) return null;
+  const values = value.split(",").map(Number);
+  return values.length === 2 && values.every(Number.isFinite) ? values : null;
+}
+
+function paperPanelSeries(id: PaperPanelId): string[] {
+  if (id === "time") return convectiveVelocityHistoryAvailable(latestRows) ? ["R", "V", "H", "Uc"] : ["R", "V", "H"];
+  if (id === "lum") return convectiveLuminosityAvailable() ? ["L", "Lr", "Lc", "Lb"] : ["L", "Lb"];
+  if (id === "light") return ["L"];
+  if (id === "velocity") return ["V"];
+  if (id === "phasePortrait") return ["H", "Uc"];
+  if (id === "periodogram") return ["power"];
+  if (id === "phaseLag") return visiblePhaseLagPairs().map(phaseLagPairLabel);
+  return [id];
+}
+
+function paperPanelMetadata(definition: PaperPanelDefinition): PaperPanelRenderer["metadata"] {
+  const canvas = document.getElementById(definition.canvasId) as HTMLCanvasElement | null;
+  const series = paperPanelSeries(definition.id);
+  return {
+    axisLimits: {
+      x: numericDatasetRange(canvas?.dataset.xlim),
+      y: numericDatasetRange(canvas?.dataset.ylim)
+    },
+    units: {
+      coordinate: latestDisplayWindow.mode === "phase" ? "phase" : "tau",
+      state: "dimensionless",
+      periodogramFrequency: "tau^-1",
+      periodogramPower: "(delta_L/L0)^2"
+    },
+    seriesStyling: series.map((name, index) => {
+      const style = paperStyle(name, index);
+      return { series: name, ...style, marker: PAPER_MARKERLESS_PANEL_IDS.has(definition.id) ? "none" : style.marker };
+    }),
+    downsampling: definition.id === "model" || definition.id === "heatEngine" ? "selected static states" : "screen and vector artwork may use envelope/path downsampling; CSV retains archived source values"
+  };
+}
+
+function paperRenderDimensions(definition: PaperPanelDefinition, size: PaperFigureSize): { cssWidth: number; cssHeight: number; widthInches: number; heightInches: number } {
+  const widthInches = size === "single" ? 3.4 : 7.1;
+  const cssWidth = size === "single" ? 520 : 920;
+  const snapshotCount = Math.max(1, paperPhaseSelection.points.length);
+  let cssHeight: number;
+  if (definition.id === "model") cssHeight = paperSnapshotCanvasHeight(cssWidth, snapshotCount, 232);
+  else if (definition.id === "heatEngine") cssHeight = paperSnapshotCanvasHeight(cssWidth, snapshotCount, 244);
+  else if (definition.id === "fourier") {
+    const columns = cssWidth >= 780 ? 2 : 1;
+    cssHeight = Math.max(280, Math.ceil(4 / columns) * 238);
+  } else {
+    const canvas = document.getElementById(definition.canvasId) as HTMLCanvasElement | null;
+    const rect = canvas?.getBoundingClientRect();
+    const aspect = rect && rect.width > 0 && rect.height > 0 ? rect.height / rect.width : 0.58;
+    cssHeight = Math.max(260, Math.round(cssWidth * clamp(aspect, 0.38, 1.1)));
+  }
+  return { cssWidth, cssHeight, widthInches, heightInches: widthInches * cssHeight / cssWidth };
+}
+
+async function renderPaperPanel(definition: PaperPanelDefinition, size: PaperFigureSize): Promise<PaperRenderResult> {
+  const canvas = document.getElementById(definition.canvasId);
+  if (!(canvas instanceof HTMLCanvasElement)) throw new Error(`${definition.title}: canvas unavailable`);
+  const dimensions = paperRenderDimensions(definition, size);
+  const dpr = window.devicePixelRatio || 1;
+  const vectorContext = new SvgCanvasContext({
+    width: Math.floor(dimensions.cssWidth * dpr),
+    height: Math.floor(dimensions.cssHeight * dpr),
+    document
+  });
+  const getContextDescriptor = Object.getOwnPropertyDescriptor(canvas, "getContext");
+  const rectDescriptor = Object.getOwnPropertyDescriptor(canvas, "getBoundingClientRect");
+  const priorWidth = canvas.width;
+  const priorHeight = canvas.height;
+  const priorStyle = canvas.style.cssText;
+  Object.defineProperty(canvas, "getContext", {
+    configurable: true,
+    value: (kind: string) => kind === "2d" ? vectorContext as unknown as CanvasRenderingContext2D : null
+  });
+  Object.defineProperty(canvas, "getBoundingClientRect", {
+    configurable: true,
+    value: () => new DOMRect(0, 0, dimensions.cssWidth, dimensions.cssHeight)
+  });
+  try {
+    definition.draw();
+    return {
+      svg: vectorContext.getSerializedSvg(true),
+      widthInches: dimensions.widthInches,
+      heightInches: dimensions.heightInches
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${definition.title}: ${message}`);
+  } finally {
+    if (getContextDescriptor) Object.defineProperty(canvas, "getContext", getContextDescriptor);
+    else delete (canvas as unknown as { getContext?: unknown }).getContext;
+    if (rectDescriptor) Object.defineProperty(canvas, "getBoundingClientRect", rectDescriptor);
+    else delete (canvas as unknown as { getBoundingClientRect?: unknown }).getBoundingClientRect;
+    canvas.width = priorWidth;
+    canvas.height = priorHeight;
+    canvas.style.cssText = priorStyle;
+  }
+}
+
+function paperExportState(): Omit<PaperExportManifestV1, "panels"> {
+  const activeRanges = activeGridRanges();
+  return {
+    schemaVersion: 1,
+    application: {
+      name: "OZwizard",
+      version: __OZWIZARD_VERSION__,
+      sourceCommit: __OZWIZARD_COMMIT__,
+      sourceUrl: window.location.href.split("#")[0]
+    },
+    createdAt: new Date().toISOString(),
+    theme: "paper",
+    model: {
+      parameters: { ...state },
+      displayParameters: { ...latestPhaseParameters },
+      preset: activePreset,
+      solver: state.solver,
+      status: latestResult.status,
+      message: latestResult.message,
+      statistics: { ...latestResult.stats },
+      rowCount: latestRows.length
+    },
+    display: {
+      mode: latestDisplayWindow.mode,
+      reason: latestDisplayWindow.reason,
+      xlim: latestDisplayWindow.xlim,
+      period: latestDisplayWindow.period,
+      message: latestDisplayWindow.message,
+      rowCount: latestDisplayWindow.rows.length
+    },
+    paper: {
+      phaseSelection: paperPhaseSelection,
+      resolvedSnapshots: resolvePaperSnapshots(paperPhaseSelection, latestDisplayWindow).map((snapshot) => ({
+        label: snapshot.label,
+        coordinateLabel: snapshot.coordinateLabel,
+        coordinate: snapshot.coordinate,
+        tau: snapshot.row.tau
+      })),
+      widthsInches: { single: 3.4, double: 7.1 },
+      pngDpi: 600,
+      palette: "paper-colorblind",
+      animationMarkers: false
+    },
+    grid: {
+      enabled: gridState.enabled,
+      centerSelection: currentGridResult()?.id ?? null,
+      selectedLoopKey: gridState.selectedLoopKey,
+      ranges: activeRanges.map((range) => ({ ...range })),
+      resultCount: gridState.results.length,
+      modelIds: gridState.results.map((result) => result.id)
+    },
+    omittedPanels: []
+  };
+}
+
+async function exportPaperBundle(): Promise<void> {
+  const button = document.getElementById("paperExportBundle") as HTMLButtonElement | null;
+  const status = document.getElementById("paperExportStatus");
+  if (!paperModeActive()) return;
+  if (button?.disabled) return;
+  if (button) button.disabled = true;
+  if (status) {
+    status.textContent = "Preparing visible panels…";
+    status.dataset.state = "running";
+  }
+  const manifest = paperExportState();
+  const renderers: PaperPanelRenderer[] = [];
+  PAPER_PANEL_DEFINITIONS.forEach((definition) => {
+    const panel = paperPanelElement(definition);
+    if (!panel || panel.hidden) return;
+    if (!paperPanelAvailable(definition.id)) {
+      manifest.omittedPanels.push({ id: definition.id, reason: "scientific data unavailable for the current solution" });
+      return;
+    }
+    renderers.push({
+      id: definition.id,
+      title: definition.title,
+      csv: paperPanelCsv(definition.id),
+      metadata: paperPanelMetadata(definition),
+      render: (size) => renderPaperPanel(definition, size)
+    });
+  });
+  try {
+    if (!renderers.length) throw new Error("No visible scientific panels are available");
+    const bundle = await createPaperBundle({
+      manifest: { ...manifest, panels: [] },
+      panels: renderers,
+      onProgress: (message) => { if (status) status.textContent = message; }
+    });
+    downloadPaperBundle(bundle.blob, bundle.filename);
+    if (status) {
+      status.textContent = `Downloaded ${renderers.length} panel${renderers.length === 1 ? "" : "s"}`;
+      status.dataset.state = "complete";
+    }
+  } catch (error) {
+    if (status) {
+      status.textContent = error instanceof Error ? error.message : "Paper bundle export failed";
+      status.dataset.state = "error";
+    }
+  } finally {
+    if (button) button.disabled = false;
+    drawAll();
+  }
 }
 
 function setupPhaseAnnotationControls(): void {
@@ -2505,7 +3152,8 @@ function updateGridLoopSliderMarker(key: ControlParameterKey): void {
   const current = currentGridResult();
   const range = currentLoopRange();
   const sliderValue = current?.sliderValues[key];
-  const active = gridState.enabled
+  const active = !paperModeActive()
+    && gridState.enabled
     && gridState.ranges.has(key)
     && key === gridState.selectedLoopKey
     && range?.key === key
@@ -2698,6 +3346,7 @@ function handleGridWorkerMessage(message: GridWorkerMessage): void {
   updateGridLoopControls();
   updateGridStatusUi();
   updateFourierPanelVisibility();
+  if (paperModeActive()) selectPaperGridCenter();
   startGridAnimation();
   drawAll();
 }
@@ -2761,7 +3410,7 @@ function updateFourierPanelVisibility(): void {
 function startGridAnimation(): void {
   stopGridAnimation();
   const path = gridPathResults();
-  if (!gridState.enabled || path.length <= 1) return;
+  if (paperModeActive() || !gridState.enabled || path.length <= 1) return;
   gridState.animationTimer = window.setInterval(() => {
     const currentPath = gridPathResults();
     if (currentPath.length <= 1) return;
@@ -2835,11 +3484,25 @@ function gridPathResults(): GridModelResult[] {
 }
 
 function currentGridResult(): GridModelResult | null {
-  if (gridState.heldResult) return gridState.heldResult;
+  if (!paperModeActive() && gridState.heldResult) return gridState.heldResult;
   const path = gridPathResults();
   if (!path.length) return null;
   const index = Math.min(path.length - 1, Math.max(0, gridState.animationIndex));
   return path[index] || null;
+}
+
+function selectPaperGridCenter(): void {
+  if (!gridState.enabled) return;
+  const path = gridPathResults();
+  const range = currentLoopRange();
+  if (!path.length || !range) return;
+  gridState.heldResult = null;
+  gridState.hoverResult = null;
+  gridState.animationDirection = 1;
+  gridState.animationIndex = centerGridPathIndex(
+    path.map((result) => result.sliderValues[range.key] ?? range.centerSliderValue),
+    range.centerSliderValue
+  );
 }
 
 function currentLoopRange(): GridRange | null {
@@ -2962,7 +3625,10 @@ function setupPhaseScrubbing(): void {
     canvas.addEventListener("pointermove", (event) => updatePhaseScrub(event, canvasId));
     canvas.addEventListener("pointerup", (event) => finishPhaseScrub(event, canvasId));
     canvas.addEventListener("pointercancel", (event) => finishPhaseScrub(event, canvasId));
-    canvas.addEventListener("pointerleave", () => clearPhaseHover(canvasId));
+    canvas.addEventListener("pointerleave", () => {
+      canvas.classList.remove("phase-scrub-hover");
+      clearPhaseHover(canvasId);
+    });
   });
 }
 
@@ -2978,16 +3644,17 @@ function setupReferencePlotInteractions(): void {
   });
 }
 
-function phaseFromCanvasPoint(canvasId: string, point: { x: number; y: number }): number | null {
+function phaseFromCanvasPoint(canvasId: string, point: { x: number; y: number }, allowOutsideY = false): number | null {
   const render = plotRenderStates.get(canvasId);
   if (!render || !latestPhaseRows.length || gridState.enabled || latestDisplayWindow.mode !== "phase") return null;
   if (point.x < render.plot.left || point.x > render.plot.left + render.plot.width) return null;
+  if (!allowOutsideY && (point.y < render.plot.top || point.y > render.plot.top + render.plot.height)) return null;
   const clamped = clampPointToPlot(point, render.plot);
   return clamp(xFromPixel(render, clamped.x), 0, 2);
 }
 
 function scrubPhaseToPointer(canvas: HTMLCanvasElement, canvasId: string, event: PointerEvent): void {
-  const phase = phaseFromCanvasPoint(canvasId, canvasPoint(canvas, event));
+  const phase = phaseFromCanvasPoint(canvasId, canvasPoint(canvas, event), true);
   if (phase === null) return;
   currentAnimationPhase = phase;
   modelAnimationStartTime = null;
@@ -2999,13 +3666,14 @@ function canvasSupportsPhaseHover(canvasId: string): boolean {
 }
 
 function beginPhaseScrub(event: PointerEvent, canvasId: string): void {
-  if (event.button !== 0 || gridState.enabled || !latestPhaseRows.length || latestDisplayWindow.mode !== "phase") return;
+  if (paperModeActive() || event.button !== 0 || gridState.enabled || !latestPhaseRows.length || latestDisplayWindow.mode !== "phase") return;
   const canvas = event.currentTarget as HTMLCanvasElement;
   const phase = phaseFromCanvasPoint(canvasId, canvasPoint(canvas, event));
   if (phase === null) return;
   event.preventDefault();
   canvas.setPointerCapture(event.pointerId);
   activePhaseScrub = { canvasId, pointerId: event.pointerId };
+  canvas.classList.add("phase-scrub-hover");
   activePhaseHoverCanvasId = null;
   currentAnimationPhase = phase;
   modelAnimationStartTime = null;
@@ -3013,15 +3681,18 @@ function beginPhaseScrub(event: PointerEvent, canvasId: string): void {
 }
 
 function updatePhaseScrub(event: PointerEvent, canvasId: string): void {
+  const canvas = event.currentTarget as HTMLCanvasElement;
+  if (canvasSupportsPhaseHover(canvasId)) {
+    canvas.classList.toggle("phase-scrub-hover", phaseFromCanvasPoint(canvasId, canvasPoint(canvas, event)) !== null);
+  }
   if (activePhaseScrub) {
     if (activePhaseScrub.canvasId !== canvasId || activePhaseScrub.pointerId !== event.pointerId) return;
     event.preventDefault();
-    scrubPhaseToPointer(event.currentTarget as HTMLCanvasElement, canvasId, event);
+    scrubPhaseToPointer(canvas, canvasId, event);
     return;
   }
   if (gridState.enabled) return;
   if (event.pointerType !== "mouse" || event.buttons !== 0 || !canvasSupportsPhaseHover(canvasId)) return;
-  const canvas = event.currentTarget as HTMLCanvasElement;
   const phase = phaseFromCanvasPoint(canvasId, canvasPoint(canvas, event));
   if (phase === null) {
     clearPhaseHover(canvasId);
@@ -3039,6 +3710,9 @@ function finishPhaseScrub(event: PointerEvent, canvasId: string): void {
   event.preventDefault();
   if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   activePhaseScrub = null;
+  if (canvasSupportsPhaseHover(canvasId)) {
+    canvas.classList.toggle("phase-scrub-hover", phaseFromCanvasPoint(canvasId, canvasPoint(canvas, event)) !== null);
+  }
   modelAnimationStartTime = null;
   drawAnimatedPhaseViews();
 }
@@ -3631,7 +4305,7 @@ function sliderScaleMarkup(key: ControlParameterKey): string {
   if (key === "tEnd") return tauScaleMarkup();
   if (key === "zeta") return keyedScaleMarkup(key, [0.01, 0.1, 1, 10, 100]);
   if (key === "zetac") return keyedScaleMarkup(key, [0, 0.1, 1, 10, 100]);
-  if (key === "m") return keyedScaleMarkup(key, [CHI_PARAMETER_MIN, 10, CHI_PARAMETER_BREAK, CHI_PARAMETER_MAX]);
+  if (key === "m") return keyedScaleMarkup(key, [CHI_PARAMETER_MIN, 10, CHI_PARAMETER_MAX]);
   return "";
 }
 
@@ -4516,6 +5190,13 @@ function drawDenseEnvelope(
   return true;
 }
 
+function fillPlotAreaBackground(ctx: CanvasRenderingContext2D, plot: PlotBox): void {
+  ctx.save();
+  ctx.fillStyle = THEME.plotBackground;
+  ctx.fillRect(plot.left, plot.top, plot.width, plot.height);
+  ctx.restore();
+}
+
 function drawAxes(
   ctx: CanvasRenderingContext2D,
   plot: { left: number; top: number; width: number; height: number },
@@ -4556,6 +5237,7 @@ function drawAxes(
   ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
+  ctx.font = "700 12px Inter, sans-serif";
   ctx.fillStyle = xlabelColor;
   ctx.fillText(xlabel, plot.left + plot.width / 2, plot.top + plot.height + 42);
   ctx.save();
@@ -4583,10 +5265,14 @@ function drawSeries(
     message?: string;
     denseEnvelope?: boolean;
     phaseMarker?: { x: number; color: string };
+    referenceLines?: Array<{ x?: number; y?: number }>;
     afterDraw?: (ctx: CanvasRenderingContext2D, plot: PlotBox, xlim: NumericRange, ylim: NumericRange, canvasId: string) => void;
   }
 ): void {
   const canvas = el<HTMLCanvasElement>(canvasId);
+  const showPaperSeriesMarkers = paperModeActive() && !PAPER_MARKERLESS_CANVAS_IDS.has(canvasId);
+  if (paperModeActive()) canvas.dataset.paperSeriesMarkers = showPaperSeriesMarkers ? "on" : "off";
+  else delete canvas.dataset.paperSeriesMarkers;
   const panel = canvas.closest<HTMLElement>(".plot-panel");
   if (panel?.hidden) {
     plotRenderStates.delete(canvasId);
@@ -4606,6 +5292,7 @@ function drawSeries(
     width: rect.width - PLOT_LAYOUT.left - PLOT_LAYOUT.right,
     height: rect.height - PLOT_LAYOUT.top - PLOT_LAYOUT.bottom
   };
+  fillPlotAreaBackground(ctx, plot);
   const xValues: number[] = [];
   const yValues: number[] = [];
   series.forEach((item) => {
@@ -4629,6 +5316,7 @@ function drawSeries(
   const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
   const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
   drawAxes(ctx, plot, xlim, ylim, options.xlabel, options.ylabel, options.xlabelColor, options.ylabelColor);
+  if (options.referenceLines?.length) drawAxisReferenceLines(ctx, plot, xlim, ylim, options.referenceLines);
   if (options.message && !series.some((item) => item.rows.length)) {
     ctx.fillStyle = THEME.axisText;
     ctx.font = "13px Inter, sans-serif";
@@ -4640,12 +5328,15 @@ function drawSeries(
   ctx.beginPath();
   ctx.rect(plot.left, plot.top, plot.width, plot.height);
   ctx.clip();
-  series.forEach((item) => {
-    if (options.denseEnvelope && drawDenseEnvelope(ctx, item, plot, xlim, ylim)) return;
+  series.forEach((item, seriesIndex) => {
+    const printStyle = paperStyle(item.label, seriesIndex);
+    const seriesColor = paperModeActive() && !gridState.enabled ? printStyle.color : item.color;
+    const seriesDash = paperModeActive() && !item.dash?.length ? printStyle.dash : item.dash || [];
+    if (!paperModeActive() && options.denseEnvelope && drawDenseEnvelope(ctx, item, plot, xlim, ylim)) return;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.setLineDash(item.dash || []);
-    if (item.colorAt || item.widthAt) {
+    ctx.setLineDash(seriesDash);
+    if (!paperModeActive() && (item.colorAt || item.widthAt)) {
       let previous: { row: Row; x: number; y: number } | null = null;
       item.rows.forEach((row) => {
         const x = item.x(row);
@@ -4681,16 +5372,61 @@ function drawSeries(
           ctx.lineTo(px, py);
         }
       });
-      ctx.strokeStyle = item.color;
+      ctx.strokeStyle = seriesColor;
       ctx.lineWidth = item.width || 2;
       ctx.stroke();
     }
     ctx.setLineDash([]);
+    if (showPaperSeriesMarkers && item.rows.length) {
+      const stride = Math.max(1, Math.floor(item.rows.length / 12));
+      item.rows.forEach((row, index) => {
+        if (index % stride !== 0 && index !== item.rows.length - 1) return;
+        const x = item.x(row);
+        const y = item.y(row);
+        if (!Number.isFinite(x + y) || x < xlim[0] || x > xlim[1] || y < ylim[0] || y > ylim[1]) return;
+        drawPaperSeriesMarker(ctx, sx(x), sy(y), seriesColor, printStyle.marker);
+      });
+    }
   });
   ctx.restore();
   if (options.phaseMarker) drawPhaseMarker(ctx, plot, xlim, options.phaseMarker);
   options.afterDraw?.(ctx, plot, xlim, ylim, canvasId);
   drawSelectionOverlay(ctx, canvasId, plot);
+}
+
+function drawAxisReferenceLines(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  lines: Array<{ x?: number; y?: number }>
+): void {
+  const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
+  const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(plot.left, plot.top, plot.width, plot.height);
+  ctx.clip();
+  ctx.strokeStyle = THEME.axisBorder;
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([5, 4]);
+  lines.forEach((line) => {
+    if (line.x !== undefined && line.x >= xlim[0] && line.x <= xlim[1]) {
+      const x = sx(line.x);
+      ctx.beginPath();
+      ctx.moveTo(x, plot.top);
+      ctx.lineTo(x, plot.top + plot.height);
+      ctx.stroke();
+    }
+    if (line.y !== undefined && line.y >= ylim[0] && line.y <= ylim[1]) {
+      const y = sy(line.y);
+      ctx.beginPath();
+      ctx.moveTo(plot.left, y);
+      ctx.lineTo(plot.left + plot.width, y);
+      ctx.stroke();
+    }
+  });
+  ctx.restore();
 }
 
 function drawPhaseMarker(
@@ -4785,6 +5521,16 @@ function gridPhaseSeries(
     }
     return [singleSeries];
   }
+  if (paperModeActive()) {
+    return gridState.results.map((result) => ({
+      label: `grid-${result.id}`,
+      color: gridResultColor(result, 0.82),
+      rows: gridPhaseRowsForResult(result, quantity, GRID_PHASE_PATH_MAX_POINTS),
+      x: (row) => row.tau,
+      y: accessor,
+      width: 1.35
+    }));
+  }
   const path = gridPathResults();
   const current = currentGridResult();
   const backgroundStride = Math.max(1, Math.ceil(gridState.results.length / GRID_PHASE_BACKGROUND_MAX_MODELS));
@@ -4853,13 +5599,13 @@ function drawGridColorbar(
   }
   const range = currentLoopRange();
   const current = currentGridResult();
-  if (!range || !current) {
+  if (!range || (!paperModeActive() && !current)) {
     clearRegion();
     return;
   }
-  const value = current.variedValues[range.key];
-  const sliderValue = current.sliderValues[range.key];
-  if (value === undefined || sliderValue === undefined) {
+  const value = current?.variedValues[range.key];
+  const sliderValue = current?.sliderValues[range.key];
+  if (!paperModeActive() && (value === undefined || sliderValue === undefined)) {
     clearRegion();
     return;
   }
@@ -4867,27 +5613,33 @@ function drawGridColorbar(
   const height = 9;
   const left = plot.left + plot.width - width - 12;
   const top = plot.top + 12;
-  gridColorbarRegions.set(canvasId, {
-    canvasId,
-    left,
-    top,
-    width,
-    height,
-    hitLeft: left - 12,
-    hitTop: top - 10,
-    hitRight: left + width + 12,
-    hitBottom: top + 50
-  });
+  if (!paperModeActive()) {
+    gridColorbarRegions.set(canvasId, {
+      canvasId,
+      left,
+      top,
+      width,
+      height,
+      hitLeft: left - 12,
+      hitTop: top - 10,
+      hitRight: left + width + 12,
+      hitBottom: top + 50
+    });
+  } else {
+    gridColorbarRegions.delete(canvasId);
+  }
   const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
   if (canvas) {
     canvas.dataset.gridColorbar = "ready";
     canvas.dataset.gridColorbarKey = range.key;
-    canvas.dataset.gridColorbarHit = [
-      Math.round(left - 12),
-      Math.round(top - 10),
-      Math.round(left + width + 12),
-      Math.round(top + 50)
-    ].join(",");
+    if (!paperModeActive()) {
+      canvas.dataset.gridColorbarHit = [
+        Math.round(left - 12),
+        Math.round(top - 10),
+        Math.round(left + width + 12),
+        Math.round(top + 50)
+      ].join(",");
+    } else delete canvas.dataset.gridColorbarHit;
   }
   const lowerValue = parameterValueFromSlider(range.key, range.lowerSliderValue);
   const upperValue = parameterValueFromSlider(range.key, range.upperSliderValue);
@@ -4905,18 +5657,20 @@ function drawGridColorbar(
   ctx.fillRect(left, top, width, height);
   ctx.strokeStyle = floatingCanvasPanelBorder(0.78);
   ctx.strokeRect(left, top, width, height);
-  const fraction = clamp((sliderValue - range.lowerSliderValue) / Math.max(1e-12, range.upperSliderValue - range.lowerSliderValue), 0, 1);
-  const markerX = left + fraction * width;
-  ctx.fillStyle = parameterColorAt(value, range);
-  ctx.strokeStyle = canvasMarkerOutlineColor();
-  ctx.lineWidth = 1.3;
-  ctx.beginPath();
-  ctx.moveTo(markerX, top + height + 2);
-  ctx.lineTo(markerX - 5, top + height + 10);
-  ctx.lineTo(markerX + 5, top + height + 10);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
+  if (!paperModeActive() && sliderValue !== undefined && value !== undefined) {
+    const fraction = clamp((sliderValue - range.lowerSliderValue) / Math.max(1e-12, range.upperSliderValue - range.lowerSliderValue), 0, 1);
+    const markerX = left + fraction * width;
+    ctx.fillStyle = parameterColorAt(value, range);
+    ctx.strokeStyle = canvasMarkerOutlineColor();
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(markerX, top + height + 2);
+    ctx.lineTo(markerX - 5, top + height + 10);
+    ctx.lineTo(markerX + 5, top + height + 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
   ctx.fillStyle = THEME.axisText;
   ctx.font = "11px Inter, sans-serif";
   ctx.textBaseline = "top";
@@ -4925,7 +5679,7 @@ function drawGridColorbar(
   ctx.textAlign = "right";
   ctx.fillText(controlValueLabel(range.key, upperValue), left + width, top + height + 13);
   const symbol = controlCanvasSymbol(range.key);
-  const valueText = ` = ${controlValueLabel(range.key, value)}`;
+  const valueText = paperModeActive() || value === undefined ? "" : ` = ${controlValueLabel(range.key, value)}`;
   ctx.font = "600 11px Inter, sans-serif";
   const symbolWidth = ctx.measureText(symbol).width;
   ctx.font = "11px Inter, sans-serif";
@@ -5014,7 +5768,7 @@ function drawFourierPanel(): void {
   }
 
   const current = currentGridResult();
-  const currentFourier = current?.fourier ? current : null;
+  const currentFourier = !paperModeActive() && current?.fourier ? current : null;
   canvas.dataset.fourierAxisLabels = panels.map((item) => item.latex).join(",");
   canvas.dataset.fourierPathCount = String(path.length);
   canvas.dataset.fourierPhaseTicks = "pi-multiples";
@@ -5040,6 +5794,7 @@ function drawFourierPanel(): void {
     const xlim = item.xPhase ? phaseRange(xValues, false) : range(xValues, 0.05);
     const ylim = item.yPhase ? phaseRange(yValues, true) : range(yValues, 0.08);
     const ylabelX = Math.max(8, box.left - 70);
+    fillPlotAreaBackground(ctx, box);
     drawFourierAxes(ctx, box, xlim, ylim, item.xLabel, ylabelX, {
       xPhase: item.xPhase,
       yPhase: item.yPhase,
@@ -5247,12 +6002,13 @@ function drawFourierAxes(
       const x = plot.left + ((period - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
       ctx.fillText(fmt(skewness, 2), x, plot.top - 10);
     });
+    ctx.font = "700 10px Inter, sans-serif";
     ctx.fillText("S_k", plot.left + plot.width / 2, plot.top - 26);
   }
 
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  ctx.font = "12px Inter, sans-serif";
+  ctx.font = "700 12px Inter, sans-serif";
   ctx.fillStyle = THEME.axisText;
   ctx.fillText(xlabel, plot.left + plot.width / 2, plot.top + plot.height + 42);
   ctx.restore();
@@ -5403,13 +6159,15 @@ function canvasMathWidth(
   ctx: CanvasRenderingContext2D,
   fragments: readonly CanvasMathFragment[],
   fontSize = 12,
-  subscriptSize = 8
+  subscriptSize = 8,
+  weight?: string | number
 ): number {
   return fragments.reduce((total, fragment) => {
-    ctx.font = canvasMathFont(fontSize, fragment.weight);
+    const fragmentWeight = weight ?? fragment.weight;
+    ctx.font = canvasMathFont(fontSize, fragmentWeight);
     const baseWidth = ctx.measureText(fragment.text).width;
     if (!fragment.subscript && !fragment.superscript) return total + baseWidth;
-    ctx.font = canvasMathFont(subscriptSize, fragment.weight);
+    ctx.font = canvasMathFont(subscriptSize, fragmentWeight);
     const subscriptWidth = fragment.subscript ? ctx.measureText(fragment.subscript).width : 0;
     const superscriptWidth = fragment.superscript ? ctx.measureText(fragment.superscript).width : 0;
     return total + baseWidth + Math.max(subscriptWidth, superscriptWidth) + 1;
@@ -5426,7 +6184,7 @@ function drawCanvasMathFragments(
   const fontSize = options.fontSize ?? 12;
   const subscriptSize = options.subscriptSize ?? Math.max(8, Math.round(fontSize * 0.68));
   const align = options.align ?? "center";
-  const totalWidth = canvasMathWidth(ctx, fragments, fontSize, subscriptSize);
+  const totalWidth = canvasMathWidth(ctx, fragments, fontSize, subscriptSize, options.weight);
   const start = align === "right" ? -totalWidth : align === "center" ? -totalWidth / 2 : 0;
   ctx.save();
   ctx.translate(x, y);
@@ -5442,7 +6200,8 @@ function drawCanvasMathFragments(
     ctx.fillText(text, textX, textY);
   };
   fragments.forEach((fragment) => {
-    ctx.font = canvasMathFont(fontSize, fragment.weight);
+    const fragmentWeight = options.weight ?? fragment.weight;
+    ctx.font = canvasMathFont(fontSize, fragmentWeight);
     ctx.fillStyle = fragment.color || options.color || THEME.axisText;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
@@ -5450,7 +6209,7 @@ function drawCanvasMathFragments(
     const baseWidth = ctx.measureText(fragment.text).width;
     cursor += baseWidth;
     if (fragment.subscript || fragment.superscript) {
-      ctx.font = canvasMathFont(subscriptSize, fragment.weight);
+      ctx.font = canvasMathFont(subscriptSize, fragmentWeight);
       const scriptX = cursor + 1;
       const subscriptWidth = fragment.subscript ? ctx.measureText(fragment.subscript).width : 0;
       const superscriptWidth = fragment.superscript ? ctx.measureText(fragment.superscript).width : 0;
@@ -5476,7 +6235,7 @@ function drawFourierAxisLabel(
   y: number
 ): void {
   const base = label.base === "phi" ? "φ" : label.base;
-  drawCanvasMathFragments(ctx, [{ text: base, subscript: label.subscript }], x, y, { rotate: -Math.PI / 2 });
+  drawCanvasMathFragments(ctx, [{ text: base, subscript: label.subscript }], x, y, { rotate: -Math.PI / 2, weight: 700 });
 }
 
 function drawStabilityLinearizedLabel(
@@ -5793,6 +6552,7 @@ function drawStabilityOverlays(
     }
   }
   ctx.restore();
+  if (paperModeActive() && gridState.enabled) return;
   const highlighted = gridState.heldResult || gridState.hoverResult || currentGridResult();
   if (highlighted) drawReferenceMarker(ctx, sx(highlighted.parameters.zetac), sy(highlighted.parameters.zeta), gridResultColor(highlighted, 1), 6);
   else drawReferenceMarker(ctx, sx(current.zetac), sy(current.zeta), COLORS.gammac, 6);
@@ -5895,6 +6655,7 @@ function drawStabilityMap(): void {
   const stabilityPhysics = analyticStabilityConditions(parameters).physicsMode;
   const kinds = stabilityKindsForMap(parameters);
   const plot = { left: 58, top: 34, width: width - 78, height: height - 88 };
+  fillPlotAreaBackground(ctx, plot);
   const cellWidth = plot.width / STABILITY_MAP_RESOLUTION;
   const cellHeight = plot.height / STABILITY_MAP_RESOLUTION;
   referencePlotRenderStates.set("stabilityMapCanvas", {
@@ -5932,7 +6693,8 @@ function drawStabilityMap(): void {
       { text: "ζ", subscript: "c", color: COLORS.zetac, weight: 600 }
     ],
     plot.left + plot.width / 2,
-    plot.top + plot.height + 42
+    plot.top + plot.height + 42,
+    { weight: 700 }
   );
   drawCanvasMathFragments(
     ctx,
@@ -5944,7 +6706,7 @@ function drawStabilityMap(): void {
     ],
     10,
     plot.top + plot.height / 2,
-    { rotate: -Math.PI / 2, fontSize: 11 }
+    { rotate: -Math.PI / 2, fontSize: 11, weight: 700 }
   );
   updateStabilityLinearizedHeader(parameters.gammac);
   drawReferenceLegend(ctx, plot.left + 4, 15, linearStabilityLegendItems(stabilityPhysics), { maxX: plot.left + plot.width - 4, fontSize: 10.5, swatchSize: 9, labelGap: 5, itemGap: 10, lineHeight: 12 });
@@ -5993,6 +6755,7 @@ function drawCepheidGuide(): void {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, width, height);
   const plot = { left: 64, top: 28, width: width - 90, height: height - 88 };
+  fillPlotAreaBackground(ctx, plot);
   const sx = (x: number) => plot.left + clamp(x, 0, 1) * plot.width;
   const sy = (gamma: number) => plot.top + plot.height - clamp(gamma, 0, 1) * plot.height;
   referencePlotRenderStates.set("cepheidGuideCanvas", { plot, xlim: [0, 1], ylim: [0, 1], width, height });
@@ -6046,7 +6809,7 @@ function drawCepheidGuide(): void {
     ],
     plot.left + plot.width / 2,
     plot.top + plot.height + 46,
-    { fontSize: 10.5, subscriptSize: 7 }
+    { fontSize: 10.5, subscriptSize: 7, weight: 700 }
   );
   ctx.fillStyle = THEME.axisText;
   ctx.font = "12px Inter, sans-serif";
@@ -6062,7 +6825,7 @@ function drawCepheidGuide(): void {
     ],
     12,
     plot.top + plot.height / 2,
-    { rotate: -Math.PI / 2, fontSize: 11 }
+    { rotate: -Math.PI / 2, fontSize: 11, weight: 700 }
   );
   ctx.fillStyle = THEME.axisText;
   ctx.font = "700 13px Inter, sans-serif";
@@ -6099,20 +6862,25 @@ function drawCepheidGuide(): void {
   }
   const currentMode: DisplayWindowMode = current ? "phase" : latestDisplayWindow.mode;
   delete canvas.dataset.teffPhaseTrack;
-  if (currentMode === "phase") {
+  if (paperModeActive()) {
+    delete canvas.dataset.currentPhase;
+    delete canvas.dataset.currentTime;
+  } else if (currentMode === "phase") {
     canvas.dataset.currentPhase = fmtFixed(currentAnimationPhase, 3);
     delete canvas.dataset.currentTime;
   } else {
     canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
     delete canvas.dataset.currentPhase;
   }
-  drawReferenceMarker(
-    ctx,
-    sx(cepheidStripCoordinate(parameters)),
-    sy(parameters.gammac),
-    current ? gridResultColor(current, 1) : COLORS.gammac,
-    6
-  );
+  if (!paperModeActive() || !gridState.enabled) {
+    drawReferenceMarker(
+      ctx,
+      sx(cepheidStripCoordinate(parameters)),
+      sy(parameters.gammac),
+      current ? gridResultColor(current, 1) : COLORS.gammac,
+      6
+    );
+  }
 }
 
 function drawPhasePortraitCurve(
@@ -6198,7 +6966,7 @@ function phasePortraitValue(row: Row, key: PhasePortraitKey): number {
 
 function drawPhasePortraitLegend(ctx: CanvasRenderingContext2D, plot: PlotBox): void {
   ctx.save();
-  const y = plot.top + 14;
+  const y = plot.top + plot.height - 14;
   let x = plot.left + 12;
   [
     { fragments: [{ text: "H", color: COLORS.H, weight: 600 }], color: COLORS.H, dash: [] },
@@ -6439,6 +7207,31 @@ function drawOpacityColorbar(
   setOpacityColorbarDataset(canvas, opacityRange, currentLogOpacity);
 }
 
+function drawPaperSeriesMarker(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, marker: string): void {
+  const size = 3.2;
+  ctx.save();
+  ctx.fillStyle = "#ffffff";
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.15;
+  ctx.beginPath();
+  if (marker === "square") ctx.rect(x - size, y - size, size * 2, size * 2);
+  else if (marker === "triangle") {
+    ctx.moveTo(x, y - size - 0.7);
+    ctx.lineTo(x + size + 0.5, y + size);
+    ctx.lineTo(x - size - 0.5, y + size);
+    ctx.closePath();
+  } else if (marker === "diamond") {
+    ctx.moveTo(x, y - size - 0.5);
+    ctx.lineTo(x + size + 0.5, y);
+    ctx.lineTo(x, y + size + 0.5);
+    ctx.lineTo(x - size - 0.5, y);
+    ctx.closePath();
+  } else ctx.arc(x, y, size, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawThermodynamicTrack(
   ctx: CanvasRenderingContext2D,
   points: ThermodynamicPoint[],
@@ -6503,7 +7296,7 @@ function drawThermodynamicCurrentMarker(
   if (![x, y].every(Number.isFinite)) return;
   ctx.save();
   ctx.shadowColor = opacityColor(point.logOpacity, opacityRange, 0.65);
-  ctx.shadowBlur = 9;
+  ctx.shadowBlur = paperModeActive() ? 0 : 9;
   ctx.fillStyle = opacityColor(point.logOpacity, opacityRange, 1);
   ctx.strokeStyle = PHASE_MARKER_COLOR;
   ctx.lineWidth = 1.8;
@@ -6531,7 +7324,8 @@ function drawThermodynamicAxisLabels(ctx: CanvasRenderingContext2D, plot: PlotBo
       { text: " T/T", subscript: "0", color: PHASE_MARKER_COLOR, weight: 600 }
     ],
     plot.left + plot.width / 2,
-    plot.top + plot.height + 42
+    plot.top + plot.height + 42,
+    { weight: 700 }
   );
   drawCanvasMathFragments(
     ctx,
@@ -6541,7 +7335,7 @@ function drawThermodynamicAxisLabels(ctx: CanvasRenderingContext2D, plot: PlotBo
     ],
     22,
     plot.top + plot.height / 2,
-    { rotate: -Math.PI / 2 }
+    { rotate: -Math.PI / 2, weight: 700 }
   );
 }
 
@@ -6558,6 +7352,7 @@ function drawThermodynamicStaticLayer(
 ): void {
   const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
   const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  fillPlotAreaBackground(ctx, plot);
   drawOpacityContours(ctx, plot, xlim, ylim, parameters, opacityRange, sx, sy);
   drawAxes(ctx, plot, xlim, ylim, "", "", THEME.axisText, THEME.axisText, 22);
   tracks.forEach((track) => drawThermodynamicTrack(ctx, track.points, plot, xlim, ylim, opacityRange, track.width, track.alpha, sx, sy, track.color));
@@ -6568,6 +7363,12 @@ function drawThermodynamicStaticLayer(
 }
 
 function thermodynamicGridStaticTracks(): ThermodynamicTrackSpec[] {
+  if (paperModeActive()) {
+    return gridState.results.flatMap((result) => {
+      const points = thermodynamicPointsForGridResult(result, TP_OPACITY_PATH_MAX_POINTS);
+      return points.length > 1 ? [{ points, width: 1.25, alpha: 0.76, color: gridResultColor(result, 0.76) }] : [];
+    });
+  }
   const tracks: ThermodynamicTrackSpec[] = [];
   const backgroundStride = Math.max(1, Math.ceil(gridState.results.length / TP_OPACITY_BACKGROUND_MAX_MODELS));
   gridState.results.forEach((result, index) => {
@@ -6664,7 +7465,7 @@ function drawThermodynamicPanel(): void {
   canvas.dataset.tpOpacityMode = gridState.enabled ? "grid" : "single";
   canvas.dataset.axisLabels = `${TP_TEMPERATURE_DATA_LABEL},${TP_PRESSURE_DATA_LABEL}`;
   canvas.dataset.colorVariable = gridState.enabled ? "grid parameter" : TP_OPACITY_DATA_LABEL;
-  if (gridState.enabled) {
+  if (paperModeActive() || gridState.enabled) {
     delete canvas.dataset.currentPhase;
     delete canvas.dataset.currentTime;
   } else if (latestDisplayWindow.mode === "time") {
@@ -6684,6 +7485,28 @@ function drawThermodynamicPanel(): void {
       canvas.dataset.tpOpacityTracks = "0";
       canvas.dataset.tpOpacityRows = "0";
       drawCanvasMessage(ctx, width, height, latestPhaseMessage || gridState.statusText || "phase unavailable");
+      return;
+    }
+    if (paperModeActive()) {
+      const tracks = thermodynamicGridStaticTracks();
+      const allPoints = tracks.flatMap((track) => track.points);
+      if (!allPoints.length) {
+        clearOpacityColorbarDataset(canvas);
+        clearThermodynamicGridColorbar(canvas);
+        canvas.dataset.tpOpacityTracks = "0";
+        canvas.dataset.tpOpacityRows = "0";
+        drawCanvasMessage(ctx, width, height, latestPhaseMessage || "phase unavailable");
+        return;
+      }
+      const plot = thermodynamicPlotBox(width, height);
+      const xlim = range([...allPoints.map((point) => point.logT), 0], 0.14);
+      const ylim = range([...allPoints.map((point) => point.logP), 0], 0.14);
+      const opacityRange = range([...allPoints.map((point) => point.logOpacity), 0], 0.12);
+      drawThermodynamicStaticLayer(ctx, canvas, plot, xlim, ylim, opacityRange, latestPhaseParameters, tracks, { showOpacityColorbar: false });
+      clearOpacityColorbarDataset(canvas);
+      drawGridColorbar(ctx, plot, xlim, ylim, "tpOpacityCanvas");
+      canvas.dataset.tpOpacityTracks = String(tracks.length);
+      canvas.dataset.tpOpacityRows = String(allPoints.length);
       return;
     }
     const backdrop = thermodynamicGridBackdrop(canvas, width, height, dpr);
@@ -6706,7 +7529,7 @@ function drawThermodynamicPanel(): void {
     const sy = (y: number) => backdrop.plot.top + backdrop.plot.height - ((y - backdrop.ylim[0]) / (backdrop.ylim[1] - backdrop.ylim[0])) * backdrop.plot.height;
     let dynamicTrackCount = 0;
     const currentGrid = currentGridResult();
-    const highlighted = gridState.heldResult || gridState.hoverResult;
+    const highlighted = paperModeActive() ? null : gridState.heldResult || gridState.hoverResult;
     if (highlighted && highlighted !== currentGrid) {
       const points = thermodynamicPointsForGridResult(highlighted, TP_OPACITY_CURRENT_MAX_POINTS);
       if (points.length > 1) {
@@ -6715,7 +7538,7 @@ function drawThermodynamicPanel(): void {
       }
     }
     const currentPoints = currentGrid ? thermodynamicPointsForGridResult(currentGrid, TP_OPACITY_CURRENT_MAX_POINTS) : [];
-    if (currentPoints.length > 1) {
+    if (!paperModeActive() && currentPoints.length > 1) {
       drawThermodynamicTrack(ctx, currentPoints, backdrop.plot, backdrop.xlim, backdrop.ylim, backdrop.opacityRange, 3.1, 0.98, sx, sy, gridResultColor(currentGrid as GridModelResult, 0.98));
       dynamicTrackCount += 1;
     }
@@ -6749,10 +7572,10 @@ function drawThermodynamicPanel(): void {
   const currentPoint = currentLoopRow ? thermodynamicPoint(currentLoopRow, latestPhaseParameters) : null;
 
   drawThermodynamicStaticLayer(ctx, canvas, plot, xlim, ylim, opacityRange, latestPhaseParameters, tracks, {
-    currentLogOpacity: currentPoint?.logOpacity,
+    currentLogOpacity: paperModeActive() ? undefined : currentPoint?.logOpacity,
     showOpacityColorbar: true
   });
-  drawThermodynamicCurrentMarker(ctx, plot, xlim, ylim, opacityRange, latestPhaseParameters, currentPoint);
+  if (!paperModeActive()) drawThermodynamicCurrentMarker(ctx, plot, xlim, ylim, opacityRange, latestPhaseParameters, currentPoint);
 }
 
 function foldedRowsAsTimeRows(rows: readonly Row[], period: number): Row[] {
@@ -6839,6 +7662,7 @@ function drawPeriodogramAxes(
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.fillStyle = THEME.axisText;
+  ctx.font = "700 12px Inter, sans-serif";
   ctx.fillText(PERIODOGRAM_FREQUENCY_AXIS_LABEL, plot.left + plot.width / 2, plot.top + plot.height + 42);
   ctx.save();
   ctx.translate(PLOT_LAYOUT.yLabelX, plot.top + plot.height / 2);
@@ -6985,6 +7809,7 @@ function drawPeriodogramPanel(): void {
   canvas.dataset.periodogramPeakFrequency = fmtFixed(result.peak.frequency, 6);
   canvas.dataset.periodogramPeakPower = fmtFixed(result.peak.power, 8);
 
+  fillPlotAreaBackground(ctx, plot);
   drawPeriodogramAxes(ctx, plot, xlim, ylim);
   const harmonicCount = drawPeriodogramHarmonics(ctx, plot, xlim, latestPeriodogramPeriod ? 1 / latestPeriodogramPeriod : null);
   canvas.dataset.periodogramHarmonics = String(harmonicCount);
@@ -7118,9 +7943,10 @@ function drawPhaseLagPanel(): void {
   const xlim = validRange(sortedRange(loopRange.lowerSliderValue, loopRange.upperSliderValue), 1e-12)
     || range(pointXValues, 0.04);
   const ylim = PHASE_LAG_YLIM;
+  fillPlotAreaBackground(ctx, plot);
   drawPhaseLagAxes(ctx, plot, xlim, ylim, loopRange);
   drawPhaseLagSeries(ctx, plot, xlim, ylim, series);
-  drawPhaseLagCurrentMarker(ctx, plot, xlim, loopRange);
+  if (!paperModeActive()) drawPhaseLagCurrentMarker(ctx, plot, xlim, loopRange);
 }
 
 function drawPhaseLagAxes(
@@ -7186,7 +8012,8 @@ function drawPhaseLagAxes(
       { text: controlCanvasSymbol(loopRange.key), color: controlColor(loopRange.key), weight: 700 }
     ],
     plot.left + plot.width / 2,
-    plot.top + plot.height + 48
+    plot.top + plot.height + 48,
+    { weight: 700 }
   );
   drawCanvasMathFragments(
     ctx,
@@ -7196,7 +8023,7 @@ function drawPhaseLagAxes(
     ],
     22,
     plot.top + plot.height / 2,
-    { rotate: -Math.PI / 2 }
+    { rotate: -Math.PI / 2, weight: 700 }
   );
 }
 
@@ -7288,7 +8115,7 @@ function drawPhasePortraitPanel(): void {
   canvas.dataset.phasePortraitMode = gridState.enabled ? "grid" : "single";
   canvas.dataset.phasePortraitRows = String(loopRows.length);
   canvas.dataset.stellingwerfLabels = latestDisplayWindow.mode === "time" ? "R,H,U_c,current_time" : "R,H,U_c,current_phase";
-  canvas.dataset.axisLabels = "radius R,state";
+  canvas.dataset.axisLabels = "radius R,thermal-pressure state H and convective velocity U_c";
   if (!loopRows.length) {
     delete canvas.dataset.currentPhase;
     delete canvas.dataset.currentTime;
@@ -7315,7 +8142,9 @@ function drawPhasePortraitPanel(): void {
     ? anchoredVisualRange([...scaleRows.map((row) => row.H), ...scaleRows.map((row) => row.Uc)], 1, 0.05, 0.1)
     : range([...rows.map((row) => row.H), ...rows.map((row) => row.Uc)], 0.1);
   const plot = { left: 78, top: 28, width: width - 102, height: height - 88 };
+  fillPlotAreaBackground(ctx, plot);
   drawAxes(ctx, plot, xlim, ylim, "", "state", THEME.axisText, THEME.axisText, 22);
+  drawAxisReferenceLines(ctx, plot, xlim, ylim, [{ x: 1 }, { y: 1 }]);
   drawCanvasMathFragments(
     ctx,
     [
@@ -7323,7 +8152,8 @@ function drawPhasePortraitPanel(): void {
       { text: "R", color: COLORS.R, weight: 600 }
     ],
     plot.left + plot.width / 2,
-    plot.top + plot.height + 42
+    plot.top + plot.height + 42,
+    { weight: 700 }
   );
   drawPhasePortraitCurve(ctx, plot, xlim, ylim, rows, "H", COLORS.H);
   drawPhasePortraitCurve(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, [8, 5]);
@@ -7331,9 +8161,9 @@ function drawPhasePortraitPanel(): void {
   drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "H", COLORS.H, 0.62);
   drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, 0.3);
   drawPhasePortraitArrow(ctx, plot, xlim, ylim, rows, "Uc", COLORS.Uc, 0.74);
-  if (!gridState.enabled) drawPhasePortraitCurrentMarkers(ctx, plot, xlim, ylim, rows);
+  if (!paperModeActive() && !gridState.enabled) drawPhasePortraitCurrentMarkers(ctx, plot, xlim, ylim, rows);
   drawPhasePortraitLegend(ctx, plot);
-  if (!gridState.enabled) drawPhasePortraitPhaseLabel(ctx, plot);
+  if (!paperModeActive() && !gridState.enabled) drawPhasePortraitPhaseLabel(ctx, plot);
 }
 
 function drawStellingwerfReferencePanel(): void {
@@ -7692,7 +8522,7 @@ function physicalSurfaceOutlineColor(alpha = 0.88): string {
 }
 
 function phaseMarker(): { x: number; color: string } | undefined {
-  if (gridState.enabled) return undefined;
+  if (paperModeActive() || gridState.enabled) return undefined;
   return latestPhaseRows.length ? { x: displayMarkerX(latestDisplayWindow, currentAnimationPhase), color: PHASE_MARKER_COLOR } : undefined;
 }
 
@@ -7700,10 +8530,11 @@ function syncPhaseCanvasState(): void {
   PHASE_SCRUB_CANVAS_IDS.forEach((canvasId) => {
     const canvas = document.getElementById(canvasId);
     if (!(canvas instanceof HTMLCanvasElement)) return;
-    const scrubEnabled = latestDisplayWindow.mode === "phase" && latestPhaseRows.length > 0 && !gridState.enabled;
+    const scrubEnabled = !paperModeActive() && latestDisplayWindow.mode === "phase" && latestPhaseRows.length > 0 && !gridState.enabled;
     canvas.classList.toggle("phase-scrub-enabled", scrubEnabled);
+    if (!scrubEnabled) canvas.classList.remove("phase-scrub-hover");
     canvas.dataset.displayMode = latestDisplayWindow.mode;
-    if (gridState.enabled) {
+    if (paperModeActive() || gridState.enabled) {
       delete canvas.dataset.currentPhase;
       delete canvas.dataset.currentTime;
     } else if (latestPhaseRows.length && latestDisplayWindow.mode === "phase") {
@@ -7880,6 +8711,7 @@ function drawPhasePlots(): void {
     minimumYlim: [0.99, 1.01],
     message: latestPhaseMessage,
     phaseMarker: marker,
+    referenceLines: [{ x: 1 }, { y: 1 }],
     afterDraw: drawPhasePlotOverlays
   });
 
@@ -7892,6 +8724,7 @@ function drawPhasePlots(): void {
     minimumYlim: [-0.01, 0.01],
     message: latestPhaseMessage,
     phaseMarker: marker,
+    referenceLines: [{ x: 1 }, { y: 0 }],
     afterDraw: drawPhasePlotOverlays
   });
 
@@ -8577,7 +9410,8 @@ function drawHeatEngineMathLabel(
     color: options.color,
     rotate: options.rotate,
     strokeColor: options.strokeColor || canvasTextHaloColor(),
-    strokeWidth: options.strokeWidth ?? 4
+    strokeWidth: options.strokeWidth ?? 4,
+    weight: options.weight
   });
 }
 
@@ -8783,7 +9617,7 @@ function drawHeatEngineCompressibilitySpring(
   ctx.save();
   ctx.strokeStyle = `rgba(145, 152, 161, ${alpha})`;
   ctx.shadowColor = `rgba(145, 152, 161, ${alpha * 0.6})`;
-  ctx.shadowBlur = 2 + stiffness * 4;
+  ctx.shadowBlur = paperModeActive() ? 0 : 2 + stiffness * 4;
   ctx.lineWidth = 1.05 + stiffness * 1.15;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
@@ -8840,7 +9674,7 @@ function drawHeatEnginePiston(
   fillGradient.addColorStop(1, colorWithAlpha(COLORS.H, 0.42 + hLevel * 0.38));
   ctx.fillStyle = fillGradient;
   ctx.shadowColor = colorWithAlpha(COLORS.H, 0.78);
-  ctx.shadowBlur = 8 + hLevel * 18;
+  ctx.shadowBlur = paperModeActive() ? 0 : 8 + hLevel * 18;
   ctx.fillRect(chamber.left + 3, gasTop, chamber.width - 6, bottom - gasTop - 3);
   ctx.shadowBlur = 0;
 
@@ -8992,7 +9826,7 @@ function drawHeatEnginePistonCausal(
   fillGradient.addColorStop(1, colorWithAlpha(COLORS.H, 0.42 + hLevel * 0.38));
   ctx.fillStyle = fillGradient;
   ctx.shadowColor = colorWithAlpha(COLORS.H, 0.78);
-  ctx.shadowBlur = 8 + hLevel * 18;
+  ctx.shadowBlur = paperModeActive() ? 0 : 8 + hLevel * 18;
   ctx.fillRect(chamber.left + 3, gasTop, chamber.width - 6, bottom - gasTop - 3);
   ctx.shadowBlur = 0;
 
@@ -9019,7 +9853,7 @@ function drawHeatEnginePistonCausal(
   const pistonDisplayColor = lightModeInvertedSurfaceRgb(pistonTemperatureColor);
   roundedRectPath(ctx, chamber.left - 5, pistonY - pistonHeight / 2, chamber.width + 10, pistonHeight, 3);
   ctx.shadowColor = rgbCss(pistonDisplayColor, 0.2 + pistonTemperatureLevel * 0.5);
-  ctx.shadowBlur = 4 + pistonTemperatureLevel * 13;
+  ctx.shadowBlur = paperModeActive() ? 0 : 4 + pistonTemperatureLevel * 13;
   ctx.fillStyle = rgbCss(pistonDisplayColor, 0.44 + pistonTemperatureLevel * 0.42);
   ctx.fill();
   ctx.shadowBlur = 0;
@@ -9149,7 +9983,7 @@ function drawHeatEnginePistonCausal(
   const radiativeRaySpread = 7 + radiativeLeakLevel * 5;
   ctx.strokeStyle = colorWithAlpha(COLORS.Lr, 0.26 + radiativeLeakLevel * 0.62);
   ctx.shadowColor = colorWithAlpha(COLORS.Lr, 0.2 + radiativeLeakLevel * 0.52);
-  ctx.shadowBlur = 2 + radiativeLeakLevel * 10;
+  ctx.shadowBlur = paperModeActive() ? 0 : 2 + radiativeLeakLevel * 10;
   ctx.lineWidth = 4.4;
   ctx.lineCap = "butt";
   ctx.beginPath();
@@ -9326,7 +10160,7 @@ function drawHeatEnginePistonCausal(
     const leakRaySpread = 7 + convectiveLeakLevel * 5;
     ctx.strokeStyle = colorWithAlpha(COLORS.Lc, 0.26 + convectiveLeakLevel * 0.62);
     ctx.shadowColor = colorWithAlpha(COLORS.Lc, 0.2 + convectiveLeakLevel * 0.52);
-    ctx.shadowBlur = 2 + convectiveLeakLevel * 10;
+    ctx.shadowBlur = paperModeActive() ? 0 : 2 + convectiveLeakLevel * 10;
     ctx.lineWidth = 4.4;
     ctx.lineCap = "butt";
     ctx.beginPath();
@@ -9658,7 +10492,7 @@ function drawHeatEngineCycleWorkLedger(
 function drawWorkLoopPanel(
   ctx: CanvasRenderingContext2D,
   rows: readonly Row[],
-  currentRow: Row,
+  currentRow: Row | null,
   parameters: ModelParameters,
   work: HeatEngineCycleWork,
   regime: ReturnType<typeof heatEngineRegime>,
@@ -9722,6 +10556,39 @@ function drawWorkLoopPanel(
   ctx.lineWidth = 1.2;
   ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
 
+  const workTickLabel = (value: number, limits: NumericRange): string => {
+    const span = Math.abs(limits[1] - limits[0]);
+    const digits = span < 0.02 ? 4 : span < 0.2 ? 3 : span < 2 ? 2 : 1;
+    return fmt(value, digits);
+  };
+  ctx.fillStyle = THEME.axisText;
+  ctx.strokeStyle = THEME.axisBorder;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.font = "8.8px Inter, sans-serif";
+  ctx.textBaseline = "top";
+  ctx.textAlign = "center";
+  for (let i = 0; i <= 3; i += 1) {
+    const fraction = i / 3;
+    const x = plot.left + plot.width * fraction;
+    ctx.beginPath();
+    ctx.moveTo(x, plot.top + plot.height);
+    ctx.lineTo(x, plot.top + plot.height + 4);
+    ctx.stroke();
+    ctx.fillText(workTickLabel(xlim[0] + (xlim[1] - xlim[0]) * fraction, xlim), x, plot.top + plot.height + 6);
+  }
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i <= 3; i += 1) {
+    const fraction = i / 3;
+    const y = plot.top + plot.height * fraction;
+    ctx.beginPath();
+    ctx.moveTo(plot.left - 4, y);
+    ctx.lineTo(plot.left, y);
+    ctx.stroke();
+    ctx.fillText(workTickLabel(ylim[1] - (ylim[1] - ylim[0]) * fraction, ylim), plot.left - 7, y);
+  }
+
   if (plotted.length > 2) {
     ctx.beginPath();
     plotted.forEach((point, index) => {
@@ -9740,8 +10607,8 @@ function drawWorkLoopPanel(
     });
   }
 
-  const currentForce = pressureSupport(currentRow, parameters);
-  if (Number.isFinite(currentRow.R + currentForce)) {
+  const currentForce = currentRow ? pressureSupport(currentRow, parameters) : Number.NaN;
+  if (currentRow && Number.isFinite(currentRow.R + currentForce)) {
     ctx.fillStyle = PHASE_MARKER_COLOR;
     ctx.strokeStyle = canvasMarkerOutlineColor();
     ctx.lineWidth = 2;
@@ -9751,11 +10618,12 @@ function drawWorkLoopPanel(
     ctx.stroke();
   }
 
-  drawHeatEngineMathLabel(ctx, [{ text: "R", color: COLORS.R }], plot.left + plot.width / 2, plot.top + plot.height + 18, {
+  drawHeatEngineMathLabel(ctx, [{ text: "radius ", color: COLORS.R }, { text: "R", color: COLORS.R }], plot.left + plot.width / 2, plot.top + plot.height + 25, {
     align: "center",
-    fontSize: 10.7
+    fontSize: 10.7,
+    weight: 700
   });
-  drawWorkPressureSupportAxisLabel(ctx, plot.left - 24, plot.top + plot.height / 2, -Math.PI / 2);
+  drawWorkPressureSupportAxisLabel(ctx, plot.left - 45, plot.top + plot.height / 2, -Math.PI / 2);
   ctx.restore();
 }
 
@@ -9846,7 +10714,7 @@ function drawWorkSummaryBars(
 
     ctx.strokeStyle = colorWithAlpha(row.color, 0.95);
     ctx.shadowColor = colorWithAlpha(row.color, 0.22);
-    ctx.shadowBlur = 5;
+    ctx.shadowBlur = paperModeActive() ? 0 : 5;
     ctx.lineWidth = row.width;
     ctx.beginPath();
     ctx.moveTo(center, laneY);
@@ -9915,7 +10783,10 @@ function drawWorkPanel(): void {
   canvas.dataset.cycleWorkNet = fmt(work.net, 6);
   canvas.dataset.cycleWorkRatio = work.pressureDampingRatio === null ? "n/a" : fmt(work.pressureDampingRatio, 6);
   canvas.dataset.regime = regime;
-  if (latestDisplayWindow.mode === "time") {
+  if (paperModeActive()) {
+    delete canvas.dataset.currentTime;
+    delete canvas.dataset.currentPhase;
+  } else if (latestDisplayWindow.mode === "time") {
     canvas.dataset.currentTime = fmtFixed(displayMarkerX(latestDisplayWindow, currentAnimationPhase), 3);
     delete canvas.dataset.currentPhase;
   } else {
@@ -9925,12 +10796,13 @@ function drawWorkPanel(): void {
   const summaryHeight = height < 245 ? 46 : 50;
   const summaryY = height - summaryHeight - 10;
   const loopPlot = {
-    left: 38,
+    left: 56,
     top: 34,
-    width: Math.max(180, width - 52),
-    height: Math.max(94, summaryY - 66)
+    width: Math.max(170, width - 70),
+    height: Math.max(94, summaryY - 70)
   };
-  drawWorkLoopPanel(ctx, plotRows, row, latestPhaseParameters, work, regime, loopPlot, scope);
+  fillPlotAreaBackground(ctx, loopPlot);
+  drawWorkLoopPanel(ctx, plotRows, paperModeActive() ? null : row, latestPhaseParameters, work, regime, loopPlot, scope);
   drawWorkSummaryBars(ctx, work, regime, 10, summaryY, width - 20, summaryHeight);
 }
 
@@ -9988,6 +10860,145 @@ function drawHeatEngineEquationTags(
   });
 }
 
+interface PaperSnapshotCell {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+function paperSnapshotCanvasHeight(width: number, count: number, cellHeight: number): number {
+  const columns = width >= 560 ? 2 : 1;
+  return 8 + Math.ceil(Math.max(1, count) / columns) * (cellHeight + 10);
+}
+
+function paperSnapshotCells(width: number, height: number, count: number): PaperSnapshotCell[] {
+  const columns = width >= 560 ? 2 : 1;
+  const rows = Math.ceil(Math.max(1, count) / columns);
+  const gap = 10;
+  const pad = 8;
+  const cellWidth = (width - pad * 2 - gap * (columns - 1)) / columns;
+  const cellHeight = (height - pad * 2 - gap * (rows - 1)) / rows;
+  return Array.from({ length: count }, (_value, index) => ({
+    left: pad + (index % columns) * (cellWidth + gap),
+    top: pad + Math.floor(index / columns) * (cellHeight + gap),
+    width: cellWidth,
+    height: cellHeight
+  }));
+}
+
+function drawPaperSnapshotFrame(
+  ctx: CanvasRenderingContext2D,
+  cell: PaperSnapshotCell,
+  snapshot: ResolvedPaperSnapshot,
+  index: number
+): void {
+  ctx.save();
+  roundedRectPath(ctx, cell.left, cell.top, cell.width, cell.height, 5);
+  ctx.fillStyle = cssVariable("--canvas", "#ffffff");
+  ctx.fill();
+  ctx.strokeStyle = themeBorder(0.72);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = cssVariable("--ink", "#1f2328");
+  ctx.font = "600 11px Helvetica, Arial, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText(`${String.fromCharCode(97 + index)}) ${snapshot.label}`, cell.left + 8, cell.top + 7);
+  ctx.fillStyle = THEME.axisText;
+  ctx.font = "10px Helvetica, Arial, sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText(snapshot.coordinateLabel, cell.left + cell.width - 8, cell.top + 7);
+  ctx.restore();
+}
+
+function drawPaperPistonSnapshots(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  snapshots: readonly ResolvedPaperSnapshot[],
+  canvas: HTMLCanvasElement
+): void {
+  const cells = paperSnapshotCells(width, height, snapshots.length);
+  const cycleRows = downsample(heatEngineCycleRows(latestPhaseRows), 1100, ["R", "V", "H", "Uc", "L", "Lr", "Lc"]);
+  snapshots.forEach((snapshot, index) => {
+    const cell = cells[index];
+    drawPaperSnapshotFrame(ctx, cell, snapshot, index);
+    const contentTop = cell.top + 26;
+    const contentHeight = Math.max(185, cell.height - 30);
+    const terms = heatEngineTerms(snapshot.row, latestPhaseParameters);
+    if (!terms) {
+      drawCanvasMessage(ctx, cell.width, contentHeight, "piston unavailable");
+      return;
+    }
+    ctx.save();
+    ctx.translate(cell.left, contentTop);
+    const chamberLeft = Math.min(78, Math.max(56, cell.width * 0.24));
+    const heatEngineShowsUc = convectiveLuminosityAvailable(latestPhaseParameters);
+    const rightReserve = heatEngineShowsUc ? 78 : 22;
+    const chamberWidth = Math.max(98, Math.min(160, cell.width - chamberLeft - rightReserve));
+    drawHeatEnginePistonCausal(ctx, snapshot.row, cycleRows, terms, {
+      left: chamberLeft,
+      top: 34,
+      width: chamberWidth,
+      height: Math.max(120, contentHeight - 74)
+    }, latestPhaseParameters, contentHeight);
+    ctx.restore();
+  });
+  canvas.dataset.paperSnapshotCount = String(snapshots.length);
+  canvas.dataset.paperSnapshotColumns = String(width >= 560 ? 2 : 1);
+  canvas.dataset.paperSnapshotLabels = snapshots.map((snapshot) => `${snapshot.label}:${snapshot.coordinateLabel}`).join("|");
+}
+
+function drawPaperModelSnapshots(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  snapshots: readonly ResolvedPaperSnapshot[],
+  canvas: HTMLCanvasElement
+): void {
+  const cells = paperSnapshotCells(width, height, snapshots.length);
+  const modelScaleRows = stableTimeVisualReferenceRows(latestPhaseRows);
+  const maxRadius = maximumPhaseRadius(modelScaleRows);
+  const convectionActive = convectiveLuminosityAvailable(latestPhaseParameters);
+  snapshots.forEach((snapshot, index) => {
+    const cell = cells[index];
+    drawPaperSnapshotFrame(ctx, cell, snapshot, index);
+    const contentTop = cell.top + 26;
+    const contentHeight = Math.max(150, cell.height - 30);
+    const size = Math.min(cell.width, contentHeight);
+    const centerX = cell.left + cell.width / 2;
+    const centerY = contentTop + contentHeight / 2;
+    const radiusScale = (size * 0.35) / maxRadius;
+    const row = snapshot.row;
+    const geometry = shellGeometryFromModel(row, latestPhaseParameters);
+    const luminosityLevel = normalizedInRange(row.L, latestPhaseLuminosityRange);
+    const temperature = inferEffectiveTemperature(row.L, row.R);
+    const blackbody = blackbodyRgbForTemperature(temperature);
+    const shellColor = scaledRgb(blackbody, 0.58 + luminosityLevel * 0.52);
+    const shellDisplayColor = lightModeInvertedSurfaceRgb(shellColor);
+    const outerRadius = Math.max(2, geometry.outerRadius * radiusScale);
+    const innerRadius = Math.max(0, geometry.innerRadius * radiusScale);
+    ctx.save();
+    drawModelReferenceGuides(ctx, modelScaleRows, centerX, centerY, radiusScale);
+    drawAnnularSegment(
+      ctx,
+      centerX,
+      centerY,
+      outerRadius,
+      innerRadius,
+      convectionActive ? Math.PI / 2 : 0,
+      Math.PI * 2,
+      rgbCss(shellDisplayColor, 0.5 + luminosityLevel * 0.4)
+    );
+    if (convectionActive) drawConvectionArcs(ctx, row, centerX, centerY, radiusScale);
+    ctx.restore();
+  });
+  canvas.dataset.paperSnapshotCount = String(snapshots.length);
+  canvas.dataset.paperSnapshotColumns = String(width >= 560 ? 2 : 1);
+  canvas.dataset.paperSnapshotLabels = snapshots.map((snapshot) => `${snapshot.label}:${snapshot.coordinateLabel}`).join("|");
+}
+
 function drawHeatEnginePanel(): void {
   const canvas = document.getElementById("heatEngineCanvas");
   if (!(canvas instanceof HTMLCanvasElement)) return;
@@ -9996,13 +11007,34 @@ function drawHeatEnginePanel(): void {
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(260, rect.width || 292);
-  const height = Math.max(230, rect.height || 260);
+  const snapshots = paperModeActive() ? resolvePaperSnapshots(paperPhaseSelection, latestDisplayWindow) : [];
+  const height = paperModeActive()
+    ? paperSnapshotCanvasHeight(width, snapshots.length, 244)
+    : Math.max(230, rect.height || 260);
+  if (paperModeActive()) canvas.style.height = `${height}px`;
+  else canvas.style.removeProperty("height");
   canvas.width = Math.floor(width * dpr);
   canvas.height = Math.floor(height * dpr);
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, width, height);
+
+  if (paperModeActive()) {
+    canvas.dataset.heatEngineMode = "paper";
+    delete canvas.dataset.currentPhase;
+    delete canvas.dataset.currentTime;
+    if (!snapshots.length) {
+      canvas.dataset.paperSnapshotCount = "0";
+      drawCanvasMessage(ctx, width, height, latestPhaseMessage || "static states unavailable");
+      return;
+    }
+    drawPaperPistonSnapshots(ctx, width, height, snapshots, canvas);
+    return;
+  }
+  delete canvas.dataset.paperSnapshotCount;
+  delete canvas.dataset.paperSnapshotColumns;
+  delete canvas.dataset.paperSnapshotLabels;
 
   const row = latestPhaseRows.length ? rowAtCurrentDisplayPosition(latestPhaseRows) : null;
   if (!row) {
@@ -10076,7 +11108,12 @@ function drawModelVisualization(): void {
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(260, rect.width || 320);
-  const height = Math.max(260, rect.height || width);
+  const snapshots = paperModeActive() ? resolvePaperSnapshots(paperPhaseSelection, latestDisplayWindow) : [];
+  const height = paperModeActive()
+    ? paperSnapshotCanvasHeight(width, snapshots.length, 232)
+    : Math.max(260, rect.height || width);
+  if (paperModeActive()) canvas.style.height = `${height}px`;
+  else canvas.style.removeProperty("height");
   canvas.width = Math.floor(width * dpr);
   canvas.height = Math.floor(height * dpr);
   const ctx = canvas.getContext("2d");
@@ -10084,6 +11121,23 @@ function drawModelVisualization(): void {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, width, height);
   canvas.dataset.animationSpeed = modelSpeedLabel(modelAnimationSpeed);
+
+  if (paperModeActive()) {
+    canvas.dataset.modelMode = "paper";
+    delete canvas.dataset.currentPhase;
+    delete canvas.dataset.currentTime;
+    if (!snapshots.length) {
+      canvas.dataset.paperSnapshotCount = "0";
+      drawCanvasMessage(ctx, width, height, latestPhaseMessage || "static states unavailable");
+      return;
+    }
+    drawPaperModelSnapshots(ctx, width, height, snapshots, canvas);
+    return;
+  }
+  delete canvas.dataset.modelMode;
+  delete canvas.dataset.paperSnapshotCount;
+  delete canvas.dataset.paperSnapshotColumns;
+  delete canvas.dataset.paperSnapshotLabels;
 
   const row = latestPhaseRows.length ? rowAtCurrentDisplayPosition(latestPhaseRows) : null;
   if (!row) {
@@ -10135,7 +11189,7 @@ function drawModelVisualization(): void {
   drawModelReferenceGuides(ctx, modelScaleRows, centerX, centerY, radiusScale);
 
   ctx.shadowColor = rgbCss(shellShadowColor, 0.65);
-  ctx.shadowBlur = 12 + luminosityLevel * 22;
+  ctx.shadowBlur = paperModeActive() ? 0 : 12 + luminosityLevel * 22;
   drawAnnularSegment(
     ctx,
     centerX,
@@ -10211,8 +11265,13 @@ function drawGridAnimationFrame(): void {
 }
 
 function startModelAnimationLoop(): void {
-  if (modelAnimationFrame) return;
+  if (paperModeActive() || modelAnimationFrame) return;
   const tick = (timestamp: number) => {
+    if (paperModeActive()) {
+      modelAnimationFrame = 0;
+      modelAnimationStartTime = null;
+      return;
+    }
     if (!document.hidden) {
       if (gridState.enabled) {
         modelAnimationStartTime = null;
@@ -10233,6 +11292,14 @@ function startModelAnimationLoop(): void {
     modelAnimationFrame = window.requestAnimationFrame(tick);
   };
   modelAnimationFrame = window.requestAnimationFrame(tick);
+}
+
+function stopModelAnimationLoop(): void {
+  if (modelAnimationFrame) {
+    window.cancelAnimationFrame(modelAnimationFrame);
+    modelAnimationFrame = 0;
+  }
+  modelAnimationStartTime = null;
 }
 
 function drawAll(): void {
@@ -10305,18 +11372,24 @@ function drawAll(): void {
     { label: "phase", value: displayWindow.mode === "time" ? "time window" : phase.reason === "ok" ? "available" : "unavailable" },
     ...stabilityMetricItems
   ];
-  const metricsHtml = metricItems
-    .map(({ label, value, className, stabilityKind, detail, formula }) => {
-      const stabilityAttribute = stabilityKind
-        ? ` data-stability-kind="${stabilityKind}" data-stability-expanded role="button" tabindex="0" aria-expanded="false"${formula ? ` data-stability-formula="${escapeAttribute(formula)}"` : ""}`
-        : "";
-      const ariaLabelPrefix = label || (stabilityKind ? s72ShortLabel(stabilityKind) : "");
-      const detailAttribute = detail
-        ? ` data-stability-detail="${escapeAttribute(detail)}" aria-label="${escapeAttribute(`${ariaLabelPrefix}: ${detail}`)}"`
-        : "";
-      return `<span class="metric${className ? ` ${className}` : ""}"${stabilityAttribute}${detailAttribute}>${label}<b>${value}</b></span>`;
-    })
-    .join("");
+  const renderMetric = ({ label, value, className, stabilityKind, detail, formula }: StatusMetricItem) => {
+    const stabilityAttribute = stabilityKind
+      ? ` data-stability-kind="${stabilityKind}" data-stability-expanded role="button" tabindex="0" aria-expanded="false"${formula ? ` data-stability-formula="${escapeAttribute(formula)}"` : ""}`
+      : "";
+    const ariaLabelPrefix = label || (stabilityKind ? s72ShortLabel(stabilityKind) : "");
+    const detailAttribute = detail
+      ? ` data-stability-detail="${escapeAttribute(detail)}" aria-label="${escapeAttribute(`${ariaLabelPrefix}: ${detail}`)}"`
+      : "";
+    return `<span class="metric${className ? ` ${className}` : ""}"${stabilityAttribute}${detailAttribute}>${label}<b>${value}</b></span>`;
+  };
+  const [statusSummary, ...statusItems] = metricItems;
+  const collapsibleStatusItems = statusItems.slice(0, statusItems.length - stabilityMetricItems.length);
+  const alwaysVisibleStatusItems = statusItems.slice(statusItems.length - stabilityMetricItems.length);
+  const metricsHtml = statusSummary
+    ? `<button type="button" class="metric status-summary-card${statusSummary.className ? ` ${statusSummary.className}` : ""}" data-status-summary aria-expanded="${String(statusMetricsExpanded)}" aria-controls="statusMetricDetails" aria-label="${statusMetricsExpanded ? "Hide" : "Show"} status details"><strong class="status-summary-label">${statusSummary.label}</strong><b>${statusSummary.value}</b><span class="status-disclosure-icon" aria-hidden="true"></span></button><div class="status-metric-details" id="statusMetricDetails"${statusMetricsExpanded ? "" : " hidden"}>${collapsibleStatusItems
+      .map(renderMetric)
+      .join("")}</div>${alwaysVisibleStatusItems.map(renderMetric).join("")}`
+    : "";
   stageMathHtml(metricsNode, metricsHtml);
   queueMathTypeset([metricsNode]);
 
@@ -10404,6 +11477,7 @@ function drawAll(): void {
 
 function startApp(): void {
   setupThemeToggle();
+  setupPaperModeControls();
   buildControls();
   solveAndDraw();
   startModelAnimationLoop();

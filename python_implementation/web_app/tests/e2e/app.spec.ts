@@ -1,4 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import { strFromU8, unzipSync } from "fflate";
 
 async function referencePanelMetrics(page: Page) {
   return page.evaluate(() => {
@@ -253,6 +255,7 @@ test("terminal runaway models use time windows instead of phase windows", async 
 
   await page.locator("#presetPanel summary").click();
   await page.getByRole("button", { name: "Instability-strip convection" }).click();
+  await page.locator("#integrationControlSection > summary").click();
   await page.locator("#initialControlSection > summary").click();
   await setSliderValue(page, "max time", "2");
   await setSliderValue(page, "initial radius", "1.9");
@@ -270,12 +273,12 @@ test("terminal runaway models use time windows instead of phase windows", async 
   expect(pageErrors).toEqual([]);
 });
 
-test("theme toggle switches between GitHub dark and light modes", async ({ page }) => {
+test("theme toggle cycles dark, light, paper, and persists paper mode", async ({ page }) => {
   await page.goto("/wizard_of_oz.html");
   await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
   const themeToggle = page.locator("#themeToggle");
   await expect(themeToggle).toBeVisible();
-  await expect(themeToggle).toHaveAttribute("aria-label", "Switch to light mode");
+  await expect(themeToggle).toHaveAttribute("aria-label", "Theme: dark. Switch to light mode");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   const themeButtonBox = await themeToggle.boundingBox();
   const viewport = page.viewportSize();
@@ -286,15 +289,123 @@ test("theme toggle switches between GitHub dark and light modes", async ({ page 
 
   await themeToggle.click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  await expect(themeToggle).toHaveAttribute("aria-label", "Switch to dark mode");
+  await expect(themeToggle).toHaveAttribute("aria-label", "Theme: light. Switch to paper mode");
   await expect.poll(async () => page.evaluate(() => getComputedStyle(document.body).backgroundColor))
     .toBe("rgb(246, 248, 250)");
 
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await themeToggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "paper");
+  await expect(themeToggle).toHaveAttribute("aria-label", "Theme: paper. Switch to dark mode");
+  await expect(page.locator("#paperModeBar")).toBeVisible();
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "paper");
+  await expect(page.locator("#paperModeBar")).toBeVisible();
+  await themeToggle.click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(themeToggle).toHaveAttribute("aria-label", "Switch to light mode");
+  await expect(themeToggle).toHaveAttribute("aria-label", "Theme: dark. Switch to light mode");
+});
+
+test("paper mode freezes scientific views and provides configurable static snapshots", async ({ page }) => {
+  await page.goto("/wizard_of_oz.html");
+  await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
+  const themeToggle = page.locator("#themeToggle");
+  await themeToggle.click();
+  await themeToggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "paper");
+
+  await expect(page.locator(".model-speed-control")).toBeHidden();
+  await expect(page.locator(".sonification-control")).toBeHidden();
+  await expect(page.locator("[data-plot-toggle='light']")).toBeVisible();
+  await expect(page.locator(".phase-anchor-control")).toBeVisible();
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-model-mode", "paper");
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-paper-snapshot-count", "4");
+  await expect(page.locator("#heatEngineCanvas")).toHaveAttribute("data-paper-snapshot-count", "4");
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-paper-snapshot-labels", /min light.*min V.*max light.*max V/);
+  await expect(page.locator("#paperAddEvent option")).toHaveText([
+    "+ event", "min light", "min V", "max light", "max V", "min Lr", "max Lr", "min Lc", "max Lc",
+    "min R", "max R", "min T", "max T"
+  ]);
+  await expect(page.locator("#lightCanvas")).not.toHaveAttribute("data-current-phase");
+  await expect(page.locator("#velocityCanvas")).not.toHaveAttribute("data-current-phase");
+  for (const canvas of ["#lightCanvas", "#velocityCanvas", "#timeCanvas", "#lumCanvas"]) {
+    await expect(page.locator(canvas)).toHaveAttribute("data-paper-series-markers", "off");
+  }
+
+  const before = await page.locator("#modelCanvas").evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL());
+  await page.waitForTimeout(250);
+  const after = await page.locator("#modelCanvas").evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL());
+  expect(after).toBe(before);
+
+  await page.locator("#paperAddEvent").selectOption("maxR");
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-paper-snapshot-count", "5");
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-paper-snapshot-labels", /max R/);
+  await page.locator("#paperAddPhase").click();
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-paper-snapshot-count", "6");
+  await page.locator("#paperQuarterPreset").click();
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-paper-snapshot-labels", /phase 0\.00.*phase 0\.25.*phase 0\.50.*phase 0\.75/);
+  await page.locator(".paper-phase-chip button").first().click();
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-paper-snapshot-count", "3");
+
+  await page.setViewportSize({ width: 390, height: 900 });
+  await expect(page.locator("#modelCanvas")).toHaveAttribute("data-paper-snapshot-columns", "1");
+  await expect(page.locator("#heatEngineCanvas")).toHaveAttribute("data-paper-snapshot-columns", "1");
+});
+
+test("paper export creates an atomic vector and 600-dpi bundle for visible panels", async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.goto("/wizard_of_oz.html");
+  await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
+  await page.locator("[data-plot-toggle]").evaluateAll((inputs) => {
+    inputs.forEach((node) => {
+      const input = node as HTMLInputElement;
+      if (input.dataset.plotToggle !== "periodogram" && input.checked && !input.disabled) input.click();
+    });
+  });
+  await expect(page.locator("[data-plot-panel='periodogram']")).toBeVisible();
+  await expect(page.locator("#plotGrid .plot-panel:visible")).toHaveCount(1);
+  await page.locator("#themeToggle").click();
+  await page.locator("#themeToggle").click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "paper");
+
+  const downloadPromise = page.waitForEvent("download", { timeout: 150_000 });
+  await page.locator("#paperExportBundle").click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^ozwizard-paper-\d{8}T\d{6}Z\.zip$/);
+  const path = await download.path();
+  expect(path).not.toBeNull();
+  const archive = unzipSync(new Uint8Array(await readFile(path!)));
+  const names = Object.keys(archive).sort();
+  for (const required of [
+    "README.txt", "manifest.json", "aastex-snippets.tex", "reproduce.py", "requirements.txt",
+    "data/01-periodogram.csv",
+    "figures/01-periodogram-single.pdf", "figures/01-periodogram-single.svg", "figures/01-periodogram-single.png",
+    "figures/01-periodogram-double.pdf", "figures/01-periodogram-double.svg", "figures/01-periodogram-double.png"
+  ]) expect(names).toContain(required);
+
+  const manifest = JSON.parse(strFromU8(archive["manifest.json"]));
+  expect(manifest.schemaVersion).toBe(1);
+  expect(manifest.application.version).toBe("1.0.0");
+  expect(manifest.application.sourceCommit).toMatch(/^[0-9a-f]+$|^unknown$/);
+  expect(manifest.panels.map((panel: { id: string }) => panel.id)).toEqual(["periodogram"]);
+  expect(manifest.panels[0].metadata.units.periodogramFrequency).toBe("tau^-1");
+  expect(strFromU8(archive["data/01-periodogram.csv"])).toContain("frequency_unit,period,period_unit,power,power_unit");
+  expect(strFromU8(archive["requirements.txt"])).toBe("matplotlib==3.10.5\n");
+
+  const singleSvg = strFromU8(archive["figures/01-periodogram-single.svg"]);
+  expect(singleSvg).toContain("<text");
+  expect(singleSvg).toMatch(/<path|<line/);
+  expect(singleSvg).not.toContain("<image");
+  const singlePdf = strFromU8(archive["figures/01-periodogram-single.pdf"]);
+  expect(singlePdf.match(/\/Type\s*\/Page\b/g)).toHaveLength(1);
+  const doublePdf = strFromU8(archive["figures/01-periodogram-double.pdf"]);
+  expect(doublePdf.match(/\/Type\s*\/Page\b/g)).toHaveLength(1);
+  const singlePng = Buffer.from(archive["figures/01-periodogram-single.png"]);
+  const doublePng = Buffer.from(archive["figures/01-periodogram-double.png"]);
+  expect(singlePng.readUInt32BE(16)).toBe(2040);
+  expect(doublePng.readUInt32BE(16)).toBe(4260);
 });
 
 test("grid mode falls back when workers are blocked", async ({ page }) => {
@@ -330,6 +441,7 @@ test("grid mode falls back when workers are blocked", async ({ page }) => {
 });
 
 test("app renders solver controls, canvases, and output metrics", async ({ page }) => {
+  test.setTimeout(180_000);
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto("/wizard_of_oz.html");
@@ -489,14 +601,14 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
       };
     }),
   );
-  expect(sectionActionLayouts.map((layout) => layout?.label)).toEqual(["Physical Parameters", "Integration", "Convective Driver", "Phase Window"]);
+  expect(sectionActionLayouts.map((layout) => layout?.label)).toEqual(["Physical Parameters", "Integration", "Phase Window", "Convective Driver"]);
   for (const layout of sectionActionLayouts) {
     expect(layout).not.toBeNull();
     expect(layout!.actionsCenterY).toBe(layout!.labelCenterY);
     expect(Math.max(...layout!.buttonHeights)).toBeLessThanOrEqual(30);
   }
   await expect(page.locator("#physicalControlSection")).toHaveAttribute("open", "");
-  await expect(page.locator("#integrationControlSection")).toHaveAttribute("open", "");
+  await expect(page.locator("#integrationControlSection")).not.toHaveAttribute("open", "");
   await expect(page.locator("#initialControlSection")).not.toHaveAttribute("open", "");
   await expect(page.locator("#initialControls")).toBeHidden();
   await expect(page.locator("#presetButtons")).not.toBeVisible();
@@ -518,6 +630,8 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await page.locator("#initialControlSection > summary").click();
   await expect(page.locator("#initialControlSection")).toHaveAttribute("open", "");
   await expect(page.locator("#initialControls")).toBeVisible();
+  await page.locator("#integrationControlSection > summary").click();
+  await expect(page.locator("#integrationControlSection")).toHaveAttribute("open", "");
   await expect(page.locator("#runUntilStable")).toBeChecked();
   const integrationControl = (name: string) => page.locator(`#integrationControls .slider-control:visible input[aria-label="${name}"]`);
   await expect(integrationControl("relative tol")).toHaveCount(1);
@@ -683,7 +797,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await pulsationalChip.click();
   await page.setViewportSize({ width: 1280, height: 720 });
   await expect(page.getByRole("heading", { name: "Lightcurve" })).toBeVisible();
-  await expect(page.locator("[data-plot-panel='light'] .plot-title #phaseAnnotationToggleLabel")).toContainText("Annotations");
+  await expect(page.locator("[data-plot-panel='light'] .plot-title #phaseAnnotationToggleLabel")).toContainText("annotations");
   await expect(page.locator("[data-plot-panel='velocity'] .phase-anchor-control")).toContainText("phase to");
   await expect(page.getByRole("button", { name: "min light" })).toHaveClass(/active/);
   await expect(page.getByRole("button", { name: "min light" })).toHaveAttribute("aria-pressed", "true");
@@ -732,7 +846,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     slider.value = "1";
     slider.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  await expect(visibleCanvases).toHaveCount(11);
+  await expect(visibleCanvases).toHaveCount(12);
   const modelBox = await page.locator("#modelCanvas").boundingBox();
   const modelPanelBox = await page.locator("[data-plot-panel='model']").boundingBox();
   const lightBox = await page.locator("#lightCanvas").boundingBox();
@@ -751,6 +865,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(lightYlim[1]).toBeGreaterThanOrEqual(1.01);
   expect(velocityYlim[0]).toBeLessThanOrEqual(-0.01);
   expect(velocityYlim[1]).toBeGreaterThanOrEqual(0.01);
+  await page.locator("#lightCanvas").scrollIntoViewIfNeeded();
   const lightHoverTarget = await page.locator("#lightCanvas").evaluate((canvas) => {
     const rect = canvas.getBoundingClientRect();
     const plotLeft = 84;
@@ -767,6 +882,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   const lightHoverPhase = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
   expect(lightHoverPhase).toBeGreaterThan(0.64);
   expect(lightHoverPhase).toBeLessThan(0.76);
+  await page.locator("#velocityCanvas").scrollIntoViewIfNeeded();
   const velocityHoverTarget = await page.locator("#velocityCanvas").evaluate((canvas) => {
     const rect = canvas.getBoundingClientRect();
     const plotLeft = 84;
@@ -934,6 +1050,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   const zetaSlider = page.getByRole("slider", { name: "thermal response" });
   const zetacSlider = page.getByRole("slider", { name: "convective response" });
   const gammacSlider = page.getByRole("slider", { name: "convective flux fraction" });
+  await page.locator("#stabilityMapCanvas").scrollIntoViewIfNeeded();
   const stabilityMapBox = await page.locator("#stabilityMapCanvas").boundingBox();
   expect(stabilityMapBox).not.toBeNull();
   await page.mouse.click(
@@ -946,6 +1063,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("[data-value-for='zeta']")).toHaveText("10");
   await expect.poll(async () => page.locator("#cepheidGuideCanvas").getAttribute("data-instability-signature"))
     .not.toBe(initialStripSignature);
+  await page.locator("#cepheidGuideCanvas").scrollIntoViewIfNeeded();
   const stripBox = await page.locator("#cepheidGuideCanvas").boundingBox();
   expect(stripBox).not.toBeNull();
   await page.mouse.move(stripBox!.x + 64 + (stripBox!.width - 90) * 0.25, stripBox!.y + 28 + (stripBox!.height - 88) * 0.35);
@@ -1200,6 +1318,26 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#fourierCanvas")).not.toHaveAttribute("data-fourier-adiabatic-reference");
   await expect(page.locator("#fourierCanvas")).toHaveAttribute("data-fourier-path-count", /[2-9]\d*/);
 
+  const gridThemeToggle = page.locator("#themeToggle");
+  await gridThemeToggle.click();
+  await gridThemeToggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "paper");
+  await expect(page.locator(".grid-loop-speed-control")).toBeHidden();
+  await expect(page.locator("[data-control-key='gammac'] [data-grid-loop-marker]")).toBeHidden();
+  await expect(page.locator("#lightCanvas")).toHaveAttribute("data-grid-colorbar", "ready");
+  await expect(page.locator("#lightCanvas")).not.toHaveAttribute("data-grid-colorbar-hit");
+  await expect(page.locator("#tpOpacityCanvas")).toHaveAttribute("data-grid-colorbar", "ready");
+  await expect(page.locator("#tpOpacityCanvas")).not.toHaveAttribute("data-grid-colorbar-hit");
+  await expect(page.locator("#fourierCanvas")).not.toHaveAttribute("data-grid-colorbar-hit");
+  await expect(page.locator("#lightCanvas")).not.toHaveAttribute("data-current-phase");
+  await page.waitForTimeout(250);
+  const staticGridBefore = await page.locator("#lightCanvas").evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL());
+  await page.waitForTimeout(240);
+  const staticGridAfter = await page.locator("#lightCanvas").evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL());
+  expect(staticGridAfter).toBe(staticGridBefore);
+  await gridThemeToggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
   await page.locator("#lightCanvas").scrollIntoViewIfNeeded();
   const lightColorbarHitHandle = await page.waitForFunction(
     () => document.querySelector("#lightCanvas")?.getAttribute("data-grid-colorbar-hit") || "",
@@ -1243,11 +1381,11 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#lightLegend")).toHaveCount(0);
   await expect(page.locator("#velocityLegend")).toHaveCount(0);
   await expect(page.locator("#phaseLegend")).toHaveCount(0);
-  await expect(page.getByLabel("Annotations")).not.toBeChecked();
+  await expect(page.getByLabel("annotations")).not.toBeChecked();
   await expect(page.locator("#phaseAnnotationLegendItems")).toBeHidden();
   await expect(page.locator("#lightCanvas")).toHaveAttribute("data-annotations", "off");
-  await page.getByLabel("Annotations").check();
-  await expect(page.getByLabel("Annotations")).toBeChecked();
+  await page.getByLabel("annotations").check();
+  await expect(page.getByLabel("annotations")).toBeChecked();
   await expect(page.locator("#phaseAnnotationLegendItems")).toBeVisible();
   await expect(page.locator("#lightCanvas")).toHaveAttribute("data-annotations", "on");
   await expect(page.locator("#phaseAnnotationLegendItems .annotation-symbol-item")).toHaveText([
@@ -1282,7 +1420,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     .toBe(16);
   await expect.poll(async () => Number(await page.locator("#velocityCanvas").getAttribute("data-annotation-count") || "0"))
     .toBe(16);
-  await page.getByLabel("Annotations").uncheck();
+  await page.getByLabel("annotations").uncheck();
   await expect(page.locator("#phaseAnnotationLegendItems")).toBeHidden();
   await expect(page.locator("#lightCanvas")).toHaveAttribute("data-annotations", "off");
   const tauCell = page.locator("[data-symbol='tau']").first();
@@ -1342,6 +1480,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#derivationPanel")).toHaveAttribute("data-driver-mode", "h");
   await expect(page.locator("#derivationPanel")).toHaveAttribute("data-convection-mode", "time-dependent");
   await expect(page.locator("#derivationContent [data-derivation-block]")).toHaveCount(6);
+  await page.locator("#derivationPanel").evaluate((node) => { (node as HTMLDetailsElement).open = true; });
   await expect(page.locator("[data-derivation-block='opacity']")).toBeVisible();
   await expect(page.locator("[data-derivation-block='equilibrium']")).toBeVisible();
   await expect(page.locator("[data-derivation-block='linear']")).toBeVisible();

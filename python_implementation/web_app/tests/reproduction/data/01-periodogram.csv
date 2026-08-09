@@ -1,0 +1,6 @@
+frequency,frequency_unit,period,period_unit,power,power_unit
+0.1,tau^-1,10,tau,0.01,(delta_L/L0)^2
+0.25,tau^-1,4,tau,0.08,(delta_L/L0)^2
+0.5,tau^-1,2,tau,0.45,(delta_L/L0)^2
+0.75,tau^-1,1.333333333,tau,0.12,(delta_L/L0)^2
+1.0,tau^-1,1,tau,0.03,(delta_L/L0)^2
