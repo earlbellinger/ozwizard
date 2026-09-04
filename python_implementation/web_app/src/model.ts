@@ -1,4 +1,5 @@
 import { type OdeResult, type SolverName, type SolverOptions, defaultSolverOptions, integrate } from "./solvers";
+import { findLuminosityMaxima, guidedMinSeparationFromPeriod } from "./phase";
 
 export type Driver = "h" | "abs-v";
 export type ReferenceFamily = "baker" | "stellingwerf-1986" | "stellingwerf-1987" | "local-s-tran" | "diagnostic";
@@ -226,6 +227,20 @@ const overtoneBase = {
 };
 
 export const DEFAULT_PRESET_NAME = "RR Lyrae low-amplitude fundamental, damped";
+export const HERTZSPRUNG_PROGRESSION_PRESET_NAME = "Hertzsprung progression";
+
+const defaultPresetParameters: ModelParameters = {
+  ...overtoneBase,
+  phaseWarmupTau: 40,
+  zetac: 1,
+  gammac: 0.5,
+  m: 10,
+  sourceExp: -2,
+  cq: 5,
+  r0: 1.1,
+  tEnd: 300,
+  runUntilStable: true
+};
 
 export const PRESETS: Record<string, ModelParameters> = {
   "Baker radiative pulsator": { ...presetBase, referenceFamily: "baker", phaseWarmupTau: 4, zeta: 1, zetac: 0, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 0, tEnd: 24, step: 0.001, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
@@ -237,7 +252,8 @@ export const PRESETS: Record<string, ModelParameters> = {
   "Thick convective shell": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 0.001, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
   "RR Lyrae fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.2 },
   "RR Lyrae low-amplitude fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.1 },
-  "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, zetac: 1, gammac: 0.5, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 300, runUntilStable: true },
+  [DEFAULT_PRESET_NAME]: defaultPresetParameters,
+  [HERTZSPRUNG_PROGRESSION_PRESET_NAME]: { ...defaultPresetParameters },
   "RR Lyrae first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.05 },
   "RR Lyrae first overtone, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 15, sourceExp: 2, cq: 7, r0: 1.05, tEnd: 80 },
   "RR Lyrae high-amplitude first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.1 },
@@ -324,15 +340,16 @@ export function solverOptionsFromParameters(p: ModelParameters, solver = p.solve
 
 type StableStatus = "equilibrium" | "limit_cycle";
 
-class StabilityDetector {
+export class StabilityDetector {
   private readonly rows: Row[] = [];
-  private readonly peakIndices: number[] = [];
+  private readonly peaks: { index: number; row: Row }[] = [];
 
   constructor(
     private readonly tolerance: number,
     private readonly stableCycles: number,
     private readonly minTime = 2,
-    private readonly equilibriumWindow = 1.5
+    private readonly equilibriumWindow = 1.5,
+    private readonly periodPrior?: number | null
   ) {}
 
   observe(row: Row): StableStatus | null {
@@ -346,18 +363,23 @@ class StabilityDetector {
 
   private captureLuminosityPeak(): void {
     if (this.rows.length < 3) return;
-    const prev = this.rows[this.rows.length - 3];
-    const peak = this.rows[this.rows.length - 2];
-    const current = this.rows[this.rows.length - 1];
-    if (peak.tau < this.minTime) return;
-    if (prev.L < peak.L && peak.L >= current.L) {
-      const previousPeakIndex = this.peakIndices.at(-1);
-      if (previousPeakIndex !== undefined && peak.tau - this.rows[previousPeakIndex].tau < 0.05) {
-        if (peak.L > this.rows[previousPeakIndex].L) this.peakIndices[this.peakIndices.length - 1] = this.rows.length - 2;
-      } else {
-        this.peakIndices.push(this.rows.length - 2);
-      }
+    // Use the same sub-sample peak timing and shoulder separation as phase extraction.
+    const peak = findLuminosityMaxima(this.rows.slice(-3), this.minTime)[0];
+    if (!peak) return;
+    const candidate = {
+      index: this.rows.length - 2,
+      row: { ...interpolateRow(this.rows, peak.tau)!, L: peak.L }
+    };
+    const previousPeak = this.peaks.at(-1);
+    if (previousPeak && peak.tau - previousPeak.row.tau < this.minimumPeakSeparation()) {
+      if (peak.L > previousPeak.row.L) this.peaks[this.peaks.length - 1] = candidate;
+    } else {
+      this.peaks.push(candidate);
     }
+  }
+
+  private minimumPeakSeparation(): number {
+    return guidedMinSeparationFromPeriod(this.rows, this.periodPrior) ?? 0.75;
   }
 
   private isEquilibrium(): boolean {
@@ -378,23 +400,30 @@ class StabilityDetector {
 
   private isLimitCycle(): boolean {
     const neededPeaks = this.stableCycles + 1;
-    if (this.peakIndices.length < neededPeaks) return false;
-    const peaks = this.peakIndices.slice(-neededPeaks);
+    if (this.peaks.length < neededPeaks) return false;
+    // A later, higher maximum may still replace the latest shoulder in its group.
+    if (this.rows.at(-1)!.tau - this.peaks.at(-1)!.row.tau < this.minimumPeakSeparation()) return false;
+    const peaks = this.peaks.slice(-neededPeaks);
     const periods: number[] = [];
     const amplitudes: number[] = [];
     const peakLuminosities: number[] = [];
     for (let i = 0; i < peaks.length - 1; i += 1) {
       const left = peaks[i];
       const right = peaks[i + 1];
-      periods.push(this.rows[right].tau - this.rows[left].tau);
-      const cycle = this.rows.slice(left, right + 1);
+      periods.push(right.row.tau - left.row.tau);
+      const cycle = this.rows.slice(left.index, right.index + 1);
       const lum = cycle.map((row) => row.L);
-      amplitudes.push(Math.max(...lum) - Math.min(...lum));
-      peakLuminosities.push(this.rows[right].L);
+      amplitudes.push(Math.max(left.row.L, right.row.L, ...lum) - Math.min(...lum));
+      peakLuminosities.push(right.row.L);
     }
     return this.relativeSpreadOk(periods)
       && this.relativeSpreadOk(amplitudes)
-      && this.relativeSpreadOk(peakLuminosities);
+      && this.relativeSpreadOk(peakLuminosities)
+      && (["R", "V", "H", "Uc"] as const).every((key) => {
+        const values = peaks.map((peak) => peak.row[key]);
+        const scale = Math.max(1, ...values.map(Math.abs));
+        return (Math.max(...values) - Math.min(...values)) / scale <= this.tolerance;
+      });
   }
 
   private relativeSpreadOk(values: number[]): boolean {
@@ -406,7 +435,7 @@ class StabilityDetector {
 
 export function solveModel(p: ModelParameters, solver = p.solver): SolveResult {
   const stabilityMinTime = Math.max(2, p.phaseWarmupTau ?? 2);
-  const detector = new StabilityDetector(10 ** p.logStabilityTol, p.stableCycles, stabilityMinTime);
+  const detector = new StabilityDetector(10 ** p.logStabilityTol, p.stableCycles, stabilityMinTime, 1.5, linearDynamicPeriod(p));
   detector.observe(sample(0, [p.r0, p.v0, p.h0, p.uc0], p));
   const result = integrate(
     (t, y) => derivatives(t, y, p),

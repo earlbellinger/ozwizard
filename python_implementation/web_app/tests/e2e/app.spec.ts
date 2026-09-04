@@ -1,5 +1,5 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
 
 async function referencePanelMetrics(page: Page) {
@@ -279,6 +279,7 @@ test("theme toggle cycles dark, light, paper, and persists paper mode", async ({
   const themeToggle = page.locator("#themeToggle");
   await expect(themeToggle).toBeVisible();
   await expect(themeToggle).toHaveAttribute("aria-label", "Theme: dark. Switch to light mode");
+  await expect(themeToggle).toHaveCSS("position", "absolute");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   const themeButtonBox = await themeToggle.boundingBox();
   const viewport = page.viewportSize();
@@ -286,6 +287,13 @@ test("theme toggle cycles dark, light, paper, and persists paper mode", async ({
   expect(viewport).not.toBeNull();
   expect(themeButtonBox!.x + themeButtonBox!.width).toBeLessThanOrEqual(viewport!.width - 8);
   expect(themeButtonBox!.y).toBeLessThanOrEqual(16);
+  await page.evaluate(() => window.scrollTo(0, 900));
+  await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  const scrolledThemeButtonBox = await themeToggle.boundingBox();
+  expect(scrolledThemeButtonBox).not.toBeNull();
+  expect(Math.round(scrolledThemeButtonBox!.x)).toBe(Math.round(themeButtonBox!.x));
+  expect(scrolledThemeButtonBox!.y).toBeLessThan(themeButtonBox!.y - 100);
+  await page.evaluate(() => window.scrollTo(0, 0));
 
   await themeToggle.click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
@@ -386,26 +394,141 @@ test("paper export creates an atomic vector and 600-dpi bundle for visible panel
   ]) expect(names).toContain(required);
 
   const manifest = JSON.parse(strFromU8(archive["manifest.json"]));
-  expect(manifest.schemaVersion).toBe(1);
+  expect(manifest.schemaVersion).toBe(2);
   expect(manifest.application.version).toBe("1.0.0");
   expect(manifest.application.sourceCommit).toMatch(/^[0-9a-f]+$|^unknown$/);
   expect(manifest.panels.map((panel: { id: string }) => panel.id)).toEqual(["periodogram"]);
+  expect(manifest.provenance.schema).toBe("ozwizard-paper-provenance-v2");
+  expect(manifest.provenance.integration).toMatchObject({
+    requestedEndTau: expect.any(Number),
+    actualEndTau: expect.any(Number),
+    stop: { status: expect.any(String), message: expect.any(String) }
+  });
+  expect(manifest.panels[0].renderings).toEqual([
+    expect.objectContaining({ size: "single", widthInches: 3.4, heightInches: expect.any(Number) }),
+    expect.objectContaining({ size: "double", widthInches: 7.1, heightInches: expect.any(Number) })
+  ]);
   expect(manifest.panels[0].metadata.units.periodogramFrequency).toBe("tau^-1");
   expect(strFromU8(archive["data/01-periodogram.csv"])).toContain("frequency_unit,period,period_unit,power,power_unit");
   expect(strFromU8(archive["requirements.txt"])).toBe("matplotlib==3.10.5\n");
 
   const singleSvg = strFromU8(archive["figures/01-periodogram-single.svg"]);
+  expect(singleSvg).toMatch(/viewBox="0 0 \d+(?:\.\d+)? \d+(?:\.\d+)?"/);
   expect(singleSvg).toContain("<text");
+  expect(singleSvg).toContain('font-family="DejaVuSans"');
+  expect(singleSvg).toContain("@font-face{font-family:DejaVuSans");
+  expect(singleSvg).toContain("data:font/ttf;base64,");
   expect(singleSvg).toMatch(/<path|<line/);
   expect(singleSvg).not.toContain("<image");
   const singlePdf = strFromU8(archive["figures/01-periodogram-single.pdf"]);
   expect(singlePdf.match(/\/Type\s*\/Page\b/g)).toHaveLength(1);
+  expect(singlePdf).not.toContain("/Subtype /Image");
+  expect(singlePdf).toContain("/FontFile2");
+  expect(singlePdf).toContain("/Encoding /Identity-H");
+  expect(singlePdf).toContain("/BaseFont /DejaVuSans");
+  expect(singlePdf).not.toContain("/BaseFont /Helvetica");
   const doublePdf = strFromU8(archive["figures/01-periodogram-double.pdf"]);
   expect(doublePdf.match(/\/Type\s*\/Page\b/g)).toHaveLength(1);
   const singlePng = Buffer.from(archive["figures/01-periodogram-single.png"]);
   const doublePng = Buffer.from(archive["figures/01-periodogram-double.png"]);
   expect(singlePng.readUInt32BE(16)).toBe(2040);
   expect(doublePng.readUInt32BE(16)).toBe(4260);
+});
+
+test("paper export preserves the full 2x2 snapshot canvas at device scale factor two", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 900 },
+    deviceScaleFactor: 2,
+    acceptDownloads: true
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto("/wizard_of_oz.html");
+    await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
+    await page.locator("[data-plot-toggle]").evaluateAll((inputs) => {
+      inputs.forEach((node) => {
+        const input = node as HTMLInputElement;
+        if (input.dataset.plotToggle !== "model" && input.checked && !input.disabled) input.click();
+      });
+    });
+    await page.locator("#themeToggle").click();
+    await page.locator("#themeToggle").click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "paper");
+    await page.locator("#paperQuarterPreset").click();
+    await expect(page.locator("#modelCanvas")).toHaveAttribute("data-paper-snapshot-count", "4");
+
+    const downloadPromise = page.waitForEvent("download", { timeout: 150_000 });
+    await page.locator("#paperExportBundle").click();
+    const download = await downloadPromise;
+    const path = await download.path();
+    expect(path).not.toBeNull();
+    const archive = unzipSync(new Uint8Array(await readFile(path!)));
+    const svg = strFromU8(archive["figures/01-model-double.svg"]);
+    const viewBox = svg.match(/viewBox="([^"]+)"/)?.[1].split(/[\s,]+/).map(Number);
+    expect(viewBox).toEqual([0, 0, 1840, 984]);
+    expect(svg).toContain('width="7.1in"');
+    expect(svg).toContain(`height="${7.1 * 492 / 920}in"`);
+    expect(svg).toMatch(/phase 0\.00/);
+    expect(svg).toMatch(/phase 0\.75/);
+    await expect(page.locator("#modelCanvas")).toHaveAttribute("data-paper-snapshot-columns", "2");
+
+    const pdf = strFromU8(archive["figures/01-model-double.pdf"]);
+    expect(pdf.match(/\/Type\s*\/Page\b/g)).toHaveLength(1);
+  const png = Buffer.from(archive["figures/01-model-double.png"]);
+    expect(png.readUInt32BE(16)).toBe(4260);
+    expect(png.readUInt32BE(20)).toBe(Math.round((7.1 * 492 / 920) * 600));
+    expect(strFromU8(archive["licenses/DejaVu-fonts.txt"])).toContain("Bitstream Vera Fonts Copyright");
+  } finally {
+    await context.close();
+  }
+});
+
+test("paper luminosity export archives one minimum-light-anchored L/Lr/Lc cycle", async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.goto("/wizard_of_oz.html");
+  await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
+  await page.locator("[data-plot-toggle]").evaluateAll((inputs) => {
+    inputs.forEach((node) => {
+      const input = node as HTMLInputElement;
+      if (input.dataset.plotToggle !== "lum" && input.checked && !input.disabled) input.click();
+    });
+  });
+  await page.locator("#themeToggle").click();
+  await page.locator("#themeToggle").click();
+  const downloadPromise = page.waitForEvent("download", { timeout: 150_000 });
+  await page.locator("#paperExportBundle").click();
+  const path = await (await downloadPromise).path();
+  expect(path).not.toBeNull();
+  const archive = unzipSync(new Uint8Array(await readFile(path!)));
+  const csv = strFromU8(archive["data/01-lum.csv"]).trim().split(/\r?\n/);
+  expect(csv[0]).toBe("phase,phase_unit,L,Lr,Lc");
+  expect(Number(csv[1].split(",")[0])).toBe(0);
+  expect(Number(csv.at(-1)!.split(",")[0])).toBe(1);
+  for (const endpoint of [csv[1], csv.at(-1)!]) {
+    const [, , L, Lr, Lc] = endpoint.split(",").map(Number);
+    expect(L).toBeCloseTo(Lr + Lc, 14);
+  }
+  const manifest = JSON.parse(strFromU8(archive["manifest.json"]));
+  expect(manifest.panels[0]).toMatchObject({
+    id: "lum",
+    metadata: {
+      axisLimits: { x: [0, 1] },
+      axes: { x: { label: "phase", scale: "linear", dataColumn: "phase" } },
+      seriesStyling: [
+        { series: "L", color: "#D55E00", marker: "none" },
+        { series: "Lr", color: "#56B4E9", marker: "none" },
+        { series: "Lc", color: "#009E73", marker: "none" }
+      ]
+    }
+  });
+  expect(manifest.provenance.phase.exportedLuminosityCycle).toMatchObject({
+    anchor: "minimum luminosity",
+    endpointState: "interpolated phase-anchor state with L=Lr+Lc",
+    lowerPhase: 0,
+    upperPhase: 1,
+    endpointIncluded: true
+  });
 });
 
 test("grid mode falls back when workers are blocked", async ({ page }) => {
@@ -437,6 +560,134 @@ test("grid mode falls back when workers are blocked", async ({ page }) => {
   });
   await expect(page.locator("#gridStatusText")).toContainText("Grid complete", { timeout: 15000 });
   await expect(page.locator("#gridStatusText")).not.toContainText("unavailable");
+  expect(pageErrors).toEqual([]);
+});
+
+test("local presets can be saved, reloaded, and removed", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/wizard_of_oz.html");
+  await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
+  await page.locator("#presetPanel summary").click();
+  await setSliderValue(page, "convective flux fraction", "0.33");
+
+  page.once("dialog", async (dialog) => {
+    expect(dialog.type()).toBe("prompt");
+    await dialog.accept("E2E local preset");
+  });
+  await page.getByRole("button", { name: "Save current" }).click();
+  await expect(page.locator("#presetSummaryLabel")).toContainText("E2E local preset");
+  await expect(page.getByRole("button", { name: "E2E local preset" })).toBeVisible();
+
+  await page.reload();
+  await expect(page.locator("#presetSummaryLabel")).toContainText("RR Lyrae low-amplitude fundamental, damped");
+  await page.locator("#presetPanel summary").click();
+  await page.getByRole("button", { name: "E2E local preset" }).click();
+  await expect(page.locator("[data-value-for='gammac']")).toHaveText("0.33");
+  await expect(page.getByRole("button", { name: "Remove local" })).toBeEnabled();
+  await page.getByRole("button", { name: "Remove local" }).click();
+  await expect(page.getByRole("button", { name: "E2E local preset" })).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+});
+
+test("inlist editor applies parameter text and grid ranges", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/wizard_of_oz.html");
+  await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
+  await page.locator("#presetPanel summary").click();
+  await page.getByRole("button", { name: "Edit inlist" }).click();
+  await expect(page.locator("#inlistDialog")).toBeVisible();
+  await expect(page.locator("#inlistText")).toHaveValue(/&solver/);
+  await page.locator("#inlistText").fill(`
+&preset
+  name = 'Text grid'
+/
+&controls
+  gammac = 0.25
+/
+&solver
+  tEnd = 2
+  runUntilStable = .false.
+/
+&grid
+  enabled = .true.
+  loop_key = 'gammac'
+  budget_mode = 'models'
+  max_models = 5
+/
+&grid_range
+  key = 'gammac'
+  lower = 0.20
+  upper = 0.30
+  center = 0.25
+/
+`);
+  await page.getByRole("button", { name: "Apply" }).click();
+  await expect(page.locator("#inlistDialog")).toBeHidden();
+  await expect(page.getByLabel("Enable grid mode")).toBeChecked();
+  await expect(page.getByRole("slider", { name: "convective flux fraction", exact: true })).toHaveValue("0.25");
+  await expect(page.getByLabel("convective flux fraction grid lower bound")).toHaveValue("0.2");
+  await expect(page.getByLabel("convective flux fraction grid upper bound")).toHaveValue("0.3");
+  await expect(page.locator("#gridStatusText")).toContainText("Grid complete", { timeout: 15000 });
+  expect(pageErrors).toEqual([]);
+});
+
+test("preset bundles can be imported and exported", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/wizard_of_oz.html");
+  await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
+  await page.locator("#presetPanel summary").click();
+  await page.setInputFiles("#importPresetFile", {
+    name: "imported-presets.inlist",
+    mimeType: "text/plain",
+    buffer: Buffer.from(`
+&preset
+  name = 'Imported e2e'
+/
+&controls
+  gammac = 0.44
+/
+&solver
+  tEnd = 2
+  runUntilStable = .false.
+/
+`)
+  });
+  await expect(page.getByRole("button", { name: "Imported e2e" })).toBeVisible();
+  await expect(page.locator("[data-value-for='gammac']")).toHaveText("0.44");
+
+  await page.getByRole("button", { name: "Export" }).click();
+  await expect(page.locator("#exportPresetDialog")).toBeVisible();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#downloadPresetExport").click()
+  ]);
+  const path = await download.path();
+  expect(path).toBeTruthy();
+  const exported = await readFile(path!, "utf8");
+  expect(exported).toContain("&preset");
+  expect(exported).toContain("&solver");
+  expect(exported).toContain("name = 'Imported e2e'");
+  expect(exported).toContain("gammac = 0.44");
+  expect(pageErrors).toEqual([]);
+});
+
+test("Hertzsprung progression preset enables the full gamma_c sweep", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/wizard_of_oz.html");
+  await expect(page.getByRole("heading", { name: "OZwizard" })).toBeVisible();
+  await page.locator("#presetPanel summary").click();
+  await page.getByRole("button", { name: "Hertzsprung progression" }).click();
+
+  await expect(page.locator("#presetSummaryLabel")).toContainText("Hertzsprung progression");
+  await expect(page.getByLabel("Enable grid mode")).toBeChecked();
+  await expect(page.getByLabel("Use num grid models budget")).toBeChecked();
+  await expect(page.locator("#gridModelBudget")).toHaveValue("57");
+  await expect(page.getByLabel("convective flux fraction grid lower bound")).toHaveValue("0.01");
+  await expect(page.getByLabel("convective flux fraction grid upper bound")).toHaveValue("0.57");
   expect(pageErrors).toEqual([]);
 });
 
@@ -873,11 +1124,11 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     const plotTop = 18;
     const plotBottom = 72;
     return {
-      x: rect.left + plotLeft + (rect.width - plotLeft - plotRight) * 0.35,
-      y: rect.top + plotTop + (rect.height - plotTop - plotBottom) * 0.5
+      x: plotLeft + (rect.width - plotLeft - plotRight) * 0.35,
+      y: plotTop + (rect.height - plotTop - plotBottom) * 0.5
     };
   });
-  await page.mouse.move(lightHoverTarget.x, lightHoverTarget.y);
+  await page.locator("#lightCanvas").hover({ position: lightHoverTarget });
   await expect(page.locator("#lightCanvas")).toHaveAttribute("data-phase-hovering", "true");
   const lightHoverPhase = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
   expect(lightHoverPhase).toBeGreaterThan(0.64);
@@ -890,11 +1141,11 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     const plotTop = 18;
     const plotBottom = 72;
     return {
-      x: rect.left + plotLeft + (rect.width - plotLeft - plotRight) * 0.75,
-      y: rect.top + plotTop + (rect.height - plotTop - plotBottom) * 0.5
+      x: plotLeft + (rect.width - plotLeft - plotRight) * 0.75,
+      y: plotTop + (rect.height - plotTop - plotBottom) * 0.5
     };
   });
-  await page.mouse.move(velocityHoverTarget.x, velocityHoverTarget.y);
+  await page.locator("#velocityCanvas").hover({ position: velocityHoverTarget });
   await expect(page.locator("#velocityCanvas")).toHaveAttribute("data-phase-hovering", "true");
   const velocityHoverPhase = Number(await page.locator("#velocityCanvas").getAttribute("data-current-phase"));
   expect(velocityHoverPhase).toBeGreaterThan(1.44);
@@ -935,7 +1186,6 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(plotLayout.panels.find((panel) => panel.id === "tpOpacity")!.width).toBeGreaterThan(360);
   expect(plotLayout.panels.find((panel) => panel.id === "time")!.width).toBeGreaterThan(360);
   expect(referencePanels.every((panel) => panel.width >= 400)).toBe(true);
-  expect(new Set(referencePanels.map((panel) => panel.top)).size).toBeLessThanOrEqual(2);
   const hasModelPaint = await page.locator("#modelCanvas").evaluate((canvas) => {
     const node = canvas as HTMLCanvasElement;
     const ctx = node.getContext("2d");
@@ -1006,7 +1256,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-editable-parameters", "zetac,zeta");
   await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-stability-scale", "log10");
   await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-stability-range", "0.01,100");
-  await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-axis-labels", "log10 convective response zeta_c,log10 thermal response zeta");
+  await expect(page.locator("#stabilityMapCanvas")).toHaveAttribute("data-axis-labels", "convective response zeta_c,thermal response zeta");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-cepheid-mode", "single");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-instability-mode", "single");
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-instability-labels", "linear damping,convective/turbulent instability,secular instability,dynamic instability,pulsational instability");
@@ -1063,13 +1313,14 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("[data-value-for='zeta']")).toHaveText("10");
   await expect.poll(async () => page.locator("#cepheidGuideCanvas").getAttribute("data-instability-signature"))
     .not.toBe(initialStripSignature);
-  await page.locator("#cepheidGuideCanvas").scrollIntoViewIfNeeded();
-  const stripBox = await page.locator("#cepheidGuideCanvas").boundingBox();
+  const stripCanvas = page.locator("#cepheidGuideCanvas");
+  await stripCanvas.scrollIntoViewIfNeeded();
+  const stripBox = await stripCanvas.boundingBox();
   expect(stripBox).not.toBeNull();
-  await page.mouse.move(stripBox!.x + 64 + (stripBox!.width - 90) * 0.25, stripBox!.y + 28 + (stripBox!.height - 88) * 0.35);
+  await stripCanvas.hover({ position: { x: 64 + (stripBox!.width - 90) * 0.25, y: 28 + (stripBox!.height - 88) * 0.35 } });
   await page.mouse.down();
   await expect(page.locator("#cepheidGuideCanvas")).toHaveAttribute("data-reference-interaction", "instability-strip");
-  await page.mouse.move(stripBox!.x + 64 + (stripBox!.width - 90) * 0.5, stripBox!.y + 28 + (stripBox!.height - 88) * 0.8);
+  await stripCanvas.hover({ position: { x: 64 + (stripBox!.width - 90) * 0.5, y: 28 + (stripBox!.height - 88) * 0.8 } });
   await page.mouse.up();
   await expect(page.locator("#cepheidGuideCanvas")).not.toHaveAttribute("data-reference-interaction");
   await expect(zetacSlider).toHaveValue("1");
@@ -1164,6 +1415,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("[data-plot-toggle='tpOpacity']")).not.toBeDisabled();
   await expect(page.locator("[data-plot-toggle='periodogram']")).not.toBeDisabled();
   await expect(page.locator("[data-plot-toggle='phaseLag']")).not.toBeDisabled();
+  await expect(page.locator("[data-plot-toggle='fourier']")).not.toBeDisabled();
   await expect(page.locator("[data-plot-toggle='stability']")).not.toBeDisabled();
   await expect(page.locator("[data-plot-toggle='strip']")).not.toBeDisabled();
   await expect(page.locator("[data-plot-toggle='phasePortrait']")).not.toBeDisabled();
@@ -1176,6 +1428,10 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await page.waitForTimeout(260);
   const gridPhaseAfter = Number(await page.locator("#cepheidGuideCanvas").getAttribute("data-current-phase"));
   expect(phaseDelta(gridPhaseAfter, gridPhaseBefore)).toBeLessThan(0.01);
+  await expect(page.locator("#fourierGridPanel")).toBeVisible();
+  await page.locator("[data-plot-toggle='fourier']").uncheck();
+  await expect(page.locator("#fourierGridPanel")).toBeHidden();
+  await page.locator("#hiddenPlotControls [data-plot-toggle='fourier']").check();
   await expect(page.locator("#fourierGridPanel")).toBeVisible();
   const loopSpeed = page.getByRole("slider", { name: "parameter loop speed" });
   await expect(loopSpeed).toHaveValue("1");
@@ -1479,6 +1735,9 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(page.locator("#derivationPanel")).toHaveAttribute("data-geometry-mode", "radius-dependent");
   await expect(page.locator("#derivationPanel")).toHaveAttribute("data-driver-mode", "h");
   await expect(page.locator("#derivationPanel")).toHaveAttribute("data-convection-mode", "time-dependent");
+  await page.locator("#derivationPanel").evaluate((panel) => {
+    (panel as HTMLDetailsElement).open = true;
+  });
   await expect(page.locator("#derivationContent [data-derivation-block]")).toHaveCount(6);
   await page.locator("#derivationPanel").evaluate((node) => { (node as HTMLDetailsElement).open = true; });
   await expect(page.locator("[data-derivation-block='opacity']")).toBeVisible();

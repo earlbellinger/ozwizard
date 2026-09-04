@@ -264,7 +264,21 @@ function addGridModel(
       variedValues,
       phaseRows,
       period: phase.period,
-      fourier
+      fourier,
+      integrationProvenance: {
+        status: solved.status,
+        message: solved.message,
+        statistics: { ...solved.stats },
+        actualEndTau: solved.rows.at(-1)?.tau ?? null,
+        rowCount: solved.rows.length
+      },
+      phaseProvenance: {
+        reason: phase.reason,
+        period: phase.period,
+        rowCount: phase.rows.length,
+        archivedRowCount: phaseRows.length,
+        reference: phase.reference
+      }
     });
   } catch (_error) {
     stats.failed += 1;

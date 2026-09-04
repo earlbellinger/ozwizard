@@ -449,535 +449,6 @@
     };
   }
 
-  // src/model.ts
-  var COLORS = {
-    tau: "#8B949E",
-    R: "#58A6FF",
-    V: "#E69F00",
-    H: "#CC79A7",
-    Uc: "#A371F7",
-    L: "#FF7B72",
-    Lr: "#79C0FF",
-    Lc: "#39C5CF",
-    zeta: "#B392F0",
-    zetac: "#FF7EB6",
-    gammac: "#7EE787",
-    m: "#9AA8BD",
-    gamma1: "#C297FF",
-    n: "#79C0FF",
-    s: "#FF9BCE",
-    sourceExp: "#D18616",
-    cq: "#8B949E",
-    tEnd: "#8B949E",
-    step: "#8B949E",
-    maxStep: "#8B949E",
-    rtol: "#C0CAE8",
-    atol: "#C0CAE8",
-    errTol: "#C0CAE8"
-  };
-  var TEX = {
-    tau: "\\ozTau{\\tau}",
-    R: "\\ozRadius{R}",
-    V: "\\ozVelocity{V}",
-    H: "\\ozPressure{H}",
-    Uc: "\\ozConvective{U_c}",
-    L: "\\ozLuminosity{L}",
-    Lr: "\\ozRadiative{L_r}",
-    Lc: "\\ozConvLum{L_c}",
-    zeta: "\\ozZeta{\\zeta}",
-    zetac: "\\ozZetac{\\zeta_c}",
-    gammac: "\\ozGammac{\\gamma_c}",
-    m: "\\ozChiZero{\\chi_0}",
-    gamma1: "\\ozGamma{\\Gamma_1}",
-    n: "\\ozBlue{n}",
-    s: "\\ozPink{s}",
-    sourceExp: "\\ozSource{U}",
-    cq: "\\ozDamping{C_q}"
-  };
-  var TEX_EXTRA = {
-    eta: "\\ozEta{\\eta}",
-    kappa: "\\ozNeutral{\\kappa}",
-    rho: "\\ozNeutral{\\rho}",
-    temp: "\\ozNeutral{T}"
-  };
-  var RESPONSE_LOG_MIN = -2;
-  var RESPONSE_LOG_MAX = 2;
-  var RESPONSE_LOG_STEP = 0.02;
-  var CHI_SLIDER_MIN = 0;
-  var CHI_SLIDER_MAX = 1;
-  var CHI_SLIDER_STEP = 5e-3;
-  var CHI_PARAMETER_MIN = 3;
-  var CHI_PARAMETER_BREAK = 20;
-  var CHI_PARAMETER_MAX = 100;
-  var CHI_SLIDER_BREAK = 0.82;
-  var CONTROL_GROUPS = {
-    physical: [
-      ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", RESPONSE_LOG_MIN, RESPONSE_LOG_MAX, RESPONSE_LOG_STEP, 1, COLORS.zeta],
-      ["zetac", `\\(${TEX.zetac}\\)`, "convective response", RESPONSE_LOG_MIN, RESPONSE_LOG_MAX, RESPONSE_LOG_STEP, 1, COLORS.zetac],
-      ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.5, COLORS.gammac],
-      ["m", `\\(${TEX.m}\\)`, "shell thinness", CHI_SLIDER_MIN, CHI_SLIDER_MAX, CHI_SLIDER_STEP, 10, COLORS.m],
-      ["gamma1", `\\(${TEX.gamma1}\\)`, "adiabatic exponent", 1.01, 1.67, 0.01, 1.1, COLORS.gamma1],
-      ["n", `\\(${TEX.n}\\)`, "\u03BA-\u03C1 exponent", 0, 3, 0.05, 1, COLORS.n],
-      ["s", `\\(${TEX.s}\\)`, "\u03BA-T exponent", 0, 8, 0.1, 3, COLORS.s],
-      ["sourceExp", `\\(${TEX.sourceExp}\\)`, "inner L exponent", -2, 2, 0.05, 0, COLORS.sourceExp],
-      ["cq", `\\(${TEX.cq}\\)`, "turbulent damping", 0, 10, 0.05, 0, COLORS.cq]
-    ],
-    initial: [
-      ["r0", `\\(${TEX.R}_0\\)`, "initial radius", 0.75, 1.9, 0.01, 1.4, COLORS.R],
-      ["v0", `\\(${TEX.V}_0\\)`, "initial radial velocity", -1.2, 1.2, 0.01, 0, COLORS.V],
-      ["h0", `\\(${TEX.H}_0\\)`, "initial H factor", 0.3, 1.8, 0.01, 1, COLORS.H],
-      ["uc0", `\\(${TEX.Uc}_{0}\\)`, "initial convective velocity", 0, 1.8, 0.01, 1, COLORS.Uc]
-    ],
-    integration: [
-      ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "max time", 0, 3, 0.01, 300, COLORS.tEnd],
-      ["step", `\\(\\Delta ${TEX.tau}_0\\)`, "initial step", 5e-4, 0.02, 5e-4, 1e-3, COLORS.step],
-      ["maxStep", `\\(\\Delta ${TEX.tau}_{\\max}\\)`, "max adaptive step", 5e-3, 0.12, 5e-3, 0.03, COLORS.maxStep],
-      ["logRtol", "\\(\\ozNeutral{\\log_{10} r_{tol}}\\)", "relative tol", -12, -8, 0.25, -11, COLORS.rtol],
-      ["logAtol", "\\(\\ozNeutral{\\log_{10} a_{tol}}\\)", "absolute tol", -14, -10, 0.25, -13, COLORS.atol],
-      ["logErrTol", "\\(\\ozNeutral{\\log_{10}\\epsilon}\\)", "tolerance", -9, -5, 0.25, -8, COLORS.errTol],
-      ["logStabilityTol", "\\(\\ozNeutral{\\log_{10}\\epsilon_s}\\)", "stability tolerance", -4, -1, 0.25, -2.7, COLORS.errTol],
-      ["stableCycles", "\\(\\ozNeutral{N_s}\\)", "stable cycles required", 3, 8, 1, 5, COLORS.errTol]
-    ]
-  };
-  var PARAMETER_DESCRIPTIONS = {
-    zeta: `Ratio of the model dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\). The slider is logarithmic over \\(10^{-2}\\) to \\(10^2\\).`,
-    zetac: `Ratio of the model dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\). The nonzero slider range is logarithmic over \\(10^{-2}\\) to \\(10^2\\).`,
-    gammac: `Equilibrium convective luminosity fraction used to weight \\(${TEX.Lc}\\); \\(${TEX.Lr}\\) carries the complementary radiative weight \\(1-${TEX.gammac}\\).`,
-    m: `Thin shell form factor that sets \\(${TEX_EXTRA.eta}\\), the shell's inner boundary radius as a fraction of the reference outer radius. Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\). The slider covers 3 to 100, with most of its travel devoted to 3 to 20.`,
-    gamma1: `First adiabatic exponent used in the \\(${TEX.H}\\) response.`,
-    n: `Density exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
-    s: `Temperature exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
-    sourceExp: `Exponent \\(${TEX.sourceExp}\\) in the inner luminosity source \\(${TEX.R}^{${TEX.sourceExp}}\\).`,
-    cq: "Cubic turbulent damping coefficient in the acceleration equation.",
-    r0: `Starting shell radius \\(${TEX.R}_{0}\\).`,
-    v0: `Starting radial velocity \\(${TEX.V}_{0}\\).`,
-    h0: `Starting nonadiabatic pressure factor \\(${TEX.H}_{0}\\), not the total gas pressure.`,
-    uc0: `Starting convective velocity \\(${TEX.Uc}_{0}\\).`,
-    tEnd: `Maximum integration time \\(${TEX.tau}\\), measured in dynamical time units. The slider uses a logarithmic scale.`,
-    step: `Initial adaptive step size \\(\\Delta ${TEX.tau}_0\\).`,
-    maxStep: `Maximum step size \\(\\Delta ${TEX.tau}_{\\max}\\) allowed for adaptive solvers.`,
-    logRtol: "Base-10 logarithm of the modern relative tolerance.",
-    logAtol: "Base-10 logarithm of the modern absolute tolerance.",
-    logErrTol: "Base-10 logarithm of the legacy midpoint error tolerance.",
-    logStabilityTol: "Base-10 logarithm of the stability classification tolerance.",
-    stableCycles: "Number of repeated cycles required before a limit cycle is classified stable."
-  };
-  var presetBase = {
-    maxStep: 0.03,
-    logRtol: -11,
-    logAtol: -13,
-    solver: "rk45",
-    runUntilStable: true,
-    logStabilityTol: -2.7,
-    stableCycles: 5,
-    phaseMinAmplitude: 1e-4,
-    phaseMode: "final"
-  };
-  var paperBase = {
-    ...presetBase,
-    referenceFamily: "stellingwerf-1986",
-    phaseWarmupTau: 4
-  };
-  var ozcBase = {
-    ...presetBase,
-    referenceFamily: "local-s-tran"
-  };
-  var overtoneBase = {
-    ...presetBase,
-    referenceFamily: "stellingwerf-1987",
-    phaseWarmupTau: 1,
-    zeta: 1,
-    zetac: 0,
-    gammac: 0,
-    gamma1: 1.1,
-    n: 1,
-    s: 3,
-    cq: 0,
-    v0: 0,
-    h0: 0.9,
-    uc0: 0,
-    tEnd: 10,
-    step: 1e-3,
-    logErrTol: -8,
-    variableM: true,
-    driver: "h",
-    runUntilStable: false
-  };
-  var PRESETS = {
-    "Baker radiative pulsator": { ...presetBase, referenceFamily: "baker", phaseWarmupTau: 4, zeta: 1, zetac: 0, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 0, tEnd: 24, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
-    "Blue-edge convection": { ...paperBase, phaseWarmupTau: 24, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 40, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
-    "Instability-strip convection": { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 15, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
-    "Red-edge convection": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 14, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
-    "Radius-dependent strip": { ...paperBase, phaseWarmupTau: 6, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 1e-3, logErrTol: -8, variableM: true, driver: "h", runUntilStable: false },
-    "Fully convective runaway": { ...paperBase, phaseWarmupTau: 1, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 8, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
-    "Thick convective shell": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
-    "RR Lyrae fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.2 },
-    "RR Lyrae low-amplitude fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.1 },
-    "RR Lyrae low-amplitude fundamental, damped": { ...overtoneBase, phaseWarmupTau: 40, zetac: 1, gammac: 0.5, m: 10, sourceExp: -2, cq: 5, r0: 1.1, tEnd: 300, runUntilStable: true },
-    "RR Lyrae first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.05 },
-    "RR Lyrae first overtone, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 15, sourceExp: 2, cq: 7, r0: 1.05, tEnd: 80 },
-    "RR Lyrae high-amplitude first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.1 },
-    "RR Lyrae second overtone": { ...overtoneBase, m: 20, sourceExp: 1, r0: 1.05 },
-    "Local radiative OZ1": { ...presetBase, referenceFamily: "local-s-tran", phaseWarmupTau: 1, zeta: 1, zetac: 0, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 2, r0: 1.2, v0: 0, h0: 0.8, uc0: 0, tEnd: 20, step: 0.012, logErrTol: -5, variableM: true, driver: "h", runUntilStable: false },
-    "Local convective OZC": { ...ozcBase, zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 20, step: 1e-3, logErrTol: -5, variableM: true, driver: "h", runUntilStable: false },
-    "OZC abs(V) driver diagnostic": { ...ozcBase, referenceFamily: "diagnostic", zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 20, step: 1e-3, logErrTol: -5, variableM: true, driver: "abs-v", runUntilStable: false }
-  };
-  function mAt(radius, p) {
-    if (!p.variableM) return p.m;
-    const eta = (1 - 3 / p.m) ** (1 / 3);
-    return 3 / (1 - (eta / radius) ** 3);
-  }
-  function linearDynamicPeriod(p) {
-    const chi = mAt(1, p);
-    const frequencySquared = chi * p.gamma1 - 4;
-    if (!Number.isFinite(frequencySquared) || frequencySquared <= 0) return null;
-    return 2 * Math.PI / Math.sqrt(frequencySquared);
-  }
-  function derivedPowers(radius, p) {
-    const m = mAt(radius, p);
-    const gamma11 = p.gamma1 - 1;
-    const b1 = (p.s + 4) * gamma11;
-    return {
-      m,
-      b: 4 + m * (p.n - b1),
-      q: m * p.gamma1 - 2,
-      c: m - 2,
-      d: m * gamma11 / 2
-    };
-  }
-  function effectiveGammaC(p) {
-    return p.zetac <= 0 && Math.abs(p.uc0) <= 1e-9 ? 0 : p.gammac;
-  }
-  function sample(tau, y, p) {
-    const [radius, velocity, pressure, convectiveVelocity] = y;
-    const powers = derivedPowers(radius, p);
-    const gammaC = effectiveGammaC(p);
-    const rawLr = radius ** powers.b * pressure ** (p.s + 4);
-    const rawLc = radius ** -powers.c * convectiveVelocity ** 3;
-    const lr = (1 - gammaC) * rawLr;
-    const lc = gammaC * rawLc;
-    return { tau, R: radius, V: velocity, H: pressure, Uc: convectiveVelocity, Lr: lr, Lc: lc, L: lr + lc };
-  }
-  function derivatives(_t, y, p) {
-    const [radius, velocity, pressure, convectiveVelocity] = y;
-    if (radius <= 0 || pressure <= 0 || !Number.isFinite(radius + velocity + pressure + convectiveVelocity)) {
-      throw new Error("model left the positive-radius/positive-H domain");
-    }
-    const powers = derivedPowers(radius, p);
-    const gammaC = effectiveGammaC(p);
-    const lr = radius ** powers.b * pressure ** (p.s + 4);
-    const lc = radius ** -powers.c * convectiveVelocity ** 3;
-    const radiativeWeight = 1 - gammaC;
-    const driver = p.driver === "h" ? Math.sqrt(pressure) : Math.sqrt(Math.abs(velocity));
-    return [
-      velocity,
-      pressure / radius ** powers.q - 1 / radius ** 2 - p.cq * velocity ** 3,
-      p.zeta * radius ** (powers.m * (p.gamma1 - 1)) * (radius ** p.sourceExp - radiativeWeight * lr - gammaC * lc),
-      p.zetac * (radius ** -powers.d * driver - convectiveVelocity)
-    ];
-  }
-  function solverOptionsFromParameters(p, solver = p.solver) {
-    return defaultSolverOptions({
-      solver,
-      rtol: 10 ** p.logRtol,
-      atol: 10 ** p.logAtol,
-      initialStep: p.step,
-      maxStep: p.maxStep,
-      minStep: 1e-10,
-      maxRows: 6e4,
-      maxAcceptedSteps: 6e5,
-      outputInterval: Math.max(5e-3, Math.min(0.02, p.tEnd / 12e3)),
-      errTol: 10 ** p.logErrTol
-    });
-  }
-  var StabilityDetector = class {
-    constructor(tolerance, stableCycles, minTime = 2, equilibriumWindow = 1.5) {
-      this.tolerance = tolerance;
-      this.stableCycles = stableCycles;
-      this.minTime = minTime;
-      this.equilibriumWindow = equilibriumWindow;
-      __publicField(this, "rows", []);
-      __publicField(this, "peakIndices", []);
-    }
-    observe(row) {
-      this.rows.push(row);
-      this.captureLuminosityPeak();
-      if (row.tau < this.minTime) return null;
-      if (this.isEquilibrium()) return "equilibrium";
-      if (this.isLimitCycle()) return "limit_cycle";
-      return null;
-    }
-    captureLuminosityPeak() {
-      if (this.rows.length < 3) return;
-      const prev = this.rows[this.rows.length - 3];
-      const peak = this.rows[this.rows.length - 2];
-      const current = this.rows[this.rows.length - 1];
-      if (peak.tau < this.minTime) return;
-      if (prev.L < peak.L && peak.L >= current.L) {
-        const previousPeakIndex = this.peakIndices.at(-1);
-        if (previousPeakIndex !== void 0 && peak.tau - this.rows[previousPeakIndex].tau < 0.05) {
-          if (peak.L > this.rows[previousPeakIndex].L) this.peakIndices[this.peakIndices.length - 1] = this.rows.length - 2;
-        } else {
-          this.peakIndices.push(this.rows.length - 2);
-        }
-      }
-    }
-    isEquilibrium() {
-      const end = this.rows.at(-1)?.tau ?? 0;
-      const window = [];
-      for (let i = this.rows.length - 1; i >= 0; i -= 1) {
-        if (end - this.rows[i].tau > this.equilibriumWindow) break;
-        window.push(this.rows[i]);
-      }
-      if (window.length < 6 || end - window.at(-1).tau < this.equilibriumWindow * 0.75) return false;
-      for (const key of ["R", "V", "H", "Uc", "L"]) {
-        const values = window.map((row) => row[key]);
-        const scale = Math.max(1, ...values.map(Math.abs));
-        if ((Math.max(...values) - Math.min(...values)) / scale > this.tolerance) return false;
-      }
-      return Math.max(...window.map((row) => Math.abs(row.V))) < this.tolerance;
-    }
-    isLimitCycle() {
-      const neededPeaks = this.stableCycles + 1;
-      if (this.peakIndices.length < neededPeaks) return false;
-      const peaks = this.peakIndices.slice(-neededPeaks);
-      const periods = [];
-      const amplitudes = [];
-      const peakLuminosities = [];
-      for (let i = 0; i < peaks.length - 1; i += 1) {
-        const left = peaks[i];
-        const right = peaks[i + 1];
-        periods.push(this.rows[right].tau - this.rows[left].tau);
-        const cycle = this.rows.slice(left, right + 1);
-        const lum = cycle.map((row) => row.L);
-        amplitudes.push(Math.max(...lum) - Math.min(...lum));
-        peakLuminosities.push(this.rows[right].L);
-      }
-      return this.relativeSpreadOk(periods) && this.relativeSpreadOk(amplitudes) && this.relativeSpreadOk(peakLuminosities);
-    }
-    relativeSpreadOk(values) {
-      if (values.length < 2) return false;
-      const center = Math.max(Math.abs(values.reduce((sum, value) => sum + value, 0) / values.length), 1e-12);
-      return (Math.max(...values) - Math.min(...values)) / center <= this.tolerance;
-    }
-  };
-  function solveModel(p, solver = p.solver) {
-    const stabilityMinTime = Math.max(2, p.phaseWarmupTau ?? 2);
-    const detector = new StabilityDetector(10 ** p.logStabilityTol, p.stableCycles, stabilityMinTime);
-    detector.observe(sample(0, [p.r0, p.v0, p.h0, p.uc0], p));
-    const result = integrate(
-      (t, y) => derivatives(t, y, p),
-      [p.r0, p.v0, p.h0, p.uc0],
-      p.tEnd,
-      solverOptionsFromParameters(p, solver),
-      (t, y) => {
-        const row = sample(t, y, p);
-        if (Math.abs(row.R) > 30 || Math.abs(row.L) > 1e5 || Math.abs(row.H) > 1e5) return "runaway";
-        if (p.runUntilStable && row.R > 20 && row.V > 0) return "runaway_trend";
-        return p.runUntilStable ? detector.observe(row) : null;
-      }
-    );
-    const message = p.runUntilStable && result.status === "complete" ? "max_time" : result.message;
-    return {
-      rows: result.points.map((point) => sample(point.t, point.y, p)),
-      status: result.status,
-      message,
-      stats: result.stats
-    };
-  }
-
-  // src/grid.ts
-  var CONTROL_META = /* @__PURE__ */ new Map();
-  Object.values(CONTROL_GROUPS).forEach((controls) => {
-    controls.forEach(([key, _symbol, _name, min, max, step2, defaultValue]) => {
-      CONTROL_META.set(key, { key, min, max, step: step2, defaultValue });
-    });
-  });
-  function sliderMeta(key) {
-    const meta = CONTROL_META.get(key);
-    if (!meta) throw new Error(`Missing control metadata for ${String(key)}`);
-    return meta;
-  }
-  function decimalPlaces(value) {
-    const text = String(value);
-    if (text.includes("e-")) return Number(text.split("e-")[1]);
-    const decimal = text.split(".")[1];
-    return decimal ? decimal.length : 0;
-  }
-  function roundToNativeStep(value, step2) {
-    const digits = Math.min(12, Math.max(0, decimalPlaces(step2) + 2));
-    return Number(value.toFixed(digits));
-  }
-  function parameterValueFromSlider(key, sliderValue) {
-    const meta = sliderMeta(key);
-    const value = clampToMeta(sliderValue, meta);
-    if (key === "tEnd") return Math.min(1e3, Math.max(1, 10 ** value));
-    if (key === "zeta") return 10 ** value;
-    if (key === "zetac") return value <= RESPONSE_LOG_MIN + 1e-12 ? 0 : 10 ** value;
-    if (key === "m") return chiFromSliderValue(value);
-    return value;
-  }
-  function normalizeGridRange(range) {
-    const meta = sliderMeta(range.key);
-    const low = Math.min(range.lowerSliderValue, range.upperSliderValue);
-    const high = Math.max(range.lowerSliderValue, range.upperSliderValue);
-    return {
-      ...range,
-      lowerSliderValue: clampToMeta(low, meta),
-      upperSliderValue: clampToMeta(high, meta),
-      centerSliderValue: clampToMeta(range.centerSliderValue, meta),
-      nativeStep: meta.step
-    };
-  }
-  function generateSliderSamples(rangeInput, stride = 1) {
-    const range = normalizeGridRange(rangeInput);
-    const meta = sliderMeta(range.key);
-    const step2 = meta.step;
-    const firstIndex = Math.ceil((range.lowerSliderValue - meta.min) / step2 - 1e-9);
-    const lastIndex = Math.floor((range.upperSliderValue - meta.min) / step2 + 1e-9);
-    const effectiveStride = Math.max(1, Math.floor(stride));
-    const samples = [];
-    for (let index = firstIndex; index <= lastIndex; index += effectiveStride) {
-      samples.push(roundToNativeStep(meta.min + index * step2, step2));
-    }
-    const upper = roundToNativeStep(meta.min + lastIndex * step2, step2);
-    if (Number.isFinite(upper) && samples.at(-1) !== upper) samples.push(upper);
-    return [...new Set(samples.filter((sample2) => sample2 >= meta.min - 1e-9 && sample2 <= meta.max + 1e-9))];
-  }
-  function centerSliderSample(rangeInput) {
-    const range = normalizeGridRange(rangeInput);
-    const samples = generateSliderSamples(range, 1);
-    if (!samples.length) return roundToNativeStep(range.centerSliderValue, range.nativeStep);
-    return samples.reduce(
-      (best, sample2) => Math.abs(sample2 - range.centerSliderValue) < Math.abs(best - range.centerSliderValue) ? sample2 : best,
-      samples[0]
-    );
-  }
-  function meanSliderSample(rangeInput) {
-    const range = normalizeGridRange(rangeInput);
-    return Number(((range.lowerSliderValue + range.upperSliderValue) / 2).toFixed(12));
-  }
-  function fallbackSliderSamples(rangeInput, selected) {
-    const range = normalizeGridRange(rangeInput);
-    if (!selected) return [centerSliderSample(range)];
-    const low = roundToNativeStep(range.lowerSliderValue, range.nativeStep);
-    const center = centerSliderSample(range);
-    const high = roundToNativeStep(range.upperSliderValue, range.nativeStep);
-    return [.../* @__PURE__ */ new Set([low, center, high])].sort((a, b) => a - b);
-  }
-  function gridModelCountForStride(ranges, loopKey, options = {}) {
-    const main = gridTotal(buildRangeSamples(ranges, loopKey, options));
-    const path = ranges.length <= 1 ? 0 : gridTotal(buildLoopPathSamples(ranges, loopKey, options));
-    return { main, path, total: main + path };
-  }
-  function estimateGridBudgetFromModelCount(ranges, loopKey, maxModels) {
-    return estimateGridBudgetForTargetModelCount(ranges, loopKey, Math.max(1, Math.floor(maxModels)));
-  }
-  function estimateGridBudgetFromTiming(ranges, loopKey, completed, elapsedMs, timeoutMs) {
-    const fullModelCount = gridModelCountForStride(ranges, loopKey);
-    if (completed <= 0 || elapsedMs <= 0 || timeoutMs <= 0) {
-      return {
-        stride: 1,
-        estimatedTotalMs: null,
-        zeroCompletedFallback: true,
-        fullModelCount,
-        coarsenedModelCount: gridModelCountForStride(ranges, loopKey, { zeroCompletedFallback: true }),
-        targetModelCount: null
-      };
-    }
-    const modelMs = elapsedMs / completed;
-    const targetModelCount = Math.max(1, Math.floor(timeoutMs / Math.max(modelMs, 1e-9)));
-    return {
-      ...estimateGridBudgetForTargetModelCount(ranges, loopKey, targetModelCount),
-      estimatedTotalMs: modelMs * fullModelCount.total
-    };
-  }
-  function estimateGridBudgetForTargetModelCount(ranges, loopKey, targetModelCount) {
-    const fullModelCount = gridModelCountForStride(ranges, loopKey);
-    if (fullModelCount.total <= targetModelCount) {
-      return {
-        stride: 1,
-        estimatedTotalMs: null,
-        zeroCompletedFallback: false,
-        fullModelCount,
-        coarsenedModelCount: fullModelCount,
-        targetModelCount
-      };
-    }
-    let bestStride = 1;
-    let bestCount = fullModelCount;
-    const maxStride = maxUsefulGridStride(ranges);
-    for (let stride = 2; stride <= maxStride; stride += 1) {
-      const count = gridModelCountForStride(ranges, loopKey, { stride });
-      if (count.total < bestCount.total) {
-        bestStride = stride;
-        bestCount = count;
-      }
-      if (count.total <= targetModelCount) {
-        return {
-          stride,
-          estimatedTotalMs: null,
-          zeroCompletedFallback: false,
-          fullModelCount,
-          coarsenedModelCount: count,
-          targetModelCount
-        };
-      }
-    }
-    return {
-      stride: bestStride,
-      estimatedTotalMs: null,
-      zeroCompletedFallback: false,
-      fullModelCount,
-      coarsenedModelCount: bestCount,
-      targetModelCount
-    };
-  }
-  function maxUsefulGridStride(ranges) {
-    return Math.max(1, ...ranges.map((range) => generateSliderSamples(range, 1).length));
-  }
-  function buildRangeSamples(ranges, loopKey, options = {}) {
-    return ranges.map((range) => ({
-      key: range.key,
-      centerSliderValue: normalizeGridRange(range).centerSliderValue,
-      samples: addCenterSample(
-        options.zeroCompletedFallback ? fallbackSliderSamples(range, range.key === loopKey) : generateSliderSamples(range, options.stride ?? 1),
-        range
-      )
-    }));
-  }
-  function buildLoopPathSamples(ranges, loopKey, options = {}) {
-    return ranges.map((rangeInput) => {
-      const range = normalizeGridRange(rangeInput);
-      const mean = meanSliderSample(range);
-      const samples = options.zeroCompletedFallback ? fallbackSliderSamples(range, true) : generateSliderSamples(range, options.stride ?? 1);
-      return {
-        key: range.key,
-        centerSliderValue: mean,
-        samples: range.key === loopKey ? samples : [mean]
-      };
-    });
-  }
-  function gridTotal(samples) {
-    return samples.reduce((total, item) => total * Math.max(1, item.samples.length), 1);
-  }
-  function clampToMeta(value, meta) {
-    return Math.min(meta.max, Math.max(meta.min, value));
-  }
-  function chiFromSliderValue(value) {
-    const slider = Math.min(CHI_SLIDER_MAX, Math.max(CHI_SLIDER_MIN, value));
-    if (slider <= CHI_SLIDER_BREAK) {
-      const fraction2 = (slider - CHI_SLIDER_MIN) / (CHI_SLIDER_BREAK - CHI_SLIDER_MIN);
-      return CHI_PARAMETER_MIN + fraction2 * (CHI_PARAMETER_BREAK - CHI_PARAMETER_MIN);
-    }
-    const fraction = (slider - CHI_SLIDER_BREAK) / (CHI_SLIDER_MAX - CHI_SLIDER_BREAK);
-    return CHI_PARAMETER_BREAK * (CHI_PARAMETER_MAX / CHI_PARAMETER_BREAK) ** fraction;
-  }
-  function addCenterSample(samples, range) {
-    const center = centerSliderSample(range);
-    return [.../* @__PURE__ */ new Set([...samples, center])].sort((a, b) => a - b);
-  }
-
   // src/phase.ts
   var SAME_EXTREMUM_LUMINOSITY_TOLERANCE = 0.025;
   function defaultWarmupTau(rows) {
@@ -1259,6 +730,575 @@
     return buildReference(rows, options);
   }
 
+  // src/model.ts
+  var COLORS = {
+    tau: "#8B949E",
+    R: "#58A6FF",
+    V: "#E69F00",
+    H: "#CC79A7",
+    Uc: "#A371F7",
+    L: "#FF7B72",
+    Lr: "#79C0FF",
+    Lc: "#39C5CF",
+    zeta: "#B392F0",
+    zetac: "#FF7EB6",
+    gammac: "#7EE787",
+    m: "#9AA8BD",
+    gamma1: "#C297FF",
+    n: "#79C0FF",
+    s: "#FF9BCE",
+    sourceExp: "#D18616",
+    cq: "#8B949E",
+    tEnd: "#8B949E",
+    step: "#8B949E",
+    maxStep: "#8B949E",
+    rtol: "#C0CAE8",
+    atol: "#C0CAE8",
+    errTol: "#C0CAE8"
+  };
+  var TEX = {
+    tau: "\\ozTau{\\tau}",
+    R: "\\ozRadius{R}",
+    V: "\\ozVelocity{V}",
+    H: "\\ozPressure{H}",
+    Uc: "\\ozConvective{U_c}",
+    L: "\\ozLuminosity{L}",
+    Lr: "\\ozRadiative{L_r}",
+    Lc: "\\ozConvLum{L_c}",
+    zeta: "\\ozZeta{\\zeta}",
+    zetac: "\\ozZetac{\\zeta_c}",
+    gammac: "\\ozGammac{\\gamma_c}",
+    m: "\\ozChiZero{\\chi_0}",
+    gamma1: "\\ozGamma{\\Gamma_1}",
+    n: "\\ozBlue{n}",
+    s: "\\ozPink{s}",
+    sourceExp: "\\ozSource{U}",
+    cq: "\\ozDamping{C_q}"
+  };
+  var TEX_EXTRA = {
+    eta: "\\ozEta{\\eta}",
+    kappa: "\\ozNeutral{\\kappa}",
+    rho: "\\ozNeutral{\\rho}",
+    temp: "\\ozNeutral{T}"
+  };
+  var RESPONSE_LOG_MIN = -2;
+  var RESPONSE_LOG_MAX = 2;
+  var RESPONSE_LOG_STEP = 0.02;
+  var CHI_SLIDER_MIN = 0;
+  var CHI_SLIDER_MAX = 1;
+  var CHI_SLIDER_STEP = 5e-3;
+  var CHI_PARAMETER_MIN = 3;
+  var CHI_PARAMETER_BREAK = 20;
+  var CHI_PARAMETER_MAX = 100;
+  var CHI_SLIDER_BREAK = 0.82;
+  var CONTROL_GROUPS = {
+    physical: [
+      ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", RESPONSE_LOG_MIN, RESPONSE_LOG_MAX, RESPONSE_LOG_STEP, 1, COLORS.zeta],
+      ["zetac", `\\(${TEX.zetac}\\)`, "convective response", RESPONSE_LOG_MIN, RESPONSE_LOG_MAX, RESPONSE_LOG_STEP, 1, COLORS.zetac],
+      ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.5, COLORS.gammac],
+      ["m", `\\(${TEX.m}\\)`, "shell thinness", CHI_SLIDER_MIN, CHI_SLIDER_MAX, CHI_SLIDER_STEP, 10, COLORS.m],
+      ["gamma1", `\\(${TEX.gamma1}\\)`, "adiabatic exponent", 1.01, 1.67, 0.01, 1.1, COLORS.gamma1],
+      ["n", `\\(${TEX.n}\\)`, "\u03BA-\u03C1 exponent", 0, 3, 0.05, 1, COLORS.n],
+      ["s", `\\(${TEX.s}\\)`, "\u03BA-T exponent", 0, 8, 0.1, 3, COLORS.s],
+      ["sourceExp", `\\(${TEX.sourceExp}\\)`, "inner L exponent", -2, 2, 0.05, 0, COLORS.sourceExp],
+      ["cq", `\\(${TEX.cq}\\)`, "turbulent damping", 0, 10, 0.05, 0, COLORS.cq]
+    ],
+    initial: [
+      ["r0", `\\(${TEX.R}_0\\)`, "initial radius", 0.75, 1.9, 0.01, 1.4, COLORS.R],
+      ["v0", `\\(${TEX.V}_0\\)`, "initial radial velocity", -1.2, 1.2, 0.01, 0, COLORS.V],
+      ["h0", `\\(${TEX.H}_0\\)`, "initial H factor", 0.3, 1.8, 0.01, 1, COLORS.H],
+      ["uc0", `\\(${TEX.Uc}_{0}\\)`, "initial convective velocity", 0, 1.8, 0.01, 1, COLORS.Uc]
+    ],
+    integration: [
+      ["tEnd", `\\(${TEX.tau}_{\\max}\\)`, "max time", 0, 3, 0.01, 300, COLORS.tEnd],
+      ["step", `\\(\\Delta ${TEX.tau}_0\\)`, "initial step", 5e-4, 0.02, 5e-4, 1e-3, COLORS.step],
+      ["maxStep", `\\(\\Delta ${TEX.tau}_{\\max}\\)`, "max adaptive step", 5e-3, 0.12, 5e-3, 0.03, COLORS.maxStep],
+      ["logRtol", "\\(\\ozNeutral{\\log_{10} r_{tol}}\\)", "relative tol", -12, -8, 0.25, -11, COLORS.rtol],
+      ["logAtol", "\\(\\ozNeutral{\\log_{10} a_{tol}}\\)", "absolute tol", -14, -10, 0.25, -13, COLORS.atol],
+      ["logErrTol", "\\(\\ozNeutral{\\log_{10}\\epsilon}\\)", "tolerance", -9, -5, 0.25, -8, COLORS.errTol],
+      ["logStabilityTol", "\\(\\ozNeutral{\\log_{10}\\epsilon_s}\\)", "stability tolerance", -4, -1, 0.25, -2.7, COLORS.errTol],
+      ["stableCycles", "\\(\\ozNeutral{N_s}\\)", "stable cycles required", 3, 8, 1, 5, COLORS.errTol]
+    ]
+  };
+  var PARAMETER_DESCRIPTIONS = {
+    zeta: `Ratio of the model dynamical time to the thermal time; larger values make \\(${TEX.H}\\) adjust faster per \\(${TEX.tau}\\). The slider is logarithmic over \\(10^{-2}\\) to \\(10^2\\).`,
+    zetac: `Ratio of the model dynamical time to the convective adjustment time; larger values make \\(${TEX.Uc}\\) relax faster, while zero freezes \\(${TEX.Uc}\\). The nonzero slider range is logarithmic over \\(10^{-2}\\) to \\(10^2\\).`,
+    gammac: `Equilibrium convective luminosity fraction used to weight \\(${TEX.Lc}\\); \\(${TEX.Lr}\\) carries the complementary radiative weight \\(1-${TEX.gammac}\\).`,
+    m: `Thin shell form factor that sets \\(${TEX_EXTRA.eta}\\), the shell's inner boundary radius as a fraction of the reference outer radius. Larger \\(${TEX.m}\\) means a thinner shell; when radius-dependent geometry is off, \\(\\ozChi{\\chi}=${TEX.m}\\). The slider covers 3 to 100, with most of its travel devoted to 3 to 20.`,
+    gamma1: `First adiabatic exponent used in the \\(${TEX.H}\\) response.`,
+    n: `Density exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
+    s: `Temperature exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
+    sourceExp: `Exponent \\(${TEX.sourceExp}\\) in the inner luminosity source \\(${TEX.R}^{${TEX.sourceExp}}\\).`,
+    cq: "Cubic turbulent damping coefficient in the acceleration equation.",
+    r0: `Starting shell radius \\(${TEX.R}_{0}\\).`,
+    v0: `Starting radial velocity \\(${TEX.V}_{0}\\).`,
+    h0: `Starting nonadiabatic pressure factor \\(${TEX.H}_{0}\\), not the total gas pressure.`,
+    uc0: `Starting convective velocity \\(${TEX.Uc}_{0}\\).`,
+    tEnd: `Maximum integration time \\(${TEX.tau}\\), measured in dynamical time units. The slider uses a logarithmic scale.`,
+    step: `Initial adaptive step size \\(\\Delta ${TEX.tau}_0\\).`,
+    maxStep: `Maximum step size \\(\\Delta ${TEX.tau}_{\\max}\\) allowed for adaptive solvers.`,
+    logRtol: "Base-10 logarithm of the modern relative tolerance.",
+    logAtol: "Base-10 logarithm of the modern absolute tolerance.",
+    logErrTol: "Base-10 logarithm of the legacy midpoint error tolerance.",
+    logStabilityTol: "Base-10 logarithm of the stability classification tolerance.",
+    stableCycles: "Number of repeated cycles required before a limit cycle is classified stable."
+  };
+  var presetBase = {
+    maxStep: 0.03,
+    logRtol: -11,
+    logAtol: -13,
+    solver: "rk45",
+    runUntilStable: true,
+    logStabilityTol: -2.7,
+    stableCycles: 5,
+    phaseMinAmplitude: 1e-4,
+    phaseMode: "final"
+  };
+  var paperBase = {
+    ...presetBase,
+    referenceFamily: "stellingwerf-1986",
+    phaseWarmupTau: 4
+  };
+  var ozcBase = {
+    ...presetBase,
+    referenceFamily: "local-s-tran"
+  };
+  var overtoneBase = {
+    ...presetBase,
+    referenceFamily: "stellingwerf-1987",
+    phaseWarmupTau: 1,
+    zeta: 1,
+    zetac: 0,
+    gammac: 0,
+    gamma1: 1.1,
+    n: 1,
+    s: 3,
+    cq: 0,
+    v0: 0,
+    h0: 0.9,
+    uc0: 0,
+    tEnd: 10,
+    step: 1e-3,
+    logErrTol: -8,
+    variableM: true,
+    driver: "h",
+    runUntilStable: false
+  };
+  var DEFAULT_PRESET_NAME = "RR Lyrae low-amplitude fundamental, damped";
+  var HERTZSPRUNG_PROGRESSION_PRESET_NAME = "Hertzsprung progression";
+  var defaultPresetParameters = {
+    ...overtoneBase,
+    phaseWarmupTau: 40,
+    zetac: 1,
+    gammac: 0.5,
+    m: 10,
+    sourceExp: -2,
+    cq: 5,
+    r0: 1.1,
+    tEnd: 300,
+    runUntilStable: true
+  };
+  var PRESETS = {
+    "Baker radiative pulsator": { ...presetBase, referenceFamily: "baker", phaseWarmupTau: 4, zeta: 1, zetac: 0, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 0, tEnd: 24, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+    "Blue-edge convection": { ...paperBase, phaseWarmupTau: 24, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 40, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+    "Instability-strip convection": { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 15, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+    "Red-edge convection": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 14, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+    "Radius-dependent strip": { ...paperBase, phaseWarmupTau: 6, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 1e-3, logErrTol: -8, variableM: true, driver: "h", runUntilStable: false },
+    "Fully convective runaway": { ...paperBase, phaseWarmupTau: 1, zeta: 2, zetac: 1, gammac: 1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 8, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+    "Thick convective shell": { ...paperBase, phaseWarmupTau: 7.5, zeta: 0.1, zetac: 10, gammac: 1, m: 5, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.1, v0: 0, h0: 1, uc0: 1, tEnd: 24, step: 1e-3, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
+    "RR Lyrae fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.2 },
+    "RR Lyrae low-amplitude fundamental": { ...overtoneBase, m: 10, sourceExp: -2, r0: 1.1 },
+    [DEFAULT_PRESET_NAME]: defaultPresetParameters,
+    [HERTZSPRUNG_PROGRESSION_PRESET_NAME]: { ...defaultPresetParameters },
+    "RR Lyrae first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.05 },
+    "RR Lyrae first overtone, damped": { ...overtoneBase, phaseWarmupTau: 40, m: 15, sourceExp: 2, cq: 7, r0: 1.05, tEnd: 80 },
+    "RR Lyrae high-amplitude first overtone": { ...overtoneBase, m: 15, sourceExp: 2, r0: 1.1 },
+    "RR Lyrae second overtone": { ...overtoneBase, m: 20, sourceExp: 1, r0: 1.05 },
+    "Local radiative OZ1": { ...presetBase, referenceFamily: "local-s-tran", phaseWarmupTau: 1, zeta: 1, zetac: 0, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 2, r0: 1.2, v0: 0, h0: 0.8, uc0: 0, tEnd: 20, step: 0.012, logErrTol: -5, variableM: true, driver: "h", runUntilStable: false },
+    "Local convective OZC": { ...ozcBase, zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 20, step: 1e-3, logErrTol: -5, variableM: true, driver: "h", runUntilStable: false },
+    "OZC abs(V) driver diagnostic": { ...ozcBase, referenceFamily: "diagnostic", zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 20, step: 1e-3, logErrTol: -5, variableM: true, driver: "abs-v", runUntilStable: false }
+  };
+  function mAt(radius, p) {
+    if (!p.variableM) return p.m;
+    const eta = (1 - 3 / p.m) ** (1 / 3);
+    return 3 / (1 - (eta / radius) ** 3);
+  }
+  function linearDynamicPeriod(p) {
+    const chi = mAt(1, p);
+    const frequencySquared = chi * p.gamma1 - 4;
+    if (!Number.isFinite(frequencySquared) || frequencySquared <= 0) return null;
+    return 2 * Math.PI / Math.sqrt(frequencySquared);
+  }
+  function derivedPowers(radius, p) {
+    const m = mAt(radius, p);
+    const gamma11 = p.gamma1 - 1;
+    const b1 = (p.s + 4) * gamma11;
+    return {
+      m,
+      b: 4 + m * (p.n - b1),
+      q: m * p.gamma1 - 2,
+      c: m - 2,
+      d: m * gamma11 / 2
+    };
+  }
+  function effectiveGammaC(p) {
+    return p.zetac <= 0 && Math.abs(p.uc0) <= 1e-9 ? 0 : p.gammac;
+  }
+  function sample(tau, y, p) {
+    const [radius, velocity, pressure, convectiveVelocity] = y;
+    const powers = derivedPowers(radius, p);
+    const gammaC = effectiveGammaC(p);
+    const rawLr = radius ** powers.b * pressure ** (p.s + 4);
+    const rawLc = radius ** -powers.c * convectiveVelocity ** 3;
+    const lr = (1 - gammaC) * rawLr;
+    const lc = gammaC * rawLc;
+    return { tau, R: radius, V: velocity, H: pressure, Uc: convectiveVelocity, Lr: lr, Lc: lc, L: lr + lc };
+  }
+  function derivatives(_t, y, p) {
+    const [radius, velocity, pressure, convectiveVelocity] = y;
+    if (radius <= 0 || pressure <= 0 || !Number.isFinite(radius + velocity + pressure + convectiveVelocity)) {
+      throw new Error("model left the positive-radius/positive-H domain");
+    }
+    const powers = derivedPowers(radius, p);
+    const gammaC = effectiveGammaC(p);
+    const lr = radius ** powers.b * pressure ** (p.s + 4);
+    const lc = radius ** -powers.c * convectiveVelocity ** 3;
+    const radiativeWeight = 1 - gammaC;
+    const driver = p.driver === "h" ? Math.sqrt(pressure) : Math.sqrt(Math.abs(velocity));
+    return [
+      velocity,
+      pressure / radius ** powers.q - 1 / radius ** 2 - p.cq * velocity ** 3,
+      p.zeta * radius ** (powers.m * (p.gamma1 - 1)) * (radius ** p.sourceExp - radiativeWeight * lr - gammaC * lc),
+      p.zetac * (radius ** -powers.d * driver - convectiveVelocity)
+    ];
+  }
+  function solverOptionsFromParameters(p, solver = p.solver) {
+    return defaultSolverOptions({
+      solver,
+      rtol: 10 ** p.logRtol,
+      atol: 10 ** p.logAtol,
+      initialStep: p.step,
+      maxStep: p.maxStep,
+      minStep: 1e-10,
+      maxRows: 6e4,
+      maxAcceptedSteps: 6e5,
+      outputInterval: Math.max(5e-3, Math.min(0.02, p.tEnd / 12e3)),
+      errTol: 10 ** p.logErrTol
+    });
+  }
+  var StabilityDetector = class {
+    constructor(tolerance, stableCycles, minTime = 2, equilibriumWindow = 1.5, periodPrior) {
+      this.tolerance = tolerance;
+      this.stableCycles = stableCycles;
+      this.minTime = minTime;
+      this.equilibriumWindow = equilibriumWindow;
+      this.periodPrior = periodPrior;
+      __publicField(this, "rows", []);
+      __publicField(this, "peaks", []);
+    }
+    observe(row) {
+      this.rows.push(row);
+      this.captureLuminosityPeak();
+      if (row.tau < this.minTime) return null;
+      if (this.isEquilibrium()) return "equilibrium";
+      if (this.isLimitCycle()) return "limit_cycle";
+      return null;
+    }
+    captureLuminosityPeak() {
+      if (this.rows.length < 3) return;
+      const peak = findLuminosityMaxima(this.rows.slice(-3), this.minTime)[0];
+      if (!peak) return;
+      const candidate = {
+        index: this.rows.length - 2,
+        row: { ...interpolateRow(this.rows, peak.tau), L: peak.L }
+      };
+      const previousPeak = this.peaks.at(-1);
+      if (previousPeak && peak.tau - previousPeak.row.tau < this.minimumPeakSeparation()) {
+        if (peak.L > previousPeak.row.L) this.peaks[this.peaks.length - 1] = candidate;
+      } else {
+        this.peaks.push(candidate);
+      }
+    }
+    minimumPeakSeparation() {
+      return guidedMinSeparationFromPeriod(this.rows, this.periodPrior) ?? 0.75;
+    }
+    isEquilibrium() {
+      const end = this.rows.at(-1)?.tau ?? 0;
+      const window = [];
+      for (let i = this.rows.length - 1; i >= 0; i -= 1) {
+        if (end - this.rows[i].tau > this.equilibriumWindow) break;
+        window.push(this.rows[i]);
+      }
+      if (window.length < 6 || end - window.at(-1).tau < this.equilibriumWindow * 0.75) return false;
+      for (const key of ["R", "V", "H", "Uc", "L"]) {
+        const values = window.map((row) => row[key]);
+        const scale = Math.max(1, ...values.map(Math.abs));
+        if ((Math.max(...values) - Math.min(...values)) / scale > this.tolerance) return false;
+      }
+      return Math.max(...window.map((row) => Math.abs(row.V))) < this.tolerance;
+    }
+    isLimitCycle() {
+      const neededPeaks = this.stableCycles + 1;
+      if (this.peaks.length < neededPeaks) return false;
+      if (this.rows.at(-1).tau - this.peaks.at(-1).row.tau < this.minimumPeakSeparation()) return false;
+      const peaks = this.peaks.slice(-neededPeaks);
+      const periods = [];
+      const amplitudes = [];
+      const peakLuminosities = [];
+      for (let i = 0; i < peaks.length - 1; i += 1) {
+        const left = peaks[i];
+        const right = peaks[i + 1];
+        periods.push(right.row.tau - left.row.tau);
+        const cycle = this.rows.slice(left.index, right.index + 1);
+        const lum = cycle.map((row) => row.L);
+        amplitudes.push(Math.max(left.row.L, right.row.L, ...lum) - Math.min(...lum));
+        peakLuminosities.push(right.row.L);
+      }
+      return this.relativeSpreadOk(periods) && this.relativeSpreadOk(amplitudes) && this.relativeSpreadOk(peakLuminosities) && ["R", "V", "H", "Uc"].every((key) => {
+        const values = peaks.map((peak) => peak.row[key]);
+        const scale = Math.max(1, ...values.map(Math.abs));
+        return (Math.max(...values) - Math.min(...values)) / scale <= this.tolerance;
+      });
+    }
+    relativeSpreadOk(values) {
+      if (values.length < 2) return false;
+      const center = Math.max(Math.abs(values.reduce((sum, value) => sum + value, 0) / values.length), 1e-12);
+      return (Math.max(...values) - Math.min(...values)) / center <= this.tolerance;
+    }
+  };
+  function solveModel(p, solver = p.solver) {
+    const stabilityMinTime = Math.max(2, p.phaseWarmupTau ?? 2);
+    const detector = new StabilityDetector(10 ** p.logStabilityTol, p.stableCycles, stabilityMinTime, 1.5, linearDynamicPeriod(p));
+    detector.observe(sample(0, [p.r0, p.v0, p.h0, p.uc0], p));
+    const result = integrate(
+      (t, y) => derivatives(t, y, p),
+      [p.r0, p.v0, p.h0, p.uc0],
+      p.tEnd,
+      solverOptionsFromParameters(p, solver),
+      (t, y) => {
+        const row = sample(t, y, p);
+        if (Math.abs(row.R) > 30 || Math.abs(row.L) > 1e5 || Math.abs(row.H) > 1e5) return "runaway";
+        if (p.runUntilStable && row.R > 20 && row.V > 0) return "runaway_trend";
+        return p.runUntilStable ? detector.observe(row) : null;
+      }
+    );
+    const message = p.runUntilStable && result.status === "complete" ? "max_time" : result.message;
+    return {
+      rows: result.points.map((point) => sample(point.t, point.y, p)),
+      status: result.status,
+      message,
+      stats: result.stats
+    };
+  }
+  function interpolateRow(rows, time) {
+    if (!rows.length || time < rows[0].tau || time > rows[rows.length - 1].tau) return null;
+    let lo = 0;
+    let hi = rows.length - 1;
+    while (hi - lo > 1) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (rows[mid].tau <= time) lo = mid;
+      else hi = mid;
+    }
+    const a = rows[lo];
+    const b = rows[Math.min(hi, rows.length - 1)];
+    if (a.tau === b.tau) return a;
+    const f = (time - a.tau) / (b.tau - a.tau);
+    const blend = (key) => a[key] + (b[key] - a[key]) * f;
+    return { tau: time, R: blend("R"), V: blend("V"), H: blend("H"), Uc: blend("Uc"), Lr: blend("Lr"), Lc: blend("Lc"), L: blend("L") };
+  }
+
+  // src/grid.ts
+  var CONTROL_META = /* @__PURE__ */ new Map();
+  Object.values(CONTROL_GROUPS).forEach((controls) => {
+    controls.forEach(([key, _symbol, _name, min, max, step2, defaultValue]) => {
+      CONTROL_META.set(key, { key, min, max, step: step2, defaultValue });
+    });
+  });
+  function sliderMeta(key) {
+    const meta = CONTROL_META.get(key);
+    if (!meta) throw new Error(`Missing control metadata for ${String(key)}`);
+    return meta;
+  }
+  function decimalPlaces(value) {
+    const text = String(value);
+    if (text.includes("e-")) return Number(text.split("e-")[1]);
+    const decimal = text.split(".")[1];
+    return decimal ? decimal.length : 0;
+  }
+  function roundToNativeStep(value, step2) {
+    const digits = Math.min(12, Math.max(0, decimalPlaces(step2) + 2));
+    return Number(value.toFixed(digits));
+  }
+  function parameterValueFromSlider(key, sliderValue) {
+    const meta = sliderMeta(key);
+    const value = clampToMeta(sliderValue, meta);
+    if (key === "tEnd") return Math.min(1e3, Math.max(1, 10 ** value));
+    if (key === "zeta") return 10 ** value;
+    if (key === "zetac") return value <= RESPONSE_LOG_MIN + 1e-12 ? 0 : 10 ** value;
+    if (key === "m") return chiFromSliderValue(value);
+    return value;
+  }
+  function normalizeGridRange(range) {
+    const meta = sliderMeta(range.key);
+    const low = Math.min(range.lowerSliderValue, range.upperSliderValue);
+    const high = Math.max(range.lowerSliderValue, range.upperSliderValue);
+    return {
+      ...range,
+      lowerSliderValue: clampToMeta(low, meta),
+      upperSliderValue: clampToMeta(high, meta),
+      centerSliderValue: clampToMeta(range.centerSliderValue, meta),
+      nativeStep: meta.step
+    };
+  }
+  function generateSliderSamples(rangeInput, stride = 1) {
+    const range = normalizeGridRange(rangeInput);
+    const meta = sliderMeta(range.key);
+    const step2 = meta.step;
+    const firstIndex = Math.ceil((range.lowerSliderValue - meta.min) / step2 - 1e-9);
+    const lastIndex = Math.floor((range.upperSliderValue - meta.min) / step2 + 1e-9);
+    const effectiveStride = Math.max(1, Math.floor(stride));
+    const samples = [];
+    for (let index = firstIndex; index <= lastIndex; index += effectiveStride) {
+      samples.push(roundToNativeStep(meta.min + index * step2, step2));
+    }
+    const upper = roundToNativeStep(meta.min + lastIndex * step2, step2);
+    if (Number.isFinite(upper) && samples.at(-1) !== upper) samples.push(upper);
+    return [...new Set(samples.filter((sample2) => sample2 >= meta.min - 1e-9 && sample2 <= meta.max + 1e-9))];
+  }
+  function centerSliderSample(rangeInput) {
+    const range = normalizeGridRange(rangeInput);
+    const samples = generateSliderSamples(range, 1);
+    if (!samples.length) return roundToNativeStep(range.centerSliderValue, range.nativeStep);
+    return samples.reduce(
+      (best, sample2) => Math.abs(sample2 - range.centerSliderValue) < Math.abs(best - range.centerSliderValue) ? sample2 : best,
+      samples[0]
+    );
+  }
+  function meanSliderSample(rangeInput) {
+    const range = normalizeGridRange(rangeInput);
+    return Number(((range.lowerSliderValue + range.upperSliderValue) / 2).toFixed(12));
+  }
+  function fallbackSliderSamples(rangeInput, selected) {
+    const range = normalizeGridRange(rangeInput);
+    if (!selected) return [centerSliderSample(range)];
+    const low = roundToNativeStep(range.lowerSliderValue, range.nativeStep);
+    const center = centerSliderSample(range);
+    const high = roundToNativeStep(range.upperSliderValue, range.nativeStep);
+    return [.../* @__PURE__ */ new Set([low, center, high])].sort((a, b) => a - b);
+  }
+  function gridModelCountForStride(ranges, loopKey, options = {}) {
+    const main = gridTotal(buildRangeSamples(ranges, loopKey, options));
+    const path = ranges.length <= 1 ? 0 : gridTotal(buildLoopPathSamples(ranges, loopKey, options));
+    return { main, path, total: main + path };
+  }
+  function estimateGridBudgetFromModelCount(ranges, loopKey, maxModels) {
+    return estimateGridBudgetForTargetModelCount(ranges, loopKey, Math.max(1, Math.floor(maxModels)));
+  }
+  function estimateGridBudgetFromTiming(ranges, loopKey, completed, elapsedMs, timeoutMs) {
+    const fullModelCount = gridModelCountForStride(ranges, loopKey);
+    if (completed <= 0 || elapsedMs <= 0 || timeoutMs <= 0) {
+      return {
+        stride: 1,
+        estimatedTotalMs: null,
+        zeroCompletedFallback: true,
+        fullModelCount,
+        coarsenedModelCount: gridModelCountForStride(ranges, loopKey, { zeroCompletedFallback: true }),
+        targetModelCount: null
+      };
+    }
+    const modelMs = elapsedMs / completed;
+    const targetModelCount = Math.max(1, Math.floor(timeoutMs / Math.max(modelMs, 1e-9)));
+    return {
+      ...estimateGridBudgetForTargetModelCount(ranges, loopKey, targetModelCount),
+      estimatedTotalMs: modelMs * fullModelCount.total
+    };
+  }
+  function estimateGridBudgetForTargetModelCount(ranges, loopKey, targetModelCount) {
+    const fullModelCount = gridModelCountForStride(ranges, loopKey);
+    if (fullModelCount.total <= targetModelCount) {
+      return {
+        stride: 1,
+        estimatedTotalMs: null,
+        zeroCompletedFallback: false,
+        fullModelCount,
+        coarsenedModelCount: fullModelCount,
+        targetModelCount
+      };
+    }
+    let bestStride = 1;
+    let bestCount = fullModelCount;
+    const maxStride = maxUsefulGridStride(ranges);
+    for (let stride = 2; stride <= maxStride; stride += 1) {
+      const count = gridModelCountForStride(ranges, loopKey, { stride });
+      if (count.total < bestCount.total) {
+        bestStride = stride;
+        bestCount = count;
+      }
+      if (count.total <= targetModelCount) {
+        return {
+          stride,
+          estimatedTotalMs: null,
+          zeroCompletedFallback: false,
+          fullModelCount,
+          coarsenedModelCount: count,
+          targetModelCount
+        };
+      }
+    }
+    return {
+      stride: bestStride,
+      estimatedTotalMs: null,
+      zeroCompletedFallback: false,
+      fullModelCount,
+      coarsenedModelCount: bestCount,
+      targetModelCount
+    };
+  }
+  function maxUsefulGridStride(ranges) {
+    return Math.max(1, ...ranges.map((range) => generateSliderSamples(range, 1).length));
+  }
+  function buildRangeSamples(ranges, loopKey, options = {}) {
+    return ranges.map((range) => ({
+      key: range.key,
+      centerSliderValue: normalizeGridRange(range).centerSliderValue,
+      samples: addCenterSample(
+        options.zeroCompletedFallback ? fallbackSliderSamples(range, range.key === loopKey) : generateSliderSamples(range, options.stride ?? 1),
+        range
+      )
+    }));
+  }
+  function buildLoopPathSamples(ranges, loopKey, options = {}) {
+    return ranges.map((rangeInput) => {
+      const range = normalizeGridRange(rangeInput);
+      const mean = meanSliderSample(range);
+      const samples = options.zeroCompletedFallback ? fallbackSliderSamples(range, true) : generateSliderSamples(range, options.stride ?? 1);
+      return {
+        key: range.key,
+        centerSliderValue: mean,
+        samples: range.key === loopKey ? samples : [mean]
+      };
+    });
+  }
+  function gridTotal(samples) {
+    return samples.reduce((total, item) => total * Math.max(1, item.samples.length), 1);
+  }
+  function clampToMeta(value, meta) {
+    return Math.min(meta.max, Math.max(meta.min, value));
+  }
+  function chiFromSliderValue(value) {
+    const slider = Math.min(CHI_SLIDER_MAX, Math.max(CHI_SLIDER_MIN, value));
+    if (slider <= CHI_SLIDER_BREAK) {
+      const fraction2 = (slider - CHI_SLIDER_MIN) / (CHI_SLIDER_BREAK - CHI_SLIDER_MIN);
+      return CHI_PARAMETER_MIN + fraction2 * (CHI_PARAMETER_BREAK - CHI_PARAMETER_MIN);
+    }
+    const fraction = (slider - CHI_SLIDER_BREAK) / (CHI_SLIDER_MAX - CHI_SLIDER_BREAK);
+    return CHI_PARAMETER_BREAK * (CHI_PARAMETER_MAX / CHI_PARAMETER_BREAK) ** fraction;
+  }
+  function addCenterSample(samples, range) {
+    const center = centerSliderSample(range);
+    return [.../* @__PURE__ */ new Set([...samples, center])].sort((a, b) => a - b);
+  }
+
   // src/displayWindow.ts
   function isTimeWindowReason(message) {
     return message === "equilibrium" || message === "runaway" || message === "runaway_trend";
@@ -1438,7 +1478,21 @@
         variedValues,
         phaseRows,
         period: phase.period,
-        fourier
+        fourier,
+        integrationProvenance: {
+          status: solved.status,
+          message: solved.message,
+          statistics: { ...solved.stats },
+          actualEndTau: solved.rows.at(-1)?.tau ?? null,
+          rowCount: solved.rows.length
+        },
+        phaseProvenance: {
+          reason: phase.reason,
+          period: phase.period,
+          rowCount: phase.rows.length,
+          archivedRowCount: phaseRows.length,
+          reference: phase.reference
+        }
       });
     } catch (_error) {
       stats.failed += 1;

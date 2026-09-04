@@ -94,7 +94,9 @@ def series_specs(panel_id, rows):
     if panel_id == "time":
         return [("tau", key, None, r"time $\tau$", "state") for key in ("R", "V", "H", "Uc")]
     if panel_id == "lum":
-        return [("tau", key, None, r"time $\tau$", "luminosity") for key in ("L", "Lr", "Lc", "L_source")]
+        x_key = "phase" if rows and "phase" in rows[0] else "tau"
+        xlabel = "phase" if x_key == "phase" else r"time $\tau$"
+        return [(x_key, key, None, xlabel, "luminosity") for key in ("L", "Lr", "Lc")]
     if panel_id == "fourier":
         return [("period", "value", "diagnostic", r"period / $\tau$", "Fourier diagnostic")]
     return []
@@ -129,6 +131,11 @@ def draw_series(ax, panel, rows):
     if sum(1 for line in ax.lines if not line.get_label().startswith("_")) > 1:
         ax.legend(frameon=False, fontsize=7)
     limits = panel.get("metadata", {}).get("axisLimits", {})
+    axes = panel.get("metadata", {}).get("axes", {})
+    if axes.get("x", {}).get("scale") == "log10":
+        ax.set_xscale("log", base=10)
+    if axes.get("y", {}).get("scale") == "log10":
+        ax.set_yscale("log", base=10)
     if limits.get("x"):
         ax.set_xlim(*limits["x"])
     if limits.get("y"):
@@ -136,34 +143,65 @@ def draw_series(ax, panel, rows):
     ax.grid(False)
 
 
-def draw_stability_cells(ax, rows, panel_id):
+def draw_stability_cells(ax, panel, rows, panel_id):
     if panel_id == "stability":
-        x_key, y_key = "log10_zeta_c", "log10_zeta"
-        xlabel, ylabel = r"$\log_{10}\zeta_c$", r"$\log_{10}\zeta$"
+        axes = panel.get("metadata", {}).get("axes", {})
+        x_key = axes.get("x", {}).get("dataColumn", "log10_zeta_c")
+        y_key = axes.get("y", {}).get("dataColumn", "log10_zeta")
+        xlabel = axes.get("x", {}).get("label", r"$\log_{10}\zeta_c$")
+        ylabel = axes.get("y", {}).get("label", r"$\log_{10}\zeta$")
     else:
         x_key, y_key = "log10_zeta_c_over_zeta", "gamma_c"
         xlabel, ylabel = r"$\log_{10}(\zeta_c/\zeta)$", r"$\gamma_c$"
+    palette = panel.get("metadata", {}).get("categoricalPalette", {})
     for kind in sorted({row.get("stability_kind", "neutral") for row in rows}):
         selected = [row for row in rows if row.get("stability_kind", "neutral") == kind]
+        palette_item = palette.get(kind, {})
+        if isinstance(palette_item, str):
+            color, alpha = palette_item, 1.0
+        else:
+            color = palette_item.get("color", KIND_COLORS.get(kind, "#999999"))
+            alpha = number(palette_item.get("alpha"), 1.0)
         ax.scatter([number(row.get(x_key)) for row in selected], [number(row.get(y_key)) for row in selected],
-                   s=7, marker="s", linewidths=0, color=KIND_COLORS.get(kind, "#999999"), label=kind)
+                   s=7, marker="s", linewidths=0, color=color, alpha=alpha, label=kind)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
+    axes = panel.get("metadata", {}).get("axes", {})
+    if axes.get("x", {}).get("scale") == "log10":
+        ax.set_xscale("log", base=10)
+    if axes.get("y", {}).get("scale") == "log10":
+        ax.set_yscale("log", base=10)
     ax.legend(frameon=False, fontsize=6)
+    limits = panel.get("metadata", {}).get("axisLimits", {})
+    if limits.get("x"):
+        ax.set_xlim(*limits["x"])
+    if limits.get("y"):
+        ax.set_ylim(*limits["y"])
     ax.grid(False)
+
+
+def rendering_geometry(panel, suffix):
+    for rendering in panel.get("renderings", []):
+        if rendering.get("size") == suffix:
+            return number(rendering.get("widthInches")), number(rendering.get("heightInches"))
+    width = 3.4 if suffix == "single" else 7.1
+    snapshot = panel["id"] in {"model", "heatEngine"}
+    columns = 1 if suffix == "single" else 2
+    height = width * (max(1, (len(load_rows(panel["dataFile"])) + columns - 1) // columns) * 0.72 if snapshot else 0.62)
+    return width, max(2.1, height)
 
 
 for panel in MANIFEST["panels"]:
     rows = load_rows(panel["dataFile"])
-    for suffix, width in (("single", 3.4), ("double", 7.1)):
+    for suffix in ("single", "double"):
+        width, height = rendering_geometry(panel, suffix)
         snapshot = panel["id"] in {"model", "heatEngine"}
         columns = 1 if suffix == "single" else 2
-        height = width * (max(1, (len(rows) + columns - 1) // columns) * 0.72 if snapshot else 0.62)
-        fig, ax = plt.subplots(figsize=(width, max(2.1, height)), constrained_layout=True)
+        fig, ax = plt.subplots(figsize=(width, height), constrained_layout=True)
         if snapshot:
             draw_snapshots(ax, rows, panel["id"], columns)
         elif panel["id"] in {"stability", "strip"}:
-            draw_stability_cells(ax, rows, panel["id"])
+            draw_stability_cells(ax, panel, rows, panel["id"])
         else:
             draw_series(ax, panel, rows)
         stem = OUT / f"{panel['id']}-{suffix}"

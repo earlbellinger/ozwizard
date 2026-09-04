@@ -81,12 +81,13 @@
     (function () {
       var script = document.createElement("script");
       var path = window.location.pathname.replace(/\\/g, "/");
+      var bundleVersion = "preset-inlist-solver-block-20260630";
       if (window.location.protocol === "file:") {
         script.src = path.indexOf("/dist/") >= 0
-          ? "./assets/wizard_of_oz-file.js"
-          : "./dist/assets/wizard_of_oz-file.js";
+          ? "./assets/wizard_of_oz-file.js?v=" + bundleVersion
+          : "./dist/assets/wizard_of_oz-file.js?v=" + bundleVersion;
       } else if (path.indexOf("/dist/") >= 0) {
-        script.src = "./assets/wizard_of_oz-file.js";
+        script.src = "./assets/wizard_of_oz-file.js?v=" + bundleVersion;
       } else {
         script.type = "module";
         script.src = "/src/main.ts";
@@ -456,9 +457,9 @@
     }
 
     .theme-toggle {
-      position: fixed;
-      top: 12px;
-      right: 12px;
+      position: absolute;
+      top: calc(12px + env(safe-area-inset-top, 0px));
+      right: calc(12px + env(safe-area-inset-right, 0px));
       z-index: 30;
       width: 34px;
       height: 34px;
@@ -984,7 +985,131 @@
 
     .preset-actions {
       display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
       margin-top: 6px;
+    }
+
+    .preset-feedback {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      margin: 7px 1px 0;
+      white-space: pre-wrap;
+    }
+
+    .preset-feedback[data-kind="error"] {
+      color: var(--bad);
+    }
+
+    .preset-feedback[hidden] {
+      display: none;
+    }
+
+    .local-preset {
+      border-color: color-mix(in srgb, var(--focus) 72%, var(--line)) !important;
+    }
+
+    .local-preset::after {
+      content: "local";
+      display: inline-block;
+      margin-left: 6px;
+      color: var(--subtle);
+      font-size: 10px;
+      font-weight: 720;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .preset-dialog {
+      width: min(720px, calc(100vw - 28px));
+      max-height: min(760px, calc(100vh - 28px));
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: var(--paper);
+      color: var(--ink);
+      box-shadow: var(--panel-shadow);
+      padding: 16px;
+    }
+
+    .preset-dialog::backdrop {
+      background: rgb(1 4 9 / 0.62);
+    }
+
+    .preset-dialog h2 {
+      margin: 0 0 12px;
+      font-size: 17px;
+      line-height: 1.25;
+    }
+
+    .preset-dialog label {
+      color: var(--muted);
+      display: grid;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 680;
+    }
+
+    .preset-dialog input[type="text"],
+    .preset-dialog textarea {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--canvas);
+      color: var(--ink);
+      font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      padding: 8px 9px;
+    }
+
+    .preset-dialog textarea {
+      min-height: 360px;
+      resize: vertical;
+      tab-size: 2;
+      white-space: pre;
+    }
+
+    .dialog-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .dialog-actions button {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--paper-raised);
+      color: var(--ink);
+      cursor: pointer;
+      min-height: 34px;
+      padding: 7px 10px;
+    }
+
+    .dialog-actions button:hover {
+      border-color: var(--line-strong);
+      background: var(--paper-high);
+    }
+
+    .preset-export-list {
+      display: grid;
+      gap: 6px;
+      max-height: min(420px, 58vh);
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .preset-export-option {
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      color: var(--ink) !important;
+      display: grid !important;
+      font-size: 13px !important;
+      font-weight: 560 !important;
+      gap: 9px !important;
+      grid-template-columns: auto minmax(0, 1fr);
+      min-height: 34px;
+      padding: 6px 8px;
     }
 
     .sidebar-controls-summary {
@@ -2891,8 +3016,15 @@
             </summary>
             <div class="preset-grid" id="presetButtons"></div>
             <div class="preset-actions">
+              <button type="button" id="savePreset">Save current</button>
               <button type="button" id="resetPreset">Reset preset</button>
+              <button type="button" id="removePreset">Remove local</button>
+              <button type="button" id="editPresetInlist">Edit inlist</button>
+              <button type="button" id="importPresets">Import</button>
+              <button type="button" id="exportPresets">Export</button>
             </div>
+            <input id="importPresetFile" type="file" accept=".inlist,.txt,text/plain" hidden>
+            <p class="preset-feedback" id="presetFeedback" hidden></p>
           </details>
 
           <details class="control-section" id="physicalControlSection" open>
@@ -3250,9 +3382,13 @@
 
       </section>
 
-      <section class="plot-panel fourier-grid-panel" id="fourierGridPanel" hidden>
+      <section class="plot-panel fourier-grid-panel" id="fourierGridPanel" data-plot-panel="fourier" hidden>
         <div class="plot-title">
-          <div class="plot-title-left">
+          <div class="plot-title-left" data-plot-control-home="fourier">
+            <label class="plot-enable-control" data-plot-control="fourier">
+              <input type="checkbox" data-plot-toggle="fourier" checked aria-label="Hide Fourier Diagnostics plot">
+              <span>Fourier Diagnostics</span>
+            </label>
             <h3>Fourier Diagnostics</h3>
           </div>
         </div>
@@ -3364,6 +3500,34 @@
       </section>
     </main>
   </div>
+
+  <dialog class="preset-dialog" id="inlistDialog" aria-labelledby="inlistDialogTitle">
+    <h2 id="inlistDialogTitle">Preset Inlist</h2>
+    <label>
+      Name
+      <input id="inlistPresetName" type="text" autocomplete="off">
+    </label>
+    <label style="margin-top: 10px;">
+      Inlist
+      <textarea id="inlistText" spellcheck="false"></textarea>
+    </label>
+    <p class="preset-feedback" id="inlistFeedback" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" id="closeInlistDialog">Cancel</button>
+      <button type="button" id="applyInlist">Apply</button>
+      <button type="button" id="saveInlistPreset">Save as preset</button>
+    </div>
+  </dialog>
+
+  <dialog class="preset-dialog" id="exportPresetDialog" aria-labelledby="exportPresetDialogTitle">
+    <h2 id="exportPresetDialogTitle">Export Presets</h2>
+    <div class="preset-export-list" id="exportPresetList"></div>
+    <p class="preset-feedback" id="exportPresetFeedback" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" id="closeExportPresetDialog">Cancel</button>
+      <button type="button" id="downloadPresetExport">Download</button>
+    </div>
+  </dialog>
 
 </body>
 </html>

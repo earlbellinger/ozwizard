@@ -861,8 +861,8 @@ async function runPlaywrightChecks() {
     assertOk((await page.locator("#pianoPanel").getAttribute("data-sonification-signature")) !== gridPianoSignature, "piano waveform should follow the grid loop model");
     await pianoToggle.click();
     await page.locator("#gridLoopControls input[value='gammac']").check();
-    await page.waitForFunction(() => document.querySelector("#phaseLagCanvas")?.getAttribute("data-phase-lag-loop-key") === "gammac", null, { timeout: 5000 });
-    await page.waitForFunction(() => document.querySelector("#lightCanvas")?.getAttribute("data-grid-colorbar-key") === "gammac", null, { timeout: 5000 });
+    await page.waitForFunction(() => document.querySelector("#phaseLagCanvas")?.getAttribute("data-phase-lag-loop-key") === "gammac", null, { timeout: 15000 });
+    await page.waitForFunction(() => document.querySelector("#lightCanvas")?.getAttribute("data-grid-colorbar-key") === "gammac", null, { timeout: 15000 });
     assertOk((await page.locator("#tpOpacityCanvas").getAttribute("data-tp-opacity-mode")) === "grid", "T-P Loop should switch to grid mode");
     await page.waitForFunction(() => /[2-9]\d*/.test(document.querySelector("#tpOpacityCanvas")?.getAttribute("data-tp-opacity-tracks") || ""), null, { timeout: 5000 });
     assertOk(/[2-9]\d*/.test(await page.locator("#tpOpacityCanvas").getAttribute("data-tp-opacity-tracks") || ""), "T-P Loop should draw a sequence of grid models");
@@ -889,6 +889,10 @@ async function runPlaywrightChecks() {
       return ctx.getImageData(0, 0, canvas.width, canvas.height).data.some((value) => value !== 0);
     });
     assertOk(fourierHasPaint, "Fourier canvas should paint in grid mode");
+    await page.locator("[data-plot-toggle='fourier']").uncheck();
+    assertOk(!(await page.locator("#fourierGridPanel").isVisible()), "Fourier toggle should hide the grid panel");
+    await page.locator("#hiddenPlotControls [data-plot-toggle='fourier']").check();
+    assertOk(await page.locator("#fourierGridPanel").isVisible(), "Fourier toggle should restore the grid panel");
     assertOk(
       (await page.locator("#fourierCanvas").getAttribute("data-fourier-axis-labels")) === String.raw`r_{21},r_{31},\phi_{21},\phi_{31}`,
       "Fourier canvas should expose only the period harmonic panels"

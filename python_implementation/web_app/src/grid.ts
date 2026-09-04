@@ -10,10 +10,11 @@ import {
   type ControlDef,
   type ControlParameterKey,
   type ModelParameters,
-  type Row
+  type Row,
+  type SolveResult
 } from "./model";
 import { type FourierParameters } from "./fourier";
-import { type PhaseAnchor } from "./phase";
+import { type PhaseAnchor, type PhaseReference, type PhaseResult } from "./phase";
 
 export interface GridRange {
   key: ControlParameterKey;
@@ -37,6 +38,20 @@ export interface GridModelResult {
   phaseRows: Row[];
   period: number;
   fourier: FourierParameters | null;
+  integrationProvenance?: {
+    status: SolveResult["status"];
+    message: string;
+    statistics: SolveResult["stats"];
+    actualEndTau: number | null;
+    rowCount: number;
+  };
+  phaseProvenance?: {
+    reason: PhaseResult["reason"];
+    period: number;
+    rowCount: number;
+    archivedRowCount: number;
+    reference: PhaseReference | null;
+  };
 }
 
 export type GridBudget =

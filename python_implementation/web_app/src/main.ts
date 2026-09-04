@@ -36,6 +36,25 @@ import {
   type GridRange,
   type GridWorkerMessage
 } from "./grid";
+import {
+  BUILT_IN_PRESETS,
+  emptyLocalPresetStore,
+  gridRangeFromSnapshot,
+  gridRangeSnapshotFromGridRange,
+  loadLocalPresetStore,
+  mergePresetRegistry,
+  parsePresetInlistBundle,
+  removeLocalPreset,
+  saveLocalPresetStore,
+  serializePresetInlistBundle,
+  snapshotFromParameters,
+  upsertLocalPreset,
+  type LocalPresetStore,
+  type PresetGridSnapshot,
+  type PresetRegistry,
+  type PresetRegistryEntry,
+  type PresetSnapshot
+} from "./presets";
 import { computeGridWithMessages } from "./gridCompute";
 import { buildTwoCyclePhase, guidedMinSeparationFromPeriod, phaseWarmupTau, type PhaseAnchor, type PhaseResult } from "./phase";
 import {
@@ -106,7 +125,9 @@ import {
 import {
   createPaperBundle,
   downloadPaperBundle,
-  type PaperExportManifestV1,
+  ensurePaperExportFonts,
+  paperExportCanvasFont,
+  type PaperExportManifestV2,
   type PaperFigureSize,
   type PaperPanelRenderer,
   type PaperRenderResult
@@ -130,6 +151,8 @@ declare global {
 let state: ModelParameters = { ...PRESETS[DEFAULT_PRESET_NAME] };
 let selectedPreset = DEFAULT_PRESET_NAME;
 let activePreset = DEFAULT_PRESET_NAME;
+let localPresetStore: LocalPresetStore = emptyLocalPresetStore();
+let presetRegistry: PresetRegistry = mergePresetRegistry(BUILT_IN_PRESETS, localPresetStore.presets);
 let latestRows: Row[] = [];
 let latestResult = solveModel(state);
 let phaseAnchor: PhaseAnchor = "min";
@@ -254,6 +277,12 @@ let latestPhaseMessage: string | undefined;
 let latestPhasePeriodLabel = "phase (period = n/a τ)";
 let latestPhaseLuminosityRange: NumericRange = [0, 1];
 let latestPhaseParameters: ModelParameters = state;
+let latestPhaseResult: PhaseResult = {
+  rows: [],
+  reference: null,
+  period: null,
+  reason: "not_enough_rows"
+};
 let paperPhaseSelection: PaperPhaseSelectionV1 = extremaPaperPhaseSelection();
 let latestPeriodogramRows: Row[] = [];
 let latestPeriodogramCutTau = 0;
@@ -353,7 +382,7 @@ type NumericRange = [number, number];
 type InteractivePlotId = "time" | "lum";
 type RowSeriesKey = "R" | "V" | "H" | "Uc" | "L" | "Lr" | "Lc";
 type PlotSeriesKey = RowSeriesKey | "Lb";
-type UserPlotId = "model" | "light" | "velocity" | "heatEngine" | "work" | "time" | "lum" | "tpOpacity" | "periodogram" | "phaseLag" | "stability" | "strip" | "phasePortrait";
+type UserPlotId = "model" | "light" | "velocity" | "heatEngine" | "work" | "time" | "lum" | "tpOpacity" | "periodogram" | "phaseLag" | "stability" | "strip" | "phasePortrait" | "fourier";
 type SonificationSource = "luminosity" | "velocity" | "pressure";
 type GridBudgetMode = GridBudget["mode"];
 const PHASE_LAG_YLIM: NumericRange = [-0.5, 0.5];
@@ -606,7 +635,8 @@ const PLOT_PANEL_LABELS: Record<UserPlotId, string> = {
   phaseLag: "Phase Lag",
   stability: "Stability Map",
   strip: "Instability Strip",
-  phasePortrait: "Thermal-Convection Loop"
+  phasePortrait: "Thermal-Convection Loop",
+  fourier: "Fourier Diagnostics"
 };
 
 const plotPanelVisibility: Record<UserPlotId, boolean> = {
@@ -622,7 +652,8 @@ const plotPanelVisibility: Record<UserPlotId, boolean> = {
   phaseLag: true,
   stability: true,
   strip: true,
-  phasePortrait: true
+  phasePortrait: true,
+  fourier: true
 };
 
 const phaseLagPairVisibility = Object.fromEntries(
@@ -649,6 +680,7 @@ const STRIP_LOG_RATIO_MIN = -2;
 const STRIP_LOG_RATIO_MAX = 2;
 const stabilityMapCache = new Map<string, StabilityKind[]>();
 const instabilityStripCache = new Map<string, { kinds: StabilityKind[]; counts: Record<StabilityKind, number>; signature: string }>();
+const expandedStabilityKinds = new Set<AnalyticStabilityKind>();
 const PLOT_LAYOUT = {
   left: 84,
   top: 18,
@@ -999,13 +1031,30 @@ function valuesMatch(a: unknown, b: unknown): boolean {
   return a === b;
 }
 
+function presetEntry(name: string): PresetRegistryEntry | undefined {
+  return presetRegistry.byName.get(name);
+}
+
+function presetParameters(name: string): ModelParameters {
+  return presetEntry(name)?.parameters ?? PRESETS[DEFAULT_PRESET_NAME];
+}
+
+function presetEntries(): PresetRegistryEntry[] {
+  return presetRegistry.entries;
+}
+
+function refreshPresetRegistry(): void {
+  presetRegistry = mergePresetRegistry(BUILT_IN_PRESETS, localPresetStore.presets);
+}
+
 function stateMatchesPreset(name: string): boolean {
-  const preset = PRESETS[name];
+  const preset = presetEntry(name)?.parameters;
+  if (!preset) return false;
   return (Object.keys(preset) as Array<keyof ModelParameters>).every((key) => valuesMatch(state[key], preset[key]));
 }
 
 function refreshActivePreset(): void {
-  activePreset = Object.keys(PRESETS).find((name) => stateMatchesPreset(name)) || "Custom";
+  activePreset = presetEntries().find((entry) => stateMatchesPreset(entry.name))?.name || "Custom";
   updatePresetButtons();
   updateResetButtons();
 }
@@ -1865,6 +1914,17 @@ function setStabilityChipExpanded(chip: HTMLElement, expanded: boolean): void {
   chip.setAttribute("aria-expanded", expanded ? "true" : "false");
   if (expanded) chip.dataset.stabilityView = "formula";
   else delete chip.dataset.stabilityView;
+  const kind = chip.dataset.stabilityKind as AnalyticStabilityKind | undefined;
+  if (!kind) return;
+  if (expanded) expandedStabilityKinds.add(kind);
+  else expandedStabilityKinds.delete(kind);
+  const metrics = chip.closest<HTMLElement>("#metrics");
+  if (metrics) {
+    stagedMathUpdates.delete(metrics);
+    mathTypesetTargets.delete(metrics);
+    metrics.dataset.mathState = "ready";
+    delete metrics.dataset.mathVersion;
+  }
 }
 
 function toggleStabilityChip(chip: HTMLElement): void {
@@ -1907,6 +1967,7 @@ function buildControls(): void {
   setupPhaseAnnotationControls();
   setupGridSliderDeferral();
   buildPresetButtons();
+  setupPresetActions();
   buildSolverButtons();
   buildSliderGroup("physicalControls", CONTROL_GROUPS.physical);
   buildSliderGroup("initialControls", CONTROL_GROUPS.initial);
@@ -2162,7 +2223,7 @@ function updatePaperModeControls(): void {
   });
 }
 
-type PaperPanelId = UserPlotId | "fourier";
+type PaperPanelId = UserPlotId;
 
 interface PaperPanelDefinition {
   id: PaperPanelId;
@@ -2197,7 +2258,19 @@ const PAPER_SERIES_STYLES: Record<string, { color: string; dash: number[]; marke
   Lr: { color: "#56B4E9", dash: [8, 4], marker: "square" },
   Lc: { color: "#009E73", dash: [2, 3], marker: "triangle" },
   Lb: { color: "#000000", dash: [10, 3, 2, 3], marker: "diamond" },
+  T: { color: "#E69F00", dash: [8, 4], marker: "diamond" },
   power: { color: "#D55E00", dash: [], marker: "circle" }
+};
+
+const PAPER_EXPORT_COLOR_OVERRIDES = {
+  R: PAPER_SERIES_STYLES.R.color,
+  V: PAPER_SERIES_STYLES.V.color,
+  H: PAPER_SERIES_STYLES.H.color,
+  Uc: PAPER_SERIES_STYLES.Uc.color,
+  L: PAPER_SERIES_STYLES.L.color,
+  Lr: PAPER_SERIES_STYLES.Lr.color,
+  Lc: PAPER_SERIES_STYLES.Lc.color,
+  sourceExp: PAPER_SERIES_STYLES.Lb.color
 };
 
 const PAPER_MARKERLESS_PANEL_IDS = new Set<PaperPanelId>(["light", "velocity", "time", "lum"]);
@@ -2248,6 +2321,33 @@ function paperPhaseSeriesRows(quantity: "L" | "V"): Record<string, unknown>[] {
     [quantity]: row[quantity],
     [`${quantity}_unit`]: "dimensionless"
   }));
+}
+
+function paperLuminosityRows(): Row[] {
+  const cycle = phaseWindowRows(latestPhaseRows, 0, 1, false)
+    .filter((row) => Number.isFinite(row.tau) && row.tau > 0 && row.tau < 1);
+  const reference = latestPhaseResult.reference;
+  if (reference?.anchor === "min" && reference.minimumRows) {
+    const lowerEndpoint = reference.minimumRows[0];
+    const upperEndpoint = reference.minimumRows[1];
+    return [
+      { ...lowerEndpoint, tau: 0, L: lowerEndpoint.Lr + lowerEndpoint.Lc },
+      ...cycle,
+      { ...upperEndpoint, tau: 1, L: upperEndpoint.Lr + upperEndpoint.Lc }
+    ];
+  }
+  const source = phaseWindowRows(latestPhaseRows, 0, 1, false);
+  if (!source.length) return [];
+  const minimum = source.reduce((best, row) => row.L < best.L ? row : best, source[0]);
+  const shifted = source.map((row) => ({ ...row, tau: ((row.tau - minimum.tau) % 1 + 1) % 1 }))
+    .sort((a, b) => a.tau - b.tau);
+  const endpoint = { ...minimum, L: minimum.Lr + minimum.Lc };
+  return [{ ...endpoint, tau: 0 }, ...shifted.filter((row) => row.tau > 1e-12), { ...endpoint, tau: 1 }];
+}
+
+function paperLuminosityYlim(): NumericRange {
+  const rows = paperLuminosityRows();
+  return range(rows.flatMap((row) => [row.L, row.Lr, row.Lc]), 0.08);
 }
 
 function paperSnapshotCsv(panel: "model" | "heatEngine"): string {
@@ -2330,15 +2430,27 @@ function paperPanelCsv(id: PaperPanelId): string {
     return csvDocument(["tau", "tau_unit", "R", "V", "H", "Uc"], latestRows.map((row) => ({ tau: row.tau, tau_unit: "dynamical time", R: row.R, V: row.V, H: row.H, Uc: row.Uc })));
   }
   if (id === "lum") {
-    return csvDocument(["tau", "tau_unit", "L", "Lr", "Lc", "L_source"], latestRows.map((row) => ({ tau: row.tau, tau_unit: "dynamical time", L: row.L, Lr: row.Lr, Lc: row.Lc, L_source: baseLuminosity(row, state) })));
+    return csvDocument(["phase", "phase_unit", "L", "Lr", "Lc"], paperLuminosityRows().map((row) => ({
+      phase: row.tau,
+      phase_unit: "cycle",
+      L: row.L,
+      Lr: row.Lr,
+      Lc: row.Lc
+    })));
   }
   if (id === "stability") {
     const kinds = stabilityKindsForMap(stabilityDisplayParameters());
-    return csvDocument(["log10_zeta_c", "log10_zeta", "stability_kind"], kinds.map((kind, index) => ({
-      log10_zeta_c: RESPONSE_LOG_MIN + ((index % STABILITY_MAP_RESOLUTION) + 0.5) * (RESPONSE_LOG_MAX - RESPONSE_LOG_MIN) / STABILITY_MAP_RESOLUTION,
-      log10_zeta: RESPONSE_LOG_MIN + (Math.floor(index / STABILITY_MAP_RESOLUTION) + 0.5) * (RESPONSE_LOG_MAX - RESPONSE_LOG_MIN) / STABILITY_MAP_RESOLUTION,
-      stability_kind: kind
-    })));
+    return csvDocument(["zeta_c", "zeta", "log10_zeta_c", "log10_zeta", "stability_kind"], kinds.map((kind, index) => {
+      const logZetaC = RESPONSE_LOG_MIN + ((index % STABILITY_MAP_RESOLUTION) + 0.5) * (RESPONSE_LOG_MAX - RESPONSE_LOG_MIN) / STABILITY_MAP_RESOLUTION;
+      const logZeta = RESPONSE_LOG_MIN + (Math.floor(index / STABILITY_MAP_RESOLUTION) + 0.5) * (RESPONSE_LOG_MAX - RESPONSE_LOG_MIN) / STABILITY_MAP_RESOLUTION;
+      return {
+        zeta_c: 10 ** logZetaC,
+        zeta: 10 ** logZeta,
+        log10_zeta_c: logZetaC,
+        log10_zeta: logZeta,
+        stability_kind: kind
+      };
+    }));
   }
   if (id === "strip") {
     const strip = instabilityKindsForStrip(stabilityDisplayParameters());
@@ -2375,6 +2487,21 @@ function drawPaperHistoryCanvas(id: "time" | "lum"): void {
     });
     return;
   }
+  if (paperModeActive()) {
+    const rows = paperLuminosityRows();
+    drawSeries("lumCanvas", [
+      { label: "L", color: COLORS.L, rows, x: (row) => row.tau, y: (row) => row.L },
+      { label: "Lr", color: COLORS.Lr, rows, x: (row) => row.tau, y: (row) => row.Lr },
+      { label: "Lc", color: COLORS.Lc, rows, x: (row) => row.tau, y: (row) => row.Lc }
+    ], {
+      xlabel: "phase",
+      ylabel: "luminosity",
+      xlim: [0, 1],
+      ylim: paperLuminosityYlim(),
+      message: "phase-resolved luminosity unavailable"
+    });
+    return;
+  }
   const showSplit = convectiveLuminosityAvailable();
   const keys: PlotSeriesKey[] = showSplit ? ["L", "Lr", "Lc", "Lb"] : ["L", "Lb"];
   const rows = rowsForInteractivePlot("lum", latestRows, keys);
@@ -2401,10 +2528,16 @@ function paperPanelAvailable(id: PaperPanelId): boolean {
   if (id === "model" || id === "heatEngine") return resolvePaperSnapshots(paperPhaseSelection, latestDisplayWindow).length > 0;
   if (id === "work") return heatEngineWorkRows(latestPhaseRows).selectedRows.length > 2;
   if (id === "light" || id === "velocity" || id === "phasePortrait") return latestPhaseRows.length > 1;
-  if (id === "time" || id === "lum") return latestRows.length > 1;
+  if (id === "time") return latestRows.length > 1;
+  if (id === "lum") return latestDisplayWindow.mode === "phase" && paperLuminosityRows().length > 2;
   if (id === "tpOpacity") return gridState.enabled ? gridState.results.length > 0 : latestPhaseRows.length > 1;
   if (id === "periodogram") return Boolean(computePeriodogram(latestPeriodogramRows, { quantity: "L", periodHint: latestPeriodogramPeriod }));
-  if (id === "phaseLag") return gridState.enabled && Boolean(currentLoopRange()) && gridPathResults().length > 0;
+  if (id === "phaseLag") {
+    const loopRange = currentLoopRange();
+    const path = gridPathResults();
+    return Boolean(gridState.enabled && loopRange && path.length > 0
+      && visiblePhaseLagPairs().some((pair) => phaseLagSeriesPoints(path, pair, loopRange.key).length > 0));
+  }
   if (id === "fourier") return gridState.enabled && gridState.results.some((result) => Boolean(result.fourier));
   return true;
 }
@@ -2417,7 +2550,7 @@ function numericDatasetRange(value: string | undefined): number[] | null {
 
 function paperPanelSeries(id: PaperPanelId): string[] {
   if (id === "time") return convectiveVelocityHistoryAvailable(latestRows) ? ["R", "V", "H", "Uc"] : ["R", "V", "H"];
-  if (id === "lum") return convectiveLuminosityAvailable() ? ["L", "Lr", "Lc", "Lb"] : ["L", "Lb"];
+  if (id === "lum") return ["L", "Lr", "Lc"];
   if (id === "light") return ["L"];
   if (id === "velocity") return ["V"];
   if (id === "phasePortrait") return ["H", "Uc"];
@@ -2429,24 +2562,103 @@ function paperPanelSeries(id: PaperPanelId): string[] {
 function paperPanelMetadata(definition: PaperPanelDefinition): PaperPanelRenderer["metadata"] {
   const canvas = document.getElementById(definition.canvasId) as HTMLCanvasElement | null;
   const series = paperPanelSeries(definition.id);
+  let xlim = numericDatasetRange(canvas?.dataset.xlim);
+  let ylim = numericDatasetRange(canvas?.dataset.ylim);
+  let axes: PaperPanelRenderer["metadata"]["axes"] | undefined;
+  let categoricalPalette: PaperPanelRenderer["metadata"]["categoricalPalette"] | undefined;
+  if (definition.id === "lum") {
+    xlim = [0, 1];
+    ylim = paperLuminosityYlim();
+    axes = {
+      x: { label: "phase", scale: "linear", dataColumn: "phase" },
+      y: { label: "luminosity", scale: "linear", dataColumn: "L" }
+    };
+  } else if (definition.id === "phaseLag") {
+    const loopRange = currentLoopRange();
+    if (loopRange) {
+      xlim = [
+        parameterValueFromSlider(loopRange.key, loopRange.lowerSliderValue),
+        parameterValueFromSlider(loopRange.key, loopRange.upperSliderValue)
+      ];
+      ylim = [...PHASE_LAG_YLIM];
+      axes = {
+        x: {
+          label: controlDefForKey(loopRange.key)?.[2] ?? controlShortLabel(loopRange.key),
+          scale: loopRange.key === "zeta" || loopRange.key === "zetac" || loopRange.key === "tEnd" ? "log10" : "linear",
+          dataColumn: "parameter_value",
+          renderedColumn: "slider_value",
+          parameter: loopRange.key
+        },
+        y: { label: PHASE_LAG_AXIS_LABEL, scale: "linear", dataColumn: "phase_lag" }
+      };
+    }
+  } else if (definition.id === "stability") {
+    xlim = [10 ** RESPONSE_LOG_MIN, 10 ** RESPONSE_LOG_MAX];
+    ylim = [10 ** RESPONSE_LOG_MIN, 10 ** RESPONSE_LOG_MAX];
+    axes = {
+      x: { label: "convective response zeta_c", scale: "log10", dataColumn: "zeta_c", renderedColumn: "log10_zeta_c" },
+      y: { label: "thermal response zeta", scale: "log10", dataColumn: "zeta", renderedColumn: "log10_zeta" }
+    };
+    categoricalPalette = paperStabilityPalette();
+  } else if (definition.id === "strip") {
+    xlim = [STRIP_LOG_RATIO_MIN, STRIP_LOG_RATIO_MAX];
+    ylim = [0, 1];
+    axes = {
+      x: { label: "log10(zeta_c/zeta)", scale: "linear", dataColumn: "log10_zeta_c_over_zeta" },
+      y: { label: "gamma_c", scale: "linear", dataColumn: "gamma_c" }
+    };
+    categoricalPalette = paperStabilityPalette();
+  }
+  const seriesStyling = definition.id === "phaseLag"
+    ? visiblePhaseLagPairs().map((pair) => ({
+      series: phaseLagPairLabel(pair),
+      ...paperStyle(pair.target),
+      dash: phaseLagPairDash(pair),
+      marker: "none"
+    }))
+    : series.map((name, index) => {
+      const style = paperStyle(name, index);
+      return { series: name, ...style, marker: PAPER_MARKERLESS_PANEL_IDS.has(definition.id) ? "none" : style.marker };
+    });
   return {
-    axisLimits: {
-      x: numericDatasetRange(canvas?.dataset.xlim),
-      y: numericDatasetRange(canvas?.dataset.ylim)
-    },
+    axisLimits: { x: xlim, y: ylim },
     units: {
       coordinate: latestDisplayWindow.mode === "phase" ? "phase" : "tau",
       state: "dimensionless",
       periodogramFrequency: "tau^-1",
       periodogramPower: "(delta_L/L0)^2"
     },
-    seriesStyling: series.map((name, index) => {
-      const style = paperStyle(name, index);
-      return { series: name, ...style, marker: PAPER_MARKERLESS_PANEL_IDS.has(definition.id) ? "none" : style.marker };
-    }),
+    seriesStyling,
+    axes,
+    categoricalPalette,
     downsampling: definition.id === "model" || definition.id === "heatEngine" ? "selected static states" : "screen and vector artwork may use envelope/path downsampling; CSV retains archived source values"
   };
 }
+
+function paperStabilityPalette(): NonNullable<PaperPanelRenderer["metadata"]["categoricalPalette"]> {
+  return {
+    stable: { color: "#458976", alpha: stabilityKindAlpha("stable") },
+    convective: { color: "#3D93C4", alpha: stabilityKindAlpha("convective") },
+    secular: { color: "#9B71D9", alpha: stabilityKindAlpha("secular") },
+    pulsational: { color: "#B8525E", alpha: stabilityKindAlpha("pulsational") },
+    dynamic: { color: "#D89B41", alpha: stabilityKindAlpha("dynamic") },
+    neutral: { color: "#8492AA", alpha: stabilityKindAlpha("neutral") }
+  };
+}
+
+const PAPER_PANEL_ASPECT_RATIOS: Record<Exclude<PaperPanelId, "model" | "heatEngine" | "fourier">, number> = {
+  work: 0.68,
+  light: 0.58,
+  velocity: 0.58,
+  tpOpacity: 0.62,
+  periodogram: 0.58,
+  phaseLag: 0.58,
+  phasePortrait: 0.62,
+  time: 0.58,
+  lum: 0.58,
+  stability: 0.62,
+  strip: 0.62
+};
 
 function paperRenderDimensions(definition: PaperPanelDefinition, size: PaperFigureSize): { cssWidth: number; cssHeight: number; widthInches: number; heightInches: number } {
   const widthInches = size === "single" ? 3.4 : 7.1;
@@ -2459,10 +2671,7 @@ function paperRenderDimensions(definition: PaperPanelDefinition, size: PaperFigu
     const columns = cssWidth >= 780 ? 2 : 1;
     cssHeight = Math.max(280, Math.ceil(4 / columns) * 238);
   } else {
-    const canvas = document.getElementById(definition.canvasId) as HTMLCanvasElement | null;
-    const rect = canvas?.getBoundingClientRect();
-    const aspect = rect && rect.width > 0 && rect.height > 0 ? rect.height / rect.width : 0.58;
-    cssHeight = Math.max(260, Math.round(cssWidth * clamp(aspect, 0.38, 1.1)));
+    cssHeight = Math.max(260, Math.round(cssWidth * PAPER_PANEL_ASPECT_RATIOS[definition.id]));
   }
   return { cssWidth, cssHeight, widthInches, heightInches: widthInches * cssHeight / cssWidth };
 }
@@ -2472,28 +2681,54 @@ async function renderPaperPanel(definition: PaperPanelDefinition, size: PaperFig
   if (!(canvas instanceof HTMLCanvasElement)) throw new Error(`${definition.title}: canvas unavailable`);
   const dimensions = paperRenderDimensions(definition, size);
   const dpr = window.devicePixelRatio || 1;
-  const vectorContext = new SvgCanvasContext({
+  await ensurePaperExportFonts();
+  const rawVectorContext = new SvgCanvasContext({
     width: Math.floor(dimensions.cssWidth * dpr),
     height: Math.floor(dimensions.cssHeight * dpr),
     document
+  });
+  const vectorContext = new Proxy(rawVectorContext as unknown as CanvasRenderingContext2D, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+    set(target, property, value) {
+      return Reflect.set(
+        target,
+        property,
+        property === "font" && typeof value === "string" ? paperExportCanvasFont(value) : value,
+        target
+      );
+    }
   });
   const getContextDescriptor = Object.getOwnPropertyDescriptor(canvas, "getContext");
   const rectDescriptor = Object.getOwnPropertyDescriptor(canvas, "getBoundingClientRect");
   const priorWidth = canvas.width;
   const priorHeight = canvas.height;
   const priorStyle = canvas.style.cssText;
+  const priorColors = {
+    R: COLORS.R,
+    V: COLORS.V,
+    H: COLORS.H,
+    Uc: COLORS.Uc,
+    L: COLORS.L,
+    Lr: COLORS.Lr,
+    Lc: COLORS.Lc,
+    sourceExp: COLORS.sourceExp
+  };
   Object.defineProperty(canvas, "getContext", {
     configurable: true,
-    value: (kind: string) => kind === "2d" ? vectorContext as unknown as CanvasRenderingContext2D : null
+    value: (kind: string) => kind === "2d" ? vectorContext : null
   });
   Object.defineProperty(canvas, "getBoundingClientRect", {
     configurable: true,
     value: () => new DOMRect(0, 0, dimensions.cssWidth, dimensions.cssHeight)
   });
   try {
+    Object.assign(COLORS, PAPER_EXPORT_COLOR_OVERRIDES);
     definition.draw();
     return {
-      svg: vectorContext.getSerializedSvg(true),
+      svg: rawVectorContext.getSerializedSvg(true),
       widthInches: dimensions.widthInches,
       heightInches: dimensions.heightInches
     };
@@ -2501,6 +2736,7 @@ async function renderPaperPanel(definition: PaperPanelDefinition, size: PaperFig
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`${definition.title}: ${message}`);
   } finally {
+    Object.assign(COLORS, priorColors);
     if (getContextDescriptor) Object.defineProperty(canvas, "getContext", getContextDescriptor);
     else delete (canvas as unknown as { getContext?: unknown }).getContext;
     if (rectDescriptor) Object.defineProperty(canvas, "getBoundingClientRect", rectDescriptor);
@@ -2511,10 +2747,57 @@ async function renderPaperPanel(definition: PaperPanelDefinition, size: PaperFig
   }
 }
 
-function paperExportState(): Omit<PaperExportManifestV1, "panels"> {
+function paperExportState(): Omit<PaperExportManifestV2, "panels"> {
   const activeRanges = activeGridRanges();
+  const actualEndTau = latestRows.at(-1)?.tau ?? null;
+  const requestedEndTau = state.tEnd;
+  const completion = gridState.lastComplete ? {
+    requestId: gridState.lastComplete.requestId,
+    total: gridState.lastComplete.total,
+    attempted: gridState.lastComplete.attempted,
+    validPhase: gridState.lastComplete.validPhase,
+    validFourier: gridState.lastComplete.validFourier,
+    excludedNonPhase: gridState.lastComplete.excludedNonPhase,
+    phaseUnavailable: gridState.lastComplete.phaseUnavailable,
+    failed: gridState.lastComplete.failed,
+    elapsedMs: gridState.lastComplete.elapsedMs,
+    stride: gridState.lastComplete.stride,
+    coarsened: gridState.lastComplete.coarsened,
+    zeroCompletedFallback: gridState.lastComplete.zeroCompletedFallback
+  } : null;
+  const serializedGridResults = (results: readonly GridModelResult[]) => results.map((result) => ({
+    id: result.id,
+    parameters: { ...result.parameters },
+    sliderValues: { ...result.sliderValues },
+    variedValues: { ...result.variedValues },
+    period: result.period,
+    integration: result.integrationProvenance ?? null,
+    phase: result.phaseProvenance ?? {
+      reason: "ok",
+      period: result.period,
+      rowCount: result.phaseRows.length,
+      archivedRowCount: result.phaseRows.length,
+      reference: null
+    },
+    archivedPhaseRows: result.phaseRows,
+    fourier: result.fourier
+  }));
+  const serializedRanges = activeRanges.map((range) => ({
+    key: range.key,
+    slider: {
+      lower: range.lowerSliderValue,
+      upper: range.upperSliderValue,
+      center: range.centerSliderValue,
+      nativeStep: range.nativeStep
+    },
+    physical: {
+      lower: parameterValueFromSlider(range.key, range.lowerSliderValue),
+      upper: parameterValueFromSlider(range.key, range.upperSliderValue),
+      center: parameterValueFromSlider(range.key, range.centerSliderValue)
+    }
+  }));
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     application: {
       name: "OZwizard",
       version: __OZWIZARD_VERSION__,
@@ -2531,7 +2814,10 @@ function paperExportState(): Omit<PaperExportManifestV1, "panels"> {
       status: latestResult.status,
       message: latestResult.message,
       statistics: { ...latestResult.stats },
-      rowCount: latestRows.length
+      rowCount: latestRows.length,
+      requestedEndTau,
+      actualEndTau,
+      stoppedEarly: actualEndTau !== null && actualEndTau < requestedEndTau - Math.max(1e-9, requestedEndTau * 1e-9)
     },
     display: {
       mode: latestDisplayWindow.mode,
@@ -2551,6 +2837,8 @@ function paperExportState(): Omit<PaperExportManifestV1, "panels"> {
       })),
       widthsInches: { single: 3.4, double: 7.1 },
       pngDpi: 600,
+      canonicalVectorFormat: "SVG",
+      pdfRendering: "vector SVG conversion",
       palette: "paper-colorblind",
       animationMarkers: false
     },
@@ -2560,7 +2848,74 @@ function paperExportState(): Omit<PaperExportManifestV1, "panels"> {
       selectedLoopKey: gridState.selectedLoopKey,
       ranges: activeRanges.map((range) => ({ ...range })),
       resultCount: gridState.results.length,
-      modelIds: gridState.results.map((result) => result.id)
+      modelIds: gridState.results.map((result) => result.id),
+      budget: {
+        mode: gridBudgetMode,
+        timeoutSeconds: gridTimeoutSeconds,
+        maxModels: gridModelBudget,
+        estimatedModelMs: gridModelMsEstimate
+      },
+      completion
+    },
+    provenance: {
+      schema: "ozwizard-paper-provenance-v2",
+      experiment: {
+        preset: activePreset,
+        parameters: { ...state },
+        displayedParameters: { ...latestPhaseParameters }
+      },
+      integration: {
+        solver: state.solver,
+        requestedEndTau,
+        actualEndTau,
+        stop: {
+          status: latestResult.status,
+          message: latestResult.message,
+          stoppedEarly: actualEndTau !== null && actualEndTau < requestedEndTau - Math.max(1e-9, requestedEndTau * 1e-9)
+        },
+        statistics: { ...latestResult.stats },
+        rowCount: latestRows.length,
+        finalRow: latestRows.at(-1) ?? null
+      },
+      phase: {
+        requested: {
+          anchor: phaseAnchor,
+          selection: state.phaseMode === "final" ? "last" : "first",
+          warmupTau: state.phaseWarmupTau ?? null,
+          minAmplitude: state.phaseMinAmplitude
+        },
+        reason: latestPhaseResult.reason,
+        period: latestPhaseResult.period,
+        reference: latestPhaseResult.reference,
+        displayMode: latestDisplayWindow.mode,
+        displayReason: latestDisplayWindow.reason,
+        foldedRowCount: latestPhaseRows.length,
+        exportedLuminosityCycle: {
+          anchor: "minimum luminosity",
+          endpointState: "interpolated phase-anchor state with L=Lr+Lc",
+          lowerPhase: 0,
+          upperPhase: 1,
+          endpointIncluded: true,
+          rowCount: paperLuminosityRows().length
+        }
+      },
+      grid: {
+        enabled: gridState.enabled,
+        selectedLoopKey: gridState.selectedLoopKey,
+        centerSelection: currentGridResult()?.id ?? null,
+        status: gridState.status,
+        statusText: gridState.statusText,
+        budget: {
+          mode: gridBudgetMode,
+          timeoutSeconds: gridTimeoutSeconds,
+          maxModels: gridModelBudget,
+          estimatedModelMs: gridModelMsEstimate
+        },
+        ranges: serializedRanges,
+        completion,
+        results: serializedGridResults(gridState.results),
+        pathResults: serializedGridResults(gridState.pathResults)
+      }
     },
     omittedPanels: []
   };
@@ -2807,6 +3162,60 @@ function gridBudgetRequest(): GridBudget {
     : { mode: "timeout", timeoutMs: gridTimeoutSeconds * 1000, modelMsEstimate };
 }
 
+function currentPresetGridSnapshot(): PresetGridSnapshot {
+  return {
+    enabled: gridState.enabled,
+    loopKey: gridState.selectedLoopKey,
+    budgetMode: gridBudgetMode,
+    timeoutSeconds: gridTimeoutSeconds,
+    maxModels: gridModelBudget,
+    ranges: activeGridRanges().map(gridRangeSnapshotFromGridRange)
+  };
+}
+
+function applyPresetGrid(grid: PresetGridSnapshot | undefined): void {
+  cancelGridCompute();
+  stopGridAnimation();
+  gridState.ranges.clear();
+  gridState.savedRanges.clear();
+  gridState.selectedLoopKey = null;
+  gridState.results = [];
+  gridState.pathResults = [];
+  gridState.hoverResult = null;
+  gridState.heldResult = null;
+  gridState.lastComplete = null;
+  gridPathCache = null;
+
+  if (grid) {
+    gridBudgetMode = grid.budgetMode;
+    gridTimeoutSeconds = clampGridTimeoutSeconds(grid.timeoutSeconds);
+    gridModelBudget = clampGridModelBudget(grid.maxModels);
+    grid.ranges.forEach((rangeSnapshot) => {
+      const range = gridRangeFromSnapshot(rangeSnapshot, state);
+      gridState.ranges.set(range.key, range);
+      gridState.savedRanges.set(range.key, range);
+    });
+    gridState.selectedLoopKey = grid.loopKey && gridState.ranges.has(grid.loopKey)
+      ? grid.loopKey
+      : Array.from(gridState.ranges.keys())[0] ?? null;
+  }
+
+  const shouldEnable = Boolean(grid?.enabled && gridState.ranges.size);
+  if (gridState.enabled !== shouldEnable) {
+    setGridModeEnabled(shouldEnable);
+  } else {
+    gridState.status = shouldEnable ? "idle" : "idle";
+    gridState.statusText = shouldEnable ? "Grid queued" : "Grid off";
+    updateGridRangeUi();
+    updateGridBudgetControls();
+    updateGridStatusUi();
+    updateGridLoopControls();
+    updateFourierPanelVisibility();
+    if (shouldEnable) scheduleGridCompute();
+    drawAll();
+  }
+}
+
 function recordGridModelTiming(elapsedMs: number, attempted = 1): void {
   if (!Number.isFinite(elapsedMs) || !Number.isFinite(attempted) || attempted <= 0 || elapsedMs <= 0) return;
   const sample = clamp(
@@ -2859,7 +3268,7 @@ function updatePlotPanelVisibility(): void {
   const hiddenControls = el<HTMLDivElement>("hiddenPlotControls");
   let hiddenCount = 0;
   (Object.keys(plotPanelVisibility) as UserPlotId[]).forEach((plotId) => {
-    const gridOnlyUnavailable = !gridState.enabled && plotId === "phaseLag";
+    const gridOnlyUnavailable = !gridState.enabled && (plotId === "phaseLag" || plotId === "fourier");
     const forcedHidden = gridState.enabled && (plotId === "model" || plotId === "heatEngine" || plotId === "work" || plotId === "time" || plotId === "lum");
     const visible = forcedHidden ? false : plotPanelVisibility[plotId];
     const panel = document.querySelector<HTMLElement>(`[data-plot-panel="${plotId}"]`);
@@ -3404,7 +3813,7 @@ function updateGridLoopControls(): void {
 
 function updateFourierPanelVisibility(): void {
   const panel = document.getElementById("fourierGridPanel");
-  if (panel instanceof HTMLElement) panel.hidden = !gridState.enabled;
+  if (panel instanceof HTMLElement) panel.hidden = !gridState.enabled || !plotPanelVisibility.fourier;
 }
 
 function startGridAnimation(): void {
@@ -4151,11 +4560,17 @@ function updatePlotResetButtons(): void {
 function buildPresetButtons(): void {
   const container = el<HTMLDivElement>("presetButtons");
   container.innerHTML = "";
-  Object.keys(PRESETS).forEach((name) => {
+  presetEntries().forEach((entry) => {
     const button = document.createElement("button");
     button.type = "button";
-    button.textContent = name;
-    button.addEventListener("click", () => applyPreset(name));
+    button.dataset.presetName = entry.name;
+    button.classList.toggle("local-preset", entry.source === "local");
+    button.classList.toggle("local-shadow-preset", entry.shadowsBuiltIn);
+    button.textContent = entry.name;
+    button.title = entry.source === "local"
+      ? entry.shadowsBuiltIn ? "Local override of a built-in preset" : "Local preset"
+      : "Built-in preset";
+    button.addEventListener("click", () => applyPreset(entry.name));
     container.appendChild(button);
   });
   updatePresetButtons();
@@ -4768,7 +5183,7 @@ function updateAllSliderLabels(): void {
 }
 
 function restoreParameterDefault(key: ControlParameterKey): void {
-  state[key] = PRESETS[selectedPreset][key];
+  state[key] = presetParameters(selectedPreset)[key];
   syncGridRangeCenter(key);
   updateSliderLabel(key);
   updateReferencePanelsForKey(key);
@@ -4779,16 +5194,20 @@ function restoreParameterDefault(key: ControlParameterKey): void {
 function updateResetButtons(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-reset-key]").forEach((button) => {
     const key = button.dataset.resetKey as ControlParameterKey;
-    button.disabled = valuesMatch(state[key], PRESETS[selectedPreset][key]);
-    button.title = `Restore to ${selectedPreset} preset value: ${controlValueLabel(key, Number(PRESETS[selectedPreset][key]))}`;
+    const preset = presetParameters(selectedPreset);
+    button.disabled = valuesMatch(state[key], preset[key]);
+    button.title = `Restore to ${selectedPreset} preset value: ${controlValueLabel(key, Number(preset[key]))}`;
   });
 }
 
 function updatePresetButtons(): void {
   document.querySelectorAll<HTMLButtonElement>("#presetButtons button").forEach((button) => {
-    button.classList.toggle("active", button.textContent === activePreset);
+    button.classList.toggle("active", button.dataset.presetName === activePreset);
   });
-  el<HTMLSpanElement>("presetSummaryLabel").textContent = activePreset;
+  const entry = activePreset === "Custom" ? undefined : presetEntry(activePreset);
+  el<HTMLSpanElement>("presetSummaryLabel").textContent = entry?.source === "local" ? `${activePreset} (local)` : activePreset;
+  const removeButton = document.getElementById("removePreset");
+  if (removeButton instanceof HTMLButtonElement) removeButton.disabled = presetEntry(selectedPreset)?.source !== "local";
 }
 
 function updateDriverButtons(): void {
@@ -4817,10 +5236,7 @@ function updateSolverButtons(): void {
   });
 }
 
-function applyPreset(name: string): void {
-  state = { ...PRESETS[name] };
-  selectedPreset = name;
-  activePreset = name;
+function syncControlsFromState(): void {
   updatePresetButtons();
   updateDriverButtons();
   updatePhaseModeButtons();
@@ -4831,7 +5247,257 @@ function applyPreset(name: string): void {
   updateEquationBlocks();
   updateAllSliderLabels();
   updateResetButtons();
+}
+
+function applyPreset(name: string): void {
+  const entry = presetEntry(name);
+  if (!entry) return;
+  state = { ...entry.parameters };
+  selectedPreset = name;
+  activePreset = name;
+  syncControlsFromState();
+  applyPresetGrid(entry.grid);
   scheduleSolve();
+}
+
+function setupLocalPresetStore(): void {
+  const result = loadLocalPresetStore(window.localStorage);
+  localPresetStore = result.store;
+  refreshPresetRegistry();
+  const entry = presetEntry(selectedPreset);
+  if (entry) state = { ...entry.parameters };
+  result.warnings.forEach((warning) => console.warn(warning));
+}
+
+function setupPresetActions(): void {
+  el<HTMLButtonElement>("savePreset").addEventListener("click", saveCurrentPresetLocally);
+  el<HTMLButtonElement>("removePreset").addEventListener("click", removeSelectedLocalPreset);
+  el<HTMLButtonElement>("editPresetInlist").addEventListener("click", () => openInlistDialog(currentSnapshotForEditing()));
+  el<HTMLButtonElement>("exportPresets").addEventListener("click", openExportDialog);
+
+  const importButton = el<HTMLButtonElement>("importPresets");
+  const importInput = el<HTMLInputElement>("importPresetFile");
+  importButton.addEventListener("click", () => importInput.click());
+  importInput.addEventListener("change", () => {
+    void importPresetFiles(importInput.files);
+    importInput.value = "";
+  });
+
+  const inlistDialog = el<HTMLDialogElement>("inlistDialog");
+  el<HTMLButtonElement>("closeInlistDialog").addEventListener("click", () => inlistDialog.close());
+  el<HTMLButtonElement>("applyInlist").addEventListener("click", applyInlistFromDialog);
+  el<HTMLButtonElement>("saveInlistPreset").addEventListener("click", saveInlistPresetFromDialog);
+
+  const exportDialog = el<HTMLDialogElement>("exportPresetDialog");
+  el<HTMLButtonElement>("closeExportPresetDialog").addEventListener("click", () => exportDialog.close());
+  el<HTMLButtonElement>("downloadPresetExport").addEventListener("click", downloadSelectedPresetExport);
+}
+
+function persistLocalPresets(): boolean {
+  try {
+    saveLocalPresetStore(window.localStorage, localPresetStore);
+    return true;
+  } catch (error) {
+    showPresetFeedback(`Could not save local presets: ${error instanceof Error ? error.message : String(error)}`, "error");
+    return false;
+  }
+}
+
+function saveCurrentPresetLocally(): void {
+  const defaultName = activePreset === "Custom" ? selectedPreset : activePreset;
+  const name = window.prompt("Preset name", defaultName);
+  if (name === null) return;
+  const snapshot = snapshotFromParameters(name, state, gridSnapshotForSaving());
+  localPresetStore = upsertLocalPreset(localPresetStore, snapshot);
+  if (!persistLocalPresets()) return;
+  refreshPresetRegistry();
+  selectedPreset = snapshot.name;
+  activePreset = snapshot.name;
+  buildPresetButtons();
+  updatePresetButtons();
+  updateResetButtons();
+  showPresetFeedback(`Saved "${snapshot.name}" locally.`, "ok");
+}
+
+function removeSelectedLocalPreset(): void {
+  const entry = presetEntry(selectedPreset);
+  if (!entry || entry.source !== "local") return;
+  const removedName = entry.name;
+  const nextName = entry.shadowsBuiltIn ? entry.name : DEFAULT_PRESET_NAME;
+  localPresetStore = removeLocalPreset(localPresetStore, entry.name);
+  if (!persistLocalPresets()) return;
+  refreshPresetRegistry();
+  buildPresetButtons();
+  applyPreset(presetEntry(nextName) ? nextName : DEFAULT_PRESET_NAME);
+  showPresetFeedback(`Removed local preset "${removedName}".`, "ok");
+}
+
+function currentSnapshotForEditing(): PresetSnapshot {
+  return snapshotFromParameters(activePreset === "Custom" ? selectedPreset : activePreset, state, gridSnapshotForSaving());
+}
+
+function gridSnapshotForSaving(): PresetGridSnapshot | undefined {
+  const grid = currentPresetGridSnapshot();
+  return grid.enabled || grid.ranges.length ? grid : undefined;
+}
+
+function openInlistDialog(snapshot: PresetSnapshot): void {
+  el<HTMLInputElement>("inlistPresetName").value = snapshot.name;
+  el<HTMLTextAreaElement>("inlistText").value = serializePresetInlistBundle([snapshot]);
+  setInlistFeedback("");
+  const dialog = el<HTMLDialogElement>("inlistDialog");
+  if (dialog.open) return;
+  dialog.showModal();
+}
+
+function applyInlistFromDialog(): void {
+  const snapshot = parseFirstDialogSnapshot();
+  if (!snapshot) return;
+  applySnapshotToCurrentState(snapshot);
+  el<HTMLDialogElement>("inlistDialog").close();
+  showPresetFeedback("Applied inlist.", "ok");
+}
+
+function saveInlistPresetFromDialog(): void {
+  const snapshot = parseFirstDialogSnapshot();
+  if (!snapshot) return;
+  const namedSnapshot = snapshotFromParameters(el<HTMLInputElement>("inlistPresetName").value || snapshot.name, snapshot.parameters, snapshot.grid);
+  localPresetStore = upsertLocalPreset(localPresetStore, namedSnapshot);
+  if (!persistLocalPresets()) return;
+  refreshPresetRegistry();
+  buildPresetButtons();
+  applyPreset(namedSnapshot.name);
+  el<HTMLDialogElement>("inlistDialog").close();
+  showPresetFeedback(`Saved "${namedSnapshot.name}" locally.`, "ok");
+}
+
+function parseFirstDialogSnapshot(): PresetSnapshot | null {
+  const name = el<HTMLInputElement>("inlistPresetName").value || selectedPreset;
+  const result = parsePresetInlistBundle(el<HTMLTextAreaElement>("inlistText").value, {
+    fallbackName: name,
+    baseParameters: state,
+    baseParametersForName: (presetName) => presetEntry(presetName)?.parameters
+  });
+  setInlistFeedback(formatInlistFeedback(result.warnings, result.errors), result.errors.length ? "error" : "ok");
+  if (result.errors.length) return null;
+  if (result.snapshots.length > 1) {
+    setInlistFeedback(`${formatInlistFeedback(result.warnings, [])}\nMultiple presets found; applying the first one.`, "ok");
+  }
+  return result.snapshots[0] ?? null;
+}
+
+function applySnapshotToCurrentState(snapshot: PresetSnapshot): void {
+  state = { ...snapshot.parameters };
+  if (presetEntry(snapshot.name)) selectedPreset = snapshot.name;
+  syncControlsFromState();
+  applyPresetGrid(snapshot.grid);
+  refreshActivePreset();
+  scheduleSolve();
+}
+
+async function importPresetFiles(files: FileList | null): Promise<void> {
+  const file = files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const result = parsePresetInlistBundle(text, {
+      fallbackName: file.name.replace(/\.[^.]+$/, "") || "Imported preset",
+      baseParametersForName: (name) => presetEntry(name)?.parameters
+    });
+    if (result.errors.length) {
+      showPresetFeedback(formatInlistFeedback(result.warnings, result.errors), "error");
+      return;
+    }
+    result.snapshots.forEach((snapshot) => {
+      localPresetStore = upsertLocalPreset(localPresetStore, snapshot);
+    });
+    if (!persistLocalPresets()) return;
+    refreshPresetRegistry();
+    buildPresetButtons();
+    const first = result.snapshots[0];
+    if (first) applyPreset(first.name);
+    showPresetFeedback(`Imported ${result.snapshots.length} preset${result.snapshots.length === 1 ? "" : "s"}.`, "ok");
+  } catch (error) {
+    showPresetFeedback(`Could not import presets: ${error instanceof Error ? error.message : String(error)}`, "error");
+  }
+}
+
+function openExportDialog(): void {
+  const list = el<HTMLDivElement>("exportPresetList");
+  list.innerHTML = "";
+  presetEntries().forEach((entry) => {
+    const id = `export-preset-${entry.name.replace(/[^a-z0-9]+/gi, "-")}`;
+    const label = document.createElement("label");
+    label.className = "preset-export-option";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = entry.name;
+    input.checked = entry.name === selectedPreset || entry.name === activePreset;
+    input.id = id;
+    const span = document.createElement("span");
+    span.textContent = entry.source === "local" ? `${entry.name} (local)` : entry.name;
+    label.append(input, span);
+    list.appendChild(label);
+  });
+  setExportFeedback("");
+  const dialog = el<HTMLDialogElement>("exportPresetDialog");
+  if (!dialog.open) dialog.showModal();
+}
+
+function downloadSelectedPresetExport(): void {
+  const names = Array.from(document.querySelectorAll<HTMLInputElement>("#exportPresetList input:checked"))
+    .map((input) => input.value);
+  const snapshots = names
+    .map((name) => presetEntry(name))
+    .filter((entry): entry is PresetRegistryEntry => Boolean(entry))
+    .map((entry) => snapshotFromParameters(entry.name, entry.parameters, entry.grid));
+  if (!snapshots.length) {
+    setExportFeedback("Select at least one preset.", "error");
+    return;
+  }
+  downloadText("ozwizard-presets.inlist", serializePresetInlistBundle(snapshots));
+  el<HTMLDialogElement>("exportPresetDialog").close();
+  showPresetFeedback(`Exported ${snapshots.length} preset${snapshots.length === 1 ? "" : "s"}.`, "ok");
+}
+
+function downloadText(filename: string, text: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function showPresetFeedback(message: string, kind: "ok" | "error" = "ok"): void {
+  const node = document.getElementById("presetFeedback");
+  if (!(node instanceof HTMLElement)) return;
+  node.textContent = message;
+  node.dataset.kind = kind;
+  node.hidden = !message;
+}
+
+function setInlistFeedback(message: string, kind: "ok" | "error" = "ok"): void {
+  const node = el<HTMLElement>("inlistFeedback");
+  node.textContent = message;
+  node.dataset.kind = kind;
+  node.hidden = !message;
+}
+
+function setExportFeedback(message: string, kind: "ok" | "error" = "ok"): void {
+  const node = el<HTMLElement>("exportPresetFeedback");
+  node.textContent = message;
+  node.dataset.kind = kind;
+  node.hidden = !message;
+}
+
+function formatInlistFeedback(warnings: Array<{ line: number; message: string }>, errors: Array<{ line: number; message: string }>): string {
+  return [
+    ...errors.map((issue) => `Line ${issue.line}: ${issue.message}`),
+    ...warnings.map((issue) => `Line ${issue.line}: ${issue.message}`)
+  ].join("\n");
 }
 
 function scheduleSolve(): void {
@@ -5699,7 +6365,7 @@ function drawFourierPanel(): void {
   const panel = document.getElementById("fourierGridPanel");
   const canvas = document.getElementById("fourierCanvas");
   if (!(panel instanceof HTMLElement) || !(canvas instanceof HTMLCanvasElement)) return;
-  panel.hidden = !gridState.enabled;
+  panel.hidden = !gridState.enabled || !plotPanelVisibility.fourier;
   if (panel.hidden) {
     fourierPointHits = [];
     gridColorbarRegions.delete("fourierCanvas");
@@ -6674,7 +7340,7 @@ function drawStabilityMap(): void {
   canvas.dataset.stabilityLegend = linearStabilityLegendLabel(stabilityPhysics);
   canvas.dataset.editableParameters = "zetac,zeta";
   canvas.dataset.stellingwerfLabels = "zeta,zeta_c,gamma_c";
-  canvas.dataset.axisLabels = "log10 convective response zeta_c,log10 thermal response zeta";
+  canvas.dataset.axisLabels = "convective response zeta_c,thermal response zeta";
 
   kinds.forEach((kind, index) => {
     const row = Math.floor(index / STABILITY_MAP_RESOLUTION);
@@ -6687,8 +7353,6 @@ function drawStabilityMap(): void {
   drawCanvasMathFragments(
     ctx,
     [
-      { text: "log", subscript: "10", color: THEME.axisText, weight: 600 },
-      { text: " " },
       { text: "convective response ", color: COLORS.zetac, weight: 600 },
       { text: "ζ", subscript: "c", color: COLORS.zetac, weight: 600 }
     ],
@@ -6699,8 +7363,6 @@ function drawStabilityMap(): void {
   drawCanvasMathFragments(
     ctx,
     [
-      { text: "log", subscript: "10", color: THEME.axisText, weight: 600 },
-      { text: " " },
       { text: "thermal response ", color: COLORS.zeta, weight: 600 },
       { text: "ζ", color: COLORS.zeta, weight: 600 }
     ],
@@ -7824,6 +8486,7 @@ interface PhaseLagSeriesSpec {
 }
 
 function phaseLagQuantityColor(key: PhaseLagQuantityKey): string {
+  if (paperModeActive()) return paperStyle(key).color;
   switch (key) {
     case "R":
       return COLORS.R;
@@ -7928,7 +8591,7 @@ function drawPhaseLagPanel(): void {
     .map((pair) => ({
       pair,
       points: phaseLagSeriesPoints(path, pair, loopRange.key),
-      color: phaseLagQuantityColor(pair.target),
+      color: paperModeActive() ? paperStyle(pair.target).color : phaseLagQuantityColor(pair.target),
       dash: phaseLagPairDash(pair)
     }))
     .filter((item) => item.points.length > 0);
@@ -7943,10 +8606,64 @@ function drawPhaseLagPanel(): void {
   const xlim = validRange(sortedRange(loopRange.lowerSliderValue, loopRange.upperSliderValue), 1e-12)
     || range(pointXValues, 0.04);
   const ylim = PHASE_LAG_YLIM;
+  canvas.dataset.xlim = `${fmtFixed(xlim[0], 6)},${fmtFixed(xlim[1], 6)}`;
+  canvas.dataset.ylim = `${fmtFixed(ylim[0], 6)},${fmtFixed(ylim[1], 6)}`;
+  canvas.dataset.phaseLagPhysicalXlim = `${parameterValueFromSlider(loopRange.key, xlim[0])},${parameterValueFromSlider(loopRange.key, xlim[1])}`;
+  canvas.dataset.phaseLagAxisScale = loopRange.key === "zeta" || loopRange.key === "zetac" || loopRange.key === "tEnd"
+    ? "log10"
+    : "linear";
   fillPlotAreaBackground(ctx, plot);
   drawPhaseLagAxes(ctx, plot, xlim, ylim, loopRange);
   drawPhaseLagSeries(ctx, plot, xlim, ylim, series);
+  if (paperModeActive()) {
+    drawPhaseLagPaperLegend(ctx, plot, series);
+    canvas.dataset.paperLegend = series.map((item) => phaseLagPairLabel(item.pair)).join(",");
+  } else {
+    delete canvas.dataset.paperLegend;
+  }
   if (!paperModeActive()) drawPhaseLagCurrentMarker(ctx, plot, xlim, loopRange);
+}
+
+function drawPhaseLagPaperLegend(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  series: readonly PhaseLagSeriesSpec[]
+): void {
+  if (!series.length) return;
+  ctx.save();
+  ctx.font = "600 10.5px Inter, sans-serif";
+  const labels = series.map((item) => phaseLagPairLabel(item.pair));
+  const padding = 7;
+  const swatchWidth = 28;
+  const swatchGap = 7;
+  const rowHeight = 17;
+  const width = Math.max(...labels.map((label) => ctx.measureText(label).width)) + swatchWidth + swatchGap + padding * 2;
+  const height = rowHeight * series.length + padding * 2;
+  const left = plot.left + plot.width - width - 8;
+  const top = plot.top + 8;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+  ctx.strokeStyle = "rgba(89, 99, 110, 0.72)";
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.rect(left, top, width, height);
+  ctx.fill();
+  ctx.stroke();
+  series.forEach((item, index) => {
+    const y = top + padding + rowHeight * (index + 0.5);
+    ctx.strokeStyle = item.color;
+    ctx.lineWidth = 2.2;
+    ctx.setLineDash(item.dash);
+    ctx.beginPath();
+    ctx.moveTo(left + padding, y);
+    ctx.lineTo(left + padding + swatchWidth, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#1f2328";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(labels[index], left + padding + swatchWidth + swatchGap, y);
+  });
+  ctx.restore();
 }
 
 function drawPhaseLagAxes(
@@ -8059,14 +8776,16 @@ function drawPhaseLagSeries(
       ctx.stroke();
     }
     ctx.setLineDash([]);
-    item.points.forEach((point) => {
-      const x = sx(point.x);
-      const y = sy(point.lag);
-      if (!Number.isFinite(x + y)) return;
-      ctx.beginPath();
-      ctx.arc(x, y, 2.4, 0, Math.PI * 2);
-      ctx.fill();
-    });
+    if (!paperModeActive()) {
+      item.points.forEach((point) => {
+        const x = sx(point.x);
+        const y = sy(point.lag);
+        if (!Number.isFinite(x + y)) return;
+        ctx.beginPath();
+        ctx.arc(x, y, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
   });
   ctx.restore();
 }
@@ -11217,8 +11936,13 @@ function drawAnimatedPhaseViews(): void {
   drawPhasePortraitPanel();
 }
 
-function updateLatestPhaseDisplay(displayWindow: DisplayWindow, gridResult: GridModelResult | null): void {
+function updateLatestPhaseDisplay(
+  displayWindow: DisplayWindow,
+  gridResult: GridModelResult | null,
+  phaseResult: PhaseResult
+): void {
   latestDisplayWindow = displayWindow;
+  latestPhaseResult = phaseResult;
   syncAnimationPositionToDisplayWindow();
   const phasePeriod = displayWindow.period;
   latestPhaseRows = [...displayWindow.rows];
@@ -11253,7 +11977,12 @@ function drawGridAnimationFrame(): void {
     phaseMessage
   );
   updateGridLoopSliderMarkers();
-  updateLatestPhaseDisplay(displayWindow, gridResult);
+  updateLatestPhaseDisplay(displayWindow, gridResult, {
+    reason: gridResult.phaseProvenance?.reason ?? "ok",
+    reference: gridResult.phaseProvenance?.reference ?? null,
+    rows: gridResult.phaseRows,
+    period: gridResult.period
+  });
   updateLatestPeriodogramData(latestRows, displayWindow, { reason: "ok", reference: null, rows: gridResult.phaseRows, period: gridResult.period }, gridResult);
   syncSonificationCurve(displayWindow, gridResult, latestRows);
   drawPhasePlots();
@@ -11373,8 +12102,9 @@ function drawAll(): void {
     ...stabilityMetricItems
   ];
   const renderMetric = ({ label, value, className, stabilityKind, detail, formula }: StatusMetricItem) => {
+    const stabilityExpanded = stabilityKind ? expandedStabilityKinds.has(stabilityKind) : false;
     const stabilityAttribute = stabilityKind
-      ? ` data-stability-kind="${stabilityKind}" data-stability-expanded role="button" tabindex="0" aria-expanded="false"${formula ? ` data-stability-formula="${escapeAttribute(formula)}"` : ""}`
+      ? ` data-stability-kind="${stabilityKind}" data-stability-expanded role="button" tabindex="0" aria-expanded="${String(stabilityExpanded)}"${stabilityExpanded ? ` data-stability-view="formula"` : ""}${formula ? ` data-stability-formula="${escapeAttribute(formula)}"` : ""}`
       : "";
     const ariaLabelPrefix = label || (stabilityKind ? s72ShortLabel(stabilityKind) : "");
     const detailAttribute = detail
@@ -11393,7 +12123,12 @@ function drawAll(): void {
   stageMathHtml(metricsNode, metricsHtml);
   queueMathTypeset([metricsNode]);
 
-  updateLatestPhaseDisplay(displayWindow, gridResult);
+  updateLatestPhaseDisplay(displayWindow, gridResult, gridResult ? {
+    reason: gridResult.phaseProvenance?.reason ?? "ok",
+    reference: gridResult.phaseProvenance?.reference ?? null,
+    rows: gridResult.phaseRows,
+    period: gridResult.period
+  } : phase);
   updateLatestPeriodogramData(rows, displayWindow, phase, gridResult);
   syncSonificationCurve(displayWindow, gridResult, rows);
   drawModelVisualization();
@@ -11478,7 +12213,10 @@ function drawAll(): void {
 function startApp(): void {
   setupThemeToggle();
   setupPaperModeControls();
+  setupLocalPresetStore();
   buildControls();
+  const startupGrid = presetEntry(selectedPreset)?.grid;
+  if (startupGrid) applyPresetGrid(startupGrid);
   solveAndDraw();
   startModelAnimationLoop();
   window.addEventListener("load", () => queueMathTypeset());

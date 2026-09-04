@@ -1,6 +1,11 @@
 import { strToU8, Zip, ZipDeflate, ZipPassThrough } from "fflate";
 import { jsPDF } from "jspdf";
 import { svg2pdf } from "svg2pdf.js";
+import dejavuSansRegular from "dejavu-fonts-ttf/ttf/DejaVuSans.ttf?inline";
+import dejavuSansBold from "dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf?inline";
+import dejavuSansOblique from "dejavu-fonts-ttf/ttf/DejaVuSans-Oblique.ttf?inline";
+import dejavuSansBoldOblique from "dejavu-fonts-ttf/ttf/DejaVuSans-BoldOblique.ttf?inline";
+import dejavuFontLicense from "dejavu-fonts-ttf/LICENSE?raw";
 import paperReproductionScript from "./reproduce.py?raw";
 
 export type PaperFigureSize = "single" | "double";
@@ -29,6 +34,14 @@ export interface PaperPanelRenderer {
     units: Record<string, string>;
     seriesStyling: Array<{ series: string; color: string; dash: number[]; marker: string }>;
     downsampling: string;
+    axes?: Record<string, {
+      label: string;
+      scale: "linear" | "log10" | "categorical";
+      dataColumn: string;
+      renderedColumn?: string;
+      parameter?: string;
+    }>;
+    categoricalPalette?: Record<string, { color: string; alpha: number }>;
   };
   render: (size: PaperFigureSize) => Promise<PaperRenderResult>;
 }
@@ -40,6 +53,13 @@ export interface PaperExportPanelManifest {
   title: string;
   dataFile: string;
   files: string[];
+  renderings?: Array<{
+    size: PaperFigureSize;
+    widthInches: number;
+    heightInches: number;
+    pdfRendering: "vector-svg2pdf";
+    files: string[];
+  }>;
   metadata: PaperPanelRenderer["metadata"];
 }
 
@@ -61,13 +81,48 @@ export interface PaperExportManifestV1 {
   omittedPanels: Array<{ id: string; reason: string }>;
 }
 
+export interface PaperExportManifestV2 extends Omit<PaperExportManifestV1, "schemaVersion"> {
+  schemaVersion: 2;
+  provenance: unknown;
+}
+
+export type PaperExportManifest = PaperExportManifestV1 | PaperExportManifestV2;
+
 export interface PaperBundleOptions {
-  manifest: PaperExportManifestV1;
+  manifest: PaperExportManifest;
   panels: PaperPanelExportSource[];
   onProgress?: (message: string) => void;
 }
 
 const PNG_DPI = 600;
+const PDF_FONT_FAMILY = "DejaVuSans";
+const PDF_FONTS = [
+  { filename: "DejaVuSans.ttf", dataUrl: dejavuSansRegular, style: "normal", cssStyle: "normal", cssWeight: "400" },
+  { filename: "DejaVuSans-Bold.ttf", dataUrl: dejavuSansBold, style: "bold", cssStyle: "normal", cssWeight: "700" },
+  { filename: "DejaVuSans-Oblique.ttf", dataUrl: dejavuSansOblique, style: "italic", cssStyle: "italic", cssWeight: "400" },
+  { filename: "DejaVuSans-BoldOblique.ttf", dataUrl: dejavuSansBoldOblique, style: "bolditalic", cssStyle: "italic", cssWeight: "700" }
+] as const;
+let paperFontsReady: Promise<void> | null = null;
+
+export function paperExportCanvasFont(font: string): string {
+  return font.replace(/(\d+(?:\.\d+)?px)\s+.+$/i, `$1 ${PDF_FONT_FAMILY}`);
+}
+
+export function ensurePaperExportFonts(): Promise<void> {
+  if (!paperFontsReady) {
+    paperFontsReady = Promise.all(PDF_FONTS.map(async (font) => {
+      const face = new FontFace(PDF_FONT_FAMILY, `url(${font.dataUrl})`, {
+        style: font.cssStyle,
+        weight: font.cssWeight
+      });
+      await face.load();
+      document.fonts.add(face);
+    })).then(async () => {
+      await document.fonts.ready;
+    });
+  }
+  return paperFontsReady;
+}
 
 function svgElement(svg: string): SVGSVGElement {
   const documentNode = new DOMParser().parseFromString(svg, "image/svg+xml");
@@ -78,24 +133,108 @@ function svgElement(svg: string): SVGSVGElement {
 
 function normalizedSvg(result: PaperRenderResult): string {
   const root = svgElement(result.svg);
+  const existingViewBox = root.getAttribute("viewBox")?.trim().split(/[\s,]+/).map(Number);
+  const hasValidViewBox = existingViewBox?.length === 4
+    && existingViewBox.every(Number.isFinite)
+    && existingViewBox[2] > 0
+    && existingViewBox[3] > 0;
+  let viewBox = existingViewBox;
+  if (!hasValidViewBox) {
+    const numericDimension = (name: "width" | "height"): number => {
+      const raw = root.getAttribute(name)?.trim() ?? "";
+      if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:px)?$/i.test(raw)) {
+        throw new Error(`Vector renderer returned an invalid logical ${name}: ${raw || "missing"}`);
+      }
+      const value = Number.parseFloat(raw);
+      if (!Number.isFinite(value) || value <= 0) throw new Error(`Vector renderer returned a non-positive logical ${name}`);
+      return value;
+    };
+    viewBox = [0, 0, numericDimension("width"), numericDimension("height")];
+    root.setAttribute("viewBox", viewBox.join(" "));
+  }
   root.setAttribute("width", `${result.widthInches}in`);
   root.setAttribute("height", `${result.heightInches}in`);
   root.setAttribute("role", "img");
   const background = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  background.setAttribute("x", "0");
-  background.setAttribute("y", "0");
-  background.setAttribute("width", "100%");
-  background.setAttribute("height", "100%");
+  background.setAttribute("x", String(viewBox![0]));
+  background.setAttribute("y", String(viewBox![1]));
+  background.setAttribute("width", String(viewBox![2]));
+  background.setAttribute("height", String(viewBox![3]));
   background.setAttribute("fill", "#ffffff");
   root.insertBefore(background, root.firstChild);
+  const usedFontStyles = new Set<string>();
+  root.querySelectorAll("text").forEach((text) => {
+    const numericWeight = Number.parseFloat(text.getAttribute("font-weight") ?? "400");
+    const weight = text.getAttribute("font-weight") === "bold" || numericWeight >= 600 ? "700" : "400";
+    const rawStyle = text.getAttribute("font-style")?.toLowerCase();
+    const style = rawStyle === "italic" || rawStyle === "oblique" ? "italic" : "normal";
+    usedFontStyles.add(`${style}-${weight}`);
+  });
+  const fontRules = PDF_FONTS
+    .filter((font) => usedFontStyles.has(`${font.cssStyle}-${font.cssWeight}`))
+    .map((font) => `@font-face{font-family:${PDF_FONT_FAMILY};src:url("${font.dataUrl}") format("truetype");font-style:${font.cssStyle};font-weight:${font.cssWeight};}`)
+    .join("");
+  if (fontRules) {
+    const defs = root.querySelector("defs") ?? document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    if (!defs.parentNode) root.insertBefore(defs, background.nextSibling);
+    const style = document.createElementNS("http://www.w3.org/2000/svg", "style");
+    style.textContent = fontRules;
+    defs.appendChild(style);
+  }
   return new XMLSerializer().serializeToString(root);
+}
+
+function pdfSvgElement(svg: string): SVGSVGElement {
+  const root = svgElement(svg);
+  root.querySelectorAll("text").forEach((text) => {
+    // Canvas labels are intentionally painted twice: a thick white stroke
+    // followed by the coloured fill. svg2pdf applies the text stroke in PDF
+    // user units rather than the text matrix, producing page-sized white
+    // strokes that obscure otherwise valid vector artwork. The PDF already has
+    // a white background, so omit those halo-only copies for conversion.
+    if (text.getAttribute("fill") === "none") {
+      text.remove();
+      return;
+    }
+    for (const attribute of ["stroke", "stroke-opacity", "stroke-width", "stroke-linecap", "stroke-linejoin"]) {
+      text.removeAttribute(attribute);
+    }
+    text.setAttribute("font-family", PDF_FONT_FAMILY);
+    const numericWeight = Number.parseFloat(text.getAttribute("font-weight") ?? "400");
+    const isBold = text.getAttribute("font-weight") === "bold" || numericWeight >= 600;
+    text.setAttribute("font-weight", isBold ? "bold" : "normal");
+    const fontStyle = text.getAttribute("font-style")?.toLowerCase();
+    text.setAttribute("font-style", fontStyle === "italic" || fontStyle === "oblique" ? "italic" : "normal");
+  });
+  return root;
+}
+
+function embeddedFontData(dataUrl: string): string {
+  const marker = ";base64,";
+  const offset = dataUrl.indexOf(marker);
+  if (offset < 0) throw new Error("Embedded PDF font is not a base64 data URL");
+  return dataUrl.slice(offset + marker.length);
+}
+
+function registerPdfFonts(pdf: jsPDF): void {
+  PDF_FONTS.forEach((font) => {
+    pdf.addFileToVFS(font.filename, embeddedFontData(font.dataUrl));
+    pdf.addFont(font.filename, PDF_FONT_FAMILY, font.style, undefined, "Identity-H");
+  });
 }
 
 async function pdfBytes(result: PaperRenderResult, svg: string): Promise<Uint8Array> {
   const orientation = result.widthInches >= result.heightInches ? "landscape" : "portrait";
-  const pdf = new jsPDF({ orientation, unit: "in", format: [result.widthInches, result.heightInches], compress: true });
+  const pdf = new jsPDF({
+    orientation,
+    unit: "in",
+    format: [result.widthInches, result.heightInches],
+    compress: true,
+    putOnlyUsedFonts: true
+  });
   pdf.setProperties({ title: "OZwizard paper figure", creator: "OZwizard" });
-  await svg2pdf(svgElement(svg), pdf, { x: 0, y: 0, width: result.widthInches, height: result.heightInches });
+  registerPdfFonts(pdf);
+  await svg2pdf(pdfSvgElement(svg), pdf, { x: 0, y: 0, width: result.widthInches, height: result.heightInches });
   return new Uint8Array(pdf.output("arraybuffer"));
 }
 
@@ -133,7 +272,7 @@ async function pngBytes(result: PaperRenderResult, svg: string): Promise<Uint8Ar
   }
 }
 
-function readme(manifest: PaperExportManifestV1): string {
+function readme(manifest: PaperExportManifest): string {
   return `OZwizard paper figure bundle
 ================================
 
@@ -144,6 +283,8 @@ Commit: ${manifest.application.sourceCommit}
 
 Each visible panel is supplied separately in vector PDF and SVG at 3.4-inch
 single-column and 7.1-inch double-column widths, plus a 600-dpi PNG fallback.
+PDF text uses embedded DejaVu Sans; its redistribution license is included at
+licenses/DejaVu-fonts.txt.
 The matching CSV contains the numerical values represented by that panel.
 manifest.json records the full model, solver, display, phase, and grid state.
 
@@ -174,8 +315,8 @@ function reproductionScript(): string {
   return paperReproductionScript;
 }
 
-export async function createPaperBundle(options: PaperBundleOptions): Promise<{ blob: Blob; filename: string; manifest: PaperExportManifestV1 }> {
-  const manifest: PaperExportManifestV1 = { ...options.manifest, panels: [] };
+export async function createPaperBundle(options: PaperBundleOptions): Promise<{ blob: Blob; filename: string; manifest: PaperExportManifest }> {
+  const manifest: PaperExportManifest = { ...options.manifest, panels: [] };
   const chunks: Uint8Array[] = [];
   let settleArchive: (() => void) | null = null;
   let rejectArchive: ((error: Error) => void) | null = null;
@@ -201,7 +342,14 @@ export async function createPaperBundle(options: PaperBundleOptions): Promise<{ 
       const panel = options.panels[panelIndex];
       const prefix = `${String(panelIndex + 1).padStart(2, "0")}-${panel.id}`;
       const dataFile = `data/${prefix}.csv`;
-      const panelManifest: PaperExportPanelManifest = { id: panel.id, title: panel.title, dataFile, files: [], metadata: panel.metadata };
+      const panelManifest: PaperExportPanelManifest = {
+        id: panel.id,
+        title: panel.title,
+        dataFile,
+        files: [],
+        renderings: [],
+        metadata: panel.metadata
+      };
       addFile(dataFile, strToU8(panel.csv));
       for (const size of ["single", "double"] as const) {
         options.onProgress?.(`Rendering ${panel.title} (${size})`);
@@ -210,8 +358,16 @@ export async function createPaperBundle(options: PaperBundleOptions): Promise<{ 
         const base = `figures/${prefix}-${size}`;
         addFile(`${base}.svg`, strToU8(svg));
         addFile(`${base}.pdf`, await pdfBytes(result, svg), false);
-        addFile(`${base}.png`, await pngBytes(result, svg), false);
+        const png = await pngBytes(result, svg);
+        addFile(`${base}.png`, png, false);
         panelManifest.files.push(`${base}.pdf`, `${base}.svg`, `${base}.png`);
+        panelManifest.renderings?.push({
+          size,
+          widthInches: result.widthInches,
+          heightInches: result.heightInches,
+          pdfRendering: "vector-svg2pdf",
+          files: [`${base}.pdf`, `${base}.svg`, `${base}.png`]
+        });
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       }
       manifest.panels.push(panelManifest);
@@ -221,6 +377,7 @@ export async function createPaperBundle(options: PaperBundleOptions): Promise<{ 
     addFile("aastex-snippets.tex", strToU8(aastexSnippets(manifest.panels)));
     addFile("reproduce.py", strToU8(reproductionScript()));
     addFile("requirements.txt", strToU8("matplotlib==3.10.5\n"));
+    addFile("licenses/DejaVu-fonts.txt", strToU8(dejavuFontLicense));
     options.onProgress?.("Compressing paper bundle");
     archive.end();
     await archiveDone;
