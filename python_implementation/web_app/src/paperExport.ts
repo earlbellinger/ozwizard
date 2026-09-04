@@ -104,8 +104,11 @@ const PDF_FONTS = [
 ] as const;
 let paperFontsReady: Promise<void> | null = null;
 
-export function paperExportCanvasFont(font: string): string {
-  return font.replace(/(\d+(?:\.\d+)?px)\s+.+$/i, `$1 ${PDF_FONT_FAMILY}`);
+export function paperExportCanvasFont(font: string, scale = 1): string {
+  return font.replace(/(\d+(?:\.\d+)?)px\s+.+$/i, (_match, rawSize: string) => {
+    const scaledSize = Math.round(Number(rawSize) * scale * 1000) / 1000;
+    return `${scaledSize}px ${PDF_FONT_FAMILY}`;
+  });
 }
 
 export function ensurePaperExportFonts(): Promise<void> {

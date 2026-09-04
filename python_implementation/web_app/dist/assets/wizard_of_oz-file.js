@@ -41373,8 +41373,11 @@ for panel in MANIFEST["panels"]:
     { filename: "DejaVuSans-BoldOblique.ttf", dataUrl: DejaVuSans_BoldOblique_default, style: "bolditalic", cssStyle: "italic", cssWeight: "700" }
   ];
   var paperFontsReady = null;
-  function paperExportCanvasFont(font) {
-    return font.replace(/(\d+(?:\.\d+)?px)\s+.+$/i, `$1 ${PDF_FONT_FAMILY}`);
+  function paperExportCanvasFont(font, scale = 1) {
+    return font.replace(/(\d+(?:\.\d+)?)px\s+.+$/i, (_match, rawSize) => {
+      const scaledSize = Math.round(Number(rawSize) * scale * 1e3) / 1e3;
+      return `${scaledSize}px ${PDF_FONT_FAMILY}`;
+    });
   }
   function ensurePaperExportFonts() {
     if (!paperFontsReady) {
@@ -43780,6 +43783,8 @@ ${rows.map((row) => headers.map((header) => csvCell(row[header])).join(",")).joi
     stability: 0.62,
     strip: 0.62
   };
+  var PAPER_EXPORT_FONT_SCALE = 1.4;
+  var activePaperExportFontScale = 1;
   function paperRenderDimensions(definition, size) {
     const widthInches = size === "single" ? 3.4 : 7.1;
     const cssWidth = size === "single" ? 520 : 920;
@@ -43800,6 +43805,7 @@ ${rows.map((row) => headers.map((header) => csvCell(row[header])).join(",")).joi
     if (!(canvas instanceof HTMLCanvasElement)) throw new Error(`${definition.title}: canvas unavailable`);
     const dimensions = paperRenderDimensions(definition, size);
     const dpr = window.devicePixelRatio || 1;
+    const exportFontScale = PAPER_EXPORT_FONT_SCALE;
     await ensurePaperExportFonts();
     const rawVectorContext = new import_svgcanvas.Context({
       width: Math.floor(dimensions.cssWidth * dpr),
@@ -43815,7 +43821,7 @@ ${rows.map((row) => headers.map((header) => csvCell(row[header])).join(",")).joi
         return Reflect.set(
           target,
           property,
-          property === "font" && typeof value === "string" ? paperExportCanvasFont(value) : value,
+          property === "font" && typeof value === "string" ? paperExportCanvasFont(value, exportFontScale) : value,
           target
         );
       }
@@ -43825,6 +43831,7 @@ ${rows.map((row) => headers.map((header) => csvCell(row[header])).join(",")).joi
     const priorWidth = canvas.width;
     const priorHeight = canvas.height;
     const priorStyle = canvas.style.cssText;
+    const priorExportFontScale = activePaperExportFontScale;
     const priorColors = {
       R: COLORS.R,
       V: COLORS.V,
@@ -43844,6 +43851,7 @@ ${rows.map((row) => headers.map((header) => csvCell(row[header])).join(",")).joi
       value: () => new DOMRect(0, 0, dimensions.cssWidth, dimensions.cssHeight)
     });
     try {
+      activePaperExportFontScale = exportFontScale;
       Object.assign(COLORS, PAPER_EXPORT_COLOR_OVERRIDES);
       definition.draw();
       return {
@@ -43855,6 +43863,7 @@ ${rows.map((row) => headers.map((header) => csvCell(row[header])).join(",")).joi
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`${definition.title}: ${message}`);
     } finally {
+      activePaperExportFontScale = priorExportFontScale;
       Object.assign(COLORS, priorColors);
       if (getContextDescriptor) Object.defineProperty(canvas, "getContext", getContextDescriptor);
       else delete canvas.getContext;
@@ -43919,7 +43928,7 @@ ${rows.map((row) => headers.map((header) => csvCell(row[header])).join(",")).joi
       application: {
         name: "OZwizard",
         version: "1.0.0",
-        sourceCommit: "1c958b6",
+        sourceCommit: "51d73bc",
         sourceUrl: window.location.href.split("#")[0]
       },
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -47745,7 +47754,7 @@ Multiple presets found; applying the first one.`, "ok");
     let cursor = x3;
     let rowY = y4;
     const maxX = options.maxX ?? Infinity;
-    const lineHeight = options.lineHeight ?? Math.max(12, fontSize + 3);
+    const lineHeight = (options.lineHeight ?? Math.max(12, fontSize + 3)) * activePaperExportFontScale;
     items.forEach((item) => {
       const itemWidth = swatchSize + labelGap + ctx.measureText(item.label).width + itemGap;
       if (cursor > x3 && cursor + itemWidth > maxX) {
@@ -47783,7 +47792,8 @@ Multiple presets found; applying the first one.`, "ok");
     const overlays = stabilityOverlayResults();
     const stabilityPhysics = analyticStabilityConditions(parameters).physicsMode;
     const kinds = stabilityKindsForMap(parameters);
-    const plot = { left: 58, top: 34, width: width - 78, height: height - 88 };
+    const plotTop = 34 + (activePaperExportFontScale - 1) * 20;
+    const plot = { left: 58, top: plotTop, width: width - 78, height: height - plotTop - 54 };
     fillPlotAreaBackground(ctx, plot);
     const cellWidth = plot.width / STABILITY_MAP_RESOLUTION;
     const cellHeight = plot.height / STABILITY_MAP_RESOLUTION;
@@ -47870,7 +47880,8 @@ Multiple presets found; applying the first one.`, "ok");
     if (!ctx) return;
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
-    const plot = { left: 64, top: 28, width: width - 90, height: height - 88 };
+    const plotTop = 28 + (activePaperExportFontScale - 1) * 35;
+    const plot = { left: 64, top: plotTop, width: width - 90, height: height - plotTop - 60 };
     fillPlotAreaBackground(ctx, plot);
     const sx = (x3) => plot.left + clamp4(x3, 0, 1) * plot.width;
     const sy = (gamma) => plot.top + plot.height - clamp4(gamma, 0, 1) * plot.height;
@@ -48895,7 +48906,7 @@ Multiple presets found; applying the first one.`, "ok");
     const padding = 7;
     const swatchWidth = 28;
     const swatchGap = 7;
-    const rowHeight = 17;
+    const rowHeight = 17 * activePaperExportFontScale;
     const width = Math.max(...labels.map((label) => ctx.measureText(label).width)) + swatchWidth + swatchGap + padding * 2;
     const height = rowHeight * series.length + padding * 2;
     const left = plot.left + plot.width - width - 8;
@@ -50232,9 +50243,10 @@ Multiple presets found; applying the first one.`, "ok");
     const sourceRoom = Math.max(14, canvasHeight - bottom - 8);
     const sourceLength = sourceNorm * Math.min(42, sourceRoom);
     const sourceTailY = Math.min(canvasHeight - 4, bottom + sourceLength + 3);
+    const sourceLabelLineSpacing = 12 * activePaperExportFontScale;
     drawHeatEngineArrow(ctx, sourceX, sourceTailY, sourceX, bottom + 3, sourceLuminosityColor(), 3);
     drawHeatEngineLabel(ctx, "source", sourceX + 10, bottom + 18, sourceLuminosityColor(), "left", 9.4, 760);
-    drawHeatEngineLabel(ctx, "luminosity", sourceX + 10, bottom + 30, sourceLuminosityColor(), "left", 9.4, 760);
+    drawHeatEngineLabel(ctx, "luminosity", sourceX + 10, bottom + 18 + sourceLabelLineSpacing, sourceLuminosityColor(), "left", 9.4, 760);
     const radiativeLeakLevel = luminosityLevel(terms.radiativeLeak);
     const currentOpacityPoint = thermodynamicPoint(row, parameters);
     const opacityValues = scaleRows.map((item) => thermodynamicPoint(item, parameters)?.logOpacity ?? NaN).filter(Number.isFinite);

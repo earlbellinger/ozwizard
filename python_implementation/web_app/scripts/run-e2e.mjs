@@ -351,8 +351,15 @@ async function runPlaywrightChecks() {
     assertOk((await convectiveChip.getAttribute("aria-expanded")) === "false", "stability chips should start collapsed");
     assertOk(/\\\(.*=30\.5 > 0\\\)/.test(await convectiveChip.getAttribute("data-stability-formula") || ""), "stability chips should expose the full formula");
     assertOk(/\\not\\gt 0\\\)/.test(await pulsationalChip.getAttribute("data-stability-formula") || ""), "failed stability formulas should use a slashed greater-than");
-    const convectiveBox = await convectiveChip.boundingBox();
-    assertOk(Boolean(convectiveBox), "convective/turbulent stability chip bounds should be available");
+    const convectiveBoundsHandle = await page.waitForFunction(() => {
+      const chip = document.querySelector("#metrics [data-stability-kind='convective']");
+      if (!(chip instanceof HTMLElement)) return false;
+      const bounds = chip.getBoundingClientRect();
+      return bounds.width > 0 && bounds.height > 0;
+    }, null, { timeout: 5000 });
+    const convectiveBoundsAvailable = await convectiveBoundsHandle.jsonValue();
+    await convectiveBoundsHandle.dispose();
+    assertOk(convectiveBoundsAvailable === true, "convective/turbulent stability chip bounds should be available");
     const normalizeChipText = (value) => value?.replace(/\s+/g, " ").trim();
     const convectiveInitialText = normalizeChipText(await convectiveChip.locator(".stability-summary").innerText());
     assertOk(convectiveInitialText?.includes("turb-response stable") && convectiveInitialText.includes("(30.5 > 0)"), "convective chip should use concise summary text");
@@ -703,12 +710,13 @@ async function runPlaywrightChecks() {
     await page.mouse.up();
     assertOk((await page.locator("#lightCanvas").getAttribute("data-phase-scrubbing")) !== "true", "lightcurve should stop scrubbing on mouse release");
     const releasePhase = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
-    await page.waitForFunction((released) => {
+    const resumedPhaseHandle = await page.waitForFunction((released) => {
       const current = Number(document.querySelector("#lightCanvas")?.getAttribute("data-current-phase"));
       const direct = Math.abs(current - released);
-      return Math.min(direct, 2 - direct) > 0.04;
+      return Math.min(direct, 2 - direct) > 0.04 ? current : false;
     }, releasePhase, { timeout: 1500 });
-    const resumedPhase = Number(await page.locator("#lightCanvas").getAttribute("data-current-phase"));
+    const resumedPhase = Number(await resumedPhaseHandle.jsonValue());
+    await resumedPhaseHandle.dispose();
     assertOk(phaseDelta(resumedPhase, releasePhase) > 0.04, "phase animation should resume from the released position");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-luminosity-arc-labels")) === "L_c,L,L_r", "model luminosity arc labels should be active");
     assertOk((await page.locator("#modelCanvas").getAttribute("data-geometry-guides")) === "R=1,eta,minR,maxR", "model geometry guides should be active");
@@ -854,11 +862,13 @@ async function runPlaywrightChecks() {
     assertOk((await sonificationToggle.getAttribute("aria-pressed")) === "false", "speaker should stop in grid piano mode");
     await page.waitForFunction(() => Boolean(document.querySelector("#pianoPanel")?.getAttribute("data-sonification-signature")), null, { timeout: 5000 });
     const gridPianoSignature = await page.locator("#pianoPanel").getAttribute("data-sonification-signature");
-    await page.waitForFunction((previous) => {
+    const changedGridPianoSignature = await page.waitForFunction((previous) => {
       const current = document.querySelector("#pianoPanel")?.getAttribute("data-sonification-signature");
-      return Boolean(current && current !== previous);
+      return current && current !== previous ? current : false;
     }, gridPianoSignature, { timeout: 5000 });
-    assertOk((await page.locator("#pianoPanel").getAttribute("data-sonification-signature")) !== gridPianoSignature, "piano waveform should follow the grid loop model");
+    const observedGridPianoSignature = await changedGridPianoSignature.jsonValue();
+    await changedGridPianoSignature.dispose();
+    assertOk(Boolean(observedGridPianoSignature && observedGridPianoSignature !== gridPianoSignature), "piano waveform should follow the grid loop model");
     await pianoToggle.click();
     await page.locator("#gridLoopControls input[value='gammac']").check();
     await page.waitForFunction(() => document.querySelector("#phaseLagCanvas")?.getAttribute("data-phase-lag-loop-key") === "gammac", null, { timeout: 15000 });
