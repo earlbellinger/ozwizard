@@ -2,7 +2,7 @@ import { type OdeResult, type SolverName, type SolverOptions, defaultSolverOptio
 import { findLuminosityMaxima, guidedMinSeparationFromPeriod } from "./phase";
 
 export type Driver = "h" | "abs-v";
-export type ReferenceFamily = "baker" | "stellingwerf-1986" | "stellingwerf-1987" | "local-s-tran" | "diagnostic";
+export type ReferenceFamily = "baker" | "stellingwerf-1986" | "stellingwerf-1987" | "munteanu-2005" | "local-s-tran" | "diagnostic";
 export type PhaseMode = "reference" | "final";
 export type GeometryMode = "constant" | "local-exponent" | "homogeneous-shell";
 
@@ -16,6 +16,8 @@ export interface ModelParameters {
   s: number;
   sourceExp: number;
   cq: number;
+  /** Equilibrium turbulent-pressure fraction; omitted in legacy models (zero). */
+  alphaP?: number;
   r0: number;
   v0: number;
   h0: number;
@@ -76,6 +78,7 @@ export const COLORS = {
   s: "#FF9BCE",
   sourceExp: "#D18616",
   cq: "#8B949E",
+  alphaP: "#D977C8",
   tEnd: "#8B949E",
   step: "#8B949E",
   maxStep: "#8B949E",
@@ -101,7 +104,8 @@ export const TEX = {
   n: "\\ozBlue{n}",
   s: "\\ozPink{s}",
   sourceExp: "\\ozSource{U}",
-  cq: "\\ozDamping{C_q}"
+  cq: "\\ozDamping{C_q}",
+  alphaP: "\\ozConvective{\\alpha_p}"
 } as const;
 
 const TEX_EXTRA = {
@@ -140,7 +144,8 @@ export const CONTROL_GROUPS: Record<"physical" | "initial" | "integration", Cont
     ["n", `\\(${TEX.n}\\)`, "κ-ρ exponent", 0, 3, 0.05, 1, COLORS.n],
     ["s", `\\(${TEX.s}\\)`, "κ-T exponent", 0, 8, 0.1, 3, COLORS.s],
     ["sourceExp", `\\(${TEX.sourceExp}\\)`, "inner L exponent", -2, 2, 0.05, 0, COLORS.sourceExp],
-    ["cq", `\\(${TEX.cq}\\)`, "turbulent damping", 0, 10, 0.05, 0, COLORS.cq]
+    ["cq", `\\(${TEX.cq}\\)`, "turbulent damping", 0, 10, 0.05, 0, COLORS.cq],
+    ["alphaP", `\\(${TEX.alphaP}\\)`, "turbulent pressure fraction", 0, 0.9, 0.01, 0, COLORS.alphaP]
   ],
   initial: [
     ["r0", `\\(${TEX.R}_0\\)`, "initial radius", 0.75, 1.9, 0.01, 1.4, COLORS.R],
@@ -170,6 +175,7 @@ export const PARAMETER_DESCRIPTIONS: Partial<Record<keyof ModelParameters, strin
   s: `Temperature exponent in the opacity convention \\(${TEX_EXTRA.kappa}\\propto${TEX_EXTRA.rho}^{${TEX.n}}${TEX_EXTRA.temp}^{-${TEX.s}}\\).`,
   sourceExp: `Exponent \\(${TEX.sourceExp}\\) in the inner luminosity source \\(${TEX.R}^{${TEX.sourceExp}}\\).`,
   cq: "Cubic turbulent damping coefficient in the acceleration equation.",
+  alphaP: "Equilibrium fraction of pressure support supplied by turbulent motions. Includes the matching thermal pressure-work term (Munteanu et al. 2005), with Gamma3 = Gamma1. Zero recovers the gas-pressure model; turbulent kinetic-energy storage is neglected.",
   r0: `Starting shell radius \\(${TEX.R}_{0}\\).`,
   v0: `Starting radial velocity \\(${TEX.V}_{0}\\).`,
   h0: `Starting nonadiabatic pressure factor \\(${TEX.H}_{0}\\), not the total gas pressure.`,
@@ -185,6 +191,7 @@ export const PARAMETER_DESCRIPTIONS: Partial<Record<keyof ModelParameters, strin
 };
 
 const presetBase = {
+  alphaP: 0,
   maxStep: 0.03,
   logRtol: -11,
   logAtol: -13,
@@ -246,7 +253,34 @@ const defaultPresetParameters: ModelParameters = {
   runUntilStable: true
 };
 
+const munteanuPresetParameters: ModelParameters = {
+  ...defaultPresetParameters,
+  referenceFamily: "munteanu-2005",
+  geometryMode: "constant",
+  variableM: false,
+  zeta: 4,
+  zetac: 1,
+  gammac: 0.4,
+  m: 10,
+  gamma1: 1.1,
+  n: 1,
+  s: 3,
+  sourceExp: 0,
+  cq: 0,
+  alphaP: 0.4,
+  r0: 1.4,
+  v0: 0,
+  h0: 1,
+  uc0: 0.7,
+  driver: "h",
+  maxStep: 0.01,
+  tEnd: 1000,
+  phaseWarmupTau: 100
+};
+
 export const PRESETS: Record<string, ModelParameters> = {
+  "Munteanu 2005 turbulent pressure": { ...munteanuPresetParameters },
+  "Munteanu 2005 fully convective": { ...munteanuPresetParameters, alphaP: 0, gammac: 1, zeta: 7.5, zetac: 9 },
   "Baker radiative pulsator": { ...presetBase, referenceFamily: "baker", phaseWarmupTau: 4, zeta: 1, zetac: 0, gammac: 0, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 0, tEnd: 24, step: 0.001, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
   "Blue-edge convection": { ...paperBase, phaseWarmupTau: 24, zeta: 10, zetac: 0.1, gammac: 0.1, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 40, step: 0.001, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
   "Instability-strip convection": { ...paperBase, zeta: 1, zetac: 1, gammac: 0.2, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: 0, cq: 0, r0: 1.4, v0: 0, h0: 1, uc0: 1, tEnd: 15, step: 0.001, logErrTol: -8, variableM: false, driver: "h", runUntilStable: false },
@@ -292,6 +326,22 @@ export function densityRatio(radius: number, p: ModelParameters): number {
   return Math.exp(logDensityRatio(radius, p));
 }
 
+/** -d ln(rho/rho0) / d ln R, consistent with the selected finite-density law. */
+export function densityLogSlope(radius: number, p: ModelParameters): number {
+  const chi = mAt(radius, p);
+  return geometryModeFor(p) === "local-exponent"
+    ? chi - chi * (chi - 3) * Math.log(radius)
+    : chi;
+}
+
+export function turbulentPressureFraction(p: Pick<ModelParameters, "alphaP">): number {
+  const alpha = p.alphaP ?? 0;
+  if (!Number.isFinite(alpha) || alpha < 0 || alpha >= 1) {
+    throw new RangeError("turbulent pressure requires 0 <= alphaP < 1");
+  }
+  return alpha;
+}
+
 export function pressureRatio(radius: number, h: number, p: ModelParameters): number {
   return h * Math.exp(p.gamma1 * logDensityRatio(radius, p));
 }
@@ -302,6 +352,30 @@ export function temperatureRatio(radius: number, h: number, p: ModelParameters):
 
 export function pressureSupport(radius: number, h: number, p: ModelParameters): number {
   return radius ** 2 * pressureRatio(radius, h, p);
+}
+
+export function gasPressureSupport(radius: number, h: number, p: ModelParameters): number {
+  return (1 - turbulentPressureFraction(p)) * pressureSupport(radius, h, p);
+}
+
+export function turbulentPressureSupport(radius: number, uc: number, p: ModelParameters): number {
+  const alpha = turbulentPressureFraction(p);
+  return alpha === 0 ? 0 : alpha * radius ** 2 * densityRatio(radius, p) * uc ** 2;
+}
+
+export function totalPressureSupport(radius: number, h: number, uc: number, p: ModelParameters): number {
+  return gasPressureSupport(radius, h, p) + turbulentPressureSupport(radius, uc, p);
+}
+
+/** Munteanu et al. (2005), A12, generalized through the chosen density law.
+ * Gamma3 = Gamma1 for the existing perfect-gas closure. This approximation
+ * retains pressure work but neglects turbulent kinetic-energy storage (A11).
+ */
+export function turbulentPressureHeating(radius: number, velocity: number, uc: number, p: ModelParameters): number {
+  const alpha = turbulentPressureFraction(p);
+  if (alpha === 0) return 0;
+  return -densityLogSlope(radius, p) * (p.gamma1 - 1) * alpha / (1 - alpha)
+    * Math.exp((1 - p.gamma1) * logDensityRatio(radius, p)) * velocity / radius * uc ** 2;
 }
 
 export function convectiveTarget(radius: number, h: number, p: ModelParameters, velocity = 0): number {
@@ -315,7 +389,9 @@ export function thermalPrefactor(radius: number, p: ModelParameters): number {
 
 export function linearDynamicPeriod(p: ModelParameters): number | null {
   const chi = mAt(1, p);
-  const frequencySquared = chi * p.gamma1 - 4;
+  const alpha = turbulentPressureFraction(p);
+  // Mechanical estimate with H and Uc frozen; the full response is in stability.ts.
+  const frequencySquared = chi * ((1 - alpha) * p.gamma1 + alpha) - 4;
   if (!Number.isFinite(frequencySquared) || frequencySquared <= 0) return null;
   return (2 * Math.PI) / Math.sqrt(frequencySquared);
 }
@@ -356,8 +432,9 @@ export function derivatives(_t: number, y: readonly number[], p: ModelParameters
   const luminosity = sample(_t, y, p).L;
   return [
     velocity,
-    pressureSupport(radius, pressure, p) - 1 / radius ** 2 - p.cq * velocity ** 3,
-    thermalPrefactor(radius, p) * (radius ** p.sourceExp - luminosity),
+    totalPressureSupport(radius, pressure, convectiveVelocity, p) - 1 / radius ** 2 - p.cq * velocity ** 3,
+    thermalPrefactor(radius, p) * (radius ** p.sourceExp - luminosity)
+      + turbulentPressureHeating(radius, velocity, convectiveVelocity, p),
     p.zetac * (convectiveTarget(radius, pressure, p, velocity) - convectiveVelocity)
   ];
 }

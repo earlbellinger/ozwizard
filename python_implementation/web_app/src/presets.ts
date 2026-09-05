@@ -169,7 +169,7 @@ const NUMERIC_PARAMETER_KEYS = new Set<keyof ModelParameters>([
 const DRIVER_VALUES = new Set<Driver>(["h", "abs-v"]);
 const GEOMETRY_VALUES = new Set<GeometryMode>(["constant", "local-exponent", "homogeneous-shell"]);
 const SOLVER_VALUES = new Set<SolverName>(SOLVER_NAMES);
-const REFERENCE_FAMILY_VALUES = new Set<ReferenceFamily>(["baker", "stellingwerf-1986", "stellingwerf-1987", "local-s-tran", "diagnostic"]);
+const REFERENCE_FAMILY_VALUES = new Set<ReferenceFamily>(["baker", "stellingwerf-1986", "stellingwerf-1987", "munteanu-2005", "local-s-tran", "diagnostic"]);
 const PHASE_MODE_VALUES = new Set<PhaseMode>(["reference", "final"]);
 const GRID_BUDGET_VALUES = new Set<PresetGridSnapshot["budgetMode"]>(["timeout", "models"]);
 
@@ -229,14 +229,16 @@ export function emptyLocalPresetStore(): LocalPresetStore {
 
 export function cloneModelParameters(parameters: ModelParameters): ModelParameters {
   const geometryMode = geometryModeFor(parameters);
-  return { ...parameters, geometryMode, variableM: geometryMode !== "constant" };
+  return { ...parameters, alphaP: parameters.alphaP ?? 0, geometryMode, variableM: geometryMode !== "constant" };
 }
 
 function mergeImportedParameters(base: ModelParameters, controls: Partial<ModelParameters>): ModelParameters {
   // A legacy file's boolean must be resolved before an exact-shell default is merged.
   const geometryMode = controls.geometryMode
     ?? (controls.variableM === undefined ? geometryModeFor(base) : controls.variableM ? "local-exponent" : "constant");
-  return cloneModelParameters({ ...base, ...controls, geometryMode });
+  // Files written before turbulent pressure existed must retain their equations,
+  // even when imported over a currently selected model with nonzero alphaP.
+  return cloneModelParameters({ ...base, ...controls, alphaP: controls.alphaP ?? 0, geometryMode });
 }
 
 export function snapshotFromParameters(name: string, parameters: ModelParameters, grid?: PresetGridSnapshot): PresetSnapshot {
@@ -723,6 +725,10 @@ function parseModelParameterValue(
 ): { ok: true; value: ModelParameters[keyof ModelParameters] } | { ok: false } {
   if (NUMERIC_PARAMETER_KEYS.has(key)) {
     const value = parseScalar(valueText);
+    if (key === "alphaP" && typeof value === "number" && (value < 0 || value >= 1)) {
+      errors.push({ line, message: "alphaP must satisfy 0 <= alphaP < 1." });
+      return { ok: false };
+    }
     if (value === null && OPTIONAL_NUMERIC_PARAMETER_KEYS.has(key)) return { ok: true, value: undefined };
     if (typeof value === "number") return { ok: true, value };
     errors.push({ line, message: `${String(key)} must be a finite number${OPTIONAL_NUMERIC_PARAMETER_KEYS.has(key) ? " or unset" : ""}.` });
@@ -884,6 +890,7 @@ function storedGridRangeSnapshot(candidate: unknown): PresetGridRangeSnapshot | 
 }
 
 function storedParameterValueIsValid(key: keyof ModelParameters, value: unknown): boolean {
+  if (key === "alphaP") return typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 1;
   if (NUMERIC_PARAMETER_KEYS.has(key)) return (value === undefined && OPTIONAL_NUMERIC_PARAMETER_KEYS.has(key)) || Number.isFinite(value);
   if (BOOLEAN_PARAMETER_KEYS.has(key)) return typeof value === "boolean";
   if (key === "driver") return typeof value === "string" && DRIVER_VALUES.has(value as Driver);

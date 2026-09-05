@@ -18,7 +18,11 @@ import {
   geometryModeFor,
   pressureRatio as modelPressureRatio,
   temperatureRatio as modelTemperatureRatio,
-  pressureSupport as modelPressureSupport,
+  gasPressureSupport as modelGasPressureSupport,
+  turbulentPressureSupport as modelTurbulentPressureSupport,
+  totalPressureSupport as modelPressureSupport,
+  turbulentPressureFraction,
+  turbulentPressureHeating,
   convectiveTarget as modelConvectiveTarget,
   thermalPrefactor,
   effectiveGammaC,
@@ -813,6 +817,12 @@ function s72ConditionMetric(stability: AnalyticStabilityResult, condition: Analy
 }
 
 function s72ConditionFormula(stability: AnalyticStabilityResult, condition: AnalyticStabilityCondition): string {
+  if (stability.turbulentPressureFraction > 0) {
+    if (condition.kind === "convective") return "a_4";
+    if (condition.kind === "secular") return "a_3";
+    if (condition.kind === "dynamic") return stability.physicsMode === "radiative" ? "a_2" : "a_3a_2-a_4a_1";
+    return stability.physicsMode === "radiative" ? "(a_1a_2-a_3)/\\zeta" : "a_1(a_3a_2-a_4a_1)-a_3^2";
+  }
   return condition.kind === "convective"
     ? s72ConvectiveMargin()
     : condition.kind === "secular"
@@ -827,6 +837,7 @@ function mathChunk(latex: string): string {
 }
 
 function s72ConditionFormulaChunks(stability: AnalyticStabilityResult, condition: AnalyticStabilityCondition): string[] {
+  if (stability.turbulentPressureFraction > 0) return [s72ConditionFormula(stability, condition)];
   if (condition.kind === "convective") {
     return [
       `${TEX.zeta}${TEX.zetac}\\bigl[`,
@@ -880,6 +891,9 @@ function s72ConditionSummary(condition: AnalyticStabilityCondition): string {
 }
 
 function s72TermSummary(stability: AnalyticStabilityResult): string {
+  if (stability.turbulentPressureFraction > 0) {
+    return `alpha_p=${fmt(stability.turbulentPressureFraction, 3)}, ${Object.entries(stability.coefficients).map(([key, value]) => `${key}=${fmt(value, 4)}`).join(", ")}; K=${fmt(stability.terms.pressureRestoring, 3)}, W=${fmt(stability.terms.pressureWork, 3)}`;
+  }
   const { radiativeThermal, restoring, secularCoupling, convectiveCorrection, thermalResponse, dynamicCoupling } = stability.terms;
   return `E=${fmt(stability.eCoefficient, 3)}, (chi0*Gamma1 - 4)=${fmt(restoring, 3)}, (1-gamma_c_eff)*(s+4)=${fmt(radiativeThermal, 3)}, E+(chi0*Gamma1 - 4)*(1-gamma_c_eff)*(s+4)=${fmt(secularCoupling, 3)}, 3*gamma_c_eff*(chi0 - 4)/2=${fmt(convectiveCorrection, 3)}, zeta_c+zeta*(1-gamma_c_eff)*(s+4)=${fmt(thermalResponse, 3)}, zeta*zeta_c*((1-gamma_c_eff)*(s+4)+3*gamma_c_eff/2)+chi0*Gamma1-4=${fmt(dynamicCoupling, 3)}`;
 }
@@ -897,15 +911,16 @@ function s72ConditionTitle(stability: AnalyticStabilityResult, condition: Analyt
 }
 
 function linearPeriodMetric(parameters: ModelParameters, period: number | null): string {
-  const chi = mAt(1, parameters);
-  const frequencySquared = chi * parameters.gamma1 - 4;
   const value = period ? fmt(period, 3) : "\\ozNeutral{n/a}";
+  if (turbulentPressureFraction(parameters) > 0) return `\\(2\\pi/\\sqrt{K}=${value}\\)`;
   return `\\(2\\pi/\\sqrt{\\ozChi{\\chi}\\ozGamma{\\Gamma_1}-4}=${value}\\)`;
 }
 
 function linearPeriodTitle(parameters: ModelParameters, period: number | null): string {
   const chi = mAt(1, parameters);
-  const frequencySquared = chi * parameters.gamma1 - 4;
+  const alpha = turbulentPressureFraction(parameters);
+  const frequencySquared = chi * ((1 - alpha) * parameters.gamma1 + alpha) - 4;
+  if (alpha > 0) return `Frozen-state mechanical period 2*pi/sqrt(K), with K=chi*((1-alpha_p)*Gamma_1+alpha_p)-4=${fmt(frequencySquared, 4)}. Thermal-pressure and convective-velocity responses enter the separate full linear-stability calculation.${period ? ` P_lin=${fmt(period, 4)}.` : " Period unavailable."}`;
   if (!period) {
     return `Linear dynamic period unavailable because chi*Gamma_1 - 4 = ${fmt(frequencySquared, 4)} is not positive.`;
   }
@@ -998,6 +1013,7 @@ async function runMathTypeset(): Promise<void> {
     console.warn("MathJax typeset failed", error);
   } finally {
     mathTypesetRunning = false;
+    updateReferencePanelLayout();
     if (mathTypesetPending) {
       mathTypesetPending = false;
       queueMathTypeset();
@@ -2405,6 +2421,8 @@ function paperSnapshotCsv(panel: "model" | "heatEngine"): string {
       Lc: snapshot.row.Lc,
       L: snapshot.row.L,
       pressure_force: panel === "heatEngine" ? terms?.pressureForce : "",
+      gas_pressure_force: panel === "heatEngine" ? terms?.gasPressureForce : "",
+      turbulent_pressure_force: panel === "heatEngine" ? terms?.turbulentPressureForce : "",
       gravity_force: panel === "heatEngine" ? terms?.gravityForce : "",
       damping_acceleration: panel === "heatEngine" ? terms?.dampingAcceleration : "",
       source_luminosity: panel === "heatEngine" ? terms?.source : "",
@@ -2415,7 +2433,7 @@ function paperSnapshotCsv(panel: "model" | "heatEngine"): string {
   });
   return csvDocument([
     "snapshot_index", "snapshot_label", "coordinate_label", "coordinate", "coordinate_unit", "tau",
-    "R", "V", "H", "Uc", "Lr", "Lc", "L", "pressure_force", "gravity_force",
+    "R", "V", "H", "Uc", "Lr", "Lc", "L", "pressure_force", "gas_pressure_force", "turbulent_pressure_force", "gravity_force",
     "damping_acceleration", "source_luminosity", "log10_T_over_T0", "log10_P_over_P0", "log10_kappa_over_kappa0"
   ], rows);
 }
@@ -2431,9 +2449,14 @@ function paperPanelCsv(id: PaperPanelId): string {
   }
   if (id === "work") {
     const { selectedRows } = heatEngineWorkRows(latestPhaseRows);
-    return csvDocument(["tau", "R", "R_unit", "pressure_support", "pressure_support_unit", "V", "H"], selectedRows.map((row) => ({
+    return csvDocument(["tau", "R", "R_unit", "pressure_support", "gas_pressure_support", "turbulent_pressure_support", "pressure_support_unit", "gas_pressure_power", "turbulent_pressure_power", "damping_power", "V", "H", "Uc"], selectedRows.map((row) => ({
       tau: row.tau, R: row.R, R_unit: "dimensionless", pressure_support: pressureSupport(row, latestPhaseParameters),
-      pressure_support_unit: "dimensionless", V: row.V, H: row.H
+      gas_pressure_support: gasPressureSupport(row, latestPhaseParameters),
+      turbulent_pressure_support: turbulentPressureSupport(row, latestPhaseParameters),
+      gas_pressure_power: row.V * gasPressureSupport(row, latestPhaseParameters),
+      turbulent_pressure_power: row.V * turbulentPressureSupport(row, latestPhaseParameters),
+      damping_power: -latestPhaseParameters.cq * row.V ** 4,
+      pressure_support_unit: "dimensionless", V: row.V, H: row.H, Uc: row.Uc
     })));
   }
   if (id === "tpOpacity") {
@@ -2678,7 +2701,8 @@ function paperStabilityPalette(): NonNullable<PaperPanelRenderer["metadata"]["ca
     secular: { color: "#9B71D9", alpha: stabilityKindAlpha("secular") },
     pulsational: { color: "#B8525E", alpha: stabilityKindAlpha("pulsational") },
     dynamic: { color: "#D89B41", alpha: stabilityKindAlpha("dynamic") },
-    neutral: { color: "#8492AA", alpha: stabilityKindAlpha("neutral") }
+    neutral: { color: "#8492AA", alpha: stabilityKindAlpha("neutral") },
+    unavailable: { color: "#8492AA", alpha: stabilityKindAlpha("unavailable") }
   };
 }
 
@@ -3990,6 +4014,7 @@ function controlCanvasSymbol(key: ControlParameterKey): string {
     gammac: "γc",
     m: "χ₀",
     gamma1: "Γ₁",
+    alphaP: "αₚ",
     n: "n",
     s: "s",
     sourceExp: "U",
@@ -4863,6 +4888,7 @@ function derivationEquation(lines: readonly string[]): string {
 }
 
 function derivationConditionFormula(stability: AnalyticStabilityResult, condition: AnalyticStabilityCondition): string {
+  if (stability.turbulentPressureFraction > 0) return s72ConditionFormula(stability, condition);
   if (condition.kind === "convective") return s72ConvectiveMargin();
   if (condition.kind === "secular") return s72SecularMargin(stability);
   if (condition.kind === "dynamic") return s72DynamicMargin(stability);
@@ -4893,9 +4919,9 @@ function geometryDensityEquations(parameters: ModelParameters): string[] {
     `&= \\ozEta{${fmtFixed(eta, 3)}}`,
     `\\ozChi{\\chi}_{\\rm local}(${TEX.R}) &= \\frac{3${TEX.R}^3}{${TEX.R}^3-\\ozEta{\\eta}^3}`,
     `f(${TEX.R}) &\\equiv \\rho/\\rho_0`,
-    ...(mode === "homogeneous-shell"
-      ? [`&=\\frac{1-\\ozEta{\\eta}^3}{${TEX.R}^3-\\ozEta{\\eta}^3}`, `&\\quad ${TEX.R}>\\ozEta{\\eta}`]
-      : [`&=${TEX.R}^{-\\ozChi{\\chi}_{\\rm local}(${TEX.R})}`])
+    mode === "homogeneous-shell"
+      ? `&=\\frac{1-\\ozEta{\\eta}^3}{${TEX.R}^3-\\ozEta{\\eta}^3},\\quad ${TEX.R}>\\ozEta{\\eta}`
+      : `&=${TEX.R}^{-\\ozChi{\\chi}_{\\rm local}(${TEX.R})}`
   ];
 }
 
@@ -4963,9 +4989,29 @@ function buildLuminosityDerivation(parameters: ModelParameters): string {
       `${TEX.Lr} &= (1-${TEX_GAMMAC_EFF})\\,${TEX.R}^{4}f^{(${TEX.s}+4)(${TEX.gamma1}-1)-${TEX.n}}${TEX.H}^{${TEX.s}+4}`,
       `${TEX.Lc} &= ${TEX_GAMMAC_EFF}\\,${TEX.R}^{2}f${TEX.Uc}^{3}`,
       `${TEX.L} &= ${TEX.Lr}+${TEX.Lc}`,
-      `\\frac{d${TEX.H}}{d${TEX.tau}} &= ${TEX.zeta}\\,f^{1-${TEX.gamma1}}\\left(${TEX.R}^{${TEX.sourceExp}}-${TEX.L}\\right)`
+      `\\frac{d${TEX.H}}{d${TEX.tau}} &= ${thermalEquationTex(parameters)}`
     ])}`
   );
+}
+
+function thermalEquationTex(parameters: ModelParameters): string {
+  const luminosity = `${TEX.zeta}\\,f^{1-${TEX.gamma1}}\\left(${TEX.R}^{${TEX.sourceExp}}-${TEX.L}\\right)`;
+  return turbulentPressureFraction(parameters) > 0
+    ? `${luminosity}-\\chi_\\rho(${TEX.R})(${TEX.gamma1}-1)\\frac{\\alpha_p}{1-\\alpha_p}f^{1-${TEX.gamma1}}\\frac{${TEX.V}}{${TEX.R}}${TEX.Uc}^{2}`
+    : luminosity;
+}
+
+function buildTurbulentPressureDerivation(parameters: ModelParameters): string {
+  if (turbulentPressureFraction(parameters) <= 0) return "";
+  return derivationBlock("turbulent-pressure", "Turbulent Pressure and Compression Work", `
+    <p>The optional <a href="https://arxiv.org/abs/astro-ph/0503697">Munteanu et al. (2005)</a> prescription adds turbulent pressure proportional to density times the squared convective velocity. The equilibrium fraction \\(\\alpha_p\\) partitions gas and turbulent support; it is distinct from the convective luminosity fraction \\(\\gamma_c\\).</p>
+    ${derivationEquation([
+      `F_{\\rm gas} &= (1-\\alpha_p)${TEX.R}^{2}${TEX.H}f^{${TEX.gamma1}},\\quad F_{\\rm turb}=\\alpha_p${TEX.R}^{2}f${TEX.Uc}^{2}`,
+      `\\chi_\\rho(${TEX.R}) &\\equiv -\\frac{d\\ln f}{d\\ln ${TEX.R}}`,
+      `\\left.\\frac{d${TEX.H}}{d${TEX.tau}}\\right|_{\\rm turb} &= -\\chi_\\rho(${TEX.R})(${TEX.gamma1}-1)\\frac{\\alpha_p}{1-\\alpha_p}f^{1-${TEX.gamma1}}\\frac{${TEX.V}}{${TEX.R}}${TEX.Uc}^{2}`
+    ])}
+    <p>Compression adds heat and expansion removes it through this pressure-work term. The fixed-exponent mode reproduces their Appendix A approximation, with \\(\\Gamma_3=\\Gamma_1\\); other density closures use their own logarithmic compression slope. Turbulent kinetic-energy storage is omitted, as in their principal calculations. Cubic drag remains a separate mechanical energy loss.</p>
+  `);
 }
 
 function buildConvectionDerivation(parameters: ModelParameters): string {
@@ -4986,6 +5032,26 @@ function buildConvectionDerivation(parameters: ModelParameters): string {
 }
 
 function buildLinearDerivation(parameters: ModelParameters, stability: AnalyticStabilityResult): string {
+  if (!stability.equilibriumValid) {
+    return derivationBlock("linear", "Linear Analysis and Stability Criteria", `<p>${escapeAttribute(stability.equilibriumNote ?? "The normalized equilibrium is unavailable.")}</p>`);
+  }
+  if (stability.turbulentPressureFraction > 0) {
+    const c = stability.coefficients;
+    const quartic = c.a4 !== undefined;
+    return derivationBlock("linear", "Linear Analysis and Stability Criteria", `
+      <p>Linearization about \\(R=H=U_c=1, V=0\\) includes gas and turbulent pressure forces and the thermal compression-work term. The characteristic polynomial uses the active ${quartic ? "four-variable" : "frozen-convection three-variable"} system. All density closures share the same equilibrium logarithmic slope.</p>
+      ${parameters.driver === "abs-v" ? "<p>For the absolute-velocity diagnostic driver, stability refers to the pressure-driven reference system.</p>" : ""}
+      ${derivationEquation([
+        `K &= ${TEX.m}[(1-\\alpha_p)${TEX.gamma1}+\\alpha_p]-4=${fmt(stability.terms.pressureRestoring, 4)}`,
+        `W &= ${TEX.m}(${TEX.gamma1}-1)\\frac{\\alpha_p}{1-\\alpha_p}=${fmt(stability.terms.pressureWork, 4)}`,
+        quartic ? "0 &= \\lambda^4+a_1\\lambda^3+a_2\\lambda^2+a_3\\lambda+a_4" : "0 &= \\lambda^3+a_1\\lambda^2+a_2\\lambda+a_3",
+        ...Object.entries(c).map(([key, value]) => `${key.replace("a", "a_")} &= ${fmt(value, 5)}`),
+        ...stability.conditions.map((condition) => `\\Delta_{\\rm ${s72ShortLabel(condition.kind)}} &= ${s72ConditionFormula(stability, condition)}`)
+      ])}
+      <p>The cubic reduction also requires \\(a_1>0\\). The frozen-state mechanical period uses \\(K\\); oscillation growth and stability use the full polynomial.</p>
+      <table class="derivation-condition-table" aria-label="Current stability criteria"><tbody>${derivationConditionRows(stability)}</tbody></table>
+    `);
+  }
   const modeLabel = stability.physicsMode === "convective" ? "time-dependent convective" : "reduced frozen-convection/radiative";
   const definitions = derivationEquation([
     `\\ozNeutral{b} &= 4+${TEX.m}\\left[${TEX.n}-(${TEX.s}+4)(${TEX.gamma1}-1)\\right],\\quad \\ozNeutral{c}=${TEX.m}-2`,
@@ -5021,6 +5087,7 @@ function buildDerivationHtml(parameters: ModelParameters, stability: AnalyticSta
     buildOpacityDerivation(parameters),
     buildEquilibriumDerivation(parameters),
     buildLuminosityDerivation(parameters),
+    buildTurbulentPressureDerivation(parameters),
     buildConvectionDerivation(parameters),
     buildLinearDerivation(parameters, stability)
   ].join("");
@@ -5040,6 +5107,7 @@ function derivationSignature(parameters: ModelParameters, stability: AnalyticSta
     parameters.s,
     parameters.sourceExp,
     parameters.cq,
+    turbulentPressureFraction(parameters),
     ...stability.conditions.map((condition) => `${condition.kind}:${condition.value}`)
   ].map((value) => String(value)).join("|");
 }
@@ -5062,7 +5130,7 @@ function updateDerivationPanel(parameters: ModelParameters = state, stability = 
 }
 
 function referencePanelsDependOnKey(key: ControlParameterKey): boolean {
-  return key === "m" || key === "gammac" || key === "zetac" || key === "uc0";
+  return key === "m" || key === "gammac" || key === "zetac" || key === "uc0" || key === "alphaP";
 }
 
 function updateReferencePanelsForKey(key: ControlParameterKey): void {
@@ -5077,6 +5145,7 @@ function updateVariableReferencePanel(parameters: ModelParameters = state): HTML
   const visibleRows = hasConvectiveLuminosity
     ? ["tau", "R", "V", "H", "Uc", "Lr", "Lc", "L"]
     : ["tau", "R", "V", "H", "Lr", "L"];
+  if (turbulentPressureFraction(parameters) > 0 && !visibleRows.includes("Uc")) visibleRows.push("Uc");
   panel.dataset.convectiveLuminosity = hasConvectiveLuminosity ? "available" : "absent";
   panel.dataset.variableRows = visibleRows.join(",");
   panel.querySelectorAll<HTMLElement>("[data-variable-row]").forEach((row) => {
@@ -5104,38 +5173,76 @@ function updateVariableReferencePanel(parameters: ModelParameters = state): HTML
   return meaningTargets;
 }
 
+function updateReferencePanelLayout(): void {
+  const grid = document.querySelector<HTMLElement>(".reference-grid");
+  const equations = grid?.querySelector<HTMLElement>(".equations-panel");
+  if (!grid || !equations) return;
+  const blocks = [...equations.querySelectorAll<HTMLElement>(".equation-block")];
+  // Measure the typeset SVGs themselves, not their width-constrained wrappers.
+  // Waiting for both blocks avoids resizing to a mixture of old and new equations.
+  if (blocks.some((block) => block.dataset.mathState !== "ready")) return;
+  const horizontalEdges = (node: Element): number => {
+    const style = getComputedStyle(node);
+    return [style.paddingLeft, style.paddingRight, style.borderLeftWidth, style.borderRightWidth]
+      .reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
+  };
+  const widths = blocks.map((block) => {
+    const svgs = [...block.querySelectorAll<SVGSVGElement>('mjx-container[jax="SVG"] > svg')];
+    return Math.max(0, ...svgs.map((svg) => svg.width.baseVal.value)) + horizontalEdges(block);
+  });
+  if (!widths.length || widths.every((width) => width <= 22)) return;
+  const heading = equations.querySelector("h3");
+  const headingRange = document.createRange();
+  if (heading) headingRange.selectNodeContents(heading);
+  const width = Math.ceil(Math.max(...widths, heading ? headingRange.getBoundingClientRect().width : 0)
+    + horizontalEdges(equations) + 2);
+  grid.style.setProperty("--equations-panel-width", `${width}px`);
+  const style = getComputedStyle(grid);
+  const gap = parseFloat(style.columnGap) || 0;
+  const variablesWidth = parseFloat(style.getPropertyValue("--variables-panel-min-width"));
+  const parametersWidth = parseFloat(style.getPropertyValue("--parameters-panel-min-width"));
+  const available = grid.clientWidth;
+  grid.dataset.columns = String(available >= width + variablesWidth + parametersWidth + 2 * gap ? 3
+    : available >= width + variablesWidth + gap ? 2 : 1);
+}
+
 function updateEquationBlocks(): void {
   const eta = Math.cbrt(Math.max(0, 1 - 3 / state.m));
   const etaDisplay = fmtFixed(eta, 2);
   const hasConvectiveLuminosity = convectiveLuminosityAvailable();
-  const geometry = geometryDensityEquations(state).join("\\\\[0.2em]\n");
+  const hasTurbulentPressure = turbulentPressureFraction(state) > 0;
+  const hasConvectiveState = hasConvectiveLuminosity || hasTurbulentPressure;
+  const geometryLines = geometryDensityEquations(state);
+  if (hasTurbulentPressure) geometryLines.push(`\\chi_\\rho(${TEX.R}) &\\equiv -\\frac{d\\ln f}{d\\ln ${TEX.R}}`);
+  const geometry = geometryLines.join("\\\\[0.2em]\n");
   const driver = state.driver === "abs-v" ? "\\sqrt{|\\ozVelocity{V}|}" : "\\sqrt{\\ozPressure{H}}";
   const odeNode = el<HTMLDivElement>("odeEquations");
   const luminosityNode = el<HTMLDivElement>("luminosityEquations");
   odeNode.dataset.driverMode = state.driver;
   odeNode.dataset.geometryMode = geometryModeFor(state);
   odeNode.dataset.convectiveLuminosity = hasConvectiveLuminosity ? "available" : "absent";
-  odeNode.dataset.equationVariables = hasConvectiveLuminosity ? "R,V,H,Uc" : "R,V,H";
+  odeNode.dataset.equationVariables = hasConvectiveState ? "R,V,H,Uc" : "R,V,H";
+  odeNode.dataset.turbulentPressure = hasTurbulentPressure ? "active" : "off";
+  odeNode.dataset.alphaP = String(turbulentPressureFraction(state));
   const odeLines = [
     `\\frac{d\\ozRadius{R}}{d\\ozTau{\\tau}} &= \\ozVelocity{V}`,
-    `\\frac{d\\ozVelocity{V}}{d\\ozTau{\\tau}} &=
-      \\ozRadius{R}^{2}\\ozPressure{H}f^{\\ozGamma{\\Gamma_1}}
-      - \\frac{1}{\\ozRadius{R}^{2}}`,
-    `&\\quad - \\ozDamping{C_q}\\ozVelocity{V}^{3}`,
-    `\\frac{d\\ozPressure{H}}{d\\ozTau{\\tau}} &=
-      \\ozZeta{\\zeta}\\,
-      f^{1-\\ozGamma{\\Gamma_1}}
-      \\left[
-        \\ozRadius{R}^{\\ozSource{U}}
-        - \\ozLuminosity{L}
-      \\right]`
+    ...(hasTurbulentPressure ? [
+      `\\frac{d${TEX.V}}{d${TEX.tau}} &= (1-\\alpha_p)${TEX.R}^{2}${TEX.H}f^{${TEX.gamma1}}-\\frac{1}{${TEX.R}^{2}}`,
+      `&\\quad+\\alpha_p${TEX.R}^{2}f${TEX.Uc}^{2}-${TEX.cq}${TEX.V}^{3}`,
+      `\\frac{d${TEX.H}}{d${TEX.tau}} &= f^{1-${TEX.gamma1}}\\Bigl[${TEX.zeta}(${TEX.R}^{${TEX.sourceExp}}-${TEX.L})`,
+      `&\\quad-\\chi_\\rho(${TEX.R})(${TEX.gamma1}-1)\\frac{\\alpha_p}{1-\\alpha_p}\\frac{${TEX.V}}{${TEX.R}}${TEX.Uc}^{2}\\Bigr]`
+    ] : [
+      `\\frac{d${TEX.V}}{d${TEX.tau}} &= ${TEX.R}^{2}${TEX.H}f^{${TEX.gamma1}}-\\frac{1}{${TEX.R}^{2}}-${TEX.cq}${TEX.V}^{3}`,
+      `\\frac{d${TEX.H}}{d${TEX.tau}} &= ${thermalEquationTex(state)}`
+    ])
   ];
-  if (hasConvectiveLuminosity) {
-    odeLines.push(`\\frac{d\\ozConvective{U_c}}{d\\ozTau{\\tau}} &=
+  if (hasConvectiveState) {
+    odeLines.push(state.zetac <= 0 ? `\\frac{d\\ozConvective{U_c}}{d\\ozTau{\\tau}} &= 0` : `\\frac{d\\ozConvective{U_c}}{d\\ozTau{\\tau}} &=
       \\ozZetac{\\zeta_c}
-      \\bigl[
-        f^{(\\ozGamma{\\Gamma_1}-1)/2}\\,${driver}`,
-      `&\\quad - \\ozConvective{U_c}\\bigr]`);
+      \\left[
+        f^{(\\ozGamma{\\Gamma_1}-1)/2}\\,${driver}
+        - \\ozConvective{U_c}
+      \\right]`);
   }
   const odeHtml = `
     \\[
@@ -5227,7 +5334,7 @@ function updateSliderLabel(key: ControlParameterKey): void {
   const dynamicValue = gridState.enabled && key === gridState.selectedLoopKey
     ? current?.variedValues[key]
     : undefined;
-  const value = dynamicValue ?? state[key];
+  const value = dynamicValue ?? state[key] ?? 0;
   label.textContent = controlValueLabel(key, value);
   const input = controlElements.get(key);
   if (input) input.value = String(sliderInputValue(key));
@@ -5240,7 +5347,7 @@ function updateAllSliderLabels(): void {
 }
 
 function restoreParameterDefault(key: ControlParameterKey): void {
-  state[key] = presetParameters(selectedPreset)[key];
+  state[key] = presetParameters(selectedPreset)[key] ?? 0;
   syncGridRangeCenter(key);
   updateSliderLabel(key);
   updateReferencePanelsForKey(key);
@@ -7268,6 +7375,8 @@ function stabilityCacheKey(parameters: ModelParameters): string {
     parameters.gamma1.toFixed(3),
     parameters.sourceExp.toFixed(3),
     parameters.cq.toFixed(3),
+    turbulentPressureFraction(parameters).toFixed(4),
+    parameters.uc0.toFixed(6),
     geometryModeFor(parameters)
   ].join("|");
 }
@@ -7303,6 +7412,8 @@ function instabilityStripCacheKey(parameters: ModelParameters): string {
     parameters.gamma1.toFixed(3),
     parameters.sourceExp.toFixed(3),
     parameters.cq.toFixed(3),
+    turbulentPressureFraction(parameters).toFixed(4),
+    parameters.uc0.toFixed(6),
     geometryModeFor(parameters)
   ].join("|");
 }
@@ -7314,7 +7425,8 @@ function emptyStabilityCounts(): Record<StabilityKind, number> {
     secular: 0,
     pulsational: 0,
     dynamic: 0,
-    neutral: 0
+    neutral: 0,
+    unavailable: 0
   };
 }
 
@@ -7344,7 +7456,8 @@ function instabilityKindsForStrip(parameters: ModelParameters): { kinds: Stabili
     counts.secular,
     counts.dynamic,
     counts.pulsational,
-    counts.neutral
+    counts.neutral,
+    counts.unavailable
   ].join("|");
   const result = { kinds, counts, signature };
   if (instabilityStripCache.size > 24) instabilityStripCache.clear();
@@ -7359,7 +7472,8 @@ function stabilityKindColor(kind: StabilityKind, alpha = 1): string {
     secular: [155, 113, 217],
     pulsational: [184, 82, 94],
     dynamic: [216, 155, 65],
-    neutral: [132, 146, 170]
+    neutral: [132, 146, 170],
+    unavailable: [132, 146, 170]
   };
   const [r, g, b] = colors[kind];
   return alpha >= 1 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${alpha})`;
@@ -7367,7 +7481,7 @@ function stabilityKindColor(kind: StabilityKind, alpha = 1): string {
 
 function stabilityKindAlpha(kind: StabilityKind): number {
   if (kind === "stable") return 0.5;
-  if (kind === "neutral") return 0.22;
+  if (kind === "neutral" || kind === "unavailable") return 0.22;
   return 0.6;
 }
 
@@ -7398,7 +7512,8 @@ function stabilityCountsLabel(counts: Record<StabilityKind, number>, physicsMode
     `secular:${counts.secular}`,
     `dynamic:${counts.dynamic}`,
     `pulsational:${counts.pulsational}`,
-    `neutral:${counts.neutral}`
+    `neutral:${counts.neutral}`,
+    `unavailable:${counts.unavailable}`
   );
   return parts.join(",");
 }
@@ -7560,7 +7675,8 @@ function drawStabilityMap(): void {
 
   const parameters = stabilityDisplayParameters();
   const overlays = stabilityOverlayResults();
-  const stabilityPhysics = analyticStabilityConditions(parameters).physicsMode;
+  const stability = analyticStabilityConditions(parameters);
+  const stabilityPhysics = stability.physicsMode;
   const kinds = stabilityKindsForMap(parameters);
   const exportLayout = activePaperExportFontScale > 1;
   const plotTop = exportLayout ? 52 : 34;
@@ -7577,11 +7693,12 @@ function drawStabilityMap(): void {
   });
 
   canvas.dataset.stabilityMode = gridState.enabled ? "grid" : "single";
+  canvas.dataset.equilibriumValid = String(stability.equilibriumValid);
   canvas.dataset.stabilityGamma = fmtFixed(parameters.gammac, 3);
   canvas.dataset.stabilityPhysics = stabilityPhysics;
   canvas.dataset.stabilityScale = "log10";
   canvas.dataset.stabilityRange = `${controlValueLabel("zeta", 10 ** RESPONSE_LOG_MIN)},${controlValueLabel("zeta", 10 ** RESPONSE_LOG_MAX)}`;
-  canvas.dataset.stabilityLegend = linearStabilityLegendLabel(stabilityPhysics);
+  canvas.dataset.stabilityLegend = stability.equilibriumValid ? linearStabilityLegendLabel(stabilityPhysics) : "normalized equilibrium unavailable";
   canvas.dataset.editableParameters = "zetac,zeta";
   canvas.dataset.stellingwerfLabels = "zeta,zeta_c,gamma_c";
   canvas.dataset.axisLabels = "convective response zeta_c,thermal response zeta";
@@ -7619,7 +7736,8 @@ function drawStabilityMap(): void {
     { rotate: -Math.PI / 2, fontSize: 11, weight: 700 }
   );
   updateStabilityLinearizedHeader(parameters.gammac);
-  drawReferenceLegend(ctx, plot.left + 4, 15, linearStabilityLegendItems(stabilityPhysics), { maxX: plot.left + plot.width - 4, fontSize: 10.5, swatchSize: 9, labelGap: 5, itemGap: 10, lineHeight: 12 });
+  drawReferenceLegend(ctx, plot.left + 4, 15, stability.equilibriumValid ? linearStabilityLegendItems(stabilityPhysics) : [{ label: "normalized equilibrium unavailable", color: stabilityKindColor("unavailable") }], { maxX: plot.left + plot.width - 4, fontSize: 10.5, swatchSize: 9, labelGap: 5, itemGap: 10, lineHeight: 12 });
+  if (!stability.equilibriumValid) drawHeatEngineLabel(ctx, "Frozen Uc must equal 1", plot.left + plot.width / 2, plot.top + plot.height / 2, THEME.axisText, "center", 12, 700);
   drawStabilityOverlays(ctx, plot, parameters, overlays);
 }
 
@@ -7683,10 +7801,12 @@ function drawCepheidGuide(): void {
 
   const current = currentGridResult();
   const parameters = current?.parameters || state;
-  const stripPhysics = analyticStabilityConditions(parameters).physicsMode;
+  const stability = analyticStabilityConditions(parameters);
+  const stripPhysics = stability.physicsMode;
+  canvas.dataset.equilibriumValid = String(stability.equilibriumValid);
   canvas.dataset.instabilityPhysics = stripPhysics;
   canvas.dataset.instabilityLabels = linearStabilityLegendLabel(stripPhysics);
-  canvas.dataset.instabilityLegend = linearStabilityLegendLabel(stripPhysics);
+  canvas.dataset.instabilityLegend = stability.equilibriumValid ? linearStabilityLegendLabel(stripPhysics) : "normalized equilibrium unavailable";
   const stripStability = instabilityKindsForStrip(parameters);
   canvas.dataset.instabilitySignature = stripStability.signature;
   canvas.dataset.instabilityCounts = stabilityCountsLabel(stripStability.counts, stripPhysics);
@@ -7706,7 +7826,8 @@ function drawCepheidGuide(): void {
   });
 
   drawAxes(ctx, plot, [STRIP_LOG_RATIO_MIN, STRIP_LOG_RATIO_MAX], [0, 1], "", "", THEME.axisText, THEME.axisText, 12);
-  drawReferenceLegend(ctx, plot.left + 8, 15, linearStabilityLegendItems(stripPhysics), { maxX: plot.left + plot.width - 4, fontSize: 10.5, swatchSize: 9, labelGap: 5, itemGap: 10, lineHeight: 12 });
+  drawReferenceLegend(ctx, plot.left + 8, 15, stability.equilibriumValid ? linearStabilityLegendItems(stripPhysics) : [{ label: "normalized equilibrium unavailable", color: stabilityKindColor("unavailable") }], { maxX: plot.left + plot.width - 4, fontSize: 10.5, swatchSize: 9, labelGap: 5, itemGap: 10, lineHeight: 12 });
+  if (!stability.equilibriumValid) drawHeatEngineLabel(ctx, "Frozen Uc must equal 1", plot.left + plot.width / 2, plot.top + plot.height / 2, THEME.axisText, "center", 12, 700);
   const paperLabels = paperModeActive() ? paperAxisLabelPositions(ctx, plot, [0, 1]) : null;
   drawCanvasMathFragments(
     ctx,
@@ -9343,6 +9464,7 @@ function phaseForRows(rows: Row[]): PhaseResult {
 
 function shouldUseStableDampingTimeWindow(phase: PhaseResult, stability: AnalyticStabilityResult): boolean {
   return state.phaseMode === "final"
+    && stability.equilibriumValid
     && stability.pulsational.stable
     && latestResult.message !== "limit_cycle"
     && phase.reason === "ok"
@@ -9979,10 +10101,14 @@ function drawConvectionArcs(
 interface HeatEngineTerms {
   q: number;
   pressureForce: number;
+  gasPressureForce: number;
+  turbulentPressureForce: number;
   gravityForce: number;
   dampingAcceleration: number;
   acceleration: number;
   pressurePower: number;
+  gasPressurePower: number;
+  turbulentPressurePower: number;
   gravityPower: number;
   dampingPower: number;
   mechanicalPower: number;
@@ -9996,6 +10122,8 @@ interface HeatEngineTerms {
 
 interface HeatEngineCycleWork {
   pressure: number;
+  gasPressure: number;
+  turbulentPressure: number;
   gravity: number;
   damping: number;
   net: number;
@@ -10014,16 +10142,29 @@ interface HeatEngineEvent {
 
 type HeatEngineCanvasLabel = string | readonly CanvasMathFragment[];
 
-function pressureSupportFormula(color?: string): CanvasMathFragment[] {
+function pressureSupportFormula(color?: string, parameters = latestPhaseParameters): CanvasMathFragment[] {
+  if (turbulentPressureFraction(parameters) > 0) {
+    return [{ text: "F", subscript: "gas", color }, { text: "+", color }, { text: "F", subscript: "turb", color: COLORS.Uc }];
+  }
   return [{ text: "R", superscript: "2", color }, { text: "H f", superscript: "Γ₁", color }];
 }
 
 function pressureSupport(row: Row, parameters: ModelParameters): number {
   if (!Number.isFinite(row.R + row.H) || row.R <= 0) return NaN;
   try {
-    const value = modelPressureSupport(row.R, row.H, parameters);
+    const value = modelPressureSupport(row.R, row.H, row.Uc, parameters);
     return Number.isFinite(value) ? value : NaN;
   } catch { return NaN; }
+}
+
+function gasPressureSupport(row: Row, parameters: ModelParameters): number {
+  try { return modelGasPressureSupport(row.R, row.H, parameters); }
+  catch { return NaN; }
+}
+
+function turbulentPressureSupport(row: Row, parameters: ModelParameters): number {
+  try { return modelTurbulentPressureSupport(row.R, row.Uc, parameters); }
+  catch { return NaN; }
 }
 
 function convectiveVelocityTarget(row: Row, parameters: ModelParameters): number {
@@ -10049,17 +10190,21 @@ function heatEngineTerms(row: Row, parameters: ModelParameters): HeatEngineTerms
   const terms = {
     q: powers.q,
     pressureForce,
+    gasPressureForce: gasPressureSupport(row, parameters),
+    turbulentPressureForce: turbulentPressureSupport(row, parameters),
     gravityForce,
     dampingAcceleration,
     acceleration: pressureForce - gravityForce + dampingAcceleration,
     pressurePower: row.V * pressureForce,
+    gasPressurePower: row.V * gasPressureSupport(row, parameters),
+    turbulentPressurePower: row.V * turbulentPressureSupport(row, parameters),
     gravityPower: -row.V * gravityForce,
     dampingPower: -parameters.cq * row.V ** 4,
     mechanicalPower: row.V * (pressureForce - gravityForce + dampingAcceleration),
     source,
     radiativeLeak,
     convectiveLeak,
-    heatNet: heatScale * (source - radiativeLeak - convectiveLeak),
+    heatNet: heatScale * (source - radiativeLeak - convectiveLeak) + turbulentPressureHeating(row.R, row.V, row.Uc, parameters),
     convectiveTarget,
     convectiveLag: convectiveTarget - row.Uc
   };
@@ -10155,8 +10300,10 @@ function integrateHeatEngineWorkTerms(
   rows: readonly Row[],
   parameters: ModelParameters,
   closePressureLoop: boolean
-): Pick<HeatEngineCycleWork, "pressure" | "gravity" | "damping"> {
+): Pick<HeatEngineCycleWork, "pressure" | "gasPressure" | "turbulentPressure" | "gravity" | "damping"> {
   let pressure = 0;
+  let gasPressure = 0;
+  let turbulentPressure = 0;
   let gravity = 0;
   let damping = 0;
   const phaseTimeScale = latestDisplayWindow.mode === "phase" && latestDisplayWindow.period
@@ -10171,6 +10318,8 @@ function integrateHeatEngineWorkTerms(
     const deltaR = right.R - left.R;
     if (Number.isFinite(leftForce + rightForce + deltaR)) {
       pressure += 0.5 * (leftForce + rightForce) * deltaR;
+      gasPressure += 0.5 * (gasPressureSupport(left, parameters) + gasPressureSupport(right, parameters)) * deltaR;
+      turbulentPressure += 0.5 * (turbulentPressureSupport(left, parameters) + turbulentPressureSupport(right, parameters)) * deltaR;
     }
 
     const dt = (right.tau - left.tau) * phaseTimeScale;
@@ -10194,20 +10343,26 @@ function integrateHeatEngineWorkTerms(
     const closingDeltaR = first.R - last.R;
     if (Number.isFinite(firstForce + lastForce + closingDeltaR)) {
       pressure += 0.5 * (firstForce + lastForce) * closingDeltaR;
+      gasPressure += 0.5 * (gasPressureSupport(first, parameters) + gasPressureSupport(last, parameters)) * closingDeltaR;
+      turbulentPressure += 0.5 * (turbulentPressureSupport(first, parameters) + turbulentPressureSupport(last, parameters)) * closingDeltaR;
     }
   }
-  return { pressure, gravity, damping };
+  return { pressure, gasPressure, turbulentPressure, gravity, damping };
 }
 
 function heatEngineCycleWork(rows: readonly Row[], parameters: ModelParameters): HeatEngineCycleWork {
   const segments = latestDisplayWindow.mode === "time" ? samePhaseCycleSegmentsForWork(rows) : [];
   const workSegments = segments.length ? segments : [rows];
   let pressure = 0;
+  let gasPressure = 0;
+  let turbulentPressure = 0;
   let gravity = 0;
   let damping = 0;
   workSegments.forEach((segment) => {
     const terms = integrateHeatEngineWorkTerms(segment, parameters, true);
     pressure += terms.pressure;
+    gasPressure += terms.gasPressure;
+    turbulentPressure += terms.turbulentPressure;
     gravity += terms.gravity;
     damping += terms.damping;
   });
@@ -10216,6 +10371,8 @@ function heatEngineCycleWork(rows: readonly Row[], parameters: ModelParameters):
   const mechanicalNet = net + gravity;
   return {
     pressure,
+    gasPressure,
+    turbulentPressure,
     gravity,
     damping,
     net,
@@ -10852,7 +11009,8 @@ function drawHeatEnginePistonCausal(
     terms.q
   );
 
-  const pressureLength = forceArrowLength(terms.pressureForce);
+  const hasTurbulentPressure = turbulentPressureFraction(parameters) > 0;
+  const pressureLength = forceArrowLength(terms.gasPressureForce);
   const pressureX = Math.max(chamber.left + 12, centerX - 62);
 
   const temperatureValues = scaleRows
@@ -10877,7 +11035,14 @@ function drawHeatEnginePistonCausal(
 
   const pressureEndY = gasTop + 2;
   drawHeatEngineArrow(ctx, pressureX, Math.min(bottom - 10, pressureEndY + pressureLength), pressureX, pressureEndY, COLORS.H, 3.1);
-  drawHeatEngineLabel(ctx, "pressure", pressureX + 7, gasTop + 27, COLORS.H, "left", 9.4, 760);
+  drawHeatEngineLabel(ctx, hasTurbulentPressure ? "gas" : "pressure", pressureX + 7, gasTop + 27, COLORS.H, "left", 9.4, 760);
+  if (hasTurbulentPressure) {
+    const turbulentX = pressureX + 44;
+    const turbulentLength = forceArrowLength(terms.turbulentPressureForce);
+    const turbulentStartY = Math.min(bottom - 10, pressureEndY + turbulentLength);
+    drawHeatEngineArrow(ctx, turbulentX, turbulentStartY, turbulentX, pressureEndY, COLORS.Uc, 3.1);
+    drawHeatEngineLabel(ctx, "turb", turbulentX - 7, Math.max(gasTop + 9, (turbulentStartY + pressureEndY) / 2), COLORS.Uc, "right", 9.4, 760);
+  }
 
   const gravityLength = forceArrowLength(terms.gravityForce);
   const gravityX = chamber.left + chamber.width * 0.05;
@@ -11514,13 +11679,18 @@ function drawWorkLoopPanel(
   plot: PlotBox,
   scope: HeatEngineWorkScope
 ): void {
-  const forces = rows.map((row) => pressureSupport(row, parameters));
+  const hasTurbulentPressure = turbulentPressureFraction(parameters) > 0;
+  const forces = rows.flatMap((row) => hasTurbulentPressure
+    ? [pressureSupport(row, parameters), gasPressureSupport(row, parameters), turbulentPressureSupport(row, parameters)]
+    : [pressureSupport(row, parameters)]);
   const scaleRows = stableTimeVisualReferenceRows(rows);
-  const scaleForces = scaleRows.map((row) => pressureSupport(row, parameters));
+  const scaleForces = scaleRows.flatMap((row) => hasTurbulentPressure
+    ? [pressureSupport(row, parameters), gasPressureSupport(row, parameters), turbulentPressureSupport(row, parameters)]
+    : [pressureSupport(row, parameters)]);
   const xlim = stableTimeEquilibriumDisplayActive()
     ? anchoredVisualRange(scaleRows.map((row) => row.R), 1, 0.045, 0.08)
     : range(rows.map((row) => row.R), 0.08);
-  const ylim = stableTimeEquilibriumDisplayActive()
+  const ylim = stableTimeEquilibriumDisplayActive() && !hasTurbulentPressure
     ? anchoredVisualRange(scaleForces, 1, 0.045, 0.1)
     : range(forces, 0.1);
   const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
@@ -11535,6 +11705,13 @@ function drawWorkLoopPanel(
     .filter((point): point is { x: number; y: number } => Boolean(point));
 
   ctx.save();
+  if (hasTurbulentPressure) {
+    const pressureWorkLabel = Math.abs(work.pressure) > 0 && Math.abs(work.pressure) < 0.001
+      ? `${work.pressure > 0 ? "+" : ""}${work.pressure.toExponential(2)}`
+      : heatEngineSignedValue(work.pressure, 3);
+    drawHeatEngineLabel(ctx, `${scope} pressure work = ${pressureWorkLabel}`, plot.left, plot.top - 31, COLORS.H, "left", 10.2, 600);
+    drawHeatEngineLabel(ctx, `pressure / |drag| = ${ratio}`, plot.left, plot.top - 16, THEME.neutralSymbol, "left", 10.2, 600);
+  } else {
   drawHeatEngineMathLabel(
     ctx,
     [
@@ -11554,6 +11731,7 @@ function drawWorkLoopPanel(
     plot.top - 15,
     { align: "right", fontSize: 10.8, subscriptSize: 8.8, strokeWidth: 2.6 }
   );
+  }
 
   const workTickLabel = (value: number, limits: NumericRange): string => {
     const span = Math.abs(limits[1] - limits[0]);
@@ -11633,6 +11811,28 @@ function drawWorkLoopPanel(
     });
   }
 
+  if (hasTurbulentPressure) {
+    const components = [
+      { value: gasPressureSupport, color: COLORS.H, dash: [5, 3] },
+      { value: turbulentPressureSupport, color: COLORS.Uc, dash: [2, 3] }
+    ];
+    components.forEach((component) => {
+      ctx.beginPath();
+      rows.forEach((loopRow, index) => {
+        const x = sx(loopRow.R);
+        const y = sy(component.value(loopRow, parameters));
+        if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.strokeStyle = component.color;
+      ctx.lineWidth = paperDataWidth(1.7);
+      ctx.setLineDash(component.dash);
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+    drawHeatEngineLabel(ctx, "solid: total · dashed: gas · dotted: turb", plot.left + plot.width / 2, plot.top + 11, THEME.axisText, "center", 8.4, 600);
+  }
+
   const currentForce = currentRow ? pressureSupport(currentRow, parameters) : Number.NaN;
   if (currentRow && Number.isFinite(currentRow.R + currentForce)) {
     ctx.fillStyle = PHASE_MARKER_COLOR;
@@ -11649,7 +11849,7 @@ function drawWorkLoopPanel(
     fontSize: 10.7,
     weight: 700
   });
-  drawWorkPressureSupportAxisLabel(ctx, paperLabels?.yTitleX ?? plot.left - 45, plot.top + plot.height / 2, -Math.PI / 2);
+  drawWorkPressureSupportAxisLabel(ctx, paperLabels?.yTitleX ?? plot.left - 45, plot.top + plot.height / 2, -Math.PI / 2, parameters);
   ctx.restore();
 }
 
@@ -11657,8 +11857,13 @@ function drawWorkPressureSupportAxisLabel(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  rotate = 0
+  rotate = 0,
+  parameters = latestPhaseParameters
 ): void {
+  if (turbulentPressureFraction(parameters) > 0) {
+    drawHeatEngineMathLabel(ctx, [{ text: "pressure support " }, ...pressureSupportFormula(undefined, parameters)], x, y, { rotate, align: "center", fontSize: 9.8, weight: 760 });
+    return;
+  }
   const baseSize = 9.8;
   const exponentSize = 7.4;
   const exponentY = -baseSize * 0.45;
@@ -11704,7 +11909,10 @@ function drawWorkSummaryBars(
   height: number
 ): void {
   const rows: Array<{ label: readonly CanvasMathFragment[]; value: number; color: string; width: number }> = [
-    { label: [{ text: "W", subscript: "P", color: COLORS.H }], value: work.pressure, color: COLORS.H, width: 4.8 },
+    ...(turbulentPressureFraction(latestPhaseParameters) > 0 ? [
+      { label: [{ text: "W", subscript: "gas", color: COLORS.H }], value: work.gasPressure, color: COLORS.H, width: 4.8 },
+      { label: [{ text: "W", subscript: "turb", color: COLORS.Uc }], value: work.turbulentPressure, color: COLORS.Uc, width: 4.8 }
+    ] : [{ label: [{ text: "W", subscript: "P", color: COLORS.H }], value: work.pressure, color: COLORS.H, width: 4.8 }]),
     { label: [{ text: "W", subscript: "damp", color: COLORS.cq }], value: work.damping, color: COLORS.cq, width: 4.8 },
     { label: [{ text: "ΔE", subscript: "mech", color: heatEngineRegimeColor(regime) }], value: work.net, color: heatEngineRegimeColor(regime), width: 5.4 }
   ];
@@ -11800,11 +12008,15 @@ function drawWorkPanel(): void {
   canvas.dataset.workWindowRows = String(selectedRows.length);
   canvas.dataset.workRows = String(integrationRows.length);
   canvas.dataset.workPlotRows = String(plotRows.length);
-  canvas.dataset.workVisualization = "pressure support R^2 H f^Gamma1-R loop";
-  canvas.dataset.workLoop = "pressure support R^2 H f^Gamma1 versus R";
+  const hasTurbulentPressure = turbulentPressureFraction(latestPhaseParameters) > 0;
+  canvas.dataset.workVisualization = hasTurbulentPressure ? "total, gas, and turbulent pressure support-R loops" : "pressure support R^2 H f^Gamma1-R loop";
+  canvas.dataset.workLoop = hasTurbulentPressure ? "total pressure support F_gas+F_turb versus R" : "pressure support R^2 H f^Gamma1 versus R";
   canvas.dataset.geometryMode = geometryModeFor(latestPhaseParameters);
-  canvas.dataset.workTerms = "W_P,W_damp,DeltaE_mech";
+  canvas.dataset.workTerms = hasTurbulentPressure ? "W_gas,W_turb,W_damp,DeltaE_mech" : "W_P,W_damp,DeltaE_mech";
+  canvas.dataset.alphaP = String(turbulentPressureFraction(latestPhaseParameters));
   canvas.dataset.cycleWorkPressure = fmt(work.pressure, 6);
+  canvas.dataset.cycleWorkGasPressure = fmt(work.gasPressure, 6);
+  canvas.dataset.cycleWorkTurbulentPressure = fmt(work.turbulentPressure, 6);
   canvas.dataset.cycleWorkDamping = fmt(work.damping, 6);
   canvas.dataset.cycleWorkNet = fmt(work.net, 6);
   canvas.dataset.cycleWorkRatio = work.pressureDampingRatio === null ? "n/a" : fmt(work.pressureDampingRatio, 6);
@@ -11819,13 +12031,13 @@ function drawWorkPanel(): void {
     canvas.dataset.currentPhase = fmtFixed(phaseModOne(currentAnimationPhase), 3);
     delete canvas.dataset.currentTime;
   }
-  const summaryHeight = height < 245 ? 46 : 50;
+  const summaryHeight = (height < 245 ? 46 : 50) + (hasTurbulentPressure ? 16 : 0);
   const summaryY = height - summaryHeight - 10;
   const loopPlot = {
     left: paperModeActive() ? 78 : 56,
-    top: 34,
+    top: hasTurbulentPressure ? 48 : 34,
     width: Math.max(170, width - (paperModeActive() ? 108 : 70)),
-    height: Math.max(94, summaryY - (paperModeActive() ? 89 : 70))
+    height: Math.max(hasTurbulentPressure ? 80 : 94, summaryY - (paperModeActive() ? 89 : 70) - (hasTurbulentPressure ? 14 : 0))
   };
   fillPlotAreaBackground(ctx, loopPlot);
   drawWorkLoopPanel(ctx, plotRows, paperModeActive() ? null : row, latestPhaseParameters, work, regime, loopPlot, scope);
@@ -12085,7 +12297,11 @@ function drawHeatEnginePanel(): void {
   const cycleRows = downsample(heatEngineCycleRows(latestPhaseRows), 1100, ["R", "V", "H", "Uc", "L", "Lr", "Lc"]);
   canvas.dataset.heatEngineMode = gridState.enabled ? "grid" : "single";
   canvas.dataset.heatEngineRows = String(cycleRows.length);
-  canvas.dataset.forceTerms = "pressure,gravity,damping";
+  canvas.dataset.forceTerms = turbulentPressureFraction(latestPhaseParameters) > 0 ? "gas-pressure,turbulent-pressure,gravity,damping" : "pressure,gravity,damping";
+  canvas.dataset.alphaP = String(turbulentPressureFraction(latestPhaseParameters));
+  canvas.dataset.gasPressureForce = String(terms.gasPressureForce);
+  canvas.dataset.turbulentPressureForce = String(terms.turbulentPressureForce);
+  canvas.dataset.pressureForce = String(terms.pressureForce);
   const heatEngineShowsUc = convectiveLuminosityAvailable(latestPhaseParameters);
   const heatEngineConvectionResponsive = heatEngineShowsUc && !convectiveResponseDisabled(latestPhaseParameters);
   canvas.dataset.heatFluxTerms = heatEngineShowsUc ? "source,L_r,L_c" : "source,L_r";
@@ -12366,7 +12582,7 @@ function drawAll(): void {
   const stabilityParameters = stabilityDisplayParameters();
   const s72Stability = analyticStabilityConditions(stabilityParameters);
   const displayWindow = buildCurrentDisplayWindow(rows, phase, gridResult, s72Stability, phaseMessage);
-  const linearPeriod = linearDynamicPeriod(stabilityParameters);
+  const linearPeriod = s72Stability.equilibriumValid ? linearDynamicPeriod(stabilityParameters) : null;
   const nonlinearPeriod = displayWindow.period;
   updateGridLoopSliderMarkers();
   updateSonificationSourceControls();
@@ -12381,10 +12597,17 @@ function drawAll(): void {
   metricsNode.dataset.s72M = fmt(s72Stability.m, 6);
   metricsNode.dataset.s72B = fmt(s72Stability.b, 6);
   metricsNode.dataset.s72PhysicsMode = s72Stability.physicsMode;
-  metricsNode.dataset.linearPeriodFormula = "2pi/sqrt(chi*Gamma1-4)";
+  metricsNode.dataset.equilibriumValid = String(s72Stability.equilibriumValid);
+  metricsNode.dataset.alphaP = String(turbulentPressureFraction(stabilityParameters));
+  if (!s72Stability.equilibriumValid) {
+    for (const key of ["s72Convective", "s72Dynamic", "s72Secular", "s72Pulsational", "s72All"]) metricsNode.dataset[key] = "unavailable";
+  }
+  metricsNode.dataset.linearPeriodFormula = turbulentPressureFraction(stabilityParameters) > 0 ? "2pi/sqrt(chi*((1-alphaP)*Gamma1+alphaP)-4)" : "2pi/sqrt(chi*Gamma1-4)";
   metricsNode.dataset.linearPeriod = linearPeriod ? String(linearPeriod) : "unavailable";
   metricsNode.dataset.nonlinearPeriod = nonlinearPeriod ? String(nonlinearPeriod) : "unavailable";
-  const stabilityMetricItems: StatusMetricItem[] = s72Stability.conditions.map((condition) => {
+  const stabilityMetricItems: StatusMetricItem[] = !s72Stability.equilibriumValid ? [{
+    label: "linear stability", value: escapeAttribute(s72Stability.equilibriumNote ?? "Normalized equilibrium unavailable"), className: "status-warn"
+  }] : s72Stability.conditions.map((condition) => {
     const formula = s72ConditionMetric(s72Stability, condition);
     return {
       label: "",
@@ -12531,6 +12754,9 @@ function startApp(): void {
   setupPaperModeControls();
   setupLocalPresetStore();
   buildControls();
+  const referenceGrid = document.querySelector<HTMLElement>(".reference-grid");
+  if (referenceGrid) new ResizeObserver(updateReferencePanelLayout).observe(referenceGrid);
+  void document.fonts.ready.then(updateReferencePanelLayout);
   const startupGrid = presetEntry(selectedPreset)?.grid;
   if (startupGrid) applyPresetGrid(startupGrid);
   solveAndDraw();

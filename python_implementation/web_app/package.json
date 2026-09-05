@@ -10,6 +10,7 @@
     "animate:convective-fraction": "node scripts/build-convective-fraction-animation.mjs",
     "plot:convective-fraction-fourier": "node scripts/plot-convective-fraction-fourier.mjs",
     "plot:convective-fraction-phi31": "npm run plot:convective-fraction-fourier",
+    "validate:turbulent-pressure": "node scripts/validate-turbulent-pressure.mjs",
     "test": "vitest run",
     "test:e2e": "node scripts/run-e2e.mjs && playwright test",
     "test:e2e:smoke": "node scripts/run-e2e.mjs"

@@ -172,7 +172,7 @@ export function roundToNativeStep(value: number, step: number): number {
 }
 
 export function sliderValueFromParameter(key: ControlParameterKey, parameters: ModelParameters): number {
-  return sliderValueFromNumericValue(key, Number(parameters[key]));
+  return sliderValueFromNumericValue(key, Number(parameters[key] ?? (key === "alphaP" ? 0 : undefined)));
 }
 
 export function parameterValueFromSlider(key: ControlParameterKey, sliderValue: number): number {

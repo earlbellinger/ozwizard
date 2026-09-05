@@ -1,0 +1,4518 @@
+{
+  "generatedAt": "2026-09-05T20:41:47.918Z",
+  "source": "https://arxiv.org/pdf/astro-ph/0503697",
+  "assumptions": {
+    "gamma3EqualsGamma1": true,
+    "publishedM": 10,
+    "mFromPrintedEta": 10.007574800083349,
+    "alphaPFromA8": 0.4068801897983392,
+    "alphaPFromRoundedText": 0.4,
+    "turbulentEnergyStorage": false
+  },
+  "numericalProtocol": {
+    "primary": "DOP853 rtol=1e-11,atol=1e-13,maxStep=.03,output=.01",
+    "check": "RK45 rtol=1e-12,atol=1e-14,maxStep=.015,output=.005",
+    "horizon": "1000 dynamical times, extended to 3000 if unsettled",
+    "limitCycle": "last five radius maxima spread <1e-7, relative period spread <1e-4, successive phase-aligned state waveforms <1e-3 of each state amplitude",
+    "equilibrium": "maximum component distance from (1,0,1,1) <1e-7 throughout final ten dynamical times",
+    "nearEquilibrium": "distance<1e-4 and final ten-time radial amplitude<1e-5; residual decay is not labeled a limit cycle",
+    "interpolation": "cubic Hermite state interpolation from endpoint RHS; luminosity recomputed from state; radial maxima found by bisection on Hermite V",
+    "runaway": "radius>15 or |H|>1e5; integration/domain failures retained separately",
+    "lightcurvePeak": "periodic local maximum prominence exceeds max(1e-6, .001*peak-to-peak L)"
+  },
+  "sourceModuleSha256": {
+    "model": "5279c902f3be309b50777d4f8577e7790965e1f72ab16410e534df0d0e5e7582",
+    "solvers": "a6926e8418dc02bcf42d938998d2cc6d52716c67ac1d0aa994152e3122f95405",
+    "phase": "080a3aeabb9960aacb1335505251035700f54f72f5caa23f5b09fe64c2d9a21a"
+  },
+  "results": [
+    {
+      "id": "fig7-alpha0-zc0.28",
+      "family": "Fig. 7 comparison",
+      "parameters": {
+        "alphaP": 0,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 4,
+        "zetac": 0.28,
+        "gammac": 0.4,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "limit_cycle",
+      "finalTau": 3000,
+      "equilibriumDistance": 0.14867769654840224,
+      "finalState": {
+        "R": 0.9589281236117891,
+        "V": 0.08690020401036494,
+        "H": 0.9988428440272676,
+        "Uc": 0.9946592711984549,
+        "L": 0.994292502376311,
+        "Lr": 0.44374531355520824,
+        "Lc": 0.5505471888211027
+      },
+      "radiusExtent": [
+        0.9499663864557286,
+        1.0616234401298839
+      ],
+      "cycle": {
+        "startTau": 2996.22640306942,
+        "endTau": 2998.612070966185,
+        "period": 2.3856678967649714,
+        "radiusAmplitude": 0.11168411301958492,
+        "luminosityAmplitude": 0.028507952277456616,
+        "luminosityMaximum": 1.0141569201693532,
+        "luminosityPeaks": [
+          {
+            "phase": 0.8203125,
+            "luminosity": 1.0141569201693532,
+            "prominence": 0.021161359865791485
+          },
+          {
+            "phase": 0.45703125,
+            "luminosity": 1.0083017083664219,
+            "prominence": 0.015306148062860125
+          }
+        ],
+        "significantLuminosityPeakCount": 2,
+        "phaseLcMaximumMinusRadiusMinimum": 0.00390625,
+        "radialPeakSpread": 7.722311679003724e-11,
+        "periodRelativeSpread": 3.240478264198746e-12,
+        "waveformRelativeError": 8.870513778010188e-8
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 3000,
+        "equilibriumDistance": 0.14867768156716912,
+        "finalState": {
+          "R": 0.9589281245715318,
+          "V": 0.08690020807613302,
+          "H": 0.9988428442693095,
+          "Uc": 0.9946592712792197,
+          "L": 0.9942925019638642,
+          "Lr": 0.4437453174167693,
+          "Lc": 0.5505471845470948
+        },
+        "radiusExtent": [
+          0.9499624554440197,
+          1.061647233218581
+        ],
+        "cycle": {
+          "startTau": 2996.2264030583324,
+          "endTau": 2998.612070955067,
+          "period": 2.3856678967345033,
+          "radiusAmplitude": 0.1116841198882732,
+          "luminosityAmplitude": 0.02850794190459427,
+          "luminosityMaximum": 1.0141569070941285,
+          "luminosityPeaks": [
+            {
+              "phase": 0.8203125,
+              "luminosity": 1.0141569070941285,
+              "prominence": 0.021161346440473294
+            },
+            {
+              "phase": 0.45703125,
+              "luminosity": 1.008301710760536,
+              "prominence": 0.015306150106880856
+            }
+          ],
+          "significantLuminosityPeakCount": 2,
+          "phaseLcMaximumMinusRadiusMinimum": 0.00390625,
+          "radialPeakSpread": 9.78106484694763e-13,
+          "periodRelativeSpread": 7.624654739392904e-13,
+          "waveformRelativeError": 3.573500451047162e-8
+        },
+        "differences": {
+          "periodRelative": 1.2771339541473026e-11,
+          "luminosityAmplitudeAbsolute": 1.0372862346841316e-8,
+          "radiusAmplitudeAbsolute": 6.868688284811242e-9,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "fig7-alpha0-zc0.4",
+      "family": "Fig. 7 comparison",
+      "parameters": {
+        "alphaP": 0,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 4,
+        "zetac": 0.4,
+        "gammac": 0.4,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "limit_cycle",
+      "finalTau": 3000,
+      "equilibriumDistance": 0.11506174511053856,
+      "finalState": {
+        "R": 1.0426399335274592,
+        "V": -0.044018635364618995,
+        "H": 0.9834034929901941,
+        "Uc": 0.9933444680005752,
+        "L": 0.9955758039055949,
+        "Lr": 0.7148484142777303,
+        "Lc": 0.28072738962786453
+      },
+      "radiusExtent": [
+        0.9604447616480944,
+        1.046473729428618
+      ],
+      "cycle": {
+        "startTau": 2997.4617605799513,
+        "endTau": 2999.8276102400246,
+        "period": 2.3658496600733088,
+        "radiusAmplitude": 0.08602795515400474,
+        "luminosityAmplitude": 0.02004521224144118,
+        "luminosityMaximum": 1.0097836272026088,
+        "luminosityPeaks": [
+          {
+            "phase": 0.828125,
+            "luminosity": 1.0097836272026088,
+            "prominence": 0.012320076636254562
+          },
+          {
+            "phase": 0.458984375,
+            "luminosity": 1.0041437026700242,
+            "prominence": 0.006680152103669901
+          }
+        ],
+        "significantLuminosityPeakCount": 2,
+        "phaseLcMaximumMinusRadiusMinimum": 0.00390625,
+        "radialPeakSpread": 5.200155861473377e-10,
+        "periodRelativeSpread": 7.636627359960339e-10,
+        "waveformRelativeError": 6.719436594658385e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 3000,
+        "equilibriumDistance": 0.11506322887971689,
+        "finalState": {
+          "R": 1.042639932978946,
+          "V": -0.044018638376954716,
+          "H": 0.9834034932205005,
+          "Uc": 0.9933444678924936,
+          "L": 0.9955758035348538,
+          "Lr": 0.7148484128171404,
+          "Lc": 0.28072739071771335
+        },
+        "radiusExtent": [
+          0.9604447485823424,
+          1.0464737463726121
+        ],
+        "cycle": {
+          "startTau": 2997.4617605676744,
+          "endTau": 2999.827610227692,
+          "period": 2.365849660017375,
+          "radiusAmplitude": 0.08602796343281194,
+          "luminosityAmplitude": 0.020045210345399966,
+          "luminosityMaximum": 1.0097836237392428,
+          "luminosityPeaks": [
+            {
+              "phase": 0.828125,
+              "luminosity": 1.0097836237392428,
+              "prominence": 0.012320073312359181
+            },
+            {
+              "phase": 0.458984375,
+              "luminosity": 1.0041437045288766,
+              "prominence": 0.006680154101992963
+            }
+          ],
+          "significantLuminosityPeakCount": 2,
+          "phaseLcMaximumMinusRadiusMinimum": 0.00390625,
+          "radialPeakSpread": 2.0177246540242777e-9,
+          "periodRelativeSpread": 7.519377355480329e-10,
+          "waveformRelativeError": 2.325904183582682e-8
+        },
+        "differences": {
+          "periodRelative": 2.364219930939271e-11,
+          "luminosityAmplitudeAbsolute": 1.896041212923194e-9,
+          "radiusAmplitudeAbsolute": 8.2788071953388e-9,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "fig7-alpha0-zc1",
+      "family": "Fig. 7 comparison",
+      "parameters": {
+        "alphaP": 0,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 4,
+        "zetac": 1,
+        "gammac": 0.4,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "near_equilibrium",
+      "finalTau": 3000,
+      "equilibriumDistance": 8.88399415301935e-7,
+      "finalState": {
+        "R": 0.9999999781238325,
+        "V": 8.54064110966107e-7,
+        "H": 0.9999999979558957,
+        "Uc": 1.0000000646900218,
+        "L": 1.0000000471666535,
+        "Lr": 0.5999998995348655,
+        "Lc": 0.4000001476317879
+      },
+      "radiusExtent": [
+        0.9999992918059738,
+        1.0000007048833988
+      ],
+      "cycle": null,
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "near_equilibrium",
+        "finalTau": 3000,
+        "equilibriumDistance": 8.885870733021761e-7,
+        "finalState": {
+          "R": 0.9999999781238536,
+          "V": 8.540640136800126e-7,
+          "H": 0.9999999979558916,
+          "Uc": 1.0000000646900133,
+          "L": 1.0000000471666473,
+          "Lr": 0.5999998995349369,
+          "Lc": 0.40000014763171027
+        },
+        "radiusExtent": [
+          0.9999992918855105,
+          1.0000007047823678
+        ],
+        "cycle": null,
+        "differences": null
+      }
+    },
+    {
+      "id": "fig7-alpha0-zc4",
+      "family": "Fig. 7 comparison",
+      "parameters": {
+        "alphaP": 0,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 4,
+        "zetac": 4,
+        "gammac": 0.4,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "equilibrium",
+      "finalTau": 3000,
+      "equilibriumDistance": 1.8885943837562068e-13,
+      "finalState": {
+        "R": 0.9999999999999708,
+        "V": -1.5708848652950308e-13,
+        "H": 1.0000000000000067,
+        "Uc": 0.9999999999999973,
+        "L": 0.9999999999999956,
+        "Lr": 0.5999999999999053,
+        "Lc": 0.4000000000000903
+      },
+      "radiusExtent": [
+        0.9999999999995816,
+        1.0000000000004137
+      ],
+      "cycle": null,
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "equilibrium",
+        "finalTau": 3000,
+        "equilibriumDistance": 2.0008739726578634e-13,
+        "finalState": {
+          "R": 0.9999999999999717,
+          "V": -1.709501748101591e-13,
+          "H": 1.0000000000000067,
+          "Uc": 0.9999999999999959,
+          "L": 0.9999999999999947,
+          "Lr": 0.599999999999909,
+          "Lc": 0.4000000000000856
+        },
+        "radiusExtent": [
+          0.9999999999995818,
+          1.0000000000004134
+        ],
+        "cycle": null,
+        "differences": null
+      }
+    },
+    {
+      "id": "fig7-alpha0-zc9",
+      "family": "Fig. 7 comparison",
+      "parameters": {
+        "alphaP": 0,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 4,
+        "zetac": 9,
+        "gammac": 0.4,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "near_equilibrium",
+      "finalTau": 3000,
+      "equilibriumDistance": 1.8005803185790807e-7,
+      "finalState": {
+        "R": 0.9999999443915416,
+        "V": -8.76601945044917e-8,
+        "H": 1.0000000061843208,
+        "Uc": 1.0000000236722406,
+        "L": 0.999999998772465,
+        "Lr": 0.5999997924186516,
+        "Lc": 0.40000020635381345
+      },
+      "radiusExtent": [
+        0.9999998413871235,
+        1.000000159385056
+      ],
+      "cycle": null,
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "near_equilibrium",
+        "finalTau": 3000,
+        "equilibriumDistance": 1.8010655273087233e-7,
+        "finalState": {
+          "R": 0.9999999443915494,
+          "V": -8.76601848498536e-8,
+          "H": 1.0000000061843197,
+          "Uc": 1.0000000236722366,
+          "L": 0.9999999987724634,
+          "Lr": 0.5999997924186796,
+          "Lc": 0.40000020635378375
+        },
+        "radiusExtent": [
+          0.9999998413936557,
+          1.0000001594543222
+        ],
+        "cycle": null,
+        "differences": null
+      }
+    },
+    {
+      "id": "fig7-alpha0.4-zc0.28",
+      "family": "Fig. 7 comparison",
+      "parameters": {
+        "alphaP": 0.4,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 4,
+        "zetac": 0.28,
+        "gammac": 0.4,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "unsettled",
+      "finalTau": 3000,
+      "equilibriumDistance": 0.06269814812815921,
+      "finalState": {
+        "R": 1.0042400213698888,
+        "V": 0.06145314187762284,
+        "H": 0.9972675184959566,
+        "Uc": 1.0002366231114634,
+        "L": 0.9932730322206972,
+        "Lr": 0.6063112748396792,
+        "Lc": 0.386961757381018
+      },
+      "radiusExtent": [
+        0.9766777974444615,
+        1.0251976229967428
+      ],
+      "cycle": {
+        "startTau": 2995.7200201628734,
+        "endTau": 2998.1453423282646,
+        "period": 2.425322165391208,
+        "radiusAmplitude": 0.04825791271295965,
+        "luminosityAmplitude": 0.015102874808402,
+        "luminosityMaximum": 1.0074930751369156,
+        "luminosityPeaks": [
+          {
+            "phase": 0.36328125,
+            "luminosity": 1.0074930751369156,
+            "prominence": 0.015102874808402
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.001953125,
+        "radialPeakSpread": 0.000006528750323919752,
+        "periodRelativeSpread": 0.0000012937196470873755,
+        "waveformRelativeError": 0.00008297565737895624
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "unsettled",
+        "finalTau": 3000,
+        "equilibriumDistance": 0.06269843022797959,
+        "finalState": {
+          "R": 1.0042400222144263,
+          "V": 0.06145314144022913,
+          "H": 0.9972675183045588,
+          "Uc": 1.0002366230978335,
+          "L": 0.9932730323561696,
+          "Lr": 0.6063112775943621,
+          "Lc": 0.38696175476180755
+        },
+        "radiusExtent": [
+          0.9766764907017567,
+          1.0252046203395881
+        ],
+        "cycle": {
+          "startTau": 2995.720020149332,
+          "endTau": 2998.1453423145244,
+          "period": 2.4253221651924832,
+          "radiusAmplitude": 0.04825791609787966,
+          "luminosityAmplitude": 0.015102880036687472,
+          "luminosityMaximum": 1.007493084778002,
+          "luminosityPeaks": [
+            {
+              "phase": 0.36328125,
+              "luminosity": 1.007493084778002,
+              "prominence": 0.015102880036687472
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.001953125,
+          "radialPeakSpread": 0.000006529615788286591,
+          "periodRelativeSpread": 0.0000012938407719039893,
+          "waveformRelativeError": 0.0000829673951396955
+        },
+        "differences": {
+          "periodRelative": 8.193734579720058e-11,
+          "luminosityAmplitudeAbsolute": 5.228285471226002e-9,
+          "radiusAmplitudeAbsolute": 3.3849200109514754e-9,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "fig7-alpha0.4-zc0.4",
+      "family": "Fig. 7 comparison",
+      "parameters": {
+        "alphaP": 0.4,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 4,
+        "zetac": 0.4,
+        "gammac": 0.4,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "limit_cycle",
+      "finalTau": 3000,
+      "equilibriumDistance": 0.15783541392997652,
+      "finalState": {
+        "R": 0.9941314879381161,
+        "V": 0.15568651486111046,
+        "H": 0.9960629066568238,
+        "Uc": 0.9973254907043508,
+        "L": 0.9760296865838162,
+        "Lr": 0.5600998158343776,
+        "Lc": 0.41592987074943855
+      },
+      "radiusExtent": [
+        0.9446696853905351,
+        1.0671764416175256
+      ],
+      "cycle": {
+        "startTau": 2995.800107170495,
+        "endTau": 2998.2691176347407,
+        "period": 2.469010464245912,
+        "radiusAmplitude": 0.12250659169544509,
+        "luminosityAmplitude": 0.05659641766752577,
+        "luminosityMaximum": 1.0276044930423986,
+        "luminosityPeaks": [
+          {
+            "phase": 0.423828125,
+            "luminosity": 1.0276044930423986,
+            "prominence": 0.05659641766752577
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.00390625,
+        "radialPeakSpread": 1.908909252890112e-9,
+        "periodRelativeSpread": 1.1253521822311089e-10,
+        "waveformRelativeError": 0.0000010528370806993842
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 3000,
+        "equilibriumDistance": 0.15786045391419914,
+        "finalState": {
+          "R": 0.9941314894492278,
+          "V": 0.15568651519761778,
+          "H": 0.9960629065796992,
+          "Uc": 0.9973254907189838,
+          "L": 0.9760296872003202,
+          "Lr": 0.5600998214903875,
+          "Lc": 0.4159298657099327
+        },
+        "radiusExtent": [
+          0.9446696853944958,
+          1.067176454042986
+        ],
+        "cycle": {
+          "startTau": 2995.8001071607905,
+          "endTau": 2998.2691176249605,
+          "period": 2.469010464169969,
+          "radiusAmplitude": 0.12250659300493061,
+          "luminosityAmplitude": 0.056596390879156466,
+          "luminosityMaximum": 1.0276045307158985,
+          "luminosityPeaks": [
+            {
+              "phase": 0.423828125,
+              "luminosity": 1.0276045307158985,
+              "prominence": 0.056596390879156466
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.00390625,
+          "radialPeakSpread": 3.3728575488112256e-13,
+          "periodRelativeSpread": 2.578548371824161e-12,
+          "waveformRelativeError": 1.903472821508119e-8
+        },
+        "differences": {
+          "periodRelative": 3.075850685263504e-11,
+          "luminosityAmplitudeAbsolute": 2.678836930058992e-8,
+          "radiusAmplitudeAbsolute": 1.3094855200179722e-9,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "fig7-alpha0.4-zc1",
+      "family": "Fig. 7 comparison",
+      "parameters": {
+        "alphaP": 0.4,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 4,
+        "zetac": 1,
+        "gammac": 0.4,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.2680329274586319,
+      "finalState": {
+        "R": 1.1217976889274506,
+        "V": -0.029100553127888503,
+        "H": 0.9380408756712242,
+        "Uc": 0.9615783937180485,
+        "L": 0.9990528569531055,
+        "Lr": 0.8572458297641236,
+        "Lc": 0.141807027188982
+      },
+      "radiusExtent": [
+        0.9114467389129238,
+        1.122743962932985
+      ],
+      "cycle": {
+        "startTau": 997.3718490676247,
+        "endTau": 999.9349737733297,
+        "period": 2.563124705705036,
+        "radiusAmplitude": 0.21129708177038198,
+        "luminosityAmplitude": 0.17015439267882226,
+        "luminosityMaximum": 1.081872286039344,
+        "luminosityPeaks": [
+          {
+            "phase": 0.458984375,
+            "luminosity": 1.081872286039344,
+            "prominence": 0.08462866642428823
+          },
+          {
+            "phase": 0.9453125,
+            "luminosity": 0.9996431628057514,
+            "prominence": 0.0023995431906956854
+          }
+        ],
+        "significantLuminosityPeakCount": 2,
+        "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+        "radialPeakSpread": 1.2238834390387865e-9,
+        "periodRelativeSpread": 2.2292713466493328e-10,
+        "waveformRelativeError": 0.000004020436899757116
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.2680329706138721,
+        "finalState": {
+          "R": 1.1217976889142927,
+          "V": -0.029100553311910617,
+          "H": 0.9380408756808568,
+          "Uc": 0.9615783936991599,
+          "L": 0.9990528569492916,
+          "Lr": 0.8572458297553599,
+          "Lc": 0.14180702719393168
+        },
+        "radiusExtent": [
+          0.9114467239016334,
+          1.1227439649960675
+        ],
+        "cycle": {
+          "startTau": 997.3718490673153,
+          "endTau": 999.934973772778,
+          "period": 2.5631247054626556,
+          "radiusAmplitude": 0.21129711174162447,
+          "luminosityAmplitude": 0.17015485231126182,
+          "luminosityMaximum": 1.0818727456625978,
+          "luminosityPeaks": [
+            {
+              "phase": 0.458984375,
+              "luminosity": 1.0818727456625978,
+              "prominence": 0.08462912725398719
+            },
+            {
+              "phase": 0.9453125,
+              "luminosity": 0.9996431590562312,
+              "prominence": 0.0023995406476206016
+            }
+          ],
+          "significantLuminosityPeakCount": 2,
+          "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+          "radialPeakSpread": 1.765920742968774e-12,
+          "periodRelativeSpread": 3.9919303860390406e-13,
+          "waveformRelativeError": 2.6370140950072277e-8
+        },
+        "differences": {
+          "periodRelative": 9.456435634547233e-11,
+          "luminosityAmplitudeAbsolute": 4.596324395533813e-7,
+          "radiusAmplitudeAbsolute": 2.997124248782512e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "fig7-alpha0.4-zc4",
+      "family": "Fig. 7 comparison",
+      "parameters": {
+        "alphaP": 0.4,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 4,
+        "zetac": 4,
+        "gammac": 0.4,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.20650986641962696,
+      "finalState": {
+        "R": 1.0081396171095662,
+        "V": -0.2048744404172919,
+        "H": 1.0071126257678569,
+        "Uc": 0.9728783282387711,
+        "L": 1.0125320202653774,
+        "Lr": 0.6673325459642749,
+        "Lc": 0.34519947430110237
+      },
+      "radiusExtent": [
+        0.9308350534805254,
+        1.0889976075765093
+      ],
+      "cycle": {
+        "startTau": 996.8537022475327,
+        "endTau": 999.3227902501527,
+        "period": 2.4690880026199693,
+        "radiusAmplitude": 0.15816236500555758,
+        "luminosityAmplitude": 0.12609699642675132,
+        "luminosityMaximum": 1.0620645113981206,
+        "luminosityPeaks": [
+          {
+            "phase": 0.4375,
+            "luminosity": 1.0620645113981206,
+            "prominence": 0.06336786045409804
+          },
+          {
+            "phase": 0.994140625,
+            "luminosity": 0.9990056123298481,
+            "prominence": 0.00030896138582547916
+          }
+        ],
+        "significantLuminosityPeakCount": 2,
+        "phaseLcMaximumMinusRadiusMinimum": 0,
+        "radialPeakSpread": 1.9497214953645425e-9,
+        "periodRelativeSpread": 2.354232820298018e-10,
+        "waveformRelativeError": 0.000002359426501572676
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.20651181257894527,
+        "finalState": {
+          "R": 1.008139617083325,
+          "V": -0.20487444042410416,
+          "H": 1.0071126257776852,
+          "Uc": 0.9728783282526787,
+          "L": 1.01253202027606,
+          "Lr": 0.6673325458882707,
+          "Lc": 0.34519947438778914
+        },
+        "radiusExtent": [
+          0.9308349518147246,
+          1.0889976629771758
+        ],
+        "cycle": {
+          "startTau": 996.8537022472575,
+          "endTau": 999.3227902501736,
+          "period": 2.4690880029161235,
+          "radiusAmplitude": 0.15816238494597645,
+          "luminosityAmplitude": 0.12609710536976793,
+          "luminosityMaximum": 1.0620646526107778,
+          "luminosityPeaks": [
+            {
+              "phase": 0.4375,
+              "luminosity": 1.0620646526107778,
+              "prominence": 0.063368001993231
+            },
+            {
+              "phase": 0.994140625,
+              "luminosity": 0.9990056123178591,
+              "prominence": 0.00030896170031236014
+            }
+          ],
+          "significantLuminosityPeakCount": 2,
+          "phaseLcMaximumMinusRadiusMinimum": 0,
+          "radialPeakSpread": 1.7146284392310918e-12,
+          "periodRelativeSpread": 1.841762425435729e-13,
+          "waveformRelativeError": 2.2939875481750805e-8
+        },
+        "differences": {
+          "periodRelative": 1.1994483184452065e-10,
+          "luminosityAmplitudeAbsolute": 1.0894301660790973e-7,
+          "radiusAmplitudeAbsolute": 1.9940418871655652e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "fig7-alpha0.4-zc9",
+      "family": "Fig. 7 comparison",
+      "parameters": {
+        "alphaP": 0.4,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 4,
+        "zetac": 9,
+        "gammac": 0.4,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "limit_cycle",
+      "finalTau": 3000,
+      "equilibriumDistance": 0.06777950978927048,
+      "finalState": {
+        "R": 0.9768693837908796,
+        "V": -0.021813003387356197,
+        "H": 1.0003273477503318,
+        "Uc": 1.0104606119055626,
+        "L": 1.0081595167029798,
+        "Lr": 0.5105070388369909,
+        "Lc": 0.49765247786598893
+      },
+      "radiusExtent": [
+        0.9756218250331995,
+        1.0265521985689776
+      ],
+      "cycle": {
+        "startTau": 2996.5586084218735,
+        "endTau": 2998.930271059541,
+        "period": 2.3716626376676686,
+        "radiusAmplitude": 0.05092774723649862,
+        "luminosityAmplitude": 0.022451723753348474,
+        "luminosityMaximum": 1.0113064023981995,
+        "luminosityPeaks": [
+          {
+            "phase": 0.3671875,
+            "luminosity": 1.0113064023981995,
+            "prominence": 0.022451723753348474
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.001953125,
+        "radialPeakSpread": 5.5406320198514436e-8,
+        "periodRelativeSpread": 1.3986620504980404e-8,
+        "waveformRelativeError": 5.148016137435617e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 3000,
+        "equilibriumDistance": 0.06780879060407184,
+        "finalState": {
+          "R": 0.9768693835745793,
+          "V": -0.021813001497646617,
+          "H": 1.0003273475777428,
+          "Uc": 1.0104606120383632,
+          "L": 1.0081595163729067,
+          "Lr": 0.510507037429175,
+          "Lc": 0.49765247894373155
+        },
+        "radiusExtent": [
+          0.9756216460082577,
+          1.0265524282510843
+        ],
+        "cycle": {
+          "startTau": 2996.558608412358,
+          "endTau": 2998.9302710498605,
+          "period": 2.3716626375025953,
+          "radiusAmplitude": 0.05092774879644868,
+          "luminosityAmplitude": 0.02245172030497178,
+          "luminosityMaximum": 1.0113064146503459,
+          "luminosityPeaks": [
+            {
+              "phase": 0.3671875,
+              "luminosity": 1.0113064146503459,
+              "prominence": 0.02245172030497178
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.001953125,
+          "radialPeakSpread": 5.624566856710089e-8,
+          "periodRelativeSpread": 1.4024777164588621e-8,
+          "waveformRelativeError": 4.878294760262006e-7
+        },
+        "differences": {
+          "periodRelative": 6.960232390440524e-11,
+          "luminosityAmplitudeAbsolute": 3.448376695303068e-9,
+          "radiusAmplitudeAbsolute": 1.5599500580165682e-9,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "fig7-alphaA8-zc0.28",
+      "family": "Fig. 7 comparison",
+      "parameters": {
+        "alphaP": 0.4068801897983392,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 4,
+        "zetac": 0.28,
+        "gammac": 0.4,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "unsettled",
+      "finalTau": 3000,
+      "equilibriumDistance": 0.060688181734355015,
+      "finalState": {
+        "R": 1.000138782095003,
+        "V": -0.06067901578671665,
+        "H": 1.0021383455498643,
+        "Uc": 0.9972358624528325,
+        "L": 1.0058828228626926,
+        "Lr": 0.6096307830805264,
+        "Lc": 0.3962520397821662
+      },
+      "radiusExtent": [
+        0.9773597704831215,
+        1.0244034967288211
+      ],
+      "cycle": {
+        "startTau": 2996.939135831295,
+        "endTau": 2999.365365495599,
+        "period": 2.426229664303719,
+        "radiusAmplitude": 0.04673848225580146,
+        "luminosityAmplitude": 0.0150564780954342,
+        "luminosityMaximum": 1.007464889268075,
+        "luminosityPeaks": [
+          {
+            "phase": 0.361328125,
+            "luminosity": 1.007464889268075,
+            "prominence": 0.0150564780954342
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.00390625,
+        "radialPeakSpread": 0.00000747302824088969,
+        "periodRelativeSpread": 0.0000014340173327999374,
+        "waveformRelativeError": 0.00009626788974275043
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "unsettled",
+        "finalTau": 3000,
+        "equilibriumDistance": 0.06070117930432634,
+        "finalState": {
+          "R": 1.000138781255097,
+          "V": -0.06067901576845272,
+          "H": 1.0021383457949735,
+          "Uc": 0.9972358624703368,
+          "L": 1.0058828230057257,
+          "Lr": 0.6096307805405474,
+          "Lc": 0.39625204246517826
+        },
+        "radiusExtent": [
+          0.9773581370669802,
+          1.0244072793917176
+        ],
+        "cycle": {
+          "startTau": 2996.939135817773,
+          "endTau": 2999.365365482161,
+          "period": 2.426229664387847,
+          "radiusAmplitude": 0.04673848407776626,
+          "luminosityAmplitude": 0.015056470348694395,
+          "luminosityMaximum": 1.0074648897927412,
+          "luminosityPeaks": [
+            {
+              "phase": 0.361328125,
+              "luminosity": 1.0074648897927412,
+              "prominence": 0.015056470348694395
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.00390625,
+          "radialPeakSpread": 0.000007471749697174346,
+          "periodRelativeSpread": 0.0000014339566056085205,
+          "waveformRelativeError": 0.00009624663391533262
+        },
+        "differences": {
+          "periodRelative": 3.467448550509289e-11,
+          "luminosityAmplitudeAbsolute": 7.746739805192249e-9,
+          "radiusAmplitudeAbsolute": 1.8219648012518519e-9,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "fig7-alphaA8-zc0.4",
+      "family": "Fig. 7 comparison",
+      "parameters": {
+        "alphaP": 0.4068801897983392,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 4,
+        "zetac": 0.4,
+        "gammac": 0.4,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "limit_cycle",
+      "finalTau": 3000,
+      "equilibriumDistance": 0.15886417532331865,
+      "finalState": {
+        "R": 1.006740636841263,
+        "V": 0.15608173716237864,
+        "H": 0.9943794328053456,
+        "Uc": 0.9972649700472006,
+        "L": 0.9805279608213229,
+        "Lr": 0.6045599532343252,
+        "Lc": 0.3759680075869976
+      },
+      "radiusExtent": [
+        0.9443025381233834,
+        1.067672602072129
+      ],
+      "cycle": {
+        "startTau": 2995.7165183387087,
+        "endTau": 2998.1875559072123,
+        "period": 2.4710375685035615,
+        "radiusAmplitude": 0.1233698993294513,
+        "luminosityAmplitude": 0.05842196940316313,
+        "luminosityMaximum": 1.0284417278058333,
+        "luminosityPeaks": [
+          {
+            "phase": 0.421875,
+            "luminosity": 1.0284417278058333,
+            "prominence": 0.05842196940316313
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.00390625,
+        "radialPeakSpread": 1.8718104843884475e-9,
+        "periodRelativeSpread": 1.0673794153748778e-10,
+        "waveformRelativeError": 0.0000012859723772833824
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 3000,
+        "equilibriumDistance": 0.15886409957277944,
+        "finalState": {
+          "R": 1.0067406383480593,
+          "V": 0.15608173669256936,
+          "H": 0.9943794325340178,
+          "Uc": 0.9972649700344464,
+          "L": 0.9805279614844031,
+          "Lr": 0.6045599584135436,
+          "Lc": 0.3759680030708596
+        },
+        "radiusExtent": [
+          0.9443025300392327,
+          1.0676726048398386
+        ],
+        "cycle": {
+          "startTau": 2995.7165183294255,
+          "endTau": 2998.1875558979145,
+          "period": 2.4710375684890096,
+          "radiusAmplitude": 0.12336991273102493,
+          "luminosityAmplitude": 0.05842194519038735,
+          "luminosityMaximum": 1.0284417440366203,
+          "luminosityPeaks": [
+            {
+              "phase": 0.421875,
+              "luminosity": 1.0284417440366203,
+              "prominence": 0.05842194519038735
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.00390625,
+          "radialPeakSpread": 8.542055951465954e-13,
+          "periodRelativeSpread": 3.680618673599115e-12,
+          "waveformRelativeError": 1.885096688572214e-8
+        },
+        "differences": {
+          "periodRelative": 5.88906701182168e-12,
+          "luminosityAmplitudeAbsolute": 2.4212775784349105e-8,
+          "radiusAmplitudeAbsolute": 1.340157362861305e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "fig7-alphaA8-zc1",
+      "family": "Fig. 7 comparison",
+      "parameters": {
+        "alphaP": 0.4068801897983392,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 4,
+        "zetac": 1,
+        "gammac": 0.4,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.2703243837395613,
+      "finalState": {
+        "R": 0.9109362965531197,
+        "V": -0.02104657641498679,
+        "H": 0.9758251786298363,
+        "Uc": 0.9871937238693991,
+        "L": 1.0747699952758223,
+        "Lr": 0.2631306495936291,
+        "Lc": 0.8116393456821932
+      },
+      "radiusExtent": [
+        0.9107086528363342,
+        1.1240091023504886
+      ],
+      "cycle": {
+        "startTau": 996.1821494734678,
+        "endTau": 998.7489514456269,
+        "period": 2.5668019721590554,
+        "radiusAmplitude": 0.21330061511311538,
+        "luminosityAmplitude": 0.17545451676058677,
+        "luminosityMaximum": 1.0842059302911413,
+        "luminosityPeaks": [
+          {
+            "phase": 0.458984375,
+            "luminosity": 1.0842059302911413,
+            "prominence": 0.08641407258524514
+          },
+          {
+            "phase": 0.966796875,
+            "luminosity": 0.9994005758668304,
+            "prominence": 0.0016087181609342194
+          }
+        ],
+        "significantLuminosityPeakCount": 2,
+        "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+        "radialPeakSpread": 1.2515801728341103e-9,
+        "periodRelativeSpread": 2.6366574136670744e-10,
+        "waveformRelativeError": 0.000005030197445147259
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.2703273942446665,
+        "finalState": {
+          "R": 0.9109362965452491,
+          "V": -0.021046576023385916,
+          "H": 0.975825178526151,
+          "Uc": 0.9871937238889524,
+          "L": 1.074769995168527,
+          "Lr": 0.26313064938200403,
+          "Lc": 0.811639345786523
+        },
+        "radiusExtent": [
+          0.9107082817012215,
+          1.124009103734725
+        ],
+        "cycle": {
+          "startTau": 996.1821494729405,
+          "endTau": 998.7489514451577,
+          "period": 2.5668019722171493,
+          "radiusAmplitude": 0.21330061641184805,
+          "luminosityAmplitude": 0.1754544317786838,
+          "luminosityMaximum": 1.084206103084938,
+          "luminosityPeaks": [
+            {
+              "phase": 0.458984375,
+              "luminosity": 1.084206103084938,
+              "prominence": 0.08641425278207904
+            },
+            {
+              "phase": 0.966796875,
+              "luminosity": 0.9994005754329351,
+              "prominence": 0.0016087251300762606
+            }
+          ],
+          "significantLuminosityPeakCount": 2,
+          "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+          "radialPeakSpread": 2.0536905509516146e-12,
+          "periodRelativeSpread": 3.100386678306861e-13,
+          "waveformRelativeError": 3.124154348953707e-8
+        },
+        "differences": {
+          "periodRelative": 2.2632784535403516e-11,
+          "luminosityAmplitudeAbsolute": 8.498190295913588e-8,
+          "radiusAmplitudeAbsolute": 1.2987326769575702e-9,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "fig7-alphaA8-zc4",
+      "family": "Fig. 7 comparison",
+      "parameters": {
+        "alphaP": 0.4068801897983392,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 4,
+        "zetac": 4,
+        "gammac": 0.4,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.20764692798133527,
+      "finalState": {
+        "R": 1.0788572719435678,
+        "V": -0.09051491959526733,
+        "H": 0.9682794403250213,
+        "Uc": 0.94590252341308,
+        "L": 0.9989781722387041,
+        "Lr": 0.8145245460143786,
+        "Lc": 0.18445362622432543
+      },
+      "radiusExtent": [
+        0.9304815803509758,
+        1.0895463965056358
+      ],
+      "cycle": {
+        "startTau": 997.2958427017542,
+        "endTau": 999.7660944931221,
+        "period": 2.4702517913679003,
+        "radiusAmplitude": 0.1590644211191098,
+        "luminosityAmplitude": 0.12907172578975246,
+        "luminosityMaximum": 1.0634203724410027,
+        "luminosityPeaks": [
+          {
+            "phase": 0.4375,
+            "luminosity": 1.0634203724410027,
+            "prominence": 0.06449825506982554
+          },
+          {
+            "phase": 0.017578125,
+            "luminosity": 0.9989696215627089,
+            "prominence": 0.000047504191531655415
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0,
+        "radialPeakSpread": 1.8313781602330437e-9,
+        "periodRelativeSpread": 1.505851890435397e-10,
+        "waveformRelativeError": 0.0000019836906834205764
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.2076460896077453,
+        "finalState": {
+          "R": 1.078857271933017,
+          "V": -0.09051491963460162,
+          "H": 0.96827944033164,
+          "Uc": 0.9459025234143283,
+          "L": 0.9989781722370789,
+          "Lr": 0.8145245459975919,
+          "Lc": 0.1844536262394869
+        },
+        "radiusExtent": [
+          0.9304815502275796,
+          1.0895464008035143
+        ],
+        "cycle": {
+          "startTau": 997.2958427014919,
+          "endTau": 999.7660944930286,
+          "period": 2.4702517915367252,
+          "radiusAmplitude": 0.15906443893681288,
+          "luminosityAmplitude": 0.12907180236958493,
+          "luminosityMaximum": 1.063420470169163,
+          "luminosityPeaks": [
+            {
+              "phase": 0.4375,
+              "luminosity": 1.063420470169163,
+              "prominence": 0.06449836503522932
+            },
+            {
+              "phase": 0.017578125,
+              "luminosity": 0.9989696167868451,
+              "prominence": 0.00004751165291150272
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0,
+          "radialPeakSpread": 3.3728575488112256e-13,
+          "periodRelativeSpread": 9.204473658198293e-13,
+          "waveformRelativeError": 1.4182160918568654e-8
+        },
+        "differences": {
+          "periodRelative": 6.834321997217785e-11,
+          "luminosityAmplitudeAbsolute": 7.657983247533195e-8,
+          "radiusAmplitudeAbsolute": 1.7817703090727832e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "fig7-alphaA8-zc9",
+      "family": "Fig. 7 comparison",
+      "parameters": {
+        "alphaP": 0.4068801897983392,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 4,
+        "zetac": 9,
+        "gammac": 0.4,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "limit_cycle",
+      "finalTau": 3000,
+      "equilibriumDistance": 0.06570774629985891,
+      "finalState": {
+        "R": 1.0098092532251748,
+        "V": 0.05998447120646208,
+        "H": 0.9961213073410033,
+        "Uc": 0.9968784520692666,
+        "L": 0.9916885752156916,
+        "Lr": 0.6251903722288211,
+        "Lc": 0.36649820298687047
+      },
+      "radiusExtent": [
+        0.9763447991796694,
+        1.0256960922482532
+      ],
+      "cycle": {
+        "startTau": 2995.7296949389015,
+        "endTau": 2998.100654998286,
+        "period": 2.370960059384288,
+        "radiusAmplitude": 0.049347660094937074,
+        "luminosityAmplitude": 0.022169079778266987,
+        "luminosityMaximum": 1.0111517260582352,
+        "luminosityPeaks": [
+          {
+            "phase": 0.36328125,
+            "luminosity": 1.0111517260582352,
+            "prominence": 0.022169079778266987
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.001953125,
+        "radialPeakSpread": 8.380299165722249e-8,
+        "periodRelativeSpread": 2.0389557364114252e-8,
+        "waveformRelativeError": 7.560707840377752e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 3000,
+        "equilibriumDistance": 0.06571268100940207,
+        "finalState": {
+          "R": 1.0098092538349006,
+          "V": 0.05998447052157018,
+          "H": 0.9961213072668954,
+          "Uc": 0.9968784517323211,
+          "L": 0.9916885753905791,
+          "Lr": 0.62519037454568,
+          "Lc": 0.3664982008448991
+        },
+        "radiusExtent": [
+          0.9763446060367629,
+          1.025696560741551
+        ],
+        "cycle": {
+          "startTau": 2995.729694928727,
+          "endTau": 2998.100654988087,
+          "period": 2.3709600593601863,
+          "radiusAmplitude": 0.0493476629798989,
+          "luminosityAmplitude": 0.02216909225425212,
+          "luminosityMaximum": 1.0111517399654233,
+          "luminosityPeaks": [
+            {
+              "phase": 0.36328125,
+              "luminosity": 1.0111517399654233,
+              "prominence": 0.02216909225425212
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.001953125,
+          "radialPeakSpread": 8.411034690958274e-8,
+          "periodRelativeSpread": 2.0364239920135523e-8,
+          "waveformRelativeError": 7.406502002577718e-7
+        },
+        "differences": {
+          "periodRelative": 1.0165424058072858e-11,
+          "luminosityAmplitudeAbsolute": 1.2475985133875156e-8,
+          "radiusAmplitudeAbsolute": 2.8849618249893183e-9,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "fig8c-fully-convective",
+      "family": "Fig. 8c",
+      "parameters": {
+        "alphaP": 0,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 7.5,
+        "zetac": 9,
+        "gammac": 1,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 2.6644363598495,
+      "finalState": {
+        "R": 1.0913605030983426,
+        "V": 0.1717914465370627,
+        "H": 1.6550888907387118,
+        "Uc": 1.1783679725018856,
+        "L": 0.8130119537632797,
+        "Lr": 0,
+        "Lc": 0.8130119537632797
+      },
+      "radiusExtent": [
+        0.8275059004006894,
+        1.2277459995641558
+      ],
+      "cycle": {
+        "startTau": 984.9447719569265,
+        "endTau": 993.2727599611688,
+        "period": 8.327988004242343,
+        "radiusAmplitude": 0.4002395267068748,
+        "luminosityAmplitude": 0.3392989327033339,
+        "luminosityMaximum": 1.148933125612752,
+        "luminosityPeaks": [
+          {
+            "phase": 0.205078125,
+            "luminosity": 1.148933125612752,
+            "prominence": 0.3392989327033339
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": -0.376953125,
+        "radialPeakSpread": 1.8474111129762605e-11,
+        "periodRelativeSpread": 3.1060522868995526e-10,
+        "waveformRelativeError": 1.1301254866908489e-8
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 2.6645575518611166,
+        "finalState": {
+          "R": 1.0913605030079299,
+          "V": 0.17179144658241716,
+          "H": 1.6550888899325107,
+          "Uc": 1.1783679722501905,
+          "L": 0.8130119537811366,
+          "Lr": 0,
+          "Lc": 0.8130119537811366
+        },
+        "radiusExtent": [
+          0.8275057669233779,
+          1.2277459988818717
+        ],
+        "cycle": {
+          "startTau": 984.9447719557382,
+          "endTau": 993.2727599604063,
+          "period": 8.3279880046681,
+          "radiusAmplitude": 0.40023952721391565,
+          "luminosityAmplitude": 0.3392989324369581,
+          "luminosityMaximum": 1.1489331252631894,
+          "luminosityPeaks": [
+            {
+              "phase": 0.205078125,
+              "luminosity": 1.1489331252631894,
+              "prominence": 0.3392989324369581
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": -0.376953125,
+          "radialPeakSpread": 1.4344081478157023e-13,
+          "periodRelativeSpread": 8.32721792722571e-13,
+          "waveformRelativeError": 7.290356582584254e-11
+        },
+        "differences": {
+          "periodRelative": 5.112366086024167e-11,
+          "luminosityAmplitudeAbsolute": 2.663758102983138e-10,
+          "radiusAmplitudeAbsolute": 5.070408537477533e-10,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "fig8c-cepheid",
+      "family": "Fig. 8c",
+      "parameters": {
+        "alphaP": 0,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 8,
+        "zetac": 1.2,
+        "gammac": 0.2,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "unsettled",
+      "finalTau": 3000,
+      "equilibriumDistance": 0.3546581331299494,
+      "finalState": {
+        "R": 1.086463693310503,
+        "V": 0.2904119492244301,
+        "H": 0.9395510109567747,
+        "Uc": 0.9956200360675578,
+        "L": 1.0255991218828298,
+        "Lr": 0.9239299852303073,
+        "Lc": 0.10166913665252249
+      },
+      "radiusExtent": [
+        0.8986704952205682,
+        1.1751663084602577
+      ],
+      "cycle": {
+        "startTau": 2995.482446619476,
+        "endTau": 2998.0367079837956,
+        "period": 2.5542613643197,
+        "radiusAmplitude": 0.2765217324288637,
+        "luminosityAmplitude": 0.06521789051390314,
+        "luminosityMaximum": 1.0317880621904933,
+        "luminosityPeaks": [
+          {
+            "phase": 0.685546875,
+            "luminosity": 1.0317880621904933,
+            "prominence": 0.06521789051390314
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.009765625,
+        "radialPeakSpread": 2.2786509545902334e-7,
+        "periodRelativeSpread": 1.7740238118885425e-7,
+        "waveformRelativeError": 0.000005894942868413822
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "unsettled",
+        "finalTau": 3000,
+        "equilibriumDistance": 0.3546579105055055,
+        "finalState": {
+          "R": 1.086463696225004,
+          "V": 0.29041194518642266,
+          "H": 0.939551008722413,
+          "Uc": 0.9956200352765685,
+          "L": 1.0255991214276186,
+          "Lr": 0.9239299871992813,
+          "Lc": 0.10166913422833733
+        },
+        "radiusExtent": [
+          0.8986665225660553,
+          1.1751954623527208
+        ],
+        "cycle": {
+          "startTau": 2995.4824466094387,
+          "endTau": 2998.0367079737534,
+          "period": 2.554261364314698,
+          "radiusAmplitude": 0.2765217733690113,
+          "luminosityAmplitude": 0.06521790022202834,
+          "luminosityMaximum": 1.0317880622593534,
+          "luminosityPeaks": [
+            {
+              "phase": 0.685546875,
+              "luminosity": 1.0317880622593534,
+              "prominence": 0.06521790022202834
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.009765625,
+          "radialPeakSpread": 2.2789262943412325e-7,
+          "periodRelativeSpread": 1.774059418853308e-7,
+          "waveformRelativeError": 3.4558980113961213e-7
+        },
+        "differences": {
+          "periodRelative": 1.958433415438776e-12,
+          "luminosityAmplitudeAbsolute": 9.7081251926312e-9,
+          "radiusAmplitudeAbsolute": 4.094014760536169e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "fully-convective-alpha0-zc5",
+      "family": "Fully convective slice",
+      "parameters": {
+        "alphaP": 0,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 7.5,
+        "zetac": 5,
+        "gammac": 1,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "step_limit",
+      "finalTau": 3.2706562021209935,
+      "equilibriumDistance": 5.315323752180337,
+      "finalState": {
+        "R": 0.5708643045998965,
+        "V": -0.9845009746533616,
+        "H": 0.0003484613332479464,
+        "Uc": 0.22547622944553541,
+        "L": 1.0163403947585505,
+        "Lr": 0,
+        "Lc": 1.0163403947585505
+      },
+      "radiusExtent": [
+        0.5708643045998965,
+        1.0848920112114628
+      ],
+      "cycle": null,
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "step_limit",
+        "finalTau": 3.2750404345146134,
+        "equilibriumDistance": 5.315369101399357,
+        "finalState": {
+          "R": 0.566518753240097,
+          "V": -0.9979237847937464,
+          "H": 0.00003209092205898907,
+          "Uc": 0.22097048973695288,
+          "L": 1.0169240278185512,
+          "Lr": 0,
+          "Lc": 1.0169240278185512
+        },
+        "radiusExtent": [
+          0.566518753240097,
+          1.0872204967303634
+        ],
+        "cycle": null,
+        "differences": null
+      }
+    },
+    {
+      "id": "fully-convective-alpha0-zc6",
+      "family": "Fully convective slice",
+      "parameters": {
+        "alphaP": 0,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 7.5,
+        "zetac": 6,
+        "gammac": 1,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "step_limit",
+      "finalTau": 3.5203271033557404,
+      "equilibriumDistance": 5.11152907739694,
+      "finalState": {
+        "R": 0.49900503451468886,
+        "V": -1.0530541981991308,
+        "H": 0.00005679175333849317,
+        "Uc": 0.15665521740164948,
+        "L": 0.9999888845565942,
+        "Lr": 0,
+        "Lc": 0.9999888845565942
+      },
+      "radiusExtent": [
+        0.49900503451468886,
+        1.0458154558082229
+      ],
+      "cycle": null,
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "step_limit",
+        "finalTau": 3.5252324276643296,
+        "equilibriumDistance": 5.113584131589808,
+        "finalState": {
+          "R": 0.4937911656284117,
+          "V": -1.072818176079353,
+          "H": 0.00004495194478990857,
+          "Uc": 0.15241237464958593,
+          "L": 1.001645773728135,
+          "Lr": 0,
+          "Lc": 1.001645773728135
+        },
+        "radiusExtent": [
+          0.4937911656284117,
+          1.047082729722432
+        ],
+        "cycle": null,
+        "differences": null
+      }
+    },
+    {
+      "id": "fully-convective-alpha0-zc7",
+      "family": "Fully convective slice",
+      "parameters": {
+        "alphaP": 0,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 7.5,
+        "zetac": 7,
+        "gammac": 1,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "step_limit",
+      "finalTau": 3.850085825748004,
+      "equilibriumDistance": 4.967771641869769,
+      "finalState": {
+        "R": 0.43281322563627583,
+        "V": -1.1036110485037884,
+        "H": 5.919037323440034e-7,
+        "Uc": 0.10720180893541906,
+        "L": 1.0004655889416665,
+        "Lr": 0,
+        "Lc": 1.0004655889416665
+      },
+      "radiusExtent": [
+        0.43281322563627583,
+        0.9994268067614464
+      ],
+      "cycle": null,
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "step_limit",
+        "finalTau": 3.8500047448240755,
+        "equilibriumDistance": 4.969679294841162,
+        "finalState": {
+          "R": 0.4329026898989185,
+          "V": -1.1031784071443405,
+          "H": 7.183908285787562e-7,
+          "Uc": 0.10726197252983526,
+          "L": 1.0004953234047345,
+          "Lr": 0,
+          "Lc": 1.0004953234047345
+        },
+        "radiusExtent": [
+          0.4329026898989185,
+          1.0029896161649334
+        ],
+        "cycle": null,
+        "differences": null
+      }
+    },
+    {
+      "id": "fully-convective-alpha0-zc8",
+      "family": "Fully convective slice",
+      "parameters": {
+        "alphaP": 0,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 7.5,
+        "zetac": 8,
+        "gammac": 1,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "runaway",
+      "finalTau": 29.243838883326774,
+      "equilibriumDistance": 1634.2693157913666,
+      "finalState": {
+        "R": 15.011605122447094,
+        "V": 0.43139089308599277,
+        "H": 1635.2693157913666,
+        "Uc": 10.41089505218065,
+        "L": 4.375696090095498e-7,
+        "Lr": 0,
+        "Lc": 4.375696090095498e-7
+      },
+      "radiusExtent": [
+        9.579180252500432,
+        15.011605122447094
+      ],
+      "cycle": null,
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "runaway",
+        "finalTau": 29.2288908504602,
+        "equilibriumDistance": 1632.5867232644707,
+        "finalState": {
+          "R": 15.00515618128289,
+          "V": 0.4314572539829505,
+          "H": 1633.5867232644707,
+          "Uc": 10.407757317007482,
+          "L": 4.386794697832894e-7,
+          "Lr": 0,
+          "Lc": 4.386794697832894e-7
+        },
+        "radiusExtent": [
+          9.563929211485405,
+          15.00515618128289
+        ],
+        "cycle": null,
+        "differences": null
+      }
+    },
+    {
+      "id": "fully-convective-alpha0.4-zc5",
+      "family": "Fully convective slice",
+      "parameters": {
+        "alphaP": 0.4,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 7.5,
+        "zetac": 5,
+        "gammac": 1,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "limit_cycle",
+      "finalTau": 3000,
+      "equilibriumDistance": 1.317385314027122,
+      "finalState": {
+        "R": 0.9323204709489995,
+        "V": 0.09957349286272961,
+        "H": 0.6748874127475095,
+        "Uc": 0.8089100633969606,
+        "L": 0.9272118088777767,
+        "Lr": 0,
+        "Lc": 0.9272118088777767
+      },
+      "radiusExtent": [
+        0.8801782040486815,
+        1.1397193986326546
+      ],
+      "cycle": {
+        "startTau": 2986.1069530645977,
+        "endTau": 2994.3917256025043,
+        "period": 8.28477253790652,
+        "radiusAmplitude": 0.2595395798416973,
+        "luminosityAmplitude": 0.2116392667432454,
+        "luminosityMaximum": 1.093629996838364,
+        "luminosityPeaks": [
+          {
+            "phase": 0.21484375,
+            "luminosity": 1.093629996838364,
+            "prominence": 0.2116392667432454
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": -0.341796875,
+        "radialPeakSpread": 1.3499867890232053e-11,
+        "periodRelativeSpread": 1.4079166924525857e-10,
+        "waveformRelativeError": 3.227620567499048e-9
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 3000,
+        "equilibriumDistance": 1.3174303872532578,
+        "finalState": {
+          "R": 0.9323204714145351,
+          "V": 0.09957349318494148,
+          "H": 0.6748874149239039,
+          "Uc": 0.8089100643765241,
+          "L": 0.9272118085423684,
+          "Lr": 0,
+          "Lc": 0.9272118085423684
+        },
+        "radiusExtent": [
+          0.8801782062790122,
+          1.1397193930015441
+        ],
+        "cycle": {
+          "startTau": 2986.106953058644,
+          "endTau": 2994.3917255970036,
+          "period": 8.284772538359448,
+          "radiusAmplitude": 0.2595395800236723,
+          "luminosityAmplitude": 0.2116392673790919,
+          "luminosityMaximum": 1.093629996824802,
+          "luminosityPeaks": [
+            {
+              "phase": 0.21484375,
+              "luminosity": 1.093629996824802,
+              "prominence": 0.2116392673790919
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": -0.341796875,
+          "radialPeakSpread": 1.0325074129013956e-13,
+          "periodRelativeSpread": 1.0977907933648454e-12,
+          "waveformRelativeError": 1.1888828008093691e-10
+        },
+        "differences": {
+          "periodRelative": 5.4669935245499346e-11,
+          "luminosityAmplitudeAbsolute": 6.358464865741098e-10,
+          "radiusAmplitudeAbsolute": 1.8197499063177247e-10,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "fully-convective-alpha0.4-zc6",
+      "family": "Fully convective slice",
+      "parameters": {
+        "alphaP": 0.4,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 7.5,
+        "zetac": 6,
+        "gammac": 1,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "equilibrium",
+      "finalTau": 1000,
+      "equilibriumDistance": 3.9968028886505635e-15,
+      "finalState": {
+        "R": 1.0000000000000004,
+        "V": -4.93226006056899e-16,
+        "H": 1.000000000000004,
+        "Uc": 1.0000000000000013,
+        "L": 1.0000000000000004,
+        "Lr": 0,
+        "Lc": 1.0000000000000004
+      },
+      "radiusExtent": [
+        0.9999999999999962,
+        1.0000000000000004
+      ],
+      "cycle": null,
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "equilibrium",
+        "finalTau": 1000,
+        "equilibriumDistance": 3.8786229599928554e-15,
+        "finalState": {
+          "R": 1,
+          "V": 3.8786229599928554e-15,
+          "H": 1.0000000000000004,
+          "Uc": 0.9999999999999997,
+          "L": 0.999999999999999,
+          "Lr": 0,
+          "Lc": 0.999999999999999
+        },
+        "radiusExtent": [
+          1,
+          1
+        ],
+        "cycle": null,
+        "differences": null
+      }
+    },
+    {
+      "id": "fully-convective-alpha0.4-zc7",
+      "family": "Fully convective slice",
+      "parameters": {
+        "alphaP": 0.4,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 7.5,
+        "zetac": 7,
+        "gammac": 1,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "equilibrium",
+      "finalTau": 1000,
+      "equilibriumDistance": 2.5493774621284856e-15,
+      "finalState": {
+        "R": 1,
+        "V": 2.5493774621284856e-15,
+        "H": 1.0000000000000002,
+        "Uc": 0.9999999999999998,
+        "L": 0.9999999999999993,
+        "Lr": 0,
+        "Lc": 0.9999999999999993
+      },
+      "radiusExtent": [
+        1,
+        1
+      ],
+      "cycle": null,
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "equilibrium",
+        "finalTau": 1000,
+        "equilibriumDistance": 3.876407962145097e-15,
+        "finalState": {
+          "R": 1,
+          "V": 3.876407962145097e-15,
+          "H": 1.0000000000000004,
+          "Uc": 0.9999999999999998,
+          "L": 0.9999999999999993,
+          "Lr": 0,
+          "Lc": 0.9999999999999993
+        },
+        "radiusExtent": [
+          1,
+          1
+        ],
+        "cycle": null,
+        "differences": null
+      }
+    },
+    {
+      "id": "fully-convective-alpha0.4-zc8",
+      "family": "Fully convective slice",
+      "parameters": {
+        "alphaP": 0.4,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 100,
+        "zeta": 7.5,
+        "zetac": 8,
+        "gammac": 1,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 0,
+        "v0": 0,
+        "h0": 1,
+        "uc0": 0.7,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": false,
+        "driver": "h",
+        "geometryMode": "constant",
+        "m": 10,
+        "sourceExp": 0,
+        "r0": 1.4
+      },
+      "classification": "equilibrium",
+      "finalTau": 1000,
+      "equilibriumDistance": 2.712073160289979e-15,
+      "finalState": {
+        "R": 1,
+        "V": 2.712073160289979e-15,
+        "H": 1.0000000000000002,
+        "Uc": 0.9999999999999998,
+        "L": 0.9999999999999993,
+        "Lr": 0,
+        "Lc": 0.9999999999999993
+      },
+      "radiusExtent": [
+        1,
+        1
+      ],
+      "cycle": null,
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "equilibrium",
+        "finalTau": 1000,
+        "equilibriumDistance": 8.659739592076221e-15,
+        "finalState": {
+          "R": 1.000000000000001,
+          "V": 6.3611456115654144e-15,
+          "H": 1.0000000000000087,
+          "Uc": 1.0000000000000027,
+          "L": 0.9999999999999991,
+          "Lr": 0,
+          "Lc": 0.9999999999999991
+        },
+        "radiusExtent": [
+          1.000000000000001,
+          1.000000000000001
+        ],
+        "cycle": null,
+        "differences": null
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.01-alpha0",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.01,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.2031492684942546,
+      "finalState": {
+        "R": 1.0583477620689048,
+        "V": -0.14596544862595992,
+        "H": 0.9185684495642868,
+        "Uc": 0.9547156207940733,
+        "L": 0.7978642813149848,
+        "Lr": 0.7918407541516189,
+        "Lc": 0.006023527163365798
+      },
+      "radiusExtent": [
+        0.9452497576926976,
+        1.0926695707189882
+      ],
+      "cycle": {
+        "startTau": 997.1869583791779,
+        "endTau": 999.5442455208445,
+        "period": 2.357287141666575,
+        "radiusAmplitude": 0.14744115625012455,
+        "luminosityAmplitude": 0.44394856770608704,
+        "luminosityMaximum": 1.2356472405668681,
+        "luminosityPeaks": [
+          {
+            "phase": 0.650390625,
+            "luminosity": 1.2356472405668681,
+            "prominence": 0.44394856770608704
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+        "radialPeakSpread": 1.3322676295501878e-15,
+        "periodRelativeSpread": 2.266707894203274e-12,
+        "waveformRelativeError": 1.0378286782185798e-12
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.2031557663700282,
+        "finalState": {
+          "R": 1.0583477620958948,
+          "V": -0.14596544857490187,
+          "H": 0.9185684495457528,
+          "Uc": 0.9547156207978794,
+          "L": 0.7978642813275535,
+          "Lr": 0.7918407541649337,
+          "Lc": 0.006023527162619725
+        },
+        "radiusExtent": [
+          0.9452324595237749,
+          1.0926736425502033
+        ],
+        "cycle": {
+          "startTau": 997.1869583814454,
+          "endTau": 999.5442455231181,
+          "period": 2.357287141672714,
+          "radiusAmplitude": 0.14744117797502254,
+          "luminosityAmplitude": 0.44394852248745775,
+          "luminosityMaximum": 1.2356471955579602,
+          "luminosityPeaks": [
+            {
+              "phase": 0.650390625,
+              "luminosity": 1.2356471955579602,
+              "prominence": 0.44394852248745775
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+          "radialPeakSpread": 5.309974682177199e-12,
+          "periodRelativeSpread": 5.932022786929682e-12,
+          "waveformRelativeError": 5.100930973794488e-9
+        },
+        "differences": {
+          "periodRelative": 2.6042501488632297e-12,
+          "luminosityAmplitudeAbsolute": 4.521862928541509e-8,
+          "radiusAmplitudeAbsolute": 2.1724897991681758e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.01-alpha0.1",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0.1,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.01,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.20136513990130914,
+      "finalState": {
+        "R": 0.9571393561997146,
+        "V": 0.1399898428610001,
+        "H": 1.0669941824909956,
+        "Uc": 0.9946900022375768,
+        "L": 1.1316837005252736,
+        "Lr": 1.1163894314873613,
+        "Lc": 0.015294269037912214
+      },
+      "radiusExtent": [
+        0.9448181897804154,
+        1.092438398698102
+      ],
+      "cycle": {
+        "startTau": 996.266162160729,
+        "endTau": 998.6438070371116,
+        "period": 2.3776448763826465,
+        "radiusAmplitude": 0.1476193325244688,
+        "luminosityAmplitude": 0.4128476903278653,
+        "luminosityMaximum": 1.2152929970506328,
+        "luminosityPeaks": [
+          {
+            "phase": 0.646484375,
+            "luminosity": 1.2152929970506328,
+            "prominence": 0.4128476903278653
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+        "radialPeakSpread": 7.668912171965303e-10,
+        "periodRelativeSpread": 4.1164320461281916e-9,
+        "waveformRelativeError": 0.000001256751357415799
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.20138054739901495,
+        "finalState": {
+          "R": 0.9571393561732268,
+          "V": 0.13998984274250323,
+          "H": 1.0669941825023723,
+          "Uc": 0.994690002225159,
+          "L": 1.1316837003520304,
+          "Lr": 1.1163894313092417,
+          "Lc": 0.015294269042788553
+        },
+        "radiusExtent": [
+          0.9448181899111178,
+          1.0924383990218332
+        ],
+        "cycle": {
+          "startTau": 996.2661621667413,
+          "endTau": 998.6438070376261,
+          "period": 2.377644870884751,
+          "radiusAmplitude": 0.14761936728204073,
+          "luminosityAmplitude": 0.41284767570530834,
+          "luminosityMaximum": 1.215292995037491,
+          "luminosityPeaks": [
+            {
+              "phase": 0.646484375,
+              "luminosity": 1.215292995037491,
+              "prominence": 0.41284767570530834
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+          "radialPeakSpread": 4.874989301129062e-12,
+          "periodRelativeSpread": 3.0171198180909335e-11,
+          "waveformRelativeError": 3.501207585969875e-9
+        },
+        "differences": {
+          "periodRelative": 2.312328328812896e-9,
+          "luminosityAmplitudeAbsolute": 1.4622556943066911e-8,
+          "radiusAmplitudeAbsolute": 3.4757571931720577e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.01-alpha0.2",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0.2,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.01,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.19998279106715616,
+      "finalState": {
+        "R": 1.071342769287842,
+        "V": 0.11374803448130118,
+        "H": 0.937350272591599,
+        "Uc": 0.9924985426340068,
+        "L": 0.9897447124211897,
+        "Lr": 0.9833889165356245,
+        "Lc": 0.006355795885565127
+      },
+      "radiusExtent": [
+        0.9443220008328729,
+        1.0924447593368913
+      ],
+      "cycle": {
+        "startTau": 995.566290873641,
+        "endTau": 997.9652805946023,
+        "period": 2.3989897209612536,
+        "radiusAmplitude": 0.1481221518207606,
+        "luminosityAmplitude": 0.37740106442041244,
+        "luminosityMaximum": 1.1905939304457265,
+        "luminosityPeaks": [
+          {
+            "phase": 0.640625,
+            "luminosity": 1.1905939304457265,
+            "prominence": 0.37740106442041244
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.0078125,
+        "radialPeakSpread": 7.935390122781882e-10,
+        "periodRelativeSpread": 3.1867993087155703e-9,
+        "waveformRelativeError": 9.659153943440325e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.20000462135947986,
+        "finalState": {
+          "R": 1.0713427692652335,
+          "V": 0.11374803453795528,
+          "H": 0.9373502726206909,
+          "Uc": 0.992498542644164,
+          "L": 0.9897447125093265,
+          "Lr": 0.9833889166229003,
+          "Lc": 0.006355795886426169
+        },
+        "radiusExtent": [
+          0.9443209490668257,
+          1.0924452629585362
+        ],
+        "cycle": {
+          "startTau": 995.5662908781732,
+          "endTau": 997.9652805951114,
+          "period": 2.3989897169382175,
+          "radiusAmplitude": 0.14812216555593027,
+          "luminosityAmplitude": 0.37740101429103323,
+          "luminosityMaximum": 1.1905938928480564,
+          "luminosityPeaks": [
+            {
+              "phase": 0.640625,
+              "luminosity": 1.1905938928480564,
+              "prominence": 0.37740101429103323
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.0078125,
+          "radialPeakSpread": 4.233280392895722e-12,
+          "periodRelativeSpread": 2.070919593099522e-11,
+          "waveformRelativeError": 2.5537261375088705e-9
+        },
+        "differences": {
+          "periodRelative": 1.676971006503436e-9,
+          "luminosityAmplitudeAbsolute": 5.0129379203234237e-8,
+          "radiusAmplitudeAbsolute": 1.3735169668294134e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.01-alpha0.4",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0.4,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.01,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.19852161456331568,
+      "finalState": {
+        "R": 1.0099347128800626,
+        "V": -0.1944043422116286,
+        "H": 0.9719955387635286,
+        "Uc": 0.9546751123946793,
+        "L": 0.876857914563021,
+        "Lr": 0.8687924844054004,
+        "Lc": 0.008065430157620632
+      },
+      "radiusExtent": [
+        0.9430744043096503,
+        1.0931859701055342
+      ],
+      "cycle": {
+        "startTau": 996.8037301411086,
+        "endTau": 999.2473252494059,
+        "period": 2.443595108297245,
+        "radiusAmplitude": 0.15011298295077935,
+        "luminosityAmplitude": 0.28976951657318806,
+        "luminosityMaximum": 1.122750533958478,
+        "luminosityPeaks": [
+          {
+            "phase": 0.607421875,
+            "luminosity": 1.122750533958478,
+            "prominence": 0.28976951657318806
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+        "radialPeakSpread": 4.527593855385703e-10,
+        "periodRelativeSpread": 7.714678824963861e-10,
+        "waveformRelativeError": 4.924417985156494e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.19852232045012114,
+        "finalState": {
+          "R": 1.0099347129344054,
+          "V": -0.1944043421914897,
+          "H": 0.9719955387036552,
+          "Uc": 0.9546751123874209,
+          "L": 0.8768579145033131,
+          "Lr": 0.8687924843490713,
+          "Lc": 0.0080654301542418
+        },
+        "radiusExtent": [
+          0.9430729883102426,
+          1.093186112321981
+        ],
+        "cycle": {
+          "startTau": 996.8037301475167,
+          "endTau": 999.2473252557287,
+          "period": 2.44359510821198,
+          "radiusAmplitude": 0.15011302441737695,
+          "luminosityAmplitude": 0.28976935783511737,
+          "luminosityMaximum": 1.1227503869001645,
+          "luminosityPeaks": [
+            {
+              "phase": 0.607421875,
+              "luminosity": 1.1227503869001645,
+              "prominence": 0.28976935783511737
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+          "radialPeakSpread": 3.97371024973836e-12,
+          "periodRelativeSpread": 2.2145622478004982e-11,
+          "waveformRelativeError": 4.4486348596135204e-9
+        },
+        "differences": {
+          "periodRelative": 3.489342148554897e-11,
+          "luminosityAmplitudeAbsolute": 1.587380706880026e-7,
+          "radiusAmplitudeAbsolute": 4.146659760007054e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.25-alpha0",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.25,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.18209525546562882,
+      "finalState": {
+        "R": 0.9483718695623232,
+        "V": 0.0034090359146592246,
+        "H": 1.0305369074817066,
+        "Uc": 0.9853321503023177,
+        "L": 1.0337253529575055,
+        "Lr": 0.6118852846279534,
+        "Lc": 0.4218400683295519
+      },
+      "radiusExtent": [
+        0.9483649453834231,
+        1.0829400391119393
+      ],
+      "cycle": {
+        "startTau": 996.4372505901422,
+        "endTau": 998.8094024075779,
+        "period": 2.372151817435679,
+        "radiusAmplitude": 0.1345751620333946,
+        "luminosityAmplitude": 0.2987729898000624,
+        "luminosityMaximum": 1.1253617963173608,
+        "luminosityPeaks": [
+          {
+            "phase": 0.67578125,
+            "luminosity": 1.1253617963173608,
+            "prominence": 0.2987729898000624
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+        "radialPeakSpread": 6.446936318127428e-10,
+        "periodRelativeSpread": 2.119845860695885e-9,
+        "waveformRelativeError": 4.2270521396989005e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.18209752555213815,
+        "finalState": {
+          "R": 0.9483718695623937,
+          "V": 0.0034090358805447317,
+          "H": 1.0305369074786492,
+          "Uc": 0.9853321502998745,
+          "L": 1.0337253529416088,
+          "Lr": 0.6118852846156566,
+          "Lc": 0.4218400683259521
+        },
+        "radiusExtent": [
+          0.9483648897007724,
+          1.0829401472979567
+        ],
+        "cycle": {
+          "startTau": 996.4372505947669,
+          "endTau": 998.8094024097954,
+          "period": 2.3721518150285874,
+          "radiusAmplitude": 0.1345751844162948,
+          "luminosityAmplitude": 0.2987730215099924,
+          "luminosityMaximum": 1.1253618265787315,
+          "luminosityPeaks": [
+            {
+              "phase": 0.67578125,
+              "luminosity": 1.1253618265787315,
+              "prominence": 0.2987730215099924
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+          "radialPeakSpread": 3.692601779903271e-12,
+          "periodRelativeSpread": 1.0112305041925343e-11,
+          "waveformRelativeError": 8.636677836610706e-9
+        },
+        "differences": {
+          "periodRelative": 1.014728967518863e-9,
+          "luminosityAmplitudeAbsolute": 3.1709930015111354e-8,
+          "radiusAmplitudeAbsolute": 2.238290019995759e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.25-alpha0.1",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0.1,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.25,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.17853532576275746,
+      "finalState": {
+        "R": 1.0725234062475517,
+        "V": 0.07297717857294657,
+        "H": 0.9461501822662353,
+        "Uc": 0.989714773281973,
+        "L": 0.9574038026361895,
+        "Lr": 0.8006987940116013,
+        "Lc": 0.1567050086245883
+      },
+      "radiusExtent": [
+        0.9485472803761631,
+        1.0814886689394538
+      ],
+      "cycle": {
+        "startTau": 995.469283844942,
+        "endTau": 997.8561795001953,
+        "period": 2.3868956552532836,
+        "radiusAmplitude": 0.1329414508411897,
+        "luminosityAmplitude": 0.27181234480839356,
+        "luminosityMaximum": 1.107398369754323,
+        "luminosityPeaks": [
+          {
+            "phase": 0.66796875,
+            "luminosity": 1.107398369754323,
+            "prominence": 0.27181234480839356
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+        "radialPeakSpread": 9.32947274989715e-10,
+        "periodRelativeSpread": 4.1006210593354915e-9,
+        "waveformRelativeError": 7.164379790600473e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.17853768964429118,
+        "finalState": {
+          "R": 1.0725234062469708,
+          "V": 0.0729771785726293,
+          "H": 0.9461501822665701,
+          "Uc": 0.9897147732821577,
+          "L": 0.9574038026360434,
+          "Lr": 0.8006987940109485,
+          "Lc": 0.1567050086250949
+        },
+        "radiusExtent": [
+          0.9485472022844708,
+          1.0814887552401837
+        ],
+        "cycle": {
+          "startTau": 995.4692838450827,
+          "endTau": 997.8561795055231,
+          "period": 2.3868956604403593,
+          "radiusAmplitude": 0.13294147687875324,
+          "luminosityAmplitude": 0.2718123789983773,
+          "luminosityMaximum": 1.1073984037068607,
+          "luminosityPeaks": [
+            {
+              "phase": 0.66796875,
+              "luminosity": 1.1073984037068607,
+              "prominence": 0.2718123789983773
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+          "radialPeakSpread": 3.6135539005499595e-12,
+          "periodRelativeSpread": 1.1669247090926829e-11,
+          "waveformRelativeError": 5.805864596823944e-9
+        },
+        "differences": {
+          "periodRelative": 2.1731472177322075e-9,
+          "luminosityAmplitudeAbsolute": 3.418998373305726e-8,
+          "radiusAmplitudeAbsolute": 2.6037563549685672e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.25-alpha0.2",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0.2,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.25,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.17525976134292345,
+      "finalState": {
+        "R": 1.0355968345521471,
+        "V": -0.15133007304814383,
+        "H": 0.9526593228036555,
+        "Uc": 0.963449335569732,
+        "L": 0.8501509455822189,
+        "Lr": 0.6749763014433853,
+        "Lc": 0.17517464413883366
+      },
+      "radiusExtent": [
+        0.9486822613788396,
+        1.0802230345538306
+      ],
+      "cycle": {
+        "startTau": 997.0424299636803,
+        "endTau": 999.444682641293,
+        "period": 2.402252677612637,
+        "radiusAmplitude": 0.1315401049973859,
+        "luminosityAmplitude": 0.24286400395817176,
+        "luminosityMaximum": 1.0874468829643766,
+        "luminosityPeaks": [
+          {
+            "phase": 0.646484375,
+            "luminosity": 1.0874468829643766,
+            "prominence": 0.24286400395817176
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+        "radialPeakSpread": 8.376090931960789e-10,
+        "periodRelativeSpread": 6.917509231251104e-10,
+        "waveformRelativeError": 3.3979773864940937e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.17531045148376906,
+        "finalState": {
+          "R": 1.0355968345478903,
+          "V": -0.1513300730520582,
+          "H": 0.9526593228069221,
+          "Uc": 0.9634493355700635,
+          "L": 0.8501509455851517,
+          "Lr": 0.6749763014417348,
+          "Lc": 0.1751746441434169
+        },
+        "radiusExtent": [
+          0.9486822661116253,
+          1.080223034421224
+        ],
+        "cycle": {
+          "startTau": 997.0424299660546,
+          "endTau": 999.4446826419686,
+          "period": 2.402252675914042,
+          "radiusAmplitude": 0.1315401202058608,
+          "luminosityAmplitude": 0.2428641342463853,
+          "luminosityMaximum": 1.087447014162772,
+          "luminosityPeaks": [
+            {
+              "phase": 0.646484375,
+              "luminosity": 1.087447014162772,
+              "prominence": 0.2428641342463853
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+          "radialPeakSpread": 2.701394663517931e-12,
+          "periodRelativeSpread": 1.3061726406209673e-11,
+          "waveformRelativeError": 2.906222380954922e-9
+        },
+        "differences": {
+          "periodRelative": 7.070841689937879e-10,
+          "luminosityAmplitudeAbsolute": 1.3028821355121067e-7,
+          "radiusAmplitudeAbsolute": 1.5208474923866788e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.25-alpha0.4",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0.4,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.25,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.17012913972834856,
+      "finalState": {
+        "R": 1.0748318619500203,
+        "V": 0.04454941264536269,
+        "H": 0.934799301804094,
+        "Uc": 0.9849945313290374,
+        "L": 0.898351275160526,
+        "Lr": 0.745498374858848,
+        "Lc": 0.15285290030167809
+      },
+      "radiusExtent": [
+        0.9487634644895482,
+        1.0783325559123778
+      ],
+      "cycle": {
+        "startTau": 995.289273836436,
+        "endTau": 997.7227973393541,
+        "period": 2.433523502918092,
+        "radiusAmplitude": 0.12956804490817364,
+        "luminosityAmplitude": 0.2581216036552525,
+        "luminosityMaximum": 1.1184554084528524,
+        "luminosityPeaks": [
+          {
+            "phase": 0.50390625,
+            "luminosity": 1.1184554084528524,
+            "prominence": 0.2581216036552525
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.0078125,
+        "radialPeakSpread": 8.844474042035699e-10,
+        "periodRelativeSpread": 8.157249642949729e-10,
+        "waveformRelativeError": 8.50442085264003e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.1701330149445023,
+        "finalState": {
+          "R": 1.074831861955116,
+          "V": 0.044549412608210985,
+          "H": 0.9347993017974289,
+          "Uc": 0.9849945313232007,
+          "L": 0.8983512751384957,
+          "Lr": 0.7454983748430687,
+          "Lc": 0.15285290029542697
+        },
+        "radiusExtent": [
+          0.948763433789642,
+          1.0783328537603585
+        ],
+        "cycle": {
+          "startTau": 995.289273836662,
+          "endTau": 997.7227973394217,
+          "period": 2.4335235027597264,
+          "radiusAmplitude": 0.12956808140748555,
+          "luminosityAmplitude": 0.25812177215874743,
+          "luminosityMaximum": 1.1184555769870794,
+          "luminosityPeaks": [
+            {
+              "phase": 0.50390625,
+              "luminosity": 1.1184555769870794,
+              "prominence": 0.25812177215874743
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.0078125,
+          "radialPeakSpread": 3.2869262867052385e-12,
+          "periodRelativeSpread": 1.691154213586321e-11,
+          "waveformRelativeError": 3.3393818626877846e-9
+        },
+        "differences": {
+          "periodRelative": 6.507683281142818e-11,
+          "luminosityAmplitudeAbsolute": 1.6850349493502392e-7,
+          "radiusAmplitudeAbsolute": 3.649931190619071e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.33-alpha0",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.33,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.16768341496727276,
+      "finalState": {
+        "R": 1.001754030764694,
+        "V": -0.16735436219302893,
+        "H": 0.9777215432514577,
+        "Uc": 0.9688889541167315,
+        "L": 0.8752896585735579,
+        "Lr": 0.5792885138511895,
+        "Lc": 0.2960011447223683
+      },
+      "radiusExtent": [
+        0.9509969920085897,
+        1.0757654119205389
+      ],
+      "cycle": {
+        "startTau": 996.8846410213757,
+        "endTau": 999.2577020762137,
+        "period": 2.37306105483799,
+        "radiusAmplitude": 0.1247674354958116,
+        "luminosityAmplitude": 0.23772122047884614,
+        "luminosityMaximum": 1.0830139404375956,
+        "luminosityPeaks": [
+          {
+            "phase": 0.685546875,
+            "luminosity": 1.0830139404375956,
+            "prominence": 0.012014780467111574
+          },
+          {
+            "phase": 0.54296875,
+            "luminosity": 1.0721328832156272,
+            "prominence": 0.001133723245143159
+          }
+        ],
+        "significantLuminosityPeakCount": 2,
+        "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+        "radialPeakSpread": 9.008898071982685e-10,
+        "periodRelativeSpread": 7.122850465763603e-10,
+        "waveformRelativeError": 2.6998403888303124e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.16768422954804563,
+        "finalState": {
+          "R": 1.0017540307628758,
+          "V": -0.167354362191829,
+          "H": 0.977721543252889,
+          "Uc": 0.9688889541173111,
+          "L": 0.8752896585769366,
+          "Lr": 0.5792885138498043,
+          "Lc": 0.29600114472713235
+        },
+        "radiusExtent": [
+          0.9509969918319402,
+          1.075765419624668
+        ],
+        "cycle": {
+          "startTau": 996.8846410266555,
+          "endTau": 999.2577020815265,
+          "period": 2.373061054871073,
+          "radiusAmplitude": 0.12476743679338032,
+          "luminosityAmplitude": 0.23772132319259676,
+          "luminosityMaximum": 1.083014040525555,
+          "luminosityPeaks": [
+            {
+              "phase": 0.685546875,
+              "luminosity": 1.083014040525555,
+              "prominence": 0.012014885311516954
+            },
+            {
+              "phase": 0.54296875,
+              "luminosity": 1.0721327870297446,
+              "prominence": 0.0011336318157064706
+            }
+          ],
+          "significantLuminosityPeakCount": 2,
+          "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+          "radialPeakSpread": 2.5772717293648384e-12,
+          "periodRelativeSpread": 9.102378180635714e-12,
+          "waveformRelativeError": 6.334027152414122e-9
+        },
+        "differences": {
+          "periodRelative": 1.3940959497915628e-11,
+          "luminosityAmplitudeAbsolute": 1.0271375061599031e-7,
+          "radiusAmplitudeAbsolute": 1.2975687191385532e-9,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.33-alpha0.1",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0.1,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.33,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.16350644571728626,
+      "finalState": {
+        "R": 1.068730234474558,
+        "V": -0.05466744600500107,
+        "H": 0.9397550603064214,
+        "Uc": 0.975022466667762,
+        "L": 0.8688517765851759,
+        "Lr": 0.6675541773199423,
+        "Lc": 0.20129759926523358
+      },
+      "radiusExtent": [
+        0.9514664884839281,
+        1.0738953116030474
+      ],
+      "cycle": {
+        "startTau": 997.4259793223039,
+        "endTau": 999.8116693777354,
+        "period": 2.385690055431496,
+        "radiusAmplitude": 0.1224270313531085,
+        "luminosityAmplitude": 0.22669008552449266,
+        "luminosityMaximum": 1.0805736692451147,
+        "luminosityPeaks": [
+          {
+            "phase": 0.52734375,
+            "luminosity": 1.0805736692451147,
+            "prominence": 0.01291919697088506
+          },
+          {
+            "phase": 0.662109375,
+            "luminosity": 1.0680863477886318,
+            "prominence": 0.000431875514402158
+          }
+        ],
+        "significantLuminosityPeakCount": 2,
+        "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+        "radialPeakSpread": 1.0988323584371074e-9,
+        "periodRelativeSpread": 4.450326663511637e-9,
+        "waveformRelativeError": 9.55094264471391e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.16350779611740673,
+        "finalState": {
+          "R": 1.0687302344724647,
+          "V": -0.05466744601172535,
+          "H": 0.9397550603072984,
+          "Uc": 0.9750224666673108,
+          "L": 0.868851776583253,
+          "Lr": 0.6675541773163145,
+          "Lc": 0.2012975992669385
+        },
+        "radiusExtent": [
+          0.9514664758557713,
+          1.073895312299206
+        ],
+        "cycle": {
+          "startTau": 997.4259793222803,
+          "endTau": 999.8116693829841,
+          "period": 2.3856900607037232,
+          "radiusAmplitude": 0.12242705350708805,
+          "luminosityAmplitude": 0.22669008606890517,
+          "luminosityMaximum": 1.080573669072427,
+          "luminosityPeaks": [
+            {
+              "phase": 0.52734375,
+              "luminosity": 1.080573669072427,
+              "prominence": 0.012919196621474782
+            },
+            {
+              "phase": 0.662109375,
+              "luminosity": 1.0680864619903976,
+              "prominence": 0.00043198953944534324
+            }
+          ],
+          "significantLuminosityPeakCount": 2,
+          "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+          "radialPeakSpread": 2.6771918015811025e-12,
+          "periodRelativeSpread": 1.005492002263491e-11,
+          "waveformRelativeError": 5.082273782599528e-9
+        },
+        "differences": {
+          "periodRelative": 2.209938010366841e-9,
+          "luminosityAmplitudeAbsolute": 5.444125150688706e-10,
+          "radiusAmplitudeAbsolute": 2.2153979539751845e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.33-alpha0.2",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0.2,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.33,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.15985079643933772,
+      "finalState": {
+        "R": 1.0423815111582129,
+        "V": 0.12157272152804618,
+        "H": 0.9781248845841658,
+        "Uc": 0.9994510791995366,
+        "L": 1.0044387889633748,
+        "Lr": 0.7561955493511086,
+        "Lc": 0.24824323961226616
+      },
+      "radiusExtent": [
+        0.9519029733650507,
+        1.0721905082777126
+      ],
+      "cycle": {
+        "startTau": 995.6715669194112,
+        "endTau": 998.0703181076742,
+        "period": 2.3987511882629633,
+        "radiusAmplitude": 0.12028633991418614,
+        "luminosityAmplitude": 0.23010511122615862,
+        "luminosityMaximum": 1.0924049991699722,
+        "luminosityPeaks": [
+          {
+            "phase": 0.515625,
+            "luminosity": 1.0924049991699722,
+            "prominence": 0.23010511122615862
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.0078125,
+        "radialPeakSpread": 4.90272045183815e-10,
+        "periodRelativeSpread": 8.156537812918549e-11,
+        "waveformRelativeError": 1.4340139878125495e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.15988291920999564,
+        "finalState": {
+          "R": 1.04238151116847,
+          "V": 0.12157272150836558,
+          "H": 0.9781248845743502,
+          "Uc": 0.9994510791971747,
+          "L": 1.004438788941492,
+          "Lr": 0.7561955493452863,
+          "Lc": 0.2482432395962058
+        },
+        "radiusExtent": [
+          0.9519029734759656,
+          1.0721905224126809
+        ],
+        "cycle": {
+          "startTau": 995.6715669201917,
+          "endTau": 998.0703181079637,
+          "period": 2.39875118777195,
+          "radiusAmplitude": 0.12028634247008496,
+          "luminosityAmplitude": 0.23010517744453762,
+          "luminosityMaximum": 1.0924050645423016,
+          "luminosityPeaks": [
+            {
+              "phase": 0.515625,
+              "luminosity": 1.0924050645423016,
+              "prominence": 0.23010517744453762
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.0078125,
+          "radialPeakSpread": 2.5370816558734077e-12,
+          "periodRelativeSpread": 9.194470285411549e-12,
+          "waveformRelativeError": 1.8440172396407794e-9
+        },
+        "differences": {
+          "periodRelative": 2.046953717638189e-10,
+          "luminosityAmplitudeAbsolute": 6.621837900233629e-8,
+          "radiusAmplitudeAbsolute": 2.5558988259177795e-9,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.33-alpha0.4",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0.4,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.33,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.15379322501760997,
+      "finalState": {
+        "R": 0.9769748866191682,
+        "V": -0.1393911008794261,
+        "H": 1.0177729529297286,
+        "Uc": 0.977805351604391,
+        "L": 1.0196251512989951,
+        "Lr": 0.6396713339888153,
+        "Lc": 0.37995381731017985
+      },
+      "radiusExtent": [
+        0.9525962309074293,
+        1.0694200147089954
+      ],
+      "cycle": {
+        "startTau": 996.6654312040972,
+        "endTau": 999.0902194496631,
+        "period": 2.4247882455658782,
+        "radiusAmplitude": 0.11682344916332232,
+        "luminosityAmplitude": 0.25676813193818326,
+        "luminosityMaximum": 1.1325908724833964,
+        "luminosityPeaks": [
+          {
+            "phase": 0.49609375,
+            "luminosity": 1.1325908724833964,
+            "prominence": 0.25676813193818326
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.0078125,
+        "radialPeakSpread": 8.915983507051806e-10,
+        "periodRelativeSpread": 2.016441448033037e-9,
+        "waveformRelativeError": 7.490462342269299e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.15379365644199985,
+        "finalState": {
+          "R": 0.9769748865875988,
+          "V": -0.1393911008301159,
+          "H": 1.0177729529601451,
+          "Uc": 0.9778053516148482,
+          "L": 1.019625151410883,
+          "Lr": 0.6396713339653421,
+          "Lc": 0.3799538174455408
+        },
+        "radiusExtent": [
+          0.9525962212356599,
+          1.06942002583911
+        ],
+        "cycle": {
+          "startTau": 996.6654312069589,
+          "endTau": 999.0902194498874,
+          "period": 2.4247882429284573,
+          "radiusAmplitude": 0.11682348507386431,
+          "luminosityAmplitude": 0.25676841637858994,
+          "luminosityMaximum": 1.1325911569245912,
+          "luminosityPeaks": [
+            {
+              "phase": 0.49609375,
+              "luminosity": 1.1325911569245912,
+              "prominence": 0.25676841637858994
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.0078125,
+          "radialPeakSpread": 2.8552715747309776e-12,
+          "periodRelativeSpread": 1.0924266589578203e-11,
+          "waveformRelativeError": 3.03220437743131e-9
+        },
+        "differences": {
+          "periodRelative": 1.087691270384994e-9,
+          "luminosityAmplitudeAbsolute": 2.844404066726369e-7,
+          "radiusAmplitudeAbsolute": 3.591054198448518e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.45-alpha0",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.45,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.13158222068647035,
+      "finalState": {
+        "R": 1.03523477261765,
+        "V": -0.09921189731537784,
+        "H": 0.9693295762801512,
+        "Uc": 0.9792516110889112,
+        "L": 0.8894290024609961,
+        "Lr": 0.557634195751176,
+        "Lc": 0.3317948067098201
+      },
+      "radiusExtent": [
+        0.9591641658371219,
+        1.0570471231076723
+      ],
+      "cycle": {
+        "startTau": 997.2104843103469,
+        "endTau": 999.5782412107899,
+        "period": 2.3677569004429415,
+        "radiusAmplitude": 0.09788294021899113,
+        "luminosityAmplitude": 0.19942727762929713,
+        "luminosityMaximum": 1.0884496277377873,
+        "luminosityPeaks": [
+          {
+            "phase": 0.5078125,
+            "luminosity": 1.0884496277377873,
+            "prominence": 0.19942727762929713
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+        "radialPeakSpread": 3.69417385570614e-10,
+        "periodRelativeSpread": 4.6319659064788035e-10,
+        "waveformRelativeError": 1.7800263512980246e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.13163449312019998,
+        "finalState": {
+          "R": 1.0352347725872821,
+          "V": -0.09921189737032195,
+          "H": 0.969329576294307,
+          "Uc": 0.9792516110865479,
+          "L": 0.8894290024699272,
+          "Lr": 0.5576341957028602,
+          "Lc": 0.33179480676706696
+        },
+        "radiusExtent": [
+          0.9591641656994637,
+          1.0570471255642826
+        ],
+        "cycle": {
+          "startTau": 997.2104843146793,
+          "endTau": 999.5782412148533,
+          "period": 2.3677569001739585,
+          "radiusAmplitude": 0.0978829522817185,
+          "luminosityAmplitude": 0.19942735976817594,
+          "luminosityMaximum": 1.0884497053541606,
+          "luminosityPeaks": [
+            {
+              "phase": 0.5078125,
+              "luminosity": 1.0884497053541606,
+              "prominence": 0.19942735976817594
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.005859375,
+          "radialPeakSpread": 2.170930102352031e-12,
+          "periodRelativeSpread": 6.049836261414362e-12,
+          "waveformRelativeError": 5.3809786320049084e-9
+        },
+        "differences": {
+          "periodRelative": 1.1360246077174452e-10,
+          "luminosityAmplitudeAbsolute": 8.213887880970105e-8,
+          "radiusAmplitudeAbsolute": 1.2062727372530446e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.45-alpha0.1",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0.1,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.45,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.12604894864142788,
+      "finalState": {
+        "R": 0.962437082762756,
+        "V": 0.044167977096046564,
+        "H": 1.0084425922417495,
+        "Uc": 0.9977454583959303,
+        "L": 1.0860581007248902,
+        "Lr": 0.4374400971109858,
+        "Lc": 0.6486180036139043
+      },
+      "radiusExtent": [
+        0.9603288949486782,
+        1.0544553439949147
+      ],
+      "cycle": {
+        "startTau": 996.3453055613408,
+        "endTau": 998.7222378348782,
+        "period": 2.376932273537477,
+        "radiusAmplitude": 0.09412653804594451,
+        "luminosityAmplitude": 0.1965960517048264,
+        "luminosityMaximum": 1.0933030139340358,
+        "luminosityPeaks": [
+          {
+            "phase": 0.50390625,
+            "luminosity": 1.0933030139340358,
+            "prominence": 0.1965960517048264
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.0078125,
+        "radialPeakSpread": 1.2772500834756784e-9,
+        "periodRelativeSpread": 2.212771446519455e-9,
+        "waveformRelativeError": 4.787954442557882e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.1260575254918593,
+        "finalState": {
+          "R": 0.9624370827811017,
+          "V": 0.04416797727140725,
+          "H": 1.0084425922366795,
+          "Uc": 0.9977454584078731,
+          "L": 1.0860581006531258,
+          "Lr": 0.43744009716388227,
+          "Lc": 0.6486180034892435
+        },
+        "radiusExtent": [
+          0.9603288146964218,
+          1.0544553648416
+        ],
+        "cycle": {
+          "startTau": 996.3453055632041,
+          "endTau": 998.7222378344829,
+          "period": 2.3769322712788608,
+          "radiusAmplitude": 0.09412654821743316,
+          "luminosityAmplitude": 0.19659613036735757,
+          "luminosityMaximum": 1.0933030869502751,
+          "luminosityPeaks": [
+            {
+              "phase": 0.50390625,
+              "luminosity": 1.0933030869502751,
+              "prominence": 0.19659613036735757
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.0078125,
+          "radialPeakSpread": 2.0965451597021456e-12,
+          "periodRelativeSpread": 3.682850626549716e-12,
+          "waveformRelativeError": 2.6876280801173656e-9
+        },
+        "differences": {
+          "periodRelative": 9.502232334313021e-10,
+          "luminosityAmplitudeAbsolute": 7.866253115551558e-8,
+          "radiusAmplitudeAbsolute": 1.0171488651344873e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.45-alpha0.2",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0.2,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.45,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.12066616683087475,
+      "finalState": {
+        "R": 1.0465547503060177,
+        "V": 0.049330370140933145,
+        "H": 0.9749550097794994,
+        "Uc": 0.9947678626595676,
+        "L": 0.9485221953493683,
+        "Lr": 0.6223642517138808,
+        "Lc": 0.3261579436354876
+      },
+      "radiusExtent": [
+        0.9614963043044583,
+        1.0519803955514646
+      ],
+      "cycle": {
+        "startTau": 995.4448200311978,
+        "endTau": 997.8309879575438,
+        "period": 2.3861679263460474,
+        "radiusAmplitude": 0.09048422083927343,
+        "luminosityAmplitude": 0.1960537834032824,
+        "luminosityMaximum": 1.0997396658615604,
+        "luminosityPeaks": [
+          {
+            "phase": 0.5,
+            "luminosity": 1.0997396658615604,
+            "prominence": 0.1960537834032824
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.0078125,
+        "radialPeakSpread": 6.876137437217267e-10,
+        "periodRelativeSpread": 1.308450084054547e-9,
+        "waveformRelativeError": 6.936054696984426e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.12066658550370685,
+        "finalState": {
+          "R": 1.0465547503282395,
+          "V": 0.04933037003598807,
+          "H": 0.9749550097579937,
+          "Uc": 0.9947678626470556,
+          "L": 0.9485221952848575,
+          "Lr": 0.6223642517011913,
+          "Lc": 0.32615794358366623
+        },
+        "radiusExtent": [
+          0.9614961983784426,
+          1.051980435681089
+        ],
+        "cycle": {
+          "startTau": 995.4448200329375,
+          "endTau": 997.8309879602297,
+          "period": 2.386167927292149,
+          "radiusAmplitude": 0.09048423765781788,
+          "luminosityAmplitude": 0.19605389266407192,
+          "luminosityMaximum": 1.0997397710899572,
+          "luminosityPeaks": [
+            {
+              "phase": 0.5,
+              "luminosity": 1.0997397710899572,
+              "prominence": 0.19605389266407192
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.0078125,
+          "radialPeakSpread": 2.156941292241754e-12,
+          "periodRelativeSpread": 1.4293231807533003e-12,
+          "waveformRelativeError": 2.7645488981388105e-9
+        },
+        "differences": {
+          "periodRelative": 3.9649428185128954e-10,
+          "luminosityAmplitudeAbsolute": 1.0926078952699925e-7,
+          "radiusAmplitudeAbsolute": 1.6818544446017825e-8,
+          "peakCountAgrees": true
+        }
+      }
+    },
+    {
+      "id": "current-homogeneous-shell-gc0.45-alpha0.4",
+      "family": "Current lightcurve sequence",
+      "parameters": {
+        "alphaP": 0.4,
+        "maxStep": 0.03,
+        "logRtol": -11,
+        "logAtol": -13,
+        "solver": "rk45",
+        "runUntilStable": false,
+        "logStabilityTol": -2.7,
+        "stableCycles": 5,
+        "phaseMinAmplitude": 0.0001,
+        "phaseMode": "final",
+        "referenceFamily": "stellingwerf-1987",
+        "phaseWarmupTau": 40,
+        "zeta": 1,
+        "zetac": 1,
+        "gammac": 0.45,
+        "gamma1": 1.1,
+        "n": 1,
+        "s": 3,
+        "cq": 5,
+        "v0": 0,
+        "h0": 0.9,
+        "uc0": 0,
+        "tEnd": 1000,
+        "step": 0.001,
+        "logErrTol": -8,
+        "variableM": true,
+        "driver": "h",
+        "geometryMode": "homogeneous-shell",
+        "m": 10,
+        "sourceExp": -2,
+        "r0": 1.1
+      },
+      "classification": "limit_cycle",
+      "finalTau": 1000,
+      "equilibriumDistance": 0.1112799621882941,
+      "finalState": {
+        "R": 1.0461816330368239,
+        "V": 0.02581662020588871,
+        "H": 0.9687825389094178,
+        "Uc": 0.9918570263603573,
+        "L": 0.9179247953971754,
+        "Lr": 0.5939624432876334,
+        "Lc": 0.323962352109542
+      },
+      "radiusExtent": [
+        0.9636113945227675,
+        1.0477403714884876
+      ],
+      "cycle": {
+        "startTau": 995.31358787235,
+        "endTau": 997.7168959315998,
+        "period": 2.4033080592497527,
+        "radiusAmplitude": 0.0841290077270146,
+        "luminosityAmplitude": 0.21161758370114092,
+        "luminosityMaximum": 1.1223135514213172,
+        "luminosityPeaks": [
+          {
+            "phase": 0.486328125,
+            "luminosity": 1.1223135514213172,
+            "prominence": 0.21161758370114092
+          }
+        ],
+        "significantLuminosityPeakCount": 1,
+        "phaseLcMaximumMinusRadiusMinimum": 0.0078125,
+        "radialPeakSpread": 6.193749957361661e-10,
+        "periodRelativeSpread": 8.777788405416705e-10,
+        "waveformRelativeError": 2.332887242737363e-7
+      },
+      "solverCheck": {
+        "solver": "rk45",
+        "classification": "limit_cycle",
+        "finalTau": 1000,
+        "equilibriumDistance": 0.11128598005785899,
+        "finalState": {
+          "R": 1.0461816330546687,
+          "V": 0.025816620041737365,
+          "H": 0.9687825388973118,
+          "Uc": 0.9918570263402107,
+          "L": 0.9179247953578635,
+          "Lr": 0.5939624432996631,
+          "Lc": 0.32396235205820045
+        },
+        "radiusExtent": [
+          0.9636113083562519,
+          1.047740369958822
+        ],
+        "cycle": {
+          "startTau": 995.3135878755369,
+          "endTau": 997.7168959339648,
+          "period": 2.4033080584279105,
+          "radiusAmplitude": 0.08412902409227785,
+          "luminosityAmplitude": 0.21161773138596662,
+          "luminosityMaximum": 1.1223136952255102,
+          "luminosityPeaks": [
+            {
+              "phase": 0.486328125,
+              "luminosity": 1.1223136952255102,
+              "prominence": 0.21161773138596662
+            }
+          ],
+          "significantLuminosityPeakCount": 1,
+          "phaseLcMaximumMinusRadiusMinimum": 0.0078125,
+          "radialPeakSpread": 1.6779910794184616e-12,
+          "periodRelativeSpread": 4.210083897375448e-12,
+          "waveformRelativeError": 4.153370917831367e-9
+        },
+        "differences": {
+          "periodRelative": 3.419629024392634e-10,
+          "luminosityAmplitudeAbsolute": 1.4768482570204355e-7,
+          "radiusAmplitudeAbsolute": 1.636526325565768e-8,
+          "peakCountAgrees": true
+        }
+      }
+    }
+  ]
+}

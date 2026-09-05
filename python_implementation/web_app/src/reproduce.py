@@ -26,7 +26,7 @@ GEOMETRY_MODE = MODEL_PARAMETERS.get("geometryMode") or (
 OUT = ROOT / "reproduced"
 OUT.mkdir(exist_ok=True)
 (OUT / "reproduction-metadata.json").write_text(
-    json.dumps({"geometryMode": GEOMETRY_MODE, "source": "archived CSV data"}, indent=2) + "\n",
+    json.dumps({"geometryMode": GEOMETRY_MODE, "alphaP": MODEL_PARAMETERS.get("alphaP", 0), "source": "archived CSV data"}, indent=2) + "\n",
     encoding="utf-8",
 )
 FALLBACK_COLORS = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#000000"]
@@ -140,7 +140,10 @@ def series_specs(panel_id, rows):
     if panel_id == "velocity":
         return [("coordinate", "V", "model_id", "coordinate", "V")]
     if panel_id == "work":
-        return [("R", "pressure_support", None, "R", "pressure support")]
+        keys = ["pressure_support"]
+        if number(MODEL_PARAMETERS.get("alphaP"), 0) > 0 and rows and "gas_pressure_support" in rows[0]:
+            keys += ["gas_pressure_support", "turbulent_pressure_support"]
+        return [("R", key, None, "R", "pressure support") for key in keys]
     if panel_id == "tpOpacity":
         return [("log10_T_over_T0", "log10_P_over_P0", "model_id", r"$\log_{10}(T/T_0)$", r"$\log_{10}(P/P_0)$")]
     if panel_id == "periodogram":
@@ -172,7 +175,9 @@ def draw_series(ax, panel, rows):
             if x == x and y == y:
                 groups[group].append((x, y))
         for group_index, (label, points) in enumerate(groups.items()):
-            points.sort(key=lambda point: point[0])
+            # Preserve traversal order in loops: sorting by radius destroys their work area.
+            if panel_id not in {"work", "tpOpacity", "phasePortrait"}:
+                points.sort(key=lambda point: point[0])
             style = styles.get(label) or styles.get(y_key) or {
                 "color": FALLBACK_COLORS[(spec_index + group_index) % len(FALLBACK_COLORS)],
                 "linestyle": FALLBACK_DASHES[(spec_index + group_index) % len(FALLBACK_DASHES)],
