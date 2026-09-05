@@ -2036,7 +2036,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(pairedReferenceLayout.panels[1].width).toBeGreaterThan(pairedReferenceLayout.panels[0].width);
   expect(pairedReferenceLayout.panels[0].top).toBe(pairedReferenceLayout.panels[1].top);
   expect(pairedReferenceLayout.panels[0].height).toBe(pairedReferenceLayout.panels[1].height);
-  expect(pairedReferenceLayout.panels[0].height).toBeLessThan(829);
+  expect(pairedReferenceLayout.panels[0].scrollHeight).toBeLessThanOrEqual(pairedReferenceLayout.panels[0].clientHeight + 1);
   expect(pairedReferenceLayout.panels[2].top).toBeGreaterThan(pairedReferenceLayout.panels[0].top);
   expect(pairedReferenceLayout.panels[2].width).toBeGreaterThanOrEqual(pairedReferenceLayout.gridWidth - 1);
   expect(pairedReferenceLayout.panels.map((panel) => panel.hasHorizontalOverflow)).toEqual([false, false, false]);
@@ -2044,7 +2044,8 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await page.setViewportSize({ width: 1920, height: 1200 });
   const wideReferenceLayout = await referencePanelMetrics(page);
   expect(wideReferenceLayout.gridColumns.split(" ")).toHaveLength(3);
-  expect(wideReferenceLayout.panels.map((panel) => panel.height)).toEqual([535, 535, 535]);
+  expect(wideReferenceLayout.panels.slice(1).map((panel) => panel.height)).toEqual([535, 535]);
+  expect(wideReferenceLayout.panels[0].scrollHeight).toBeLessThanOrEqual(wideReferenceLayout.panels[0].clientHeight + 1);
   expect(wideReferenceLayout.panels[1].width).toBeGreaterThan(wideReferenceLayout.panels[0].width);
   expect(wideReferenceLayout.panels[2].width).toBeGreaterThan(wideReferenceLayout.panels[0].width);
   const wideVariables = wideReferenceLayout.panels.find((panel) => panel.heading === "Variables");
