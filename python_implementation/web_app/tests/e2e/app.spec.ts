@@ -1031,7 +1031,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   const thinnessSliderValue = await page.getByRole("slider", { name: "shell thinness" }).evaluate((input) => Number((input as HTMLInputElement).value));
   expect(thinnessSliderValue).toBeCloseTo(0.34, 6);
   const physicalControlsBox = await page.locator("#physicalControls").boundingBox();
-  const geometryBox = await page.locator("#variableM").boundingBox();
+  const geometryBox = await page.locator("#geometryMode").boundingBox();
   const driverBox = await page.locator("[data-driver='h']").boundingBox();
   expect(physicalControlsBox).not.toBeNull();
   expect(geometryBox).not.toBeNull();
@@ -1821,12 +1821,12 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   await expect(initialRadiusControl).toContainText("1.1");
   await expect(page.locator("[data-value-for='tEnd']")).toHaveText("300");
   await expect(page.locator(".equation-label")).toHaveCount(0);
-  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "radius-dependent");
+  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "homogeneous-shell");
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-layout", "stacked");
   await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-eta-value", "0.89");
   await expect(page.locator("#derivationPanel")).toBeVisible();
   await expect(page.locator("#derivationPanel")).toHaveAttribute("data-physics-mode", "convective");
-  await expect(page.locator("#derivationPanel")).toHaveAttribute("data-geometry-mode", "radius-dependent");
+  await expect(page.locator("#derivationPanel")).toHaveAttribute("data-geometry-mode", "homogeneous-shell");
   await expect(page.locator("#derivationPanel")).toHaveAttribute("data-driver-mode", "h");
   await expect(page.locator("#derivationPanel")).toHaveAttribute("data-convection-mode", "time-dependent");
   await page.locator("#derivationPanel").evaluate((panel) => {
@@ -1845,7 +1845,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
       fetch("/wizard_of_oz.html").then((response) => response.text()),
     ]),
   );
-  expect(sourceText).toContain("\\\\ozChiZero{\\\\chi_0}");
+  expect(sourceText).toContain("geometryDensityEquations");
   expect(sourceText).toContain("\\\\ozChi{\\\\chi}");
   expect(sourceText).toContain("\\\\ozEta{\\\\eta}");
   expect(sourceText).not.toContain("\\\\ozNeutral{\\\\gamma_r}");
@@ -1856,7 +1856,7 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
   expect(sourceText).not.toContain("free-fall/dynamical");
   expect(htmlText).toContain("ozChiZero");
   expect(htmlText).toContain("ozEta");
-  expect(htmlText).toContain("\\ozChi{\\chi}");
+  expect(htmlText).toContain('value="homogeneous-shell"');
   expect(htmlText).not.toContain("free-fall/dynamical");
   expect(sourceText).not.toContain("\\\\ozChi{\\\\chi_0}");
   expect(sourceText).not.toContain("\\\\mathrm{eff}");
@@ -1973,12 +1973,14 @@ test("app renders solver controls, canvases, and output metrics", async ({ page 
     return ctx.getImageData(0, 0, node.width, node.height).data.some((value) => value !== 0);
   });
   expect(hasVelocityPaint).toBe(true);
-  await page.locator("#variableM").uncheck();
-  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "fixed");
-  await expect(page.locator("#derivationPanel")).toHaveAttribute("data-geometry-mode", "fixed");
-  await page.locator("#variableM").check();
-  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "radius-dependent");
-  await expect(page.locator("#derivationPanel")).toHaveAttribute("data-geometry-mode", "radius-dependent");
+  await page.locator("#geometryMode").selectOption("constant");
+  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "constant");
+  await expect(page.locator("#derivationPanel")).toHaveAttribute("data-geometry-mode", "constant");
+  await page.locator("#geometryMode").selectOption("local-exponent");
+  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "local-exponent");
+  await expect(page.locator("#derivationPanel")).toHaveAttribute("data-geometry-mode", "local-exponent");
+  await page.locator("#geometryMode").selectOption("homogeneous-shell");
+  await expect(page.locator("#luminosityEquations")).toHaveAttribute("data-geometry-mode", "homogeneous-shell");
   const timeLegendHtmlBeforeMSlider = await page.locator("#timeLegend").innerHTML();
   await page.locator("input[aria-label='shell thinness']").evaluate((input) => {
     const slider = input as HTMLInputElement;

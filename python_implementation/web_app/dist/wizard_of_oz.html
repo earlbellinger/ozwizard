@@ -62,7 +62,7 @@
           ozConvLum: ["{\\color[RGB]{57,197,207}#1}", 1],
           ozZeta: ["{\\color[RGB]{179,146,240}#1}", 1],
           ozZetac: ["{\\color[RGB]{255,126,182}#1}", 1],
-          ozGammac: ["{\\color[RGB]{126,231,135}#1}", 1],
+          ozGammac: ["{\\color{var(--gammac)}#1}", 1],
           ozChi: ["{\\color[RGB]{192,202,232}#1}", 1],
           ozChiZero: ["{\\color[RGB]{154,168,189}#1}", 1],
           ozEta: ["{\\color[RGB]{255,184,108}#1}", 1],
@@ -119,7 +119,7 @@
           ozConvLum: ["{\\color[RGB]{57,197,207}#1}", 1],
           ozZeta: ["{\\color[RGB]{179,146,240}#1}", 1],
           ozZetac: ["{\\color[RGB]{255,126,182}#1}", 1],
-          ozGammac: ["{\\color[RGB]{126,231,135}#1}", 1],
+          ozGammac: ["{\\color{var(--gammac)}#1}", 1],
           ozChi: ["{\\color[RGB]{192,202,232}#1}", 1],
           ozChiZero: ["{\\color[RGB]{154,168,189}#1}", 1],
           ozEta: ["{\\color[RGB]{255,184,108}#1}", 1],
@@ -264,6 +264,8 @@
       --logo-gold-bright: #bf8700;
       --logo-violet: #8250df;
       --logo-leaf: #1a7f37;
+      /* Dark olive keeps gamma_c distinct from the teal convection series. */
+      --gammac: #667000;
       --neutral-symbol: #1f2328;
       --warn: #9a6700;
       --bad: #cf222e;
@@ -1206,6 +1208,17 @@
       width: 18px;
       height: 18px;
       accent-color: var(--focus);
+    }
+
+    #geometryMode {
+      min-width: 0;
+      max-width: 66%;
+      font: inherit;
+      color: var(--text);
+      background: var(--control-bg);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 4px;
     }
 
     .slider-list {
@@ -3068,8 +3081,12 @@
             </summary>
             <div class="slider-list" id="physicalControls"></div>
             <label class="toggle-line">
-              <span>Use radius-dependent geometry \(\ozChi{\chi}(\ozRadius{R})\)</span>
-              <input id="variableM" type="checkbox">
+              <span>Density geometry</span>
+              <select id="geometryMode" aria-label="Density geometry">
+                <option value="homogeneous-shell">Homogenous shell</option>
+                <option value="local-exponent">Local exponent</option>
+                <option value="constant">Constant exponent</option>
+              </select>
             </label>
           </details>
 

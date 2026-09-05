@@ -317,9 +317,12 @@
       let nextStep = step2;
       if (scaledError > errTol) nextStep *= 0.9;
       else if (scaledError < errTol / 2) nextStep *= 1.1;
+      const yNew = y0.map((value, i) => value + k2[i]);
+      if (!yNew.every(Number.isFinite)) throw new Error("non-finite state");
+      if (!derivative(t + step2, yNew).every(Number.isFinite)) throw new Error("non-finite derivative");
       return {
         t: t + step2,
-        y: y0.map((value, i) => value + k2[i]),
+        y: yNew,
         nextStep,
         errorNorm: scaledError,
         rejectedSteps: reset
@@ -795,7 +798,7 @@
     physical: [
       ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", RESPONSE_LOG_MIN, RESPONSE_LOG_MAX, RESPONSE_LOG_STEP, 1, COLORS.zeta],
       ["zetac", `\\(${TEX.zetac}\\)`, "convective response", RESPONSE_LOG_MIN, RESPONSE_LOG_MAX, RESPONSE_LOG_STEP, 1, COLORS.zetac],
-      ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.5, COLORS.gammac],
+      ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.5, "var(--gammac)"],
       ["m", `\\(${TEX.m}\\)`, "shell thinness", CHI_SLIDER_MIN, CHI_SLIDER_MAX, CHI_SLIDER_STEP, 10, COLORS.m],
       ["gamma1", `\\(${TEX.gamma1}\\)`, "adiabatic exponent", 1.01, 1.67, 0.01, 1.1, COLORS.gamma1],
       ["n", `\\(${TEX.n}\\)`, "\u03BA-\u03C1 exponent", 0, 3, 0.05, 1, COLORS.n],
@@ -888,6 +891,7 @@
   var HERTZSPRUNG_PROGRESSION_PRESET_NAME = "Hertzsprung progression";
   var defaultPresetParameters = {
     ...overtoneBase,
+    geometryMode: "homogeneous-shell",
     phaseWarmupTau: 40,
     zetac: 1,
     gammac: 0.5,
@@ -919,9 +923,34 @@
     "OZC abs(V) driver diagnostic": { ...ozcBase, referenceFamily: "diagnostic", zeta: 1, zetac: 1, gammac: 0.5, m: 10, gamma1: 1.1, n: 1, s: 3, sourceExp: -1, cq: 1, r0: 1.4, v0: 0, h0: 0.9, uc0: 0.7, tEnd: 20, step: 1e-3, logErrTol: -5, variableM: true, driver: "abs-v", runUntilStable: false }
   };
   function mAt(radius, p) {
-    if (!p.variableM) return p.m;
+    if (geometryModeFor(p) === "constant" || radius === 1) return p.m;
     const eta = (1 - 3 / p.m) ** (1 / 3);
     return 3 / (1 - (eta / radius) ** 3);
+  }
+  function geometryModeFor(p) {
+    return p.geometryMode ?? (p.variableM ? "local-exponent" : "constant");
+  }
+  function logDensityRatio(radius, p) {
+    if (!Number.isFinite(radius) || radius <= 0) throw new RangeError("model requires a positive finite radius");
+    if (geometryModeFor(p) !== "homogeneous-shell") return -mAt(radius, p) * Math.log(radius);
+    if (!Number.isFinite(p.m) || p.m < 3) throw new RangeError("homogeneous shell requires chi_0 >= 3");
+    if (p.m === 3) return -3 * Math.log(radius);
+    const eta = Math.cbrt(1 - 3 / p.m);
+    if (radius <= eta) throw new RangeError(`homogeneous shell boundary reached: R must exceed eta=${eta}`);
+    return -Math.log1p(p.m / 3 * Math.expm1(3 * Math.log(radius)));
+  }
+  function pressureRatio(radius, h, p) {
+    return h * Math.exp(p.gamma1 * logDensityRatio(radius, p));
+  }
+  function pressureSupport(radius, h, p) {
+    return radius ** 2 * pressureRatio(radius, h, p);
+  }
+  function convectiveTarget(radius, h, p, velocity = 0) {
+    const driver = p.driver === "h" ? Math.sqrt(h) : Math.sqrt(Math.abs(velocity));
+    return Math.exp((p.gamma1 - 1) / 2 * logDensityRatio(radius, p)) * driver;
+  }
+  function thermalPrefactor(radius, p) {
+    return p.zeta * Math.exp((1 - p.gamma1) * logDensityRatio(radius, p));
   }
   function linearDynamicPeriod(p) {
     const chi = mAt(1, p);
@@ -929,27 +958,15 @@
     if (!Number.isFinite(frequencySquared) || frequencySquared <= 0) return null;
     return 2 * Math.PI / Math.sqrt(frequencySquared);
   }
-  function derivedPowers(radius, p) {
-    const m = mAt(radius, p);
-    const gamma11 = p.gamma1 - 1;
-    const b1 = (p.s + 4) * gamma11;
-    return {
-      m,
-      b: 4 + m * (p.n - b1),
-      q: m * p.gamma1 - 2,
-      c: m - 2,
-      d: m * gamma11 / 2
-    };
-  }
   function effectiveGammaC(p) {
     return p.zetac <= 0 && Math.abs(p.uc0) <= 1e-9 ? 0 : p.gammac;
   }
   function sample(tau, y, p) {
     const [radius, velocity, pressure, convectiveVelocity] = y;
-    const powers = derivedPowers(radius, p);
+    const logDensity = logDensityRatio(radius, p);
     const gammaC = effectiveGammaC(p);
-    const rawLr = radius ** powers.b * pressure ** (p.s + 4);
-    const rawLc = radius ** -powers.c * convectiveVelocity ** 3;
+    const rawLr = radius ** 4 * Math.exp(((p.s + 4) * (p.gamma1 - 1) - p.n) * logDensity) * pressure ** (p.s + 4);
+    const rawLc = radius ** 2 * Math.exp(logDensity) * convectiveVelocity ** 3;
     const lr = (1 - gammaC) * rawLr;
     const lc = gammaC * rawLc;
     return { tau, R: radius, V: velocity, H: pressure, Uc: convectiveVelocity, Lr: lr, Lc: lc, L: lr + lc };
@@ -959,17 +976,12 @@
     if (radius <= 0 || pressure <= 0 || !Number.isFinite(radius + velocity + pressure + convectiveVelocity)) {
       throw new Error("model left the positive-radius/positive-H domain");
     }
-    const powers = derivedPowers(radius, p);
-    const gammaC = effectiveGammaC(p);
-    const lr = radius ** powers.b * pressure ** (p.s + 4);
-    const lc = radius ** -powers.c * convectiveVelocity ** 3;
-    const radiativeWeight = 1 - gammaC;
-    const driver = p.driver === "h" ? Math.sqrt(pressure) : Math.sqrt(Math.abs(velocity));
+    const luminosity = sample(_t, y, p).L;
     return [
       velocity,
-      pressure / radius ** powers.q - 1 / radius ** 2 - p.cq * velocity ** 3,
-      p.zeta * radius ** (powers.m * (p.gamma1 - 1)) * (radius ** p.sourceExp - radiativeWeight * lr - gammaC * lc),
-      p.zetac * (radius ** -powers.d * driver - convectiveVelocity)
+      pressureSupport(radius, pressure, p) - 1 / radius ** 2 - p.cq * velocity ** 3,
+      thermalPrefactor(radius, p) * (radius ** p.sourceExp - luminosity),
+      p.zetac * (convectiveTarget(radius, pressure, p, velocity) - convectiveVelocity)
     ];
   }
   function solverOptionsFromParameters(p, solver = p.solver) {
@@ -1067,11 +1079,31 @@
     }
   };
   function solveModel(p, solver = p.solver) {
+    try {
+      derivatives(0, [p.r0, p.v0, p.h0, p.uc0], p);
+    } catch (error) {
+      return {
+        rows: [],
+        status: "domain_error",
+        message: error instanceof Error ? error.message : "invalid initial state",
+        stats: { acceptedSteps: 0, rejectedSteps: 0, finalStep: 0, maxNormalizedError: 0 }
+      };
+    }
     const stabilityMinTime = Math.max(2, p.phaseWarmupTau ?? 2);
     const detector = new StabilityDetector(10 ** p.logStabilityTol, p.stableCycles, stabilityMinTime, 1.5, linearDynamicPeriod(p));
     detector.observe(sample(0, [p.r0, p.v0, p.h0, p.uc0], p));
+    let boundaryError = null;
     const result = integrate(
-      (t, y) => derivatives(t, y, p),
+      (t, y) => {
+        try {
+          const values = derivatives(t, y, p);
+          boundaryError = null;
+          return values;
+        } catch (error) {
+          boundaryError = error instanceof Error && error.message.includes("shell boundary") ? error.message : null;
+          throw error;
+        }
+      },
       [p.r0, p.v0, p.h0, p.uc0],
       p.tEnd,
       solverOptionsFromParameters(p, solver),
@@ -1082,6 +1114,10 @@
         return p.runUntilStable ? detector.observe(row) : null;
       }
     );
+    if (boundaryError && (result.status === "step_limit" || result.status === "domain_error")) {
+      result.status = "domain_error";
+      result.message = boundaryError;
+    }
     const message = p.runUntilStable && result.status === "complete" ? "max_time" : result.message;
     return {
       rows: result.points.map((point) => sample(point.t, point.y, p)),

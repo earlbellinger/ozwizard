@@ -170,9 +170,13 @@ function midpointStep(t: number, y: readonly number[], h: number, derivative: De
     let nextStep = step;
     if (scaledError > errTol) nextStep *= 0.9;
     else if (scaledError < errTol / 2) nextStep *= 1.1;
+    const yNew = y0.map((value, i) => value + k2[i]);
+    if (!yNew.every(Number.isFinite)) throw new Error("non-finite state");
+    // The midpoint stages can be valid even when their proposed endpoint leaves the domain.
+    if (!derivative(t + step, yNew).every(Number.isFinite)) throw new Error("non-finite derivative");
     return {
       t: t + step,
-      y: y0.map((value, i) => value + k2[i]),
+      y: yNew,
       nextStep,
       errorNorm: scaledError,
       rejectedSteps: reset

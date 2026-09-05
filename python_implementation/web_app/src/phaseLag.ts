@@ -1,4 +1,4 @@
-import { mAt, type ControlParameterKey, type ModelParameters, type Row } from "./model";
+import { temperatureRatio, type ControlParameterKey, type ModelParameters, type Row } from "./model";
 import { type GridModelResult } from "./grid";
 
 export type PhaseLagQuantityKey = "R" | "L" | "V" | "T" | "H" | "Uc";
@@ -66,8 +66,12 @@ export function phaseLagQuantityValue(row: Row, key: PhaseLagQuantityKey, parame
 
 export function thermodynamicTemperatureRatio(row: Row, parameters: ModelParameters): number {
   if (!Number.isFinite(row.R + row.H) || row.R <= 0 || row.H <= 0) return NaN;
-  const chi = mAt(row.R, parameters);
-  const value = row.R ** (-chi * (parameters.gamma1 - 1)) * row.H;
+  let value: number;
+  try {
+    value = temperatureRatio(row.R, row.H, parameters);
+  } catch {
+    return NaN;
+  }
   return Number.isFinite(value) && value > 0 ? value : NaN;
 }
 

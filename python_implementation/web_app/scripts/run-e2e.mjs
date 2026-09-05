@@ -429,12 +429,12 @@ async function runPlaywrightChecks() {
     assertOk(await page.getByRole("heading", { name: "Variables" }).isVisible(), "variables panel was not visible");
     assertOk(await page.getByRole("heading", { name: "Parameters" }).isVisible(), "parameters panel was not visible");
     assertOk((await page.locator(".equation-label").count()) === 0, "closure relations label should be removed");
-    assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "radius-dependent", "luminosity equations should start radius-dependent");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "homogeneous-shell", "luminosity equations should start with exact shell geometry");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-layout")) === "stacked", "geometry equation should keep eta on its own line");
     assertOk((await page.locator("#luminosityEquations").getAttribute("data-eta-value")) === "0.89", "eta should match the default chi0 value");
     assertOk(await page.locator("#derivationPanel").isVisible(), "derivation panel should be visible");
     assertOk((await page.locator("#derivationPanel").getAttribute("data-physics-mode")) === "convective", "derivation should start in convective mode");
-    assertOk((await page.locator("#derivationPanel").getAttribute("data-geometry-mode")) === "radius-dependent", "derivation should start with radius-dependent geometry");
+    assertOk((await page.locator("#derivationPanel").getAttribute("data-geometry-mode")) === "homogeneous-shell", "derivation should start with exact shell geometry");
     assertOk((await page.locator("#derivationPanel").getAttribute("data-driver-mode")) === "h", "derivation should start with pressure driver");
     assertOk((await page.locator("#derivationPanel").getAttribute("data-convection-mode")) === "time-dependent", "derivation should start with time-dependent convection");
     await page.locator("[data-derivation-block='opacity']").waitFor({ state: "attached", timeout: 15000 });
@@ -449,7 +449,7 @@ async function runPlaywrightChecks() {
     const modelText = await page.evaluate(async () => (await fetch("/src/model.ts")).text());
     const htmlText = await page.evaluate(async () => (await fetch("/wizard_of_oz.html")).text());
     assertOk(
-      sourceText.includes("\\\\ozChiZero{\\\\chi_0}") && sourceText.includes("\\\\ozChi{\\\\chi}") && sourceText.includes("\\\\ozEta{\\\\eta}") && sourceText.includes("1-\\\\ozGammac{\\\\gamma_c}") && !sourceText.includes("\\\\ozNeutral{\\\\gamma_r}") && !htmlText.includes("\\ozNeutral{\\gamma_r}") && htmlText.includes("\\ozChi{\\chi}"),
+      sourceText.includes("geometryDensityEquations") && sourceText.includes("\\\\ozChi{\\\\chi}") && sourceText.includes("\\\\ozEta{\\\\eta}") && sourceText.includes("1-\\\\ozGammac{\\\\gamma_c}") && !sourceText.includes("\\\\ozNeutral{\\\\gamma_r}") && !htmlText.includes("\\ozNeutral{\\gamma_r}") && htmlText.includes('value="homogeneous-shell"'),
       "web app source should use separate chi, chi0, and eta notation"
     );
     assertOk(modelText.includes("Thin shell form factor"), "chi0 should use Thin shell form factor terminology");
@@ -1096,12 +1096,13 @@ async function runPlaywrightChecks() {
     assertOk((await radiusToggle.getAttribute("aria-pressed")) === "false", "radius toggle did not hide the radius series");
     await radiusToggle.click();
     assertOk((await radiusToggle.getAttribute("aria-pressed")) === "true", "radius toggle did not restore the radius series");
-    await page.locator("#variableM").uncheck();
-    assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "fixed", "luminosity equations did not switch back to fixed geometry");
-    assertOk((await page.locator("#derivationPanel").getAttribute("data-geometry-mode")) === "fixed", "derivation did not switch to fixed geometry");
-    await page.locator("#variableM").check();
-    assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "radius-dependent", "luminosity equations did not switch to radius-dependent geometry");
-    assertOk((await page.locator("#derivationPanel").getAttribute("data-geometry-mode")) === "radius-dependent", "derivation did not switch to radius-dependent geometry");
+    await page.locator("#geometryMode").selectOption("constant");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "constant", "luminosity equations did not switch to constant geometry");
+    assertOk((await page.locator("#derivationPanel").getAttribute("data-geometry-mode")) === "constant", "derivation did not switch to constant geometry");
+    await page.locator("#geometryMode").selectOption("local-exponent");
+    assertOk((await page.locator("#luminosityEquations").getAttribute("data-geometry-mode")) === "local-exponent", "luminosity equations did not switch to legacy geometry");
+    assertOk((await page.locator("#derivationPanel").getAttribute("data-geometry-mode")) === "local-exponent", "derivation did not switch to legacy geometry");
+    await page.locator("#geometryMode").selectOption("homogeneous-shell");
     const timeLegendHtmlBeforeMSlider = await page.locator("#timeLegend").innerHTML();
     await page.locator("input[aria-label='shell thinness']").evaluate((input) => {
       const slider = input;

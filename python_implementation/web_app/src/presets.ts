@@ -3,8 +3,10 @@ import {
   DEFAULT_PRESET_NAME,
   HERTZSPRUNG_PROGRESSION_PRESET_NAME,
   PRESETS,
+  geometryModeFor,
   type ControlParameterKey,
   type Driver,
+  type GeometryMode,
   type ModelParameters,
   type PhaseMode,
   type ReferenceFamily
@@ -125,6 +127,7 @@ const CONTROL_PARAMETER_KEYS = Object.values(CONTROL_GROUPS)
 export const MODEL_PARAMETER_KEYS: Array<keyof ModelParameters> = [
   ...CONTROL_PARAMETER_KEYS,
   "variableM",
+  "geometryMode",
   "driver",
   "solver",
   "runUntilStable",
@@ -164,6 +167,7 @@ const NUMERIC_PARAMETER_KEYS = new Set<keyof ModelParameters>([
 ]);
 
 const DRIVER_VALUES = new Set<Driver>(["h", "abs-v"]);
+const GEOMETRY_VALUES = new Set<GeometryMode>(["constant", "local-exponent", "homogeneous-shell"]);
 const SOLVER_VALUES = new Set<SolverName>(SOLVER_NAMES);
 const REFERENCE_FAMILY_VALUES = new Set<ReferenceFamily>(["baker", "stellingwerf-1986", "stellingwerf-1987", "local-s-tran", "diagnostic"]);
 const PHASE_MODE_VALUES = new Set<PhaseMode>(["reference", "final"]);
@@ -224,7 +228,15 @@ export function emptyLocalPresetStore(): LocalPresetStore {
 }
 
 export function cloneModelParameters(parameters: ModelParameters): ModelParameters {
-  return { ...parameters };
+  const geometryMode = geometryModeFor(parameters);
+  return { ...parameters, geometryMode, variableM: geometryMode !== "constant" };
+}
+
+function mergeImportedParameters(base: ModelParameters, controls: Partial<ModelParameters>): ModelParameters {
+  // A legacy file's boolean must be resolved before an exact-shell default is merged.
+  const geometryMode = controls.geometryMode
+    ?? (controls.variableM === undefined ? geometryModeFor(base) : controls.variableM ? "local-exponent" : "constant");
+  return cloneModelParameters({ ...base, ...controls, geometryMode });
 }
 
 export function snapshotFromParameters(name: string, parameters: ModelParameters, grid?: PresetGridSnapshot): PresetSnapshot {
@@ -389,7 +401,7 @@ export function parsePresetInlistBundle(text: string, options: InlistParseOption
       ?? PRESETS[DEFAULT_PRESET_NAME];
     snapshots.push({
       name,
-      parameters: { ...base, ...current.controls },
+      parameters: mergeImportedParameters(base, current.controls),
       grid: normalizeParsedGrid(current.grid)
     });
   };
@@ -448,6 +460,7 @@ export function serializePresetInlistBundle(snapshots: readonly PresetSnapshot[]
 }
 
 export function serializePresetInlist(snapshot: PresetSnapshot): string {
+  const parameters = cloneModelParameters(snapshot.parameters);
   const lines: string[] = [
     "&preset",
     `  name = ${formatInlistValue(snapshot.name)}`,
@@ -456,7 +469,7 @@ export function serializePresetInlist(snapshot: PresetSnapshot): string {
     "&controls"
   ];
   INLIST_CONTROL_PARAMETER_KEYS.forEach((key) => {
-    const value = snapshot.parameters[key];
+    const value = parameters[key];
     lines.push(`  ${String(key)} = ${formatInlistValue(value)}`);
   });
   lines.push(
@@ -465,7 +478,7 @@ export function serializePresetInlist(snapshot: PresetSnapshot): string {
     "&solver"
   );
   SOLVER_PARAMETER_KEYS.forEach((key) => {
-    const value = snapshot.parameters[key];
+    const value = parameters[key];
     lines.push(`  ${String(key)} = ${formatInlistValue(value)}`);
   });
   lines.push("/");
@@ -725,6 +738,7 @@ function parseModelParameterValue(
     return { ok: false };
   }
   if (key === "driver" && DRIVER_VALUES.has(value as Driver)) return { ok: true, value: value as Driver };
+  if (key === "geometryMode" && GEOMETRY_VALUES.has(value as GeometryMode)) return { ok: true, value: value as GeometryMode };
   if (key === "solver" && SOLVER_VALUES.has(value as SolverName)) return { ok: true, value: value as SolverName };
   if (key === "referenceFamily" && REFERENCE_FAMILY_VALUES.has(value as ReferenceFamily)) return { ok: true, value: value as ReferenceFamily };
   if (key === "phaseMode" && PHASE_MODE_VALUES.has(value as PhaseMode)) return { ok: true, value: value as PhaseMode };
@@ -835,7 +849,7 @@ function storedPresetSnapshot(candidate: unknown): PresetSnapshot | null {
   const grid = storedGridSnapshot(candidate.grid);
   return {
     name: normalizePresetName(candidate.name),
-    parameters: { ...base, ...controls },
+    parameters: mergeImportedParameters(base, controls),
     grid
   };
 }
@@ -873,6 +887,7 @@ function storedParameterValueIsValid(key: keyof ModelParameters, value: unknown)
   if (NUMERIC_PARAMETER_KEYS.has(key)) return (value === undefined && OPTIONAL_NUMERIC_PARAMETER_KEYS.has(key)) || Number.isFinite(value);
   if (BOOLEAN_PARAMETER_KEYS.has(key)) return typeof value === "boolean";
   if (key === "driver") return typeof value === "string" && DRIVER_VALUES.has(value as Driver);
+  if (key === "geometryMode") return typeof value === "string" && GEOMETRY_VALUES.has(value as GeometryMode);
   if (key === "solver") return typeof value === "string" && SOLVER_VALUES.has(value as SolverName);
   if (key === "referenceFamily") return typeof value === "string" && REFERENCE_FAMILY_VALUES.has(value as ReferenceFamily);
   if (key === "phaseMode") return typeof value === "string" && PHASE_MODE_VALUES.has(value as PhaseMode);

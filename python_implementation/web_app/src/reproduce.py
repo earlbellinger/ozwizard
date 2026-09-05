@@ -19,11 +19,24 @@ from matplotlib.patches import Circle, Rectangle
 
 ROOT = Path(__file__).resolve().parent
 MANIFEST = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
+MODEL_PARAMETERS = MANIFEST.get("model", {}).get("displayParameters") or MANIFEST.get("model", {}).get("parameters", {})
+GEOMETRY_MODE = MODEL_PARAMETERS.get("geometryMode") or (
+    "local-exponent" if MODEL_PARAMETERS.get("variableM", False) else "constant"
+)
 OUT = ROOT / "reproduced"
 OUT.mkdir(exist_ok=True)
+(OUT / "reproduction-metadata.json").write_text(
+    json.dumps({"geometryMode": GEOMETRY_MODE, "source": "archived CSV data"}, indent=2) + "\n",
+    encoding="utf-8",
+)
 FALLBACK_COLORS = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#000000"]
 FALLBACK_DASHES = ["-", "--", "-.", ":"]
 FALLBACK_MARKERS = ["o", "s", "^", "D", "v", "P"]
+AXIS_COLOR = "#000000"
+AXIS_LINEWIDTH = 0.9
+DATA_LINEWIDTH = 1.6
+AXIS_LABEL_SIZE = 9
+TICK_LABEL_SIZE = 7
 KIND_COLORS = {
     "stable": "#D9EAD3",
     "convective": "#E69F00",
@@ -32,6 +45,47 @@ KIND_COLORS = {
     "pulsational": "#CC79A7",
     "neutral": "#999999",
 }
+
+
+def style_axes(ax):
+    """Keep paper axes legible without competing with the plotted curves."""
+    for spine in ax.spines.values():
+        spine.set_color(AXIS_COLOR)
+        spine.set_linewidth(AXIS_LINEWIDTH)
+    ax.minorticks_on()
+    ax.tick_params(
+        axis="both", which="both", direction="out", colors=AXIS_COLOR,
+        width=AXIS_LINEWIDTH, bottom=True, left=True, top=False, right=False,
+        labelbottom=True, labelleft=True, labeltop=False, labelright=False,
+    )
+    ax.tick_params(axis="both", which="major", length=3.5, pad=2.5, labelsize=TICK_LABEL_SIZE)
+    ax.tick_params(axis="both", which="minor", length=2)
+    for axis in (ax.xaxis, ax.yaxis):
+        axis.label.set_fontsize(AXIS_LABEL_SIZE)
+        axis.label.set_color(AXIS_COLOR)
+        axis.labelpad = 4
+        axis.get_offset_text().set_fontsize(TICK_LABEL_SIZE)
+        axis.get_offset_text().set_color(AXIS_COLOR)
+
+
+def draw_reference_lines(ax, panel_id):
+    """Match the equilibrium and phase guides in the browser rendering."""
+    guides = {
+        "light": {"x": [1], "y": [1]},
+        "velocity": {"x": [1], "y": [0]},
+        "phasePortrait": {"x": [1], "y": [1]},
+        "phaseLag": {"y": [0]},
+    }.get(panel_id, {})
+    line_style = {
+        "color": AXIS_COLOR, "linewidth": AXIS_LINEWIDTH,
+        "linestyle": (0, (5, 4)), "zorder": 1.5,
+    }
+    for value in guides.get("x", []):
+        if min(ax.get_xlim()) <= value <= max(ax.get_xlim()):
+            ax.axvline(value, **line_style)
+    for value in guides.get("y", []):
+        if min(ax.get_ylim()) <= value <= max(ax.get_ylim()):
+            ax.axhline(value, **line_style)
 
 
 def load_rows(relative_path: str):
@@ -67,6 +121,10 @@ def draw_snapshots(ax, rows, panel_id, columns):
         radius = max(0.12, number(row.get("R"), 1.0) * 0.65)
         if panel_id == "model":
             ax.add_patch(Circle((cx, cy), radius, facecolor=FALLBACK_COLORS[index % len(FALLBACK_COLORS)], alpha=0.72, edgecolor="black"))
+            eta = max(0.0, 1.0 - 3.0 / max(3.0, number(MODEL_PARAMETERS.get("m"), 3.0))) ** (1.0 / 3.0)
+            inner_radius = radius * eta if GEOMETRY_MODE == "constant" else 0.65 * eta
+            if inner_radius > 0:
+                ax.add_patch(Circle((cx, cy), inner_radius, facecolor="#f3f4f6", edgecolor="black", linewidth=0.7))
         else:
             ax.add_patch(Rectangle((cx - 0.62, cy - 0.72), 1.24, 1.44, facecolor="#f3f4f6", edgecolor="black"))
             piston_y = cy - 0.45 + max(0.0, min(1.0, number(row.get("R"), 1.0) / 2.0)) * 0.9
@@ -124,7 +182,7 @@ def draw_series(ax, panel, rows):
             ax.plot(
                 [point[0] for point in points], [point[1] for point in points], label=label,
                 color=style["color"], linestyle=style["linestyle"], marker=style["marker"],
-                markevery=stride, markersize=3, linewidth=1.4,
+                markevery=stride, markersize=3, linewidth=DATA_LINEWIDTH,
             )
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
@@ -140,6 +198,7 @@ def draw_series(ax, panel, rows):
         ax.set_xlim(*limits["x"])
     if limits.get("y"):
         ax.set_ylim(*limits["y"])
+    draw_reference_lines(ax, panel_id)
     ax.grid(False)
 
 
@@ -198,12 +257,15 @@ for panel in MANIFEST["panels"]:
         snapshot = panel["id"] in {"model", "heatEngine"}
         columns = 1 if suffix == "single" else 2
         fig, ax = plt.subplots(figsize=(width, height), constrained_layout=True)
+        fig.get_layout_engine().set(w_pad=3 / 72, h_pad=3 / 72)
         if snapshot:
             draw_snapshots(ax, rows, panel["id"], columns)
         elif panel["id"] in {"stability", "strip"}:
             draw_stability_cells(ax, panel, rows, panel["id"])
         else:
             draw_series(ax, panel, rows)
+        if not snapshot:
+            style_axes(ax)
         stem = OUT / f"{panel['id']}-{suffix}"
         fig.savefig(stem.with_suffix(".pdf"))
         fig.savefig(stem.with_suffix(".svg"))

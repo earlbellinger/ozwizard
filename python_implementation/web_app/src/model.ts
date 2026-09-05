@@ -4,6 +4,7 @@ import { findLuminosityMaxima, guidedMinSeparationFromPeriod } from "./phase";
 export type Driver = "h" | "abs-v";
 export type ReferenceFamily = "baker" | "stellingwerf-1986" | "stellingwerf-1987" | "local-s-tran" | "diagnostic";
 export type PhaseMode = "reference" | "final";
+export type GeometryMode = "constant" | "local-exponent" | "homogeneous-shell";
 
 export interface ModelParameters {
   zeta: number;
@@ -25,7 +26,9 @@ export interface ModelParameters {
   logRtol: number;
   logAtol: number;
   logErrTol: number;
+  /** Legacy input flag. Explicit geometryMode takes precedence. */
   variableM: boolean;
+  geometryMode?: GeometryMode;
   driver: Driver;
   solver: SolverName;
   runUntilStable: boolean;
@@ -131,7 +134,7 @@ export const CONTROL_GROUPS: Record<"physical" | "initial" | "integration", Cont
   physical: [
     ["zeta", `\\(${TEX.zeta}\\)`, "thermal response", RESPONSE_LOG_MIN, RESPONSE_LOG_MAX, RESPONSE_LOG_STEP, 1, COLORS.zeta],
     ["zetac", `\\(${TEX.zetac}\\)`, "convective response", RESPONSE_LOG_MIN, RESPONSE_LOG_MAX, RESPONSE_LOG_STEP, 1, COLORS.zetac],
-    ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.5, COLORS.gammac],
+    ["gammac", `\\(${TEX.gammac}\\)`, "convective flux fraction", 0, 1, 0.01, 0.5, "var(--gammac)"],
     ["m", `\\(${TEX.m}\\)`, "shell thinness", CHI_SLIDER_MIN, CHI_SLIDER_MAX, CHI_SLIDER_STEP, 10, COLORS.m],
     ["gamma1", `\\(${TEX.gamma1}\\)`, "adiabatic exponent", 1.01, 1.67, 0.01, 1.1, COLORS.gamma1],
     ["n", `\\(${TEX.n}\\)`, "κ-ρ exponent", 0, 3, 0.05, 1, COLORS.n],
@@ -231,6 +234,7 @@ export const HERTZSPRUNG_PROGRESSION_PRESET_NAME = "Hertzsprung progression";
 
 const defaultPresetParameters: ModelParameters = {
   ...overtoneBase,
+  geometryMode: "homogeneous-shell",
   phaseWarmupTau: 40,
   zetac: 1,
   gammac: 0.5,
@@ -264,9 +268,49 @@ export const PRESETS: Record<string, ModelParameters> = {
 };
 
 export function mAt(radius: number, p: ModelParameters): number {
-  if (!p.variableM) return p.m;
+  if (geometryModeFor(p) === "constant" || radius === 1) return p.m;
   const eta = (1 - 3 / p.m) ** (1 / 3);
   return 3 / (1 - (eta / radius) ** 3);
+}
+
+export function geometryModeFor(p: Pick<ModelParameters, "geometryMode" | "variableM">): GeometryMode {
+  return p.geometryMode ?? (p.variableM ? "local-exponent" : "constant");
+}
+
+/** Finite-displacement density law; mAt remains the local geometrical slope. */
+export function logDensityRatio(radius: number, p: ModelParameters): number {
+  if (!Number.isFinite(radius) || radius <= 0) throw new RangeError("model requires a positive finite radius");
+  if (geometryModeFor(p) !== "homogeneous-shell") return -mAt(radius, p) * Math.log(radius);
+  if (!Number.isFinite(p.m) || p.m < 3) throw new RangeError("homogeneous shell requires chi_0 >= 3");
+  if (p.m === 3) return -3 * Math.log(radius);
+  const eta = Math.cbrt(1 - 3 / p.m);
+  if (radius <= eta) throw new RangeError(`homogeneous shell boundary reached: R must exceed eta=${eta}`);
+  return -Math.log1p((p.m / 3) * Math.expm1(3 * Math.log(radius)));
+}
+
+export function densityRatio(radius: number, p: ModelParameters): number {
+  return Math.exp(logDensityRatio(radius, p));
+}
+
+export function pressureRatio(radius: number, h: number, p: ModelParameters): number {
+  return h * Math.exp(p.gamma1 * logDensityRatio(radius, p));
+}
+
+export function temperatureRatio(radius: number, h: number, p: ModelParameters): number {
+  return h * Math.exp((p.gamma1 - 1) * logDensityRatio(radius, p));
+}
+
+export function pressureSupport(radius: number, h: number, p: ModelParameters): number {
+  return radius ** 2 * pressureRatio(radius, h, p);
+}
+
+export function convectiveTarget(radius: number, h: number, p: ModelParameters, velocity = 0): number {
+  const driver = p.driver === "h" ? Math.sqrt(h) : Math.sqrt(Math.abs(velocity));
+  return Math.exp((p.gamma1 - 1) / 2 * logDensityRatio(radius, p)) * driver;
+}
+
+export function thermalPrefactor(radius: number, p: ModelParameters): number {
+  return p.zeta * Math.exp((1 - p.gamma1) * logDensityRatio(radius, p));
 }
 
 export function linearDynamicPeriod(p: ModelParameters): number | null {
@@ -295,10 +339,10 @@ export function effectiveGammaC(p: Pick<ModelParameters, "gammac" | "zetac" | "u
 
 export function sample(tau: number, y: readonly number[], p: ModelParameters): Row {
   const [radius, velocity, pressure, convectiveVelocity] = y;
-  const powers = derivedPowers(radius, p);
+  const logDensity = logDensityRatio(radius, p);
   const gammaC = effectiveGammaC(p);
-  const rawLr = radius ** powers.b * pressure ** (p.s + 4);
-  const rawLc = radius ** (-powers.c) * convectiveVelocity ** 3;
+  const rawLr = radius ** 4 * Math.exp(((p.s + 4) * (p.gamma1 - 1) - p.n) * logDensity) * pressure ** (p.s + 4);
+  const rawLc = radius ** 2 * Math.exp(logDensity) * convectiveVelocity ** 3;
   const lr = (1 - gammaC) * rawLr;
   const lc = gammaC * rawLc;
   return { tau, R: radius, V: velocity, H: pressure, Uc: convectiveVelocity, Lr: lr, Lc: lc, L: lr + lc };
@@ -309,17 +353,12 @@ export function derivatives(_t: number, y: readonly number[], p: ModelParameters
   if (radius <= 0 || pressure <= 0 || !Number.isFinite(radius + velocity + pressure + convectiveVelocity)) {
     throw new Error("model left the positive-radius/positive-H domain");
   }
-  const powers = derivedPowers(radius, p);
-  const gammaC = effectiveGammaC(p);
-  const lr = radius ** powers.b * pressure ** (p.s + 4);
-  const lc = radius ** (-powers.c) * convectiveVelocity ** 3;
-  const radiativeWeight = 1 - gammaC;
-  const driver = p.driver === "h" ? Math.sqrt(pressure) : Math.sqrt(Math.abs(velocity));
+  const luminosity = sample(_t, y, p).L;
   return [
     velocity,
-    pressure / radius ** powers.q - 1 / radius ** 2 - p.cq * velocity ** 3,
-    p.zeta * radius ** (powers.m * (p.gamma1 - 1)) * (radius ** p.sourceExp - radiativeWeight * lr - gammaC * lc),
-    p.zetac * (radius ** (-powers.d) * driver - convectiveVelocity)
+    pressureSupport(radius, pressure, p) - 1 / radius ** 2 - p.cq * velocity ** 3,
+    thermalPrefactor(radius, p) * (radius ** p.sourceExp - luminosity),
+    p.zetac * (convectiveTarget(radius, pressure, p, velocity) - convectiveVelocity)
   ];
 }
 
@@ -434,11 +473,29 @@ export class StabilityDetector {
 }
 
 export function solveModel(p: ModelParameters, solver = p.solver): SolveResult {
+  try {
+    derivatives(0, [p.r0, p.v0, p.h0, p.uc0], p);
+  } catch (error) {
+    return {
+      rows: [], status: "domain_error", message: error instanceof Error ? error.message : "invalid initial state",
+      stats: { acceptedSteps: 0, rejectedSteps: 0, finalStep: 0, maxNormalizedError: 0 }
+    };
+  }
   const stabilityMinTime = Math.max(2, p.phaseWarmupTau ?? 2);
   const detector = new StabilityDetector(10 ** p.logStabilityTol, p.stableCycles, stabilityMinTime, 1.5, linearDynamicPeriod(p));
   detector.observe(sample(0, [p.r0, p.v0, p.h0, p.uc0], p));
+  let boundaryError: string | null = null;
   const result = integrate(
-    (t, y) => derivatives(t, y, p),
+    (t, y) => {
+      try {
+        const values = derivatives(t, y, p);
+        boundaryError = null;
+        return values;
+      } catch (error) {
+        boundaryError = error instanceof Error && error.message.includes("shell boundary") ? error.message : null;
+        throw error;
+      }
+    },
     [p.r0, p.v0, p.h0, p.uc0],
     p.tEnd,
     solverOptionsFromParameters(p, solver),
@@ -449,6 +506,10 @@ export function solveModel(p: ModelParameters, solver = p.solver): SolveResult {
       return p.runUntilStable ? detector.observe(row) : null;
     }
   );
+  if (boundaryError && (result.status === "step_limit" || result.status === "domain_error")) {
+    result.status = "domain_error";
+    result.message = boundaryError;
+  }
   const message = p.runUntilStable && result.status === "complete" ? "max_time" : result.message;
   return {
     rows: result.points.map((point) => sample(point.t, point.y, p)),

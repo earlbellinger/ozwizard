@@ -1,4 +1,4 @@
-import { mAt, type ModelParameters, type Row } from "./model";
+import { geometryModeFor, type ModelParameters, type Row } from "./model";
 
 export interface RgbColor {
   r: number;
@@ -155,5 +155,13 @@ export function shellGeometryFor(radius: number, formFactor: number): ShellGeome
 }
 
 export function shellGeometryFromModel(row: Row, parameters: ModelParameters): ShellGeometry {
-  return shellGeometryFor(row.R, mAt(row.R, parameters));
+  if (geometryModeFor(parameters) === "constant") return shellGeometryFor(row.R, parameters.m);
+  const outerRadius = Number.isFinite(row.R) ? Math.max(0, row.R) : 1;
+  const innerRadius = Math.cbrt(Math.max(0, 1 - 3 / parameters.m));
+  const thickness = Math.max(0, outerRadius - innerRadius);
+  return {
+    eta: outerRadius > 0 ? innerRadius / outerRadius : 0,
+    outerRadius, innerRadius, thickness,
+    thicknessFraction: outerRadius > 0 ? thickness / outerRadius : 0
+  };
 }

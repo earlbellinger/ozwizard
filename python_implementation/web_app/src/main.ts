@@ -15,6 +15,12 @@ import {
   type ModelParameters,
   type Row,
   derivedPowers,
+  geometryModeFor,
+  pressureRatio as modelPressureRatio,
+  temperatureRatio as modelTemperatureRatio,
+  pressureSupport as modelPressureSupport,
+  convectiveTarget as modelConvectiveTarget,
+  thermalPrefactor,
   effectiveGammaC,
   linearDynamicPeriod,
   mAt,
@@ -372,7 +378,7 @@ function canvasMarkerOutlineColor(alpha = 0.9): string {
 const THEME = {
   get axisGrid() { return cssVariable("--canvas-grid", "#30363D"); },
   get axisText() { return cssVariable("--muted", "#9198A1"); },
-  get axisBorder() { return cssVariable("--line", "#3D444D"); },
+  get axisBorder() { return paperModeActive() ? "#000000" : cssVariable("--line", "#3D444D"); },
   get plotBackground() { return cssVariable("--plot-canvas-bg", "#000000"); },
   get selectionFill() { return cssVariable("--selection-fill", "#388BFD1A"); },
   get selectionStroke() { return cssVariable("--focus", "#1F6FEB"); },
@@ -1840,8 +1846,7 @@ function sonificationSampleSignature(samples: SonificationSample[]): string {
 }
 
 function acousticPressure(row: Row, parameters = state): number {
-  const m = mAt(row.R, parameters);
-  return row.H * row.R ** (-m * parameters.gamma1);
+  return pressureRatio(row, parameters);
 }
 
 function acousticPressureSignal(row: Row, parameters = state): number {
@@ -1978,10 +1983,12 @@ function buildControls(): void {
   buildParameterTable();
   setupGridControls();
 
-  const variableM = el<HTMLInputElement>("variableM");
-  variableM.checked = state.variableM;
-  variableM.addEventListener("change", (event) => {
-    state.variableM = (event.target as HTMLInputElement).checked;
+  const geometryMode = el<HTMLSelectElement>("geometryMode");
+  geometryMode.value = geometryModeFor(state);
+  geometryMode.addEventListener("change", (event) => {
+    const value = (event.target as HTMLSelectElement).value;
+    state.geometryMode = value === "constant" || value === "local-exponent" ? value : "homogeneous-shell";
+    state.variableM = state.geometryMode !== "constant";
     updateEquationBlocks();
     refreshActivePreset();
     scheduleSolve();
@@ -2706,7 +2713,7 @@ function paperRenderDimensions(definition: PaperPanelDefinition, size: PaperFigu
   else if (definition.id === "heatEngine") cssHeight = paperSnapshotCanvasHeight(cssWidth, snapshotCount, 244);
   else if (definition.id === "fourier") {
     const columns = cssWidth >= 780 ? 2 : 1;
-    cssHeight = Math.max(280, Math.ceil(4 / columns) * 238);
+    cssHeight = Math.max(280, Math.ceil(4 / columns) * 238) + 40;
   } else {
     cssHeight = Math.max(260, Math.round(cssWidth * PAPER_PANEL_ASPECT_RATIOS[definition.id]));
   }
@@ -2808,7 +2815,7 @@ function paperExportState(): Omit<PaperExportManifestV2, "panels"> {
   } : null;
   const serializedGridResults = (results: readonly GridModelResult[]) => results.map((result) => ({
     id: result.id,
-    parameters: { ...result.parameters },
+    parameters: { ...result.parameters, geometryMode: geometryModeFor(result.parameters) },
     sliderValues: { ...result.sliderValues },
     variedValues: { ...result.variedValues },
     period: result.period,
@@ -2848,8 +2855,8 @@ function paperExportState(): Omit<PaperExportManifestV2, "panels"> {
     createdAt: new Date().toISOString(),
     theme: "paper",
     model: {
-      parameters: { ...state },
-      displayParameters: { ...latestPhaseParameters },
+      parameters: { ...state, geometryMode: geometryModeFor(state) },
+      displayParameters: { ...latestPhaseParameters, geometryMode: geometryModeFor(latestPhaseParameters) },
       preset: activePreset,
       solver: state.solver,
       status: latestResult.status,
@@ -2903,8 +2910,8 @@ function paperExportState(): Omit<PaperExportManifestV2, "panels"> {
       schema: "ozwizard-paper-provenance-v2",
       experiment: {
         preset: activePreset,
-        parameters: { ...state },
-        displayedParameters: { ...latestPhaseParameters }
+        parameters: { ...state, geometryMode: geometryModeFor(state) },
+        displayedParameters: { ...latestPhaseParameters, geometryMode: geometryModeFor(latestPhaseParameters) }
       },
       integration: {
         solver: state.solver,
@@ -3972,6 +3979,7 @@ function controlSymbolHtml(key: ControlParameterKey): string {
 }
 
 function controlColor(key: ControlParameterKey): string {
+  if (key === "gammac") return cssVariable("--gammac", COLORS.gammac);
   return controlDefForKey(key)?.[7] ?? THEME.neutralSymbol;
 }
 
@@ -4823,7 +4831,7 @@ function buildParameterTable(): void {
     .join("");
 
   tunableTable.innerHTML = controlRows(CONTROL_GROUPS.physical) + `
-      <tr><td class="symbol-cell" style="--color:${COLORS.m}">geometry</td><td>${meaning(`Switch between fixed geometry \\(\\ozChi{\\chi}=${TEX.m}\\) and radius-dependent local geometry \\(\\ozChi{\\chi}(${TEX.R})\\).`)}</td></tr>
+      <tr><td class="symbol-cell" style="--color:${COLORS.m}">geometry</td><td>${meaning("Choose the exact homogeneous-shell density, the legacy local-exponent prescription, or a constant exponent. All nonlinear terms use the selected density ratio f.")}</td></tr>
       <tr><td class="symbol-cell" style="--color:${COLORS.H}">driver</td><td>${meaning(`Convective driving choice: the standard Stellingwerf pressure form is \\(\\sqrt{${TEX.H}}\\); \\(\\sqrt{|${TEX.V}|}\\) is retained as a diagnostic variant.`)}</td></tr>
     `;
   numericalTable.innerHTML = controlRows(CONTROL_GROUPS.integration) + `
@@ -4876,40 +4884,44 @@ function derivationConditionRows(stability: AnalyticStabilityResult): string {
     .join("");
 }
 
-function buildGeometryDerivation(parameters: ModelParameters): string {
+function geometryDensityEquations(parameters: ModelParameters): string[] {
+  const mode = geometryModeFor(parameters);
   const eta = Math.cbrt(Math.max(0, 1 - 3 / parameters.m));
-  const etaDisplay = fmtFixed(eta, 3);
-  const chiDisplay = fmt(parameters.m, 3);
-  const lines = parameters.variableM
-    ? [
-        `\\ozEta{\\eta} &= \\left(1-\\frac{3}{${TEX.m}}\\right)^{1/3}=\\ozEta{${etaDisplay}}`,
-        `\\ozChi{\\chi}(${TEX.R}) &= \\frac{3}{1-(\\ozEta{\\eta}/${TEX.R})^3}`,
-        `\\ozChi{\\chi}(1) &= ${TEX.m}=\\ozChiZero{${chiDisplay}}`,
-        `\\frac{\\ozNeutral{\\rho}}{\\ozNeutral{\\rho}_0} &= ${TEX.R}^{-\\ozChi{\\chi}(${TEX.R})}`
-      ]
-    : [
-        `\\ozChi{\\chi} &= ${TEX.m}=\\ozChiZero{${chiDisplay}}`,
-        `\\frac{\\ozNeutral{\\rho}}{\\ozNeutral{\\rho}_0} &= ${TEX.R}^{-${TEX.m}}`
-      ];
+  if (mode === "constant") return [`f(${TEX.R}) &\\equiv \\rho/\\rho_0=${TEX.R}^{-${TEX.m}}`];
+  return [
+    `\\ozEta{\\eta} &= \\left(1-\\frac{3}{${TEX.m}}\\right)^{1/3}`,
+    `&= \\ozEta{${fmtFixed(eta, 3)}}`,
+    `\\ozChi{\\chi}_{\\rm local}(${TEX.R}) &= \\frac{3${TEX.R}^3}{${TEX.R}^3-\\ozEta{\\eta}^3}`,
+    `f(${TEX.R}) &\\equiv \\rho/\\rho_0`,
+    mode === "homogeneous-shell"
+      ? `&=\\frac{1-\\ozEta{\\eta}^3}{${TEX.R}^3-\\ozEta{\\eta}^3},\\quad ${TEX.R}>\\ozEta{\\eta}`
+      : `&=${TEX.R}^{-\\ozChi{\\chi}_{\\rm local}(${TEX.R})}`
+  ];
+}
+
+function buildGeometryDerivation(parameters: ModelParameters): string {
+  const mode = geometryModeFor(parameters);
+  const descriptions = {
+    "homogeneous-shell": "Exact mass conservation for a homogeneous shell with fixed inner radius is active. The local logarithmic slope describes compression; the density ratio f enters every nonlinear term.",
+    "local-exponent": "The legacy prescription inserts the local shell slope into a finite power of radius. This is a phenomenological density closure and differs from exact homogeneous-shell mass conservation at finite amplitude.",
+    "constant": "A constant exponent sets the density ratio. The exponent stays at the shell-thinness slider value."
+  };
   return derivationBlock(
     "geometry",
     "Geometry and Shell Thinness",
-    `<p>${parameters.variableM
-      ? "Radius-dependent shell geometry is active, so the local thin shell factor changes with radius."
-      : "Fixed shell geometry is active, so the thin shell factor stays at the slider value."}</p>${derivationEquation(lines)}`
+    `<p>${descriptions[mode]}</p>${derivationEquation(geometryDensityEquations(parameters))}`
   );
 }
 
 function buildOpacityDerivation(parameters: ModelParameters): string {
-  const powers = derivedPowers(1, parameters);
   return derivationBlock(
     "opacity",
     "Opacity and Radiative Scaling",
     derivationEquation([
-      `\\frac{\\ozNeutral{T}}{\\ozNeutral{T}_0} &= ${TEX.R}^{-\\ozChi{\\chi}(${TEX.gamma1}-1)}${TEX.H}`,
+      `\\frac{\\ozNeutral{P}}{\\ozNeutral{P}_0} &= ${TEX.H}f^{${TEX.gamma1}}`,
+      `\\frac{\\ozNeutral{T}}{\\ozNeutral{T}_0} &= ${TEX.H}f^{${TEX.gamma1}-1}`,
       `\\frac{\\ozNeutral{\\kappa}}{\\ozNeutral{\\kappa}_0} &= \\left(\\frac{\\ozNeutral{\\rho}}{\\ozNeutral{\\rho}_0}\\right)^{${TEX.n}}\\left(\\frac{\\ozNeutral{T}}{\\ozNeutral{T}_0}\\right)^{-${TEX.s}}`,
-      `&= ${TEX.R}^{-\\ozChi{\\chi}${TEX.n}+\\ozChi{\\chi}${TEX.s}(${TEX.gamma1}-1)}${TEX.H}^{-${TEX.s}}`,
-      `\\ozNeutral{b} &= 4+\\ozChi{\\chi}\\left[${TEX.n}-(${TEX.s}+4)(${TEX.gamma1}-1)\\right]=\\ozNeutral{${fmt(powers.b, 3)}}`
+      `&= f^{${TEX.n}-${TEX.s}(${TEX.gamma1}-1)}${TEX.H}^{-${TEX.s}}`
     ])
   );
 }
@@ -4924,7 +4936,7 @@ function buildEquilibriumDerivation(parameters: ModelParameters): string {
     derivationEquation([
       `${TEX.R}_0 &= 1,\\quad ${TEX.V}_0=0,\\quad ${TEX.H}_0=1,\\quad ${TEX.Uc}_0=1`,
       `\\left.\\frac{\\ozNeutral{\\rho}}{\\ozNeutral{\\rho}_0}\\right|_0 &= 1,\\quad \\left.\\frac{\\ozNeutral{P}}{\\ozNeutral{P}_0}\\right|_0 = 1,\\quad \\left.\\frac{\\ozNeutral{T}}{\\ozNeutral{T}_0}\\right|_0=1`,
-      `\\left.\\frac{\\ozNeutral{\\kappa}}{\\ozNeutral{\\kappa}_0}\\right|_0 &= 1,\\quad \\ozNeutral{b}=\\ozNeutral{${fmt(powers.b, 3)}},\\quad \\ozNeutral{c}=\\ozChi{\\chi}-2=\\ozNeutral{${fmt(powers.c, 3)}}`,
+      `\\left.\\frac{\\ozNeutral{\\kappa}}{\\ozNeutral{\\kappa}_0}\\right|_0 &= 1,\\quad \\ozNeutral{b}=\\ozNeutral{${fmt(powers.b, 3)}},\\quad \\ozNeutral{c}=${TEX.m}-2=\\ozNeutral{${fmt(powers.c, 3)}}`,
       `${TEX_GAMMAC_EFF} &= \\ozGammac{${fmt(gammaC, 3)}}`,
       `\\ozRadiative{L_{r,0}} &= 1-${TEX_GAMMAC_EFF}=\\ozRadiative{${fmt(1 - gammaC, 3)}}`,
       `\\ozConvLum{L_{c,0}} &= ${TEX_GAMMAC_EFF}=\\ozConvLum{${fmt(gammaC, 3)}}`,
@@ -4948,30 +4960,27 @@ function buildLuminosityDerivation(parameters: ModelParameters): string {
     `${note}${derivationEquation([
       `\\ozNeutral{L_b} &= ${TEX.R}^{${TEX.sourceExp}}`,
       `${TEX_GAMMAC_EFF} &= \\ozGammac{${fmt(gammaC, 3)}}`,
-      `${TEX.Lr} &= (1-${TEX_GAMMAC_EFF})\\,${TEX.R}^{\\ozNeutral{b}}${TEX.H}^{${TEX.s}+4}`,
-      `${TEX.Lc} &= ${TEX_GAMMAC_EFF}\\,${TEX.R}^{-(\\ozNeutral{c})}${TEX.Uc}^{3}`,
+      `${TEX.Lr} &= (1-${TEX_GAMMAC_EFF})\\,${TEX.R}^{4}f^{(${TEX.s}+4)(${TEX.gamma1}-1)-${TEX.n}}${TEX.H}^{${TEX.s}+4}`,
+      `${TEX.Lc} &= ${TEX_GAMMAC_EFF}\\,${TEX.R}^{2}f${TEX.Uc}^{3}`,
       `${TEX.L} &= ${TEX.Lr}+${TEX.Lc}`,
-      `\\frac{d${TEX.H}}{d${TEX.tau}} &= ${TEX.zeta}\\,${TEX.R}^{\\ozChi{\\chi}(${TEX.gamma1}-1)}\\left(${TEX.R}^{${TEX.sourceExp}}-${TEX.L}\\right)`
+      `\\frac{d${TEX.H}}{d${TEX.tau}} &= ${TEX.zeta}\\,f^{1-${TEX.gamma1}}\\left(${TEX.R}^{${TEX.sourceExp}}-${TEX.L}\\right)`
     ])}`
   );
 }
 
 function buildConvectionDerivation(parameters: ModelParameters): string {
   const driver = parameters.driver === "abs-v" ? `\\sqrt{|${TEX.V}|}` : `\\sqrt{${TEX.H}}`;
-  const powers = derivedPowers(1, parameters);
   const intro = parameters.zetac <= 0
     ? "<p>Time-dependent convection is off in the active physics because \\(\\zeta_c=0\\).</p>"
     : `<p>The active convective driver is \\(${driver}\\).</p>`;
   const evolution = parameters.zetac <= 0
     ? `\\frac{d${TEX.Uc}}{d${TEX.tau}} = 0`
-    : `\\frac{d${TEX.Uc}}{d${TEX.tau}} = ${TEX.zetac}\\left[${TEX.R}^{-\\ozNeutral{d}}${driver}-${TEX.Uc}\\right]`;
+    : `\\frac{d${TEX.Uc}}{d${TEX.tau}} = ${TEX.zetac}\\left[f^{(${TEX.gamma1}-1)/2}${driver}-${TEX.Uc}\\right]`;
   return derivationBlock(
     "convection",
     "Convection Assumption",
     `${intro}${derivationEquation([
-      `\\ozNeutral{d} &= \\frac{\\ozChi{\\chi}(${TEX.gamma1}-1)}{2}=\\ozNeutral{${fmt(powers.d, 3)}}`,
-      evolution,
-      `\\ozNeutral{c} &= \\ozChi{\\chi}-2=\\ozNeutral{${fmt(powers.c, 3)}}`
+      evolution
     ])}`
   );
 }
@@ -4979,6 +4988,7 @@ function buildConvectionDerivation(parameters: ModelParameters): string {
 function buildLinearDerivation(parameters: ModelParameters, stability: AnalyticStabilityResult): string {
   const modeLabel = stability.physicsMode === "convective" ? "time-dependent convective" : "reduced frozen-convection/radiative";
   const definitions = derivationEquation([
+    `\\ozNeutral{b} &= 4+${TEX.m}\\left[${TEX.n}-(${TEX.s}+4)(${TEX.gamma1}-1)\\right],\\quad \\ozNeutral{c}=${TEX.m}-2`,
     `\\ozNeutral{E} &= (1-${TEX_GAMMAC_EFF})\\ozNeutral{b}-${TEX_GAMMAC_EFF}\\ozNeutral{c}-${TEX.sourceExp}=\\ozNeutral{${fmt(stability.eCoefficient, 3)}}`,
     `\\ozNeutral{Q} &= (1-${TEX_GAMMAC_EFF})(${TEX.s}+4)=\\ozNeutral{${fmt(stability.terms.radiativeThermal, 3)}}`,
     `\\ozNeutral{S} &= ${TEX.m}${TEX.gamma1}-4=\\ozNeutral{${fmt(stability.terms.restoring, 3)}}`
@@ -4994,7 +5004,7 @@ function buildLinearDerivation(parameters: ModelParameters, stability: AnalyticS
     "linear",
     "Linear Analysis and Stability Criteria",
     `
-      <p>Linearized about \\(R=H=U_c=1\\) with active ${modeLabel} physics.</p>
+      <p>Linearized about \\(R=H=U_c=1\\) with active ${modeLabel} physics. All three closures have the same density and logarithmic slope at equilibrium, so these linear coefficients are unchanged.</p>
       ${definitions}
       ${reducedNote}
       ${derivationEquation(conditions)}
@@ -5018,7 +5028,7 @@ function buildDerivationHtml(parameters: ModelParameters, stability: AnalyticSta
 
 function derivationSignature(parameters: ModelParameters, stability: AnalyticStabilityResult): string {
   return [
-    parameters.variableM ? "variable" : "fixed",
+    geometryModeFor(parameters),
     parameters.driver,
     stability.physicsMode,
     parameters.zeta,
@@ -5043,7 +5053,7 @@ function updateDerivationPanel(parameters: ModelParameters = state, stability = 
   const details = document.getElementById("derivationPanel") as HTMLDetailsElement | null;
   if (details) {
     details.dataset.physicsMode = stability.physicsMode;
-    details.dataset.geometryMode = parameters.variableM ? "radius-dependent" : "fixed";
+    details.dataset.geometryMode = geometryModeFor(parameters);
     details.dataset.driverMode = parameters.driver;
     details.dataset.convectionMode = parameters.zetac <= 0 ? "frozen" : "time-dependent";
   }
@@ -5098,25 +5108,23 @@ function updateEquationBlocks(): void {
   const eta = Math.cbrt(Math.max(0, 1 - 3 / state.m));
   const etaDisplay = fmtFixed(eta, 2);
   const hasConvectiveLuminosity = convectiveLuminosityAvailable();
-  const geometry = state.variableM
-    ? `\\ozChi{\\chi} &= \\frac{3}{1-(\\ozEta{\\eta}/\\ozRadius{R})^3}\\\\[0.2em]
-       \\ozEta{\\eta} &= \\left(1-\\frac{3}{\\ozChiZero{\\chi_0}}\\right)^{1/3}=\\ozEta{${etaDisplay}}`
-    : `\\ozChi{\\chi} &= \\ozChiZero{\\chi_0}`;
+  const geometry = geometryDensityEquations(state).join("\\\\[0.2em]\n");
   const driver = state.driver === "abs-v" ? "\\sqrt{|\\ozVelocity{V}|}" : "\\sqrt{\\ozPressure{H}}";
   const odeNode = el<HTMLDivElement>("odeEquations");
   const luminosityNode = el<HTMLDivElement>("luminosityEquations");
   odeNode.dataset.driverMode = state.driver;
+  odeNode.dataset.geometryMode = geometryModeFor(state);
   odeNode.dataset.convectiveLuminosity = hasConvectiveLuminosity ? "available" : "absent";
   odeNode.dataset.equationVariables = hasConvectiveLuminosity ? "R,V,H,Uc" : "R,V,H";
   const odeLines = [
     `\\frac{d\\ozRadius{R}}{d\\ozTau{\\tau}} &= \\ozVelocity{V}`,
     `\\frac{d\\ozVelocity{V}}{d\\ozTau{\\tau}} &=
-      \\frac{\\ozPressure{H}}{\\ozRadius{R}^{\\ozChi{\\chi}\\ozGamma{\\Gamma_1}-2}}
+      \\ozRadius{R}^{2}\\ozPressure{H}f^{\\ozGamma{\\Gamma_1}}
       - \\frac{1}{\\ozRadius{R}^{2}}
       - \\ozDamping{C_q}\\ozVelocity{V}^{3}`,
     `\\frac{d\\ozPressure{H}}{d\\ozTau{\\tau}} &=
       \\ozZeta{\\zeta}\\,
-      \\ozRadius{R}^{\\ozChi{\\chi}(\\ozGamma{\\Gamma_1}-1)}
+      f^{1-\\ozGamma{\\Gamma_1}}
       \\left[
         \\ozRadius{R}^{\\ozSource{U}}
         - \\ozLuminosity{L}
@@ -5126,7 +5134,7 @@ function updateEquationBlocks(): void {
     odeLines.push(`\\frac{d\\ozConvective{U_c}}{d\\ozTau{\\tau}} &=
       \\ozZetac{\\zeta_c}
       \\left[
-        \\ozRadius{R}^{-\\ozChi{\\chi}(\\ozGamma{\\Gamma_1}-1)/2}\\,${driver}
+        f^{(\\ozGamma{\\Gamma_1}-1)/2}\\,${driver}
         - \\ozConvective{U_c}
       \\right]`);
   }
@@ -5137,29 +5145,27 @@ function updateEquationBlocks(): void {
     \\end{aligned}
     \\]
   `;
-  luminosityNode.dataset.geometryMode = state.variableM ? "radius-dependent" : "fixed";
+  luminosityNode.dataset.geometryMode = geometryModeFor(state);
   luminosityNode.dataset.geometryLayout = "stacked";
   luminosityNode.dataset.etaValue = etaDisplay;
   luminosityNode.dataset.convectiveLuminosity = hasConvectiveLuminosity ? "available" : "absent";
   luminosityNode.dataset.luminosityTerms = hasConvectiveLuminosity ? "L_r,L_c,L" : "L_r,L";
   const luminosityLines = [
-    geometry,
     hasConvectiveLuminosity
       ? `\\ozRadiative{L_r} &=
         (1-\\ozGammac{\\gamma_c})\\,
-        \\ozRadius{R}^{4+\\ozChi{\\chi}
-        \\left[\\ozBlue{n}-(\\ozPink{s}+4)(\\ozGamma{\\Gamma_1}-1)\\right]}
+        \\ozRadius{R}^{4}
         \\ozPressure{H}^{\\ozPink{s}+4}`
       : `\\ozRadiative{L_r} &=
-        \\ozRadius{R}^{4+\\ozChi{\\chi}
-        \\left[\\ozBlue{n}-(\\ozPink{s}+4)(\\ozGamma{\\Gamma_1}-1)\\right]}
-        \\ozPressure{H}^{\\ozPink{s}+4}`
+        \\ozRadius{R}^{4}
+        \\ozPressure{H}^{\\ozPink{s}+4}`,
+    `&\\quad\\times f^{(\\ozPink{s}+4)(\\ozGamma{\\Gamma_1}-1)-\\ozBlue{n}}`
   ];
   if (hasConvectiveLuminosity) {
     luminosityLines.push(
       `\\ozConvLum{L_c} &=
         \\ozGammac{\\gamma_c}\\,
-        \\ozRadius{R}^{-(\\ozChi{\\chi}-2)}
+        \\ozRadius{R}^{2}f
         \\ozConvective{U_c}^{3}`,
       `\\ozLuminosity{L} &=
         \\ozRadiative{L_r}
@@ -5169,6 +5175,11 @@ function updateEquationBlocks(): void {
     luminosityLines.push(`\\ozLuminosity{L} &= \\ozRadiative{L_r}`);
   }
   const luminosityHtml = `
+    \\[
+    \\begin{aligned}
+    ${geometry}
+    \\end{aligned}
+    \\]
     \\[
     \\begin{aligned}
     ${luminosityLines.join("\\\\[0.35em]\n")}
@@ -5183,7 +5194,12 @@ function updateEquationBlocks(): void {
 }
 
 function updateVariableInitials(): void {
-  const initial = sample(0, [state.r0, state.v0, state.h0, state.uc0], state);
+  let initial: Row;
+  try {
+    initial = sample(0, [state.r0, state.v0, state.h0, state.uc0], state);
+  } catch {
+    initial = { tau: 0, R: state.r0, V: state.v0, H: state.h0, Uc: state.uc0, Lr: NaN, Lc: NaN, L: NaN };
+  }
   const values: Record<string, string> = {
     initialTau: `\\(${TEX.tau}_{0}=0.00\\)`,
     initialR: `\\(${TEX.R}_{0}=${fmtFixed(initial.R, 2)}\\)`,
@@ -5283,7 +5299,7 @@ function syncControlsFromState(): void {
   updateDriverButtons();
   updatePhaseModeButtons();
   updateSolverButtons();
-  el<HTMLInputElement>("variableM").checked = state.variableM;
+  el<HTMLSelectElement>("geometryMode").value = geometryModeFor(state);
   el<HTMLInputElement>("runUntilStable").checked = state.runUntilStable;
   rebuildIntegrationControls();
   updateEquationBlocks();
@@ -5596,16 +5612,18 @@ function log10Positive(value: number): number {
 
 function temperatureRatio(row: Row, parameters: ModelParameters): number {
   if (!Number.isFinite(row.R) || row.R <= 0 || !Number.isFinite(row.H) || row.H <= 0) return NaN;
-  const chi = mAt(row.R, parameters);
-  const value = row.R ** (-chi * (parameters.gamma1 - 1)) * row.H;
-  return Number.isFinite(value) && value > 0 ? value : NaN;
+  try {
+    const value = modelTemperatureRatio(row.R, row.H, parameters);
+    return Number.isFinite(value) && value > 0 ? value : NaN;
+  } catch { return NaN; }
 }
 
 function pressureRatio(row: Row, parameters: ModelParameters): number {
   if (!Number.isFinite(row.R) || row.R <= 0 || !Number.isFinite(row.H) || row.H <= 0) return NaN;
-  const chi = mAt(row.R, parameters);
-  const value = row.R ** (-chi * parameters.gamma1) * row.H;
-  return Number.isFinite(value) && value > 0 ? value : NaN;
+  try {
+    const value = modelPressureRatio(row.R, row.H, parameters);
+    return Number.isFinite(value) && value > 0 ? value : NaN;
+  } catch { return NaN; }
 }
 
 function opacityLogFromLogTemperaturePressure(logT: number, logP: number, parameters: ModelParameters): number {
@@ -5905,6 +5923,121 @@ function fillPlotAreaBackground(ctx: CanvasRenderingContext2D, plot: PlotBox): v
   ctx.restore();
 }
 
+const PAPER_AXES = {
+  tickSize: 10.5,
+  labelSize: 12,
+  lineWidth: 1.6,
+  dataWidth: 2.6,
+  majorLength: 5,
+  minorLength: 2.75,
+  tickGap: 4,
+  labelGap: 7
+} as const;
+
+interface PaperAxisOptions {
+  xTicks?: number[];
+  yTicks?: number[];
+  xFormat?: (value: number) => string;
+  yFormat?: (value: number) => string;
+  xLog?: boolean;
+  yLog?: boolean;
+  tickSize?: number;
+  labelSize?: number;
+}
+
+function paperDataWidth(width: number): number {
+  return paperModeActive() ? Math.max(PAPER_AXES.dataWidth, width) : width;
+}
+
+function paperAxisLabelPositions(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  ylim: NumericRange,
+  options: PaperAxisOptions = {}
+): { xTitleY: number; yTitleX: number } {
+  const tickSize = options.tickSize ?? PAPER_AXES.tickSize;
+  const labelSize = (options.labelSize ?? PAPER_AXES.labelSize) * activePaperExportFontScale;
+  ctx.save();
+  ctx.font = `${tickSize}px Inter, sans-serif`;
+  const widestTick = Math.max(...(options.yTicks ?? axisTickValues(ylim)).map((value) =>
+    ctx.measureText(options.yFormat?.(value) ?? fmt(value, 2)).width));
+  ctx.restore();
+  const tickOffset = PAPER_AXES.majorLength + PAPER_AXES.tickGap;
+  return {
+    xTitleY: plot.top + plot.height + tickOffset + tickSize * activePaperExportFontScale + PAPER_AXES.labelGap + labelSize / 2,
+    yTitleX: plot.left - tickOffset - widestTick - PAPER_AXES.labelGap - labelSize / 2
+  };
+}
+
+function paperMinorTickValues(limits: NumericRange, majors: readonly number[], logarithmic = false): number[] {
+  if (logarithmic) {
+    const ticks: number[] = [];
+    for (let decade = Math.floor(limits[0]); decade < limits[1]; decade += 1) {
+      for (let multiple = 2; multiple <= 9; multiple += 1) ticks.push(decade + Math.log10(multiple));
+    }
+    return ticks.filter((value) => value > limits[0] && value < limits[1]
+      && majors.every((major) => Math.abs(value - major) > 1e-8));
+  }
+  if (majors.length < 2) return [];
+  const step = (majors[1] - majors[0]) / 5;
+  if (!(step > 0)) return [];
+  const ticks: number[] = [];
+  const first = Math.ceil((limits[0] - majors[0]) / step);
+  const last = Math.floor((limits[1] - majors[0]) / step);
+  for (let index = first; index <= last; index += 1) {
+    const value = majors[0] + index * step;
+    if (value > limits[0] && majors.every((major) => Math.abs(value - major) > step * 1e-6)) ticks.push(value);
+  }
+  return ticks;
+}
+
+function drawPaperAxes(
+  ctx: CanvasRenderingContext2D,
+  plot: PlotBox,
+  xlim: NumericRange,
+  ylim: NumericRange,
+  options: PaperAxisOptions = {}
+): { xTitleY: number; yTitleX: number } {
+  const xTicks = options.xTicks ?? axisTickValues(xlim);
+  const yTicks = options.yTicks ?? axisTickValues(ylim);
+  const bottom = plot.top + plot.height;
+  const sx = (value: number) => plot.left + (value - xlim[0]) / (xlim[1] - xlim[0]) * plot.width;
+  const sy = (value: number) => bottom - (value - ylim[0]) / (ylim[1] - ylim[0]) * plot.height;
+  ctx.save();
+  ctx.strokeStyle = "#000000";
+  ctx.fillStyle = THEME.axisText;
+  ctx.lineWidth = PAPER_AXES.lineWidth;
+  ctx.lineCap = "butt";
+  ctx.setLineDash([]);
+  ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
+  const ticks = (values: readonly number[], horizontal: boolean, length: number) => {
+    ctx.beginPath();
+    values.forEach((value) => {
+      if (horizontal) {
+        ctx.moveTo(sx(value), bottom);
+        ctx.lineTo(sx(value), bottom + length);
+      } else {
+        ctx.moveTo(plot.left - length, sy(value));
+        ctx.lineTo(plot.left, sy(value));
+      }
+    });
+    ctx.stroke();
+  };
+  ticks(paperMinorTickValues(xlim, xTicks, options.xLog), true, PAPER_AXES.minorLength);
+  ticks(paperMinorTickValues(ylim, yTicks, options.yLog), false, PAPER_AXES.minorLength);
+  ticks(xTicks, true, PAPER_AXES.majorLength);
+  ticks(yTicks, false, PAPER_AXES.majorLength);
+  ctx.font = `${options.tickSize ?? PAPER_AXES.tickSize}px Inter, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  xTicks.forEach((value) => ctx.fillText(options.xFormat?.(value) ?? fmt(value, 2), sx(value), bottom + PAPER_AXES.majorLength + PAPER_AXES.tickGap));
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  yTicks.forEach((value) => ctx.fillText(options.yFormat?.(value) ?? fmt(value, 2), plot.left - PAPER_AXES.majorLength - PAPER_AXES.tickGap, sy(value)));
+  ctx.restore();
+  return paperAxisLabelPositions(ctx, plot, ylim, options);
+}
+
 function drawAxes(
   ctx: CanvasRenderingContext2D,
   plot: { left: number; top: number; width: number; height: number },
@@ -5916,6 +6049,21 @@ function drawAxes(
   ylabelColor: string = THEME.axisText,
   ylabelX: number = PLOT_LAYOUT.yLabelX
 ): void {
+  if (paperModeActive()) {
+    const labels = drawPaperAxes(ctx, plot, xlim, ylim);
+    ctx.save();
+    ctx.font = `700 ${PAPER_AXES.labelSize}px Inter, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = xlabelColor;
+    ctx.fillText(xlabel, plot.left + plot.width / 2, labels.xTitleY);
+    ctx.translate(labels.yTitleX, plot.top + plot.height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillStyle = ylabelColor;
+    ctx.fillText(ylabel, 0, 0);
+    ctx.restore();
+    return;
+  }
   ctx.strokeStyle = THEME.axisGrid;
   ctx.lineWidth = 1;
   ctx.fillStyle = THEME.axisText;
@@ -6084,7 +6232,7 @@ function drawSeries(
         }
       });
       ctx.strokeStyle = seriesColor;
-      ctx.lineWidth = item.width || 2;
+      ctx.lineWidth = paperDataWidth(item.width || 2);
       ctx.stroke();
     }
     ctx.setLineDash([]);
@@ -6119,7 +6267,7 @@ function drawAxisReferenceLines(
   ctx.rect(plot.left, plot.top, plot.width, plot.height);
   ctx.clip();
   ctx.strokeStyle = THEME.axisBorder;
-  ctx.lineWidth = 1.2;
+  ctx.lineWidth = paperModeActive() ? PAPER_AXES.lineWidth : 1.2;
   ctx.setLineDash([5, 4]);
   lines.forEach((line) => {
     if (line.x !== undefined && line.x >= xlim[0] && line.x <= xlim[1]) {
@@ -6366,7 +6514,8 @@ function drawGridColorbar(
   ctx.stroke();
   ctx.fillStyle = gradient;
   ctx.fillRect(left, top, width, height);
-  ctx.strokeStyle = floatingCanvasPanelBorder(0.78);
+  ctx.strokeStyle = paperModeActive() ? THEME.axisBorder : floatingCanvasPanelBorder(0.78);
+  ctx.lineWidth = paperModeActive() ? PAPER_AXES.lineWidth : 1;
   ctx.strokeRect(left, top, width, height);
   if (!paperModeActive() && sliderValue !== undefined && value !== undefined) {
     const fraction = clamp((sliderValue - range.lowerSliderValue) / Math.max(1e-12, range.upperSliderValue - range.lowerSliderValue), 0, 1);
@@ -6383,7 +6532,7 @@ function drawGridColorbar(
     ctx.stroke();
   }
   ctx.fillStyle = THEME.axisText;
-  ctx.font = "11px Inter, sans-serif";
+  ctx.font = paperModeActive() ? "10.5px Inter, sans-serif" : "11px Inter, sans-serif";
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
   ctx.fillText(controlValueLabel(range.key, lowerValue), left, top + height + 13);
@@ -6391,16 +6540,16 @@ function drawGridColorbar(
   ctx.fillText(controlValueLabel(range.key, upperValue), left + width, top + height + 13);
   const symbol = controlCanvasSymbol(range.key);
   const valueText = paperModeActive() || value === undefined ? "" : ` = ${controlValueLabel(range.key, value)}`;
-  ctx.font = "600 11px Inter, sans-serif";
+  ctx.font = paperModeActive() ? "600 12px Inter, sans-serif" : "600 11px Inter, sans-serif";
   const symbolWidth = ctx.measureText(symbol).width;
-  ctx.font = "11px Inter, sans-serif";
+  ctx.font = paperModeActive() ? "10.5px Inter, sans-serif" : "11px Inter, sans-serif";
   const valueWidth = ctx.measureText(valueText).width;
   const labelLeft = left + width / 2 - (symbolWidth + valueWidth) / 2;
   ctx.textAlign = "left";
-  ctx.font = "600 11px Inter, sans-serif";
+  ctx.font = paperModeActive() ? "600 12px Inter, sans-serif" : "600 11px Inter, sans-serif";
   ctx.fillStyle = controlColor(range.key);
   ctx.fillText(symbol, labelLeft, top + height + 28);
-  ctx.font = "11px Inter, sans-serif";
+  ctx.font = paperModeActive() ? "10.5px Inter, sans-serif" : "11px Inter, sans-serif";
   ctx.fillStyle = THEME.axisText;
   ctx.fillText(valueText, labelLeft + symbolWidth, top + height + 28);
   ctx.restore();
@@ -6456,7 +6605,8 @@ function drawFourierPanel(): void {
   ];
   const columns = rect.width >= 1760 ? 5 : rect.width >= 1320 ? 4 : rect.width >= 780 ? 2 : 1;
   const rows = Math.ceil(panels.length / columns);
-  const cssHeight = Math.max(280, rows * 238);
+  const paperHeader = paperModeActive() ? 40 : 0;
+  const cssHeight = Math.max(280, rows * 238) + paperHeader;
   canvas.width = Math.max(320, Math.floor(rect.width * dpr));
   canvas.height = Math.floor(cssHeight * dpr);
   canvas.style.height = `${cssHeight}px`;
@@ -6483,28 +6633,37 @@ function drawFourierPanel(): void {
   canvas.dataset.fourierAxisLabels = panels.map((item) => item.latex).join(",");
   canvas.dataset.fourierPathCount = String(path.length);
   canvas.dataset.fourierPhaseTicks = "pi-multiples";
+  canvas.dataset.fourierPhaseConvention = "wrapped-0-2pi; break-at-wrap";
+  let phaseBreakCount = 0;
   delete canvas.dataset.fourierStructuralPanels;
   delete canvas.dataset.fourierAdiabaticReference;
   const adiabaticReference: FourierSeriesPoint[] = [];
   const gap = 16;
   const pad = { left: 78, right: 22, top: 42, bottom: 60 };
   const panelWidth = (rect.width - gap * (columns - 1)) / columns;
-  const panelHeight = (cssHeight - gap * (rows - 1)) / rows;
+  const panelHeight = (cssHeight - paperHeader - gap * (rows - 1)) / rows;
 
   panels.forEach((item, index) => {
     const column = index % columns;
     const rowIndex = Math.floor(index / columns);
-    const box = {
-      left: column * (panelWidth + gap) + pad.left,
-      top: rowIndex * (panelHeight + gap) + pad.top,
-      width: panelWidth - pad.left - pad.right,
-      height: panelHeight - pad.top - pad.bottom
-    };
     const xValues = fourierPanelXValues(item, allPoints, item.adiabaticReference ? adiabaticReference : []);
     const yValues = fourierPanelYValues(item, allPoints, path, item.adiabaticReference ? adiabaticReference : []);
     const xlim = item.xPhase ? phaseRange(xValues, false) : range(xValues, 0.05);
     const ylim = item.yPhase ? phaseRange(yValues, true) : range(yValues, 0.08);
-    const ylabelX = Math.max(8, box.left - 70);
+    ctx.save();
+    ctx.font = `${paperModeActive() ? PAPER_AXES.tickSize : 11}px Inter, sans-serif`;
+    const rightTickWidth = ctx.measureText(item.xPhase ? phaseTickLabel(xlim[1]) : fourierPeriodTickLabel(xlim[1], xlim)).width;
+    ctx.restore();
+    const rightPadding = Math.max(pad.right, rightTickWidth / 2 + 8);
+    const box = {
+      left: column * (panelWidth + gap) + pad.left,
+      top: paperHeader + rowIndex * (panelHeight + gap) + pad.top,
+      width: panelWidth - pad.left - rightPadding,
+      height: panelHeight - pad.top - pad.bottom
+    };
+    const ylabelX = paperModeActive() ? paperAxisLabelPositions(ctx, box, ylim, {
+      yTicks: axisTickValues(ylim, item.yPhase), yFormat: item.yPhase ? phaseTickLabel : undefined
+    }).yTitleX : Math.max(8, box.left - 70);
     fillPlotAreaBackground(ctx, box);
     drawFourierAxes(ctx, box, xlim, ylim, item.xLabel, ylabelX, {
       xPhase: item.xPhase,
@@ -6522,14 +6681,14 @@ function drawFourierPanel(): void {
         const yValue = (result: GridModelResult) => item.harmonicValues!(result, harmonic);
         collectFourierPointHits(box, xlim, ylim, allPoints, item.xValue, yValue);
         drawFourierPoints(ctx, box, xlim, ylim, gridPoints, item.xValue, yValue, colorWithAlpha(color, 0.28), 1.8);
-        drawFourierSeriesPath(
+        phaseBreakCount += drawFourierSeriesPath(
           ctx,
           box,
           xlim,
           ylim,
-          buildFourierSeries(path, item.xValue, yValue, Boolean(item.yPhase)),
+          buildFourierSeries(path, item.xValue, yValue),
           1.45,
-          colorWithAlpha(color, 0.72)
+          colorWithAlpha(color, 0.72), [], Boolean(item.yPhase)
         );
         drawFourierPoints(ctx, box, xlim, ylim, path, item.xValue, yValue, colorWithAlpha(color, 0.76), 2.2);
         const highlighted = gridState.heldResult || gridState.hoverResult;
@@ -6544,14 +6703,14 @@ function drawFourierPanel(): void {
     if (!item.yValue) return;
     collectFourierPointHits(box, xlim, ylim, allPoints, item.xValue, item.yValue);
     drawFourierPoints(ctx, box, xlim, ylim, gridPoints, item.xValue, item.yValue, "rgba(190, 200, 216, 0.24)", 2.1);
-    drawFourierSeriesPath(
+    phaseBreakCount += drawFourierSeriesPath(
       ctx,
       box,
       xlim,
       ylim,
-      buildFourierSeries(path, item.xValue, item.yValue, Boolean(item.yPhase)),
+      buildFourierSeries(path, item.xValue, item.yValue),
       1.9,
-      (point) => point.result ? gridResultColor(point.result, 0.62) : colorWithAlpha(PHASE_MARKER_COLOR, 0.58)
+      (point) => point.result ? gridResultColor(point.result, 0.62) : colorWithAlpha(PHASE_MARKER_COLOR, 0.58), [], Boolean(item.yPhase)
     );
     drawFourierPoints(ctx, box, xlim, ylim, path, item.xValue, item.yValue, (result) => gridResultColor(result, 0.78), 2.9);
     const highlighted = gridState.heldResult || gridState.hoverResult;
@@ -6560,6 +6719,7 @@ function drawFourierPanel(): void {
   });
 
   canvas.dataset.fourierHitCount = String(fourierPointHits.length);
+  canvas.dataset.fourierPhaseBreakCount = String(phaseBreakCount);
   drawGridColorbar(ctx, {
     left: rect.width - 184,
     top: 4,
@@ -6597,11 +6757,9 @@ function fourierPanelYValues(
     panel.harmonics.forEach((harmonic) => {
       const yValue = (result: GridModelResult) => panel.harmonicValues!(result, harmonic);
       values.push(...points.map(yValue));
-      if (panel.yPhase) values.push(...buildFourierSeries(path, panel.xValue, yValue, true).map((point) => point.y));
     });
   } else if (panel.yValue) {
     values.push(...points.map(panel.yValue));
-    if (panel.yPhase) values.push(...buildFourierSeries(path, panel.xValue, panel.yValue, true).map((point) => point.y));
   }
   values.push(...reference.map((point) => point.y));
   return values.filter(Number.isFinite);
@@ -6659,6 +6817,11 @@ function skewnessAtPeriod(points: GridModelResult[], period: number): number | n
   return null;
 }
 
+function fourierPeriodTickLabel(value: number, limits: NumericRange): string {
+  const decimals = Math.max(2, Math.min(8, Math.ceil(-Math.log10((limits[1] - limits[0]) / 4)) + 1));
+  return value.toFixed(decimals);
+}
+
 function drawFourierAxes(
   ctx: CanvasRenderingContext2D,
   plot: PlotBox,
@@ -6668,6 +6831,33 @@ function drawFourierAxes(
   ylabelX: number,
   options: { xPhase?: boolean; yPhase?: boolean; upperSkewnessAxis?: GridModelResult[] | null } = {}
 ): void {
+  const periodTickLabel = (value: number) => fourierPeriodTickLabel(value, xlim);
+  if (paperModeActive()) {
+    const labels = drawPaperAxes(ctx, plot, xlim, ylim, {
+      xTicks: axisTickValues(xlim, options.xPhase),
+      yTicks: axisTickValues(ylim, options.yPhase),
+      xFormat: options.xPhase ? phaseTickLabel : periodTickLabel,
+      yFormat: options.yPhase ? phaseTickLabel : undefined
+    });
+    ctx.save();
+    ctx.font = `700 ${PAPER_AXES.labelSize}px Inter, sans-serif`;
+    ctx.fillStyle = THEME.axisText;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(xlabel, plot.left + plot.width / 2, labels.xTitleY);
+    if (options.upperSkewnessAxis?.length) {
+      ctx.font = `${PAPER_AXES.tickSize}px Inter, sans-serif`;
+      ctx.textBaseline = "bottom";
+      axisTickValues(xlim).forEach((period) => {
+        const value = skewnessAtPeriod(options.upperSkewnessAxis!, period);
+        if (value !== null) ctx.fillText(fmt(value, 2), plot.left + (period - xlim[0]) / (xlim[1] - xlim[0]) * plot.width, plot.top - 8);
+      });
+      ctx.font = `700 ${PAPER_AXES.labelSize}px Inter, sans-serif`;
+      ctx.fillText("S_k", plot.left + plot.width / 2, plot.top - 8 - PAPER_AXES.tickSize * activePaperExportFontScale - PAPER_AXES.labelGap);
+    }
+    ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.strokeStyle = THEME.axisGrid;
   ctx.lineWidth = 1;
@@ -6683,7 +6873,7 @@ function drawFourierAxes(
     ctx.moveTo(x, plot.top);
     ctx.lineTo(x, plot.top + plot.height);
     ctx.stroke();
-    ctx.fillText(options.xPhase ? phaseTickLabel(value) : fmt(value, 2), x, plot.top + plot.height + 8);
+    ctx.fillText(options.xPhase ? phaseTickLabel(value) : periodTickLabel(value), x, plot.top + plot.height + 8);
   });
 
   ctx.textAlign = "right";
@@ -6730,20 +6920,11 @@ function drawFourierAxes(
 function buildFourierSeries(
   points: GridModelResult[],
   xValue: FourierValueAccessor,
-  yValue: FourierValueAccessor,
-  unwrapY: boolean
+  yValue: FourierValueAccessor
 ): FourierSeriesPoint[] {
-  let previous: number | null = null;
   return points.map((result) => {
     const x = xValue(result);
-    let y = yValue(result);
-    if (unwrapY && Number.isFinite(y)) {
-      if (previous !== null) {
-        while (y - previous > Math.PI) y -= 2 * Math.PI;
-        while (previous - y > Math.PI) y += 2 * Math.PI;
-      }
-      previous = y;
-    }
+    const y = yValue(result);
     return { x, y, result };
   }).filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
 }
@@ -6753,11 +6934,12 @@ function buildAdiabaticFourierReference(parameters: ModelParameters): FourierSer
   const adiabaticParameters = { ...parameters, gammac: 0, zetac: 0, cq: 0 };
   for (let index = 0; index <= 28; index += 1) {
     const amplitude = 0.015 + (index / 28) * 0.42;
+    if (geometryModeFor(parameters) === "homogeneous-shell" && 1 - amplitude <= Math.cbrt(1 - 3 / parameters.m)) continue;
     const rows: Row[] = Array.from({ length: 360 }, (_value, sampleIndex) => {
       const phase = (2 * sampleIndex) / 360;
       const folded = phase % 1;
       const radius = Math.max(0.2, 1 + amplitude * Math.cos(2 * Math.PI * folded));
-      const pressure = radius ** (-mAt(radius, parameters) * (parameters.gamma1 - 1));
+      const pressure = modelTemperatureRatio(radius, 1, parameters);
       return sample(phase, [radius, 0, pressure, 0], adiabaticParameters);
     });
     const fourier = computeFourierParameters(rows);
@@ -6967,7 +7149,7 @@ function drawStabilityLinearizedLabel(
   drawCanvasMathFragments(
     ctx,
     [
-      { text: "γ", subscript: "c", color: COLORS.gammac, weight: 600 },
+      { text: "γ", subscript: "c", color: controlColor("gammac"), weight: 600 },
       { text: ` = ${fmt(gammac, 2)}` }
     ],
     x + prefixWidth,
@@ -6990,22 +7172,28 @@ function drawFourierSeriesPath(
   points: FourierSeriesPoint[],
   width: number,
   color: string | ((point: FourierSeriesPoint) => string),
-  dash: number[] = []
-): void {
-  if (points.length < 2) return;
+  dash: number[] = [],
+  wrappedPhase = false
+): number {
+  if (points.length < 2) return 0;
+  let phaseBreakCount = 0;
   const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
   const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
   ctx.save();
   ctx.beginPath();
   ctx.rect(plot.left, plot.top, plot.width, plot.height);
   ctx.clip();
-  ctx.lineWidth = width;
+  ctx.lineWidth = paperDataWidth(width);
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.setLineDash(dash);
   for (let i = 1; i < points.length; i += 1) {
     const previous = points[i - 1];
     const current = points[i];
+    if (wrappedPhase && Math.abs(current.y - previous.y) > Math.PI) {
+      phaseBreakCount += 1;
+      continue;
+    }
     const x0 = sx(previous.x);
     const y0 = sy(previous.y);
     const x1 = sx(current.x);
@@ -7018,6 +7206,7 @@ function drawFourierSeriesPath(
     ctx.stroke();
   }
   ctx.restore();
+  return phaseBreakCount;
 }
 
 function drawFourierPoints(
@@ -7080,7 +7269,7 @@ function stabilityCacheKey(parameters: ModelParameters): string {
     parameters.gamma1.toFixed(3),
     parameters.sourceExp.toFixed(3),
     parameters.cq.toFixed(3),
-    String(parameters.variableM)
+    geometryModeFor(parameters)
   ].join("|");
 }
 
@@ -7115,7 +7304,7 @@ function instabilityStripCacheKey(parameters: ModelParameters): string {
     parameters.gamma1.toFixed(3),
     parameters.sourceExp.toFixed(3),
     parameters.cq.toFixed(3),
-    String(parameters.variableM)
+    geometryModeFor(parameters)
   ].join("|");
 }
 
@@ -7266,7 +7455,7 @@ function drawStabilityOverlays(
   if (paperModeActive() && gridState.enabled) return;
   const highlighted = gridState.heldResult || gridState.hoverResult || currentGridResult();
   if (highlighted) drawReferenceMarker(ctx, sx(highlighted.parameters.zetac), sy(highlighted.parameters.zeta), gridResultColor(highlighted, 1), 6);
-  else drawReferenceMarker(ctx, sx(current.zetac), sy(current.zeta), COLORS.gammac, 6);
+  else drawReferenceMarker(ctx, sx(current.zetac), sy(current.zeta), controlColor("gammac"), 6);
 }
 
 function responseTickLabel(logValue: number): string {
@@ -7277,6 +7466,15 @@ function drawLogResponseAxes(
   ctx: CanvasRenderingContext2D,
   plot: { left: number; top: number; width: number; height: number }
 ): void {
+  if (paperModeActive()) {
+    const limits: NumericRange = [RESPONSE_LOG_MIN, RESPONSE_LOG_MAX];
+    const ticks = Array.from({ length: RESPONSE_LOG_MAX - RESPONSE_LOG_MIN + 1 }, (_, i) => RESPONSE_LOG_MIN + i);
+    drawPaperAxes(ctx, plot, limits, limits, {
+      xTicks: ticks, yTicks: ticks, xFormat: responseTickLabel, yFormat: responseTickLabel,
+      xLog: true, yLog: true
+    });
+    return;
+  }
   const span = RESPONSE_LOG_MAX - RESPONSE_LOG_MIN;
   const position = (logValue: number) => (logValue - RESPONSE_LOG_MIN) / span;
   ctx.strokeStyle = THEME.axisGrid;
@@ -7397,6 +7595,10 @@ function drawStabilityMap(): void {
   });
 
   drawLogResponseAxes(ctx, plot);
+  const paperLabels = paperModeActive() ? paperAxisLabelPositions(ctx, plot, [RESPONSE_LOG_MIN, RESPONSE_LOG_MAX], {
+    yTicks: Array.from({ length: RESPONSE_LOG_MAX - RESPONSE_LOG_MIN + 1 }, (_, i) => RESPONSE_LOG_MIN + i),
+    yFormat: responseTickLabel, labelSize: 11
+  }) : null;
   drawCanvasMathFragments(
     ctx,
     [
@@ -7404,7 +7606,7 @@ function drawStabilityMap(): void {
       { text: "ζ", subscript: "c", color: COLORS.zetac, weight: 600 }
     ],
     plot.left + plot.width / 2,
-    plot.top + plot.height + 42,
+    paperLabels?.xTitleY ?? plot.top + plot.height + 42,
     { weight: 700 }
   );
   drawCanvasMathFragments(
@@ -7413,7 +7615,7 @@ function drawStabilityMap(): void {
       { text: "thermal response ", color: COLORS.zeta, weight: 600 },
       { text: "ζ", color: COLORS.zeta, weight: 600 }
     ],
-    exportLayout ? 20 : 10,
+    paperLabels?.yTitleX ?? (exportLayout ? 20 : 10),
     plot.top + plot.height / 2,
     { rotate: -Math.PI / 2, fontSize: 11, weight: 700 }
   );
@@ -7464,7 +7666,9 @@ function drawCepheidGuide(): void {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, width, height);
   const plotTop = 28 + (activePaperExportFontScale - 1) * 35;
-  const plot = { left: 64, top: plotTop, width: width - 90, height: height - plotTop - 60 };
+  const plot = paperModeActive()
+    ? { left: 88, top: Math.max(52, plotTop), width: width - 116, height: height - Math.max(52, plotTop) - 94 }
+    : { left: 64, top: plotTop, width: width - 90, height: height - plotTop - 60 };
   fillPlotAreaBackground(ctx, plot);
   const sx = (x: number) => plot.left + clamp(x, 0, 1) * plot.width;
   const sy = (gamma: number) => plot.top + plot.height - clamp(gamma, 0, 1) * plot.height;
@@ -7504,6 +7708,7 @@ function drawCepheidGuide(): void {
 
   drawAxes(ctx, plot, [STRIP_LOG_RATIO_MIN, STRIP_LOG_RATIO_MAX], [0, 1], "", "", THEME.axisText, THEME.axisText, 12);
   drawReferenceLegend(ctx, plot.left + 8, 15, linearStabilityLegendItems(stripPhysics), { maxX: plot.left + plot.width - 4, fontSize: 10.5, swatchSize: 9, labelGap: 5, itemGap: 10, lineHeight: 12 });
+  const paperLabels = paperModeActive() ? paperAxisLabelPositions(ctx, plot, [0, 1]) : null;
   drawCanvasMathFragments(
     ctx,
     [
@@ -7513,29 +7718,37 @@ function drawCepheidGuide(): void {
       { text: "/" },
       { text: "ζ", color: COLORS.zeta, weight: 600 },
       { text: ") " },
-      { text: "convective response", color: COLORS.zetac, weight: 600 },
-      { text: "/" },
-      { text: "thermal response", color: COLORS.zeta, weight: 600 }
+      ...(!paperLabels ? [
+        { text: "convective response", color: COLORS.zetac, weight: 600 },
+        { text: "/" },
+        { text: "thermal response", color: COLORS.zeta, weight: 600 }
+      ] : [])
     ],
     plot.left + plot.width / 2,
-    plot.top + plot.height + 46,
-    { fontSize: 10.5, subscriptSize: 7, weight: 700 }
+    paperLabels?.xTitleY ?? plot.top + plot.height + 46,
+    { fontSize: paperLabels ? PAPER_AXES.labelSize : 10.5, subscriptSize: paperLabels ? 8.5 : 7, weight: 700 }
   );
+  if (paperLabels) drawCanvasMathFragments(ctx, [
+    { text: "convective response", color: COLORS.zetac, weight: 600 },
+    { text: "/" },
+    { text: "thermal response", color: COLORS.zeta, weight: 600 }
+  ], plot.left + plot.width / 2, paperLabels.xTitleY + 15 * activePaperExportFontScale, { weight: 700 });
   ctx.fillStyle = THEME.axisText;
   ctx.font = "12px Inter, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  ctx.fillText("blue", sx(0.08), plot.top + plot.height + 25);
-  ctx.fillText("red", sx(0.92), plot.top + plot.height + 25);
+  if (paperLabels) ctx.textBaseline = "middle";
+  ctx.fillText("blue", sx(0.08), paperLabels?.xTitleY ?? plot.top + plot.height + 25);
+  ctx.fillText("red", sx(0.92), paperLabels?.xTitleY ?? plot.top + plot.height + 25);
   drawCanvasMathFragments(
     ctx,
     [
-      { text: "convective flux fraction ", color: COLORS.gammac, weight: 600 },
-      { text: "γ", subscript: "c", color: COLORS.gammac, weight: 600 }
+      { text: "convective flux fraction ", color: controlColor("gammac"), weight: 600 },
+      { text: "γ", subscript: "c", color: controlColor("gammac"), weight: 600 }
     ],
-    12,
+    paperLabels?.yTitleX ?? 12,
     plot.top + plot.height / 2,
-    { rotate: -Math.PI / 2, fontSize: 11, weight: 700 }
+    { rotate: -Math.PI / 2, fontSize: paperLabels ? PAPER_AXES.labelSize : 11, weight: 700 }
   );
   ctx.fillStyle = THEME.axisText;
   ctx.font = "700 13px Inter, sans-serif";
@@ -7587,7 +7800,7 @@ function drawCepheidGuide(): void {
       ctx,
       sx(cepheidStripCoordinate(parameters)),
       sy(parameters.gammac),
-      current ? gridResultColor(current, 1) : COLORS.gammac,
+      current ? gridResultColor(current, 1) : controlColor("gammac"),
       6
     );
   }
@@ -7610,7 +7823,7 @@ function drawPhasePortraitCurve(
   ctx.rect(plot.left, plot.top, plot.width, plot.height);
   ctx.clip();
   ctx.strokeStyle = colorWithAlpha(color, 0.94);
-  ctx.lineWidth = 2;
+  ctx.lineWidth = paperDataWidth(2);
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
   ctx.setLineDash(dash);
@@ -7683,7 +7896,7 @@ function drawPhasePortraitLegend(ctx: CanvasRenderingContext2D, plot: PlotBox): 
     { fragments: [{ text: "U", subscript: "c", color: COLORS.Uc, weight: 600 }], color: COLORS.Uc, dash: [8, 5] }
   ].forEach((item) => {
     ctx.strokeStyle = item.color;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = paperDataWidth(2);
     ctx.setLineDash(item.dash);
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -7806,7 +8019,9 @@ function drawOpacityContours(
     const value = opacityRange[0] + fraction * (opacityRange[1] - opacityRange[0]);
     const segment = opacityContourSegment(value, xlim, ylim, parameters);
     if (!segment) continue;
-    ctx.strokeStyle = opacityColor(value, opacityRange, 0.22);
+    const axisAligned = paperModeActive() && (Math.abs(segment[0].x - segment[1].x) < 1e-12 || Math.abs(segment[0].y - segment[1].y) < 1e-12);
+    ctx.strokeStyle = axisAligned ? THEME.axisBorder : opacityColor(value, opacityRange, 0.22);
+    ctx.lineWidth = axisAligned ? PAPER_AXES.lineWidth : 1;
     ctx.beginPath();
     ctx.moveTo(sx(segment[0].x), sy(segment[0].y));
     ctx.lineTo(sx(segment[1].x), sy(segment[1].y));
@@ -7858,8 +8073,9 @@ function drawOpacityColorbar(
     { text: "log", subscript: "10", color: THEME.axisText },
     { text: " κ/κ", subscript: "0", color: THEME.axisText, weight: 600 }
   ];
+  const labelSize = paperModeActive() ? 12 : 10.5;
   ctx.save();
-  const labelWidth = canvasMathWidth(ctx, labelFragments, 10.5, 7.2);
+  const labelWidth = canvasMathWidth(ctx, labelFragments, labelSize, 7.2);
   ctx.restore();
   const width = Math.min(Math.max(120, labelWidth + 20, plot.width * 0.24), Math.max(96, plot.width - 24));
   const height = 9;
@@ -7867,7 +8083,7 @@ function drawOpacityColorbar(
   const top = plot.top + 12;
   const panelPadX = 7;
   const panelPadTop = 7;
-  const panelHeight = 52;
+  const panelHeight = paperModeActive() ? 70 : 52;
   const gradient = ctx.createLinearGradient(left, top, left + width, top);
   for (let index = 0; index <= 24; index += 1) {
     const fraction = index / 24;
@@ -7883,8 +8099,8 @@ function drawOpacityColorbar(
   ctx.stroke();
   ctx.fillStyle = gradient;
   ctx.fillRect(left, top, width, height);
-  ctx.strokeStyle = floatingCanvasPanelBorder(0.78);
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = paperModeActive() ? THEME.axisBorder : floatingCanvasPanelBorder(0.78);
+  ctx.lineWidth = paperModeActive() ? PAPER_AXES.lineWidth : 1;
   ctx.strokeRect(left, top, width, height);
   if (Number.isFinite(currentLogOpacity)) {
     const markerX = left + normalizedInRange(currentLogOpacity as number, opacityRange) * width;
@@ -7908,8 +8124,8 @@ function drawOpacityColorbar(
   ctx.fillText(fmt(opacityRange[0], 2), left, top + height + 8);
   ctx.textAlign = "right";
   ctx.fillText(fmt(opacityRange[1], 2), left + width, top + height + 8);
-  drawCanvasMathFragments(ctx, labelFragments, left + width / 2, top + height + 27, {
-    fontSize: 10.5,
+  drawCanvasMathFragments(ctx, labelFragments, left + width / 2, top + height + (paperModeActive() ? 15 + 16.5 * activePaperExportFontScale : 27), {
+    fontSize: labelSize,
     subscriptSize: 7.2,
     strokeWidth: 0
   });
@@ -7979,7 +8195,7 @@ function drawThermodynamicTrack(
       ctx.stroke();
     }
     ctx.strokeStyle = color || opacityColor((previous.logOpacity + current.logOpacity) / 2, opacityRange, alpha);
-    ctx.lineWidth = width;
+    ctx.lineWidth = paperDataWidth(width);
     ctx.beginPath();
     ctx.moveTo(x0, y0);
     ctx.lineTo(x1, y1);
@@ -8026,7 +8242,8 @@ function thermodynamicPlotBox(width: number, height: number): PlotBox {
   return { left: 82, top: 24, width: width - 106, height: height - 88 };
 }
 
-function drawThermodynamicAxisLabels(ctx: CanvasRenderingContext2D, plot: PlotBox): void {
+function drawThermodynamicAxisLabels(ctx: CanvasRenderingContext2D, plot: PlotBox, ylim: NumericRange): void {
+  const labels = paperModeActive() ? paperAxisLabelPositions(ctx, plot, ylim) : null;
   drawCanvasMathFragments(
     ctx,
     [
@@ -8034,7 +8251,7 @@ function drawThermodynamicAxisLabels(ctx: CanvasRenderingContext2D, plot: PlotBo
       { text: " T/T", subscript: "0", color: PHASE_MARKER_COLOR, weight: 600 }
     ],
     plot.left + plot.width / 2,
-    plot.top + plot.height + 42,
+    labels?.xTitleY ?? plot.top + plot.height + 42,
     { weight: 700 }
   );
   drawCanvasMathFragments(
@@ -8043,7 +8260,7 @@ function drawThermodynamicAxisLabels(ctx: CanvasRenderingContext2D, plot: PlotBo
       { text: "log", subscript: "10", color: THEME.axisText },
       { text: " P/P", subscript: "0", color: COLORS.H, weight: 600 }
     ],
-    22,
+    labels?.yTitleX ?? 22,
     plot.top + plot.height / 2,
     { rotate: -Math.PI / 2, weight: 700 }
   );
@@ -8069,7 +8286,7 @@ function drawThermodynamicStaticLayer(
   if (options.showOpacityColorbar ?? true) drawOpacityColorbar(ctx, plot, opacityRange, canvas, options.currentLogOpacity);
   canvas.dataset.opacityContours = TP_OPACITY_DATA_LABEL;
   delete canvas.dataset.opacityVectorField;
-  drawThermodynamicAxisLabels(ctx, plot);
+  drawThermodynamicAxisLabels(ctx, plot, ylim);
 }
 
 function thermodynamicGridStaticTracks(): ThermodynamicTrackSpec[] {
@@ -8339,6 +8556,20 @@ function drawPeriodogramAxes(
   xlim: NumericRange,
   ylim: NumericRange
 ): void {
+  if (paperModeActive()) {
+    const labels = drawPaperAxes(ctx, plot, xlim, ylim, { yFormat: periodogramPowerLabel });
+    ctx.save();
+    ctx.font = `700 ${PAPER_AXES.labelSize}px Inter, sans-serif`;
+    ctx.fillStyle = THEME.axisText;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(PERIODOGRAM_FREQUENCY_AXIS_LABEL, plot.left + plot.width / 2, labels.xTitleY);
+    ctx.translate(labels.yTitleX, plot.top + plot.height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText(PERIODOGRAM_POWER_AXIS_LABEL, 0, 0);
+    ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.strokeStyle = THEME.axisBorder;
   ctx.lineWidth = 1;
@@ -8396,8 +8627,8 @@ function drawPeriodogramHarmonics(
     if (frequency < xlim[0] || frequency > xlim[1]) continue;
     const x = sx(frequency);
     ctx.save();
-    ctx.strokeStyle = harmonic === 1 ? colorWithAlpha(PHASE_MARKER_COLOR, 0.78) : colorWithAlpha(PHASE_MARKER_COLOR, 0.34);
-    ctx.lineWidth = harmonic === 1 ? 1.4 : 1;
+    ctx.strokeStyle = paperModeActive() ? THEME.axisBorder : harmonic === 1 ? colorWithAlpha(PHASE_MARKER_COLOR, 0.78) : colorWithAlpha(PHASE_MARKER_COLOR, 0.34);
+    ctx.lineWidth = paperModeActive() ? PAPER_AXES.lineWidth : harmonic === 1 ? 1.4 : 1;
     ctx.setLineDash(harmonic === 1 ? [] : [3, 5]);
     ctx.beginPath();
     ctx.moveTo(x, plot.top);
@@ -8454,7 +8685,7 @@ function drawPeriodogramCurve(
     else ctx.lineTo(x, y);
   });
   ctx.strokeStyle = COLORS.L;
-  ctx.lineWidth = 2.2;
+  ctx.lineWidth = paperDataWidth(2.2);
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
   ctx.stroke();
@@ -8701,7 +8932,7 @@ function drawPhaseLagPaperLegend(
   series.forEach((item, index) => {
     const y = top + padding + rowHeight * (index + 0.5);
     ctx.strokeStyle = item.color;
-    ctx.lineWidth = 2.2;
+    ctx.lineWidth = paperDataWidth(2.2);
     ctx.setLineDash(item.dash);
     ctx.beginPath();
     ctx.moveTo(left + padding, y);
@@ -8725,6 +8956,12 @@ function drawPhaseLagAxes(
 ): void {
   const sx = (x: number) => plot.left + ((x - xlim[0]) / (xlim[1] - xlim[0])) * plot.width;
   const sy = (y: number) => plot.top + plot.height - ((y - ylim[0]) / (ylim[1] - ylim[0])) * plot.height;
+  const paperLabels = paperModeActive() ? drawPaperAxes(ctx, plot, xlim, ylim, {
+    xFormat: (value) => controlValueLabel(loopRange.key, parameterValueFromSlider(loopRange.key, value)),
+    xLog: loopRange.key === "zeta" || loopRange.key === "zetac" || loopRange.key === "tEnd"
+  }) : null;
+  if (paperLabels) drawAxisReferenceLines(ctx, plot, xlim, ylim, [{ y: 0 }]);
+  else {
   ctx.save();
   ctx.strokeStyle = THEME.axisGrid;
   ctx.lineWidth = 1;
@@ -8771,6 +9008,7 @@ function drawPhaseLagAxes(
   ctx.lineWidth = 1.2;
   ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
   ctx.restore();
+  }
 
   drawCanvasMathFragments(
     ctx,
@@ -8779,7 +9017,7 @@ function drawPhaseLagAxes(
       { text: controlCanvasSymbol(loopRange.key), color: controlColor(loopRange.key), weight: 700 }
     ],
     plot.left + plot.width / 2,
-    plot.top + plot.height + 48,
+    paperLabels?.xTitleY ?? plot.top + plot.height + 48,
     { weight: 700 }
   );
   drawCanvasMathFragments(
@@ -8788,7 +9026,7 @@ function drawPhaseLagAxes(
       { text: "phase lag ", color: THEME.axisText },
       { text: "\u0394\u03c6", color: THEME.axisText, weight: 700 }
     ],
-    22,
+    paperLabels?.yTitleX ?? 22,
     plot.top + plot.height / 2,
     { rotate: -Math.PI / 2, weight: 700 }
   );
@@ -8810,7 +9048,7 @@ function drawPhaseLagSeries(
   series.forEach((item) => {
     ctx.strokeStyle = colorWithAlpha(item.color, 0.92);
     ctx.fillStyle = colorWithAlpha(item.color, 0.96);
-    ctx.lineWidth = 2.1;
+    ctx.lineWidth = paperDataWidth(2.1);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.setLineDash(item.dash);
@@ -8923,7 +9161,7 @@ function drawPhasePortraitPanel(): void {
       { text: "R", color: COLORS.R, weight: 600 }
     ],
     plot.left + plot.width / 2,
-    plot.top + plot.height + 42,
+    paperModeActive() ? paperAxisLabelPositions(ctx, plot, ylim).xTitleY : plot.top + plot.height + 42,
     { weight: 700 }
   );
   drawPhasePortraitCurve(ctx, plot, xlim, ylim, rows, "H", COLORS.H);
@@ -9777,29 +10015,35 @@ interface HeatEngineEvent {
 
 type HeatEngineCanvasLabel = string | readonly CanvasMathFragment[];
 
+function pressureSupportFormula(color?: string): CanvasMathFragment[] {
+  return [{ text: "R", superscript: "2", color }, { text: "H f", superscript: "Γ₁", color }];
+}
+
 function pressureSupport(row: Row, parameters: ModelParameters): number {
   if (!Number.isFinite(row.R + row.H) || row.R <= 0) return NaN;
-  const { q } = derivedPowers(row.R, parameters);
-  const value = row.H / row.R ** q;
-  return Number.isFinite(value) ? value : NaN;
+  try {
+    const value = modelPressureSupport(row.R, row.H, parameters);
+    return Number.isFinite(value) ? value : NaN;
+  } catch { return NaN; }
 }
 
 function convectiveVelocityTarget(row: Row, parameters: ModelParameters): number {
   if (!Number.isFinite(row.R + row.H + row.V) || row.R <= 0) return NaN;
-  const { d } = derivedPowers(row.R, parameters);
-  const driver = parameters.driver === "h" ? Math.sqrt(Math.max(0, row.H)) : Math.sqrt(Math.abs(row.V));
-  const value = row.R ** (-d) * driver;
-  return Number.isFinite(value) ? value : NaN;
+  try {
+    const value = modelConvectiveTarget(row.R, row.H, parameters, row.V);
+    return Number.isFinite(value) ? value : NaN;
+  } catch { return NaN; }
 }
 
 function heatEngineTerms(row: Row, parameters: ModelParameters): HeatEngineTerms | null {
   if (!Number.isFinite(row.R + row.V + row.H + row.Uc) || row.R <= 0 || row.H <= 0) return null;
   const powers = derivedPowers(row.R, parameters);
-  const pressureForce = row.H / row.R ** powers.q;
+  const pressureForce = pressureSupport(row, parameters);
+  if (!Number.isFinite(pressureForce)) return null;
   const gravityForce = 1 / row.R ** 2;
   const dampingAcceleration = -parameters.cq * row.V ** 3;
   const source = baseLuminosity(row, parameters);
-  const heatScale = parameters.zeta * row.R ** (powers.m * (parameters.gamma1 - 1));
+  const heatScale = thermalPrefactor(row.R, parameters);
   const radiativeLeak = row.Lr;
   const convectiveLeak = row.Lc;
   const convectiveTarget = convectiveVelocityTarget(row, parameters);
@@ -10473,7 +10717,7 @@ function drawHeatEnginePiston(
   drawHeatEngineArrow(ctx, chamber.left - 36, velocityStartY, chamber.left - 36, velocityEndY, row.V >= 0 ? POSITIVE_VELOCITY_COLOR : NEGATIVE_VELOCITY_COLOR, 2.2, [{ text: "V" }, { text: `=${fmt(row.V, 2)}` }], 14);
 
   const pressureLength = 28 + normalizedInRange(terms.pressureForce, pressureRange) * 34;
-  drawHeatEngineArrow(ctx, centerX - 30, gasTop + pressureLength, centerX - 30, gasTop + 8, COLORS.H, 3, [{ text: "H/R", superscript: "q" }], 18);
+  drawHeatEngineArrow(ctx, centerX - 30, gasTop + pressureLength, centerX - 30, gasTop + 8, COLORS.H, 3, pressureSupportFormula(), 18);
   const gravityLength = 26 + normalizedInRange(terms.gravityForce, gravityRange) * 28;
   drawHeatEngineArrow(ctx, centerX + 32, pistonY - gravityLength, centerX + 32, pistonY - 3, THEME.axisText, 2.6, [{ text: "1/R", superscript: "2" }], -20);
   const dampingDirection = row.V >= 0 ? 1 : -1;
@@ -10998,7 +11242,7 @@ function drawHeatEngineLoop(
   drawHeatEngineCanvasLabel(ctx, [{ text: "R" }], plot.left + plot.width / 2, plot.top + plot.height + 21, COLORS.R, "center", 11);
   drawHeatEngineCanvasLabel(
     ctx,
-    [{ text: "F", subscript: "P" }, { text: "=" }, { text: "H/R", superscript: "q" }],
+    [{ text: "F", subscript: "P" }, { text: "=" }, ...pressureSupportFormula()],
     plot.left - 24,
     plot.top + plot.height / 2,
     COLORS.H,
@@ -11089,7 +11333,7 @@ function drawHeatEngineWorkLoop(
   });
   drawHeatEngineMathLabel(
     ctx,
-    [{ text: "F", subscript: "P", color: COLORS.H }, { text: "=H/R", superscript: "q", color: COLORS.H }],
+    [{ text: "F", subscript: "P", color: COLORS.H }, { text: "=", color: COLORS.H }, ...pressureSupportFormula(COLORS.H)],
     plot.left - 35,
     plot.top + plot.height / 2,
     { align: "center", fontSize: 10, rotate: -Math.PI / 2 }
@@ -11168,7 +11412,7 @@ function drawHeatEnginePowerStrip(
   height: number
 ): void {
   const components: Array<{ label: readonly CanvasMathFragment[]; value: number; color: string }> = [
-    { label: [{ text: "V " }, { text: "H/R", superscript: "q" }], value: terms.pressurePower, color: COLORS.H },
+    { label: [{ text: "V " }, ...pressureSupportFormula()], value: terms.pressurePower, color: COLORS.H },
     { label: [{ text: "-V/R", superscript: "2" }], value: terms.gravityPower, color: COLORS.R },
     { label: [{ text: "-C", subscript: "q" }, { text: "V", superscript: "4" }], value: terms.dampingPower, color: COLORS.cq }
   ];
@@ -11312,6 +11556,20 @@ function drawWorkLoopPanel(
     { align: "right", fontSize: 10.8, subscriptSize: 8.8, strokeWidth: 2.6 }
   );
 
+  const workTickLabel = (value: number, limits: NumericRange): string => {
+    const span = Math.abs(limits[1] - limits[0]);
+    const digits = span < 0.02 ? 4 : span < 0.2 ? 3 : span < 2 ? 2 : 1;
+    return fmt(value, digits);
+  };
+  const workAxisOptions: PaperAxisOptions = {
+    xTicks: Array.from({ length: 4 }, (_, i) => xlim[0] + (xlim[1] - xlim[0]) * i / 3),
+    yTicks: Array.from({ length: 4 }, (_, i) => ylim[0] + (ylim[1] - ylim[0]) * i / 3),
+    xFormat: (value) => workTickLabel(value, xlim),
+    yFormat: (value) => workTickLabel(value, ylim),
+    tickSize: 8.2, labelSize: 10.7
+  };
+  const paperLabels = paperModeActive() ? drawPaperAxes(ctx, plot, xlim, ylim, workAxisOptions) : null;
+  if (!paperLabels) {
   ctx.strokeStyle = colorWithAlpha(THEME.axisGrid, 0.9);
   ctx.lineWidth = 1;
   for (let i = 0; i <= 3; i += 1) {
@@ -11328,11 +11586,6 @@ function drawWorkLoopPanel(
   ctx.lineWidth = 1.2;
   ctx.strokeRect(plot.left, plot.top, plot.width, plot.height);
 
-  const workTickLabel = (value: number, limits: NumericRange): string => {
-    const span = Math.abs(limits[1] - limits[0]);
-    const digits = span < 0.02 ? 4 : span < 0.2 ? 3 : span < 2 ? 2 : 1;
-    return fmt(value, digits);
-  };
   ctx.fillStyle = THEME.axisText;
   ctx.strokeStyle = THEME.axisBorder;
   ctx.lineWidth = 1;
@@ -11361,6 +11614,8 @@ function drawWorkLoopPanel(
     ctx.fillText(workTickLabel(ylim[1] - (ylim[1] - ylim[0]) * fraction, ylim), plot.left - 7, y);
   }
 
+  }
+
   if (plotted.length > 2) {
     ctx.beginPath();
     plotted.forEach((point, index) => {
@@ -11370,7 +11625,7 @@ function drawWorkLoopPanel(
     ctx.closePath();
     ctx.fillStyle = colorWithAlpha(loopColor, 0.16);
     ctx.strokeStyle = colorWithAlpha(loopColor, 0.95);
-    ctx.lineWidth = 2.4;
+    ctx.lineWidth = paperDataWidth(2.4);
     ctx.fill();
     ctx.stroke();
     [0.2, 0.46, 0.72].forEach((fraction) => {
@@ -11390,12 +11645,12 @@ function drawWorkLoopPanel(
     ctx.stroke();
   }
 
-  drawHeatEngineMathLabel(ctx, [{ text: "radius ", color: COLORS.R }, { text: "R", color: COLORS.R }], plot.left + plot.width / 2, plot.top + plot.height + 25, {
+  drawHeatEngineMathLabel(ctx, [{ text: "radius ", color: COLORS.R }, { text: "R", color: COLORS.R }], plot.left + plot.width / 2, paperLabels?.xTitleY ?? plot.top + plot.height + 25, {
     align: "center",
     fontSize: 10.7,
     weight: 700
   });
-  drawWorkPressureSupportAxisLabel(ctx, plot.left - 45, plot.top + plot.height / 2, -Math.PI / 2);
+  drawWorkPressureSupportAxisLabel(ctx, paperLabels?.yTitleX ?? plot.left - 45, plot.top + plot.height / 2, -Math.PI / 2);
   ctx.restore();
 }
 
@@ -11410,12 +11665,11 @@ function drawWorkPressureSupportAxisLabel(
   const exponentY = -baseSize * 0.45;
   const parts = [
     { text: "pressure support ", color: THEME.axisText, size: baseSize, y: 0 },
-    { text: "H", color: COLORS.H, size: baseSize, y: 0 },
-    { text: "/", color: THEME.axisText, size: baseSize, y: 0 },
     { text: "R", color: COLORS.R, size: baseSize, y: 0 },
-    { text: "χ", color: COLORS.m, size: exponentSize, y: exponentY },
-    { text: "Γ₁", color: COLORS.gamma1, size: exponentSize, y: exponentY },
-    { text: "-2", color: THEME.axisText, size: exponentSize, y: exponentY }
+    { text: "2", color: THEME.axisText, size: exponentSize, y: exponentY },
+    { text: "H", color: COLORS.H, size: baseSize, y: 0 },
+    { text: "f", color: THEME.axisText, size: baseSize, y: 0 },
+    { text: "Γ₁", color: COLORS.gamma1, size: exponentSize, y: exponentY }
   ];
 
   ctx.save();
@@ -11547,8 +11801,9 @@ function drawWorkPanel(): void {
   canvas.dataset.workWindowRows = String(selectedRows.length);
   canvas.dataset.workRows = String(integrationRows.length);
   canvas.dataset.workPlotRows = String(plotRows.length);
-  canvas.dataset.workVisualization = "pressure support H/R^(chi Gamma1-2)-R loop";
-  canvas.dataset.workLoop = "pressure support H/R^(chi Gamma1-2) versus R";
+  canvas.dataset.workVisualization = "pressure support R^2 H f^Gamma1-R loop";
+  canvas.dataset.workLoop = "pressure support R^2 H f^Gamma1 versus R";
+  canvas.dataset.geometryMode = geometryModeFor(latestPhaseParameters);
   canvas.dataset.workTerms = "W_P,W_damp,DeltaE_mech";
   canvas.dataset.cycleWorkPressure = fmt(work.pressure, 6);
   canvas.dataset.cycleWorkDamping = fmt(work.damping, 6);
@@ -11568,10 +11823,10 @@ function drawWorkPanel(): void {
   const summaryHeight = height < 245 ? 46 : 50;
   const summaryY = height - summaryHeight - 10;
   const loopPlot = {
-    left: 56,
+    left: paperModeActive() ? 78 : 56,
     top: 34,
-    width: Math.max(170, width - 70),
-    height: Math.max(94, summaryY - 70)
+    width: Math.max(170, width - (paperModeActive() ? 108 : 70)),
+    height: Math.max(94, summaryY - (paperModeActive() ? 89 : 70))
   };
   fillPlotAreaBackground(ctx, loopPlot);
   drawWorkLoopPanel(ctx, plotRows, paperModeActive() ? null : row, latestPhaseParameters, work, regime, loopPlot, scope);
@@ -11593,7 +11848,7 @@ function drawHeatEngineEquationTags(
       fragments: [
         { text: "V̇", color: COLORS.V },
         { text: " = " },
-        { text: "H/R", superscript: "q", color: COLORS.H },
+        ...pressureSupportFormula(COLORS.H),
         { text: " - " },
         { text: "1/R", superscript: "2" },
         { text: " - " },
@@ -12128,8 +12383,8 @@ function drawAll(): void {
   metricsNode.dataset.s72B = fmt(s72Stability.b, 6);
   metricsNode.dataset.s72PhysicsMode = s72Stability.physicsMode;
   metricsNode.dataset.linearPeriodFormula = "2pi/sqrt(chi*Gamma1-4)";
-  metricsNode.dataset.linearPeriod = linearPeriod ? fmt(linearPeriod, 6) : "unavailable";
-  metricsNode.dataset.nonlinearPeriod = nonlinearPeriod ? fmt(nonlinearPeriod, 6) : "unavailable";
+  metricsNode.dataset.linearPeriod = linearPeriod ? String(linearPeriod) : "unavailable";
+  metricsNode.dataset.nonlinearPeriod = nonlinearPeriod ? String(nonlinearPeriod) : "unavailable";
   const stabilityMetricItems: StatusMetricItem[] = s72Stability.conditions.map((condition) => {
     const formula = s72ConditionMetric(s72Stability, condition);
     return {
