@@ -2,6 +2,52 @@ import { readFile } from "node:fs/promises";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
 
+async function renderedSnapshotHeaderClearance(page: Page, source: string, width: number, height: number) {
+  return page.evaluate(async ({ source, width, height }) => {
+    const image = new Image();
+    image.src = source;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) throw new Error("missing image-analysis canvas context");
+    context.drawImage(image, 0, 0, width, height);
+    const pixels = context.getImageData(0, 0, width, height).data;
+    const sample = (x: number, y: number) => {
+      const offset = (y * width + x) * 4;
+      return [pixels[offset], pixels[offset + 1], pixels[offset + 2], pixels[offset + 3]];
+    };
+
+    let borderY = -1;
+    let borderScore = -1;
+    for (let y = 4; y < Math.min(48, height); y += 1) {
+      let score = 0;
+      for (let x = 420; x < Math.min(650, width); x += 1) {
+        const [red, green, blue, alpha] = sample(x, y);
+        if (alpha > 200 && (red < 245 || green < 245 || blue < 245)) score += 1;
+      }
+      if (score > borderScore) {
+        borderScore = score;
+        borderY = y;
+      }
+    }
+
+    let titleInkTop = height;
+    let titleInkPixels = 0;
+    for (let y = Math.max(0, borderY + 1); y < Math.min(92, height); y += 1) {
+      for (let x = 28; x < Math.min(410, width); x += 1) {
+        const [red, green, blue, alpha] = sample(x, y);
+        if (alpha > 200 && red < 75 && green < 75 && blue < 85) {
+          titleInkTop = Math.min(titleInkTop, y);
+          titleInkPixels += 1;
+        }
+      }
+    }
+    return { borderY, borderScore, titleInkTop, titleInkPixels };
+  }, { source, width, height });
+}
+
 async function referencePanelMetrics(page: Page) {
   return page.evaluate(() => {
     const grid = document.querySelector<HTMLElement>(".reference-grid");
@@ -418,8 +464,8 @@ test("paper export creates an atomic vector and 600-dpi bundle for visible panel
   expect(singleSvg).toContain('font-family="DejaVuSans"');
   expect(singleSvg).toContain("@font-face{font-family:DejaVuSans");
   expect(singleSvg).toContain("data:font/ttf;base64,");
-  expect(singleSvg).not.toMatch(/dominant-baseline="(?!alphabetic)[^"]+"/);
-  expect(singleSvg.match(/alignment-baseline="alphabetic"/g)?.length).toBe(singleSvg.match(/<text\b/g)?.length);
+  expect(singleSvg).toContain('dominant-baseline="text-before-edge"');
+  expect(singleSvg).not.toContain('alignment-baseline="alphabetic"');
   expect(singleSvg).toMatch(/<path|<line/);
   expect(singleSvg).not.toContain("<image");
   const singlePdf = strFromU8(archive["figures/01-periodogram-single.pdf"]);
@@ -460,6 +506,18 @@ test("paper export preserves the full 2x2 snapshot canvas at device scale factor
     await page.locator("#paperQuarterPreset").click();
     await expect(page.locator("#modelCanvas")).toHaveAttribute("data-paper-snapshot-count", "4");
 
+    await page.evaluate(() => {
+      const observedWindow = window as typeof window & { __pdfAlignmentBaselines?: string[] };
+      observedWindow.__pdfAlignmentBaselines = [];
+      const setAttribute = Element.prototype.setAttribute;
+      Element.prototype.setAttribute = function(name, value) {
+        if (this.localName === "text" && name === "alignment-baseline") {
+          observedWindow.__pdfAlignmentBaselines!.push(value);
+        }
+        setAttribute.call(this, name, value);
+      };
+    });
+
     const downloadPromise = page.waitForEvent("download", { timeout: 150_000 });
     await page.locator("#paperExportBundle").click();
     const download = await downloadPromise;
@@ -473,27 +531,47 @@ test("paper export preserves the full 2x2 snapshot canvas at device scale factor
     expect(svg).toContain(`height="${7.1 * 492 / 920}in"`);
     expect(svg).toMatch(/phase 0\.00/);
     expect(svg).toMatch(/phase 0\.75/);
-    const headerClearance = await page.evaluate((source) => {
+    const nativeHeader = await page.evaluate((source) => {
       const documentNode = new DOMParser().parseFromString(source, "image/svg+xml");
       const heading = [...documentNode.querySelectorAll("text")].find((node) => node.textContent === "a) phase 0.00")!;
-      const measure = document.createElement("canvas").getContext("2d")!;
-      measure.font = `${heading.getAttribute("font-weight")} ${heading.getAttribute("font-size")} DejaVuSans`;
-      measure.textBaseline = "alphabetic";
       return {
-        baseline: heading.getAttribute("dominant-baseline"),
-        inkTop: Number(heading.getAttribute("y")) - measure.measureText(heading.textContent!).actualBoundingBoxAscent,
-        cardTop: 8
+        dominantBaseline: heading.getAttribute("dominant-baseline"),
+        alignmentBaseline: heading.getAttribute("alignment-baseline")
       };
     }, svg);
-    expect(headerClearance.baseline).toBe("alphabetic");
-    expect(headerClearance.inkTop).toBeGreaterThan(headerClearance.cardTop + 3);
+    expect(nativeHeader).toEqual({ dominantBaseline: "text-before-edge", alignmentBaseline: null });
+    const pdfAlignmentBaselines = await page.evaluate(() => (
+      window as typeof window & { __pdfAlignmentBaselines?: string[] }
+    ).__pdfAlignmentBaselines ?? []);
+    expect(pdfAlignmentBaselines.length).toBeGreaterThanOrEqual(svg.match(/<text\b/g)?.length ?? 1);
+    expect(new Set(pdfAlignmentBaselines)).toEqual(new Set(["alphabetic"]));
     await expect(page.locator("#modelCanvas")).toHaveAttribute("data-paper-snapshot-columns", "2");
 
     const pdf = strFromU8(archive["figures/01-model-double.pdf"]);
     expect(pdf.match(/\/Type\s*\/Page\b/g)).toHaveLength(1);
-  const png = Buffer.from(archive["figures/01-model-double.png"]);
+    const png = Buffer.from(archive["figures/01-model-double.png"]);
     expect(png.readUInt32BE(16)).toBe(4260);
     expect(png.readUInt32BE(20)).toBe(Math.round((7.1 * 492 / 920) * 600));
+    const renderedSvgHeader = await renderedSnapshotHeaderClearance(
+      page,
+      `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
+      1840,
+      984
+    );
+    const renderedPngHeader = await renderedSnapshotHeaderClearance(
+      page,
+      `data:image/png;base64,${png.toString("base64")}`,
+      1840,
+      984
+    );
+    for (const header of [renderedSvgHeader, renderedPngHeader]) {
+      expect(header.borderScore).toBeGreaterThan(50);
+      expect(header.titleInkPixels).toBeGreaterThan(10);
+      expect(header.titleInkTop - header.borderY).toBeGreaterThan(4);
+    }
+    const svgClearance = renderedSvgHeader.titleInkTop - renderedSvgHeader.borderY;
+    const pngClearance = renderedPngHeader.titleInkTop - renderedPngHeader.borderY;
+    expect(Math.abs(svgClearance - pngClearance)).toBeLessThanOrEqual(2);
     expect(strFromU8(archive["licenses/DejaVu-fonts.txt"])).toContain("Bitstream Vera Fonts Copyright");
   } finally {
     await context.close();

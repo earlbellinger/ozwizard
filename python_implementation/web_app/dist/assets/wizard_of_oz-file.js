@@ -41402,7 +41402,6 @@ for panel in MANIFEST["panels"]:
   }
   function normalizedSvg(result) {
     const root = svgElement(result.svg);
-    normalizeTextBaselines(root);
     const existingViewBox = root.getAttribute("viewBox")?.trim().split(/[\s,]+/).map(Number);
     const hasValidViewBox = existingViewBox?.length === 4 && existingViewBox.every(Number.isFinite) && existingViewBox[2] > 0 && existingViewBox[3] > 0;
     let viewBox = existingViewBox;
@@ -41478,6 +41477,7 @@ for panel in MANIFEST["panels"]:
   }
   function pdfSvgElement(svg2) {
     const root = svgElement(svg2);
+    normalizeTextBaselines(root);
     root.querySelectorAll("text").forEach((text2) => {
       if (text2.getAttribute("fill") === "none") {
         text2.remove();
@@ -43989,7 +43989,7 @@ ${rows.map((row) => headers.map((header) => csvCell(row[header])).join(",")).joi
       application: {
         name: "OZwizard",
         version: "1.0.0",
-        sourceCommit: "5bef2c0",
+        sourceCommit: "f7cf89e",
         sourceUrl: window.location.href.split("#")[0]
       },
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),

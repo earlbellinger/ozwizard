@@ -136,7 +136,6 @@ function svgElement(svg: string): SVGSVGElement {
 
 function normalizedSvg(result: PaperRenderResult): string {
   const root = svgElement(result.svg);
-  normalizeTextBaselines(root);
   const existingViewBox = root.getAttribute("viewBox")?.trim().split(/[\s,]+/).map(Number);
   const hasValidViewBox = existingViewBox?.length === 4
     && existingViewBox.every(Number.isFinite)
@@ -190,8 +189,8 @@ function normalizedSvg(result: PaperRenderResult): string {
 
 function normalizeTextBaselines(root: SVGSVGElement): void {
   // svgcanvas emits dominant-baseline, which svg2pdf does not implement.
-  // Resolve Canvas baselines to explicit alphabetic coordinates before either
-  // PDF conversion or SVG/PNG output, using the same embedded font metrics.
+  // Resolve Canvas baselines to explicit alphabetic coordinates only on the
+  // PDF conversion clone, using the same embedded font metrics.
   const context = document.createElement("canvas").getContext("2d");
   if (!context) throw new Error("Text-metric canvas unavailable");
   const baselines: Record<string, CanvasTextBaseline> = {
@@ -219,6 +218,7 @@ function normalizeTextBaselines(root: SVGSVGElement): void {
 
 function pdfSvgElement(svg: string): SVGSVGElement {
   const root = svgElement(svg);
+  normalizeTextBaselines(root);
   root.querySelectorAll("text").forEach((text) => {
     // Canvas labels are intentionally painted twice: a thick white stroke
     // followed by the coloured fill. svg2pdf applies the text stroke in PDF
