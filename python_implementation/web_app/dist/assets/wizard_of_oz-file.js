@@ -44248,7 +44248,7 @@ ${rows.map((row) => headers.map((header) => csvCell(row[header])).join(",")).joi
       application: {
         name: "OZwizard",
         version: "1.0.0",
-        sourceCommit: "b55c8e8",
+        sourceCommit: "422a8ad",
         sourceUrl: window.location.href.split("#")[0]
       },
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
