@@ -2320,6 +2320,10 @@
       .reference-panel .variable-table :is(th, td) {
         padding-inline: 4px;
       }
+
+      .reference-panel .variable-table td:not(.symbol-cell):not(.initial-cell) {
+        overflow-wrap: anywhere;
+      }
     }
 
     .parameters-panel {

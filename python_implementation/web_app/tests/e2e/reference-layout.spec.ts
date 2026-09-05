@@ -93,6 +93,22 @@ test.afterEach(async ({ page }, testInfo) => {
   });
 });
 
+test("narrow reference tables wrap long words with wider fallback fonts", async ({ page }) => {
+  await page.goto("/wizard_of_oz.html");
+  await renderedReferenceMath(page);
+  for (const family of ["Arial, sans-serif", "monospace"]) {
+    await page.addStyleTag({ content: `.reference-panel { --font-body: ${family}; --font-mono: ${family}; }` });
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 1100 });
+      await renderedReferenceMath(page);
+      const measurements = await referenceMeasurements(page);
+      for (const panel of measurements.panels) {
+        expect(panel.horizontalOverflow, `${width}px ${family}: ${panel.heading}`).toBeLessThanOrEqual(1);
+      }
+    }
+  }
+});
+
 for (const { width, columns } of [
   { width: 390, columns: 1 }, { width: 1000, columns: 1 },
   { width: 1500, columns: 2 }, { width: 1800, columns: 3 }
