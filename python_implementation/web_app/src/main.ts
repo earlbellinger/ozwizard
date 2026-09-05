@@ -4893,9 +4893,9 @@ function geometryDensityEquations(parameters: ModelParameters): string[] {
     `&= \\ozEta{${fmtFixed(eta, 3)}}`,
     `\\ozChi{\\chi}_{\\rm local}(${TEX.R}) &= \\frac{3${TEX.R}^3}{${TEX.R}^3-\\ozEta{\\eta}^3}`,
     `f(${TEX.R}) &\\equiv \\rho/\\rho_0`,
-    mode === "homogeneous-shell"
-      ? `&=\\frac{1-\\ozEta{\\eta}^3}{${TEX.R}^3-\\ozEta{\\eta}^3},\\quad ${TEX.R}>\\ozEta{\\eta}`
-      : `&=${TEX.R}^{-\\ozChi{\\chi}_{\\rm local}(${TEX.R})}`
+    ...(mode === "homogeneous-shell"
+      ? [`&=\\frac{1-\\ozEta{\\eta}^3}{${TEX.R}^3-\\ozEta{\\eta}^3}`, `&\\quad ${TEX.R}>\\ozEta{\\eta}`]
+      : [`&=${TEX.R}^{-\\ozChi{\\chi}_{\\rm local}(${TEX.R})}`])
   ];
 }
 
@@ -5120,8 +5120,8 @@ function updateEquationBlocks(): void {
     `\\frac{d\\ozRadius{R}}{d\\ozTau{\\tau}} &= \\ozVelocity{V}`,
     `\\frac{d\\ozVelocity{V}}{d\\ozTau{\\tau}} &=
       \\ozRadius{R}^{2}\\ozPressure{H}f^{\\ozGamma{\\Gamma_1}}
-      - \\frac{1}{\\ozRadius{R}^{2}}
-      - \\ozDamping{C_q}\\ozVelocity{V}^{3}`,
+      - \\frac{1}{\\ozRadius{R}^{2}}`,
+    `&\\quad - \\ozDamping{C_q}\\ozVelocity{V}^{3}`,
     `\\frac{d\\ozPressure{H}}{d\\ozTau{\\tau}} &=
       \\ozZeta{\\zeta}\\,
       f^{1-\\ozGamma{\\Gamma_1}}
@@ -5133,10 +5133,9 @@ function updateEquationBlocks(): void {
   if (hasConvectiveLuminosity) {
     odeLines.push(`\\frac{d\\ozConvective{U_c}}{d\\ozTau{\\tau}} &=
       \\ozZetac{\\zeta_c}
-      \\left[
-        f^{(\\ozGamma{\\Gamma_1}-1)/2}\\,${driver}
-        - \\ozConvective{U_c}
-      \\right]`);
+      \\bigl[
+        f^{(\\ozGamma{\\Gamma_1}-1)/2}\\,${driver}`,
+      `&\\quad - \\ozConvective{U_c}\\bigr]`);
   }
   const odeHtml = `
     \\[

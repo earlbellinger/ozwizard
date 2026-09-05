@@ -44127,7 +44127,7 @@ ${rows.map((row) => headers.map((header) => csvCell(row[header])).join(",")).joi
       application: {
         name: "OZwizard",
         version: "1.0.0",
-        sourceCommit: "528e28c",
+        sourceCommit: "b93cbb8",
         sourceUrl: window.location.href.split("#")[0]
       },
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -45966,7 +45966,7 @@ ${rows.map((row) => headers.map((header) => csvCell(row[header])).join(",")).joi
       `&= \\ozEta{${fmtFixed(eta, 3)}}`,
       `\\ozChi{\\chi}_{\\rm local}(${TEX.R}) &= \\frac{3${TEX.R}^3}{${TEX.R}^3-\\ozEta{\\eta}^3}`,
       `f(${TEX.R}) &\\equiv \\rho/\\rho_0`,
-      mode === "homogeneous-shell" ? `&=\\frac{1-\\ozEta{\\eta}^3}{${TEX.R}^3-\\ozEta{\\eta}^3},\\quad ${TEX.R}>\\ozEta{\\eta}` : `&=${TEX.R}^{-\\ozChi{\\chi}_{\\rm local}(${TEX.R})}`
+      ...mode === "homogeneous-shell" ? [`&=\\frac{1-\\ozEta{\\eta}^3}{${TEX.R}^3-\\ozEta{\\eta}^3}`, `&\\quad ${TEX.R}>\\ozEta{\\eta}`] : [`&=${TEX.R}^{-\\ozChi{\\chi}_{\\rm local}(${TEX.R})}`]
     ];
   }
   function buildGeometryDerivation(parameters) {
@@ -46161,8 +46161,8 @@ ${rows.map((row) => headers.map((header) => csvCell(row[header])).join(",")).joi
       `\\frac{d\\ozRadius{R}}{d\\ozTau{\\tau}} &= \\ozVelocity{V}`,
       `\\frac{d\\ozVelocity{V}}{d\\ozTau{\\tau}} &=
       \\ozRadius{R}^{2}\\ozPressure{H}f^{\\ozGamma{\\Gamma_1}}
-      - \\frac{1}{\\ozRadius{R}^{2}}
-      - \\ozDamping{C_q}\\ozVelocity{V}^{3}`,
+      - \\frac{1}{\\ozRadius{R}^{2}}`,
+      `&\\quad - \\ozDamping{C_q}\\ozVelocity{V}^{3}`,
       `\\frac{d\\ozPressure{H}}{d\\ozTau{\\tau}} &=
       \\ozZeta{\\zeta}\\,
       f^{1-\\ozGamma{\\Gamma_1}}
@@ -46172,12 +46172,13 @@ ${rows.map((row) => headers.map((header) => csvCell(row[header])).join(",")).joi
       \\right]`
     ];
     if (hasConvectiveLuminosity) {
-      odeLines.push(`\\frac{d\\ozConvective{U_c}}{d\\ozTau{\\tau}} &=
+      odeLines.push(
+        `\\frac{d\\ozConvective{U_c}}{d\\ozTau{\\tau}} &=
       \\ozZetac{\\zeta_c}
-      \\left[
-        f^{(\\ozGamma{\\Gamma_1}-1)/2}\\,${driver}
-        - \\ozConvective{U_c}
-      \\right]`);
+      \\bigl[
+        f^{(\\ozGamma{\\Gamma_1}-1)/2}\\,${driver}`,
+        `&\\quad - \\ozConvective{U_c}\\bigr]`
+      );
     }
     const odeHtml = `
     \\[
