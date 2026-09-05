@@ -2268,56 +2268,58 @@
     }
 
     .reference-grid {
-      --equations-panel-min-width: 370px;
+      --equations-panel-width: 370px;
       --variables-panel-min-width: 434px;
       --parameters-panel-min-width: 414px;
       display: grid;
+      min-width: 0;
       grid-template-columns: 1fr;
       gap: 14px;
-      align-items: start;
+      align-items: stretch;
       container-type: inline-size;
     }
 
-    @container (min-width: 802px) {
-      .reference-grid {
-        grid-template-columns:
-          minmax(var(--equations-panel-min-width), 0.6fr)
-          minmax(var(--variables-panel-min-width), 1.4fr);
-      }
+    .reference-grid[data-columns="2"] {
+      grid-template-columns: var(--equations-panel-width) minmax(0, 1fr);
     }
 
-    @container (min-width: 1230px) {
-      .reference-grid {
-        grid-template-columns:
-          minmax(var(--equations-panel-min-width), 0.55fr)
-          minmax(var(--variables-panel-min-width), 1.25fr)
-          minmax(var(--parameters-panel-min-width), 1.2fr);
-      }
-
-      .reference-grid > .parameters-panel {
-        grid-column: auto;
-      }
-
-      .reference-grid > .reference-panel {
-        height: 535px;
-        overflow-y: auto;
-      }
-
-      .reference-grid > .equations-panel {
-        height: auto;
-        overflow-y: visible;
-      }
+    .reference-grid[data-columns="3"] {
+      grid-template-columns:
+        var(--equations-panel-width)
+        minmax(var(--variables-panel-min-width), 1.05fr)
+        minmax(var(--parameters-panel-min-width), 1fr);
     }
 
-    @container (min-width: 802px) and (max-width: 1229px) {
-      .reference-grid {
-        align-items: stretch;
-      }
+    .reference-grid[data-columns="3"] > .parameters-panel {
+      grid-column: auto;
+    }
+
+    /* The equations determine the shared row height; reference tables scroll. */
+    .reference-grid[data-columns="2"] > .variables-panel,
+    .reference-grid[data-columns="3"] > :is(.variables-panel, .parameters-panel) {
+      contain: size;
+      overflow-y: auto;
+    }
+
+    .equations-panel {
+      width: min(100%, var(--equations-panel-width));
+      overflow: visible;
+    }
+
+    .equations-panel mjx-container[jax="SVG"] > svg {
+      max-width: 100%;
+      height: auto;
     }
 
     .reference-panel {
       height: auto;
       min-height: 0;
+    }
+
+    @container (max-width: 434px) {
+      .reference-panel .variable-table :is(th, td) {
+        padding-inline: 4px;
+      }
     }
 
     .parameters-panel {
@@ -3527,7 +3529,7 @@
           </p>
           <p>
             Mechanically, the shell behaves like a nonlinear oscillator: pressure support pushes outward,
-            gravity pulls inward, and turbulent damping removes kinetic energy. The thermal equation updates
+            gravity pulls inward, and cubic drag removes kinetic energy. The thermal equation updates
             <span class="symbol-cell" style="--color:var(--pressure)">\(\ozPressure{H}\)</span> by comparing the inner
             luminosity source with the radiative and convective luminosity leaking out of the shell. If energy is
             trapped and released at the right phase of the motion, the pulse grows; if leakage and damping win,
@@ -3543,6 +3545,15 @@
             can move the model between damping, a stable limit cycle, and dynamic instability. Phase-folded plots
             are most meaningful once the model has reached a repeatable cycle; a still-growing pulse should be read
             as transient evolution, not a final waveform.
+          </p>
+          <p>
+            The optional turbulent-pressure fraction \(\alpha_p\) adds outward support proportional to
+            \(\rho U_c^2\), together with its associated thermal compression work. Gas pressure supplies
+            the remaining equilibrium support. The Work plot separates gas and turbulent pressure work;
+            setting \(\alpha_p=0\) recovers the model without turbulent pressure. This follows the
+            approximation of <a href="https://arxiv.org/abs/astro-ph/0503697">Munteanu et al. (2005)</a>,
+            with \(\Gamma_3=\Gamma_1\) and without turbulent kinetic-energy storage. The fixed-exponent
+            geometry provides the direct comparison with their calculations.
           </p>
           <p>
             For the one-zone convection framework, see
