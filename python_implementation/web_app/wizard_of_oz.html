@@ -1955,6 +1955,37 @@
       text-align: right;
     }
 
+    .shell-visual-controls {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      flex: 0 0 auto;
+    }
+
+    .shell-luminosity-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .shell-luminosity-control input {
+      width: 15px;
+      height: 15px;
+      margin: 0;
+      accent-color: var(--focus);
+      cursor: pointer;
+    }
+
+    .shell-luminosity-control span {
+      font-size: 11px;
+    }
+
     .plot-reset {
       width: 28px;
       height: 28px;
@@ -3171,11 +3202,17 @@
               </label>
               <h3>Shell</h3>
             </div>
-            <label class="model-speed-control" aria-label="Shell animation speed control">
-              <span>speed</span>
-              <input id="modelSpeed" type="range" min="0.25" max="4" step="0.25" value="1" aria-label="shell speed">
-              <output id="modelSpeedValue" for="modelSpeed">1x</output>
-            </label>
+            <div class="shell-visual-controls">
+              <label class="shell-luminosity-control">
+                <input id="shellLuminosityToggle" type="checkbox" checked aria-label="luminosity shells">
+                <span>L shells</span>
+              </label>
+              <label class="model-speed-control" aria-label="Shell animation speed control">
+                <span>speed</span>
+                <input id="modelSpeed" type="range" min="0.25" max="4" step="0.25" value="1" aria-label="shell speed">
+                <output id="modelSpeedValue" for="modelSpeed">1x</output>
+              </label>
+            </div>
           </div>
           <div class="model-canvas-wrap">
             <canvas class="model-canvas" id="modelCanvas" aria-label="Shell visualization"></canvas>

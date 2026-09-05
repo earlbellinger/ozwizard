@@ -418,6 +418,8 @@ test("paper export creates an atomic vector and 600-dpi bundle for visible panel
   expect(singleSvg).toContain('font-family="DejaVuSans"');
   expect(singleSvg).toContain("@font-face{font-family:DejaVuSans");
   expect(singleSvg).toContain("data:font/ttf;base64,");
+  expect(singleSvg).not.toMatch(/dominant-baseline="(?!alphabetic)[^"]+"/);
+  expect(singleSvg.match(/alignment-baseline="alphabetic"/g)?.length).toBe(singleSvg.match(/<text\b/g)?.length);
   expect(singleSvg).toMatch(/<path|<line/);
   expect(singleSvg).not.toContain("<image");
   const singlePdf = strFromU8(archive["figures/01-periodogram-single.pdf"]);
@@ -471,6 +473,20 @@ test("paper export preserves the full 2x2 snapshot canvas at device scale factor
     expect(svg).toContain(`height="${7.1 * 492 / 920}in"`);
     expect(svg).toMatch(/phase 0\.00/);
     expect(svg).toMatch(/phase 0\.75/);
+    const headerClearance = await page.evaluate((source) => {
+      const documentNode = new DOMParser().parseFromString(source, "image/svg+xml");
+      const heading = [...documentNode.querySelectorAll("text")].find((node) => node.textContent === "a) phase 0.00")!;
+      const measure = document.createElement("canvas").getContext("2d")!;
+      measure.font = `${heading.getAttribute("font-weight")} ${heading.getAttribute("font-size")} DejaVuSans`;
+      measure.textBaseline = "alphabetic";
+      return {
+        baseline: heading.getAttribute("dominant-baseline"),
+        inkTop: Number(heading.getAttribute("y")) - measure.measureText(heading.textContent!).actualBoundingBoxAscent,
+        cardTop: 8
+      };
+    }, svg);
+    expect(headerClearance.baseline).toBe("alphabetic");
+    expect(headerClearance.inkTop).toBeGreaterThan(headerClearance.cardTop + 3);
     await expect(page.locator("#modelCanvas")).toHaveAttribute("data-paper-snapshot-columns", "2");
 
     const pdf = strFromU8(archive["figures/01-model-double.pdf"]);

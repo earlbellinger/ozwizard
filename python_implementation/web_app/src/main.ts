@@ -170,6 +170,7 @@ const stagedMathUpdates = new Map<HTMLElement, StagedMathUpdate>();
 const PIANO_MIN_NOTE = 21;
 const PIANO_MAX_NOTE = 108;
 const MIDDLE_C_NOTE = 60;
+const SHELL_LUMINOSITY_VISIBILITY_STORAGE_KEY = "ozwizard-shell-luminosity-visible-v1";
 const PIANO_VISIBLE_OCTAVES = 2;
 const PIANO_MIN_START_OCTAVE = 1;
 const PIANO_MAX_START_OCTAVE = 6;
@@ -257,6 +258,7 @@ const gridState: GridModeState = {
 };
 let currentAnimationPhase = 0;
 let modelAnimationSpeed = 1;
+let shellLuminosityVisible = true;
 let gridLoopSpeed = 1;
 let gridBudgetMode: GridBudgetMode = "timeout";
 let gridTimeoutSeconds = GRID_TIMEOUT_DEFAULT_SECONDS;
@@ -1964,6 +1966,7 @@ function buildControls(): void {
   setupSonificationControls();
   setupStabilityChipInteractions();
   setupModelSpeedControl();
+  setupShellLuminosityToggle();
   setupPhaseAnnotationControls();
   setupGridSliderDeferral();
   buildPresetButtons();
@@ -2060,6 +2063,32 @@ function setupModelSpeedControl(): void {
   };
   input.addEventListener("input", sync);
   sync();
+}
+
+function loadShellLuminosityVisibility(): boolean {
+  try {
+    return window.localStorage.getItem(SHELL_LUMINOSITY_VISIBILITY_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function saveShellLuminosityVisibility(): void {
+  try {
+    window.localStorage.setItem(SHELL_LUMINOSITY_VISIBILITY_STORAGE_KEY, String(shellLuminosityVisible));
+  } catch (_error) {}
+}
+
+function setupShellLuminosityToggle(): void {
+  const toggle = document.getElementById("shellLuminosityToggle");
+  if (!(toggle instanceof HTMLInputElement)) return;
+  shellLuminosityVisible = loadShellLuminosityVisibility();
+  toggle.checked = shellLuminosityVisible;
+  toggle.addEventListener("change", () => {
+    shellLuminosityVisible = toggle.checked;
+    saveShellLuminosityVisibility();
+    drawModelVisualization();
+  });
 }
 
 function currentThemeMode(): ThemeMode {
@@ -2837,7 +2866,8 @@ function paperExportState(): Omit<PaperExportManifestV2, "panels"> {
       xlim: latestDisplayWindow.xlim,
       period: latestDisplayWindow.period,
       message: latestDisplayWindow.message,
-      rowCount: latestDisplayWindow.rows.length
+      rowCount: latestDisplayWindow.rows.length,
+      shellLuminosityVisible
     },
     paper: {
       phaseSelection: paperPhaseSelection,
@@ -5919,7 +5949,7 @@ function drawAxes(
   ctx.fillStyle = xlabelColor;
   ctx.fillText(xlabel, plot.left + plot.width / 2, plot.top + plot.height + 42);
   ctx.save();
-  ctx.translate(ylabelX, plot.top + plot.height / 2);
+  ctx.translate(activePaperExportFontScale > 1 ? 12 : ylabelX, plot.top + plot.height / 2);
   ctx.rotate(-Math.PI / 2);
   ctx.fillStyle = ylabelColor;
   ctx.fillText(ylabel, 0, 0);
@@ -5964,11 +5994,14 @@ function drawSeries(
   if (!ctx) return;
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, rect.width, rect.height);
+  const layout = activePaperExportFontScale > 1
+    ? { left: 104, top: 26, right: 28, bottom: 82 }
+    : PLOT_LAYOUT;
   const plot = {
-    left: PLOT_LAYOUT.left,
-    top: PLOT_LAYOUT.top,
-    width: rect.width - PLOT_LAYOUT.left - PLOT_LAYOUT.right,
-    height: rect.height - PLOT_LAYOUT.top - PLOT_LAYOUT.bottom
+    left: layout.left,
+    top: layout.top,
+    width: rect.width - layout.left - layout.right,
+    height: rect.height - layout.top - layout.bottom
   };
   fillPlotAreaBackground(ctx, plot);
   const xValues: number[] = [];
@@ -7332,8 +7365,9 @@ function drawStabilityMap(): void {
   const overlays = stabilityOverlayResults();
   const stabilityPhysics = analyticStabilityConditions(parameters).physicsMode;
   const kinds = stabilityKindsForMap(parameters);
-  const plotTop = 34 + (activePaperExportFontScale - 1) * 20;
-  const plot = { left: 58, top: plotTop, width: width - 78, height: height - plotTop - 54 };
+  const exportLayout = activePaperExportFontScale > 1;
+  const plotTop = exportLayout ? 52 : 34;
+  const plot = { left: exportLayout ? 100 : 58, top: plotTop, width: width - (exportLayout ? 128 : 78), height: height - plotTop - (exportLayout ? 78 : 54) };
   fillPlotAreaBackground(ctx, plot);
   const cellWidth = plot.width / STABILITY_MAP_RESOLUTION;
   const cellHeight = plot.height / STABILITY_MAP_RESOLUTION;
@@ -7379,7 +7413,7 @@ function drawStabilityMap(): void {
       { text: "thermal response ", color: COLORS.zeta, weight: 600 },
       { text: "ζ", color: COLORS.zeta, weight: 600 }
     ],
-    10,
+    exportLayout ? 20 : 10,
     plot.top + plot.height / 2,
     { rotate: -Math.PI / 2, fontSize: 11, weight: 700 }
   );
@@ -8615,7 +8649,9 @@ function drawPhaseLagPanel(): void {
     return;
   }
 
-  const plot: PlotBox = { left: 74, top: 24, width: width - 96, height: height - 92 };
+  const plot: PlotBox = activePaperExportFontScale > 1
+    ? { left: 104, top: 28, width: width - 136, height: height - 110 }
+    : { left: 74, top: 24, width: width - 96, height: height - 92 };
   const pointXValues = series.flatMap((item) => item.points.map((point) => point.x));
   const xlim = validRange(sortedRange(loopRange.lowerSliderValue, loopRange.upperSliderValue), 1e-12)
     || range(pointXValues, 0.04);
@@ -8874,7 +8910,9 @@ function drawPhasePortraitPanel(): void {
   const ylim = stableTimeEquilibriumDisplayActive()
     ? anchoredVisualRange([...scaleRows.map((row) => row.H), ...scaleRows.map((row) => row.Uc)], 1, 0.05, 0.1)
     : range([...rows.map((row) => row.H), ...rows.map((row) => row.Uc)], 0.1);
-  const plot = { left: 78, top: 28, width: width - 102, height: height - 88 };
+  const plot = activePaperExportFontScale > 1
+    ? { left: 104, top: 28, width: width - 136, height: height - 110 }
+    : { left: 78, top: 28, width: width - 102, height: height - 88 };
   fillPlotAreaBackground(ctx, plot);
   drawAxes(ctx, plot, xlim, ylim, "", "state", THEME.axisText, THEME.axisText, 22);
   drawAxisReferenceLines(ctx, plot, xlim, ylim, [{ x: 1 }, { y: 1 }]);
@@ -10565,7 +10603,7 @@ function drawHeatEnginePistonCausal(
 
   drawHeatEngineCompressibilitySpring(
     ctx,
-    centerX + 9,
+    paperModeActive() ? right - 50 : centerX + 9,
     pistonY + pistonHeight / 2,
     bottom - 3,
     terms.q
@@ -11675,7 +11713,7 @@ function drawPaperPistonSnapshots(
       left: chamberLeft,
       top: 34,
       width: chamberWidth,
-      height: Math.max(120, contentHeight - 74)
+      height: Math.max(120, contentHeight - 82)
     }, latestPhaseParameters, contentHeight);
     ctx.restore();
   });
@@ -11695,6 +11733,7 @@ function drawPaperModelSnapshots(
   const modelScaleRows = stableTimeVisualReferenceRows(latestPhaseRows);
   const maxRadius = maximumPhaseRadius(modelScaleRows);
   const convectionActive = convectiveLuminosityAvailable(latestPhaseParameters);
+  const luminosityShellsVisible = convectionActive && shellLuminosityVisible;
   snapshots.forEach((snapshot, index) => {
     const cell = cells[index];
     drawPaperSnapshotFrame(ctx, cell, snapshot, index);
@@ -11721,16 +11760,19 @@ function drawPaperModelSnapshots(
       centerY,
       outerRadius,
       innerRadius,
-      convectionActive ? Math.PI / 2 : 0,
+      luminosityShellsVisible ? Math.PI / 2 : 0,
       Math.PI * 2,
       rgbCss(shellDisplayColor, 0.5 + luminosityLevel * 0.4)
     );
-    if (convectionActive) drawConvectionArcs(ctx, row, centerX, centerY, radiusScale);
+    if (luminosityShellsVisible) drawConvectionArcs(ctx, row, centerX, centerY, radiusScale);
     ctx.restore();
   });
   canvas.dataset.paperSnapshotCount = String(snapshots.length);
   canvas.dataset.paperSnapshotColumns = String(width >= 560 ? 2 : 1);
   canvas.dataset.paperSnapshotLabels = snapshots.map((snapshot) => `${snapshot.label}:${snapshot.coordinateLabel}`).join("|");
+  canvas.dataset.convectionActive = String(convectionActive);
+  canvas.dataset.luminosityArcLabels = luminosityShellsVisible ? "L_c,L,L_r" : "";
+  canvas.dataset.geometryGuides = "R=1,eta,minR,maxR";
 }
 
 function drawHeatEnginePanel(): void {
@@ -11855,6 +11897,7 @@ function drawModelVisualization(): void {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, width, height);
   canvas.dataset.animationSpeed = modelSpeedLabel(modelAnimationSpeed);
+  canvas.dataset.luminosityShells = shellLuminosityVisible ? "visible" : "hidden";
 
   if (paperModeActive()) {
     canvas.dataset.modelMode = "paper";
@@ -11862,6 +11905,9 @@ function drawModelVisualization(): void {
     delete canvas.dataset.currentTime;
     if (!snapshots.length) {
       canvas.dataset.paperSnapshotCount = "0";
+      canvas.dataset.convectionActive = String(convectiveLuminosityAvailable(latestPhaseParameters));
+      canvas.dataset.luminosityArcLabels = "";
+      canvas.dataset.geometryGuides = "";
       drawCanvasMessage(ctx, width, height, latestPhaseMessage || "static states unavailable");
       return;
     }
@@ -11903,6 +11949,7 @@ function drawModelVisualization(): void {
   const outerRadius = Math.max(2, geometry.outerRadius * radiusScale);
   const innerRadius = Math.max(0, geometry.innerRadius * radiusScale);
   const convectionActive = convectiveLuminosityAvailable();
+  const luminosityShellsVisible = convectionActive && shellLuminosityVisible;
   const shellAlpha = 0.5 + luminosityLevel * 0.4;
 
   canvas.dataset.convectionActive = String(convectionActive);
@@ -11913,7 +11960,7 @@ function drawModelVisualization(): void {
     canvas.dataset.currentPhase = fmtFixed(row.tau, 3);
     delete canvas.dataset.currentTime;
   }
-  canvas.dataset.luminosityArcLabels = convectionActive ? "L_c,L,L_r" : "";
+  canvas.dataset.luminosityArcLabels = luminosityShellsVisible ? "L_c,L,L_r" : "";
   canvas.dataset.geometryGuides = "R=1,eta,minR,maxR";
   delete canvas.dataset.boundaryLuminosityLines;
   delete canvas.dataset.velocityArcLabel;
@@ -11930,13 +11977,13 @@ function drawModelVisualization(): void {
     centerY,
     outerRadius,
     innerRadius,
-    convectionActive ? Math.PI / 2 : 0,
+    luminosityShellsVisible ? Math.PI / 2 : 0,
     Math.PI * 2,
     rgbCss(shellDisplayColor, shellAlpha)
   );
   ctx.shadowBlur = 0;
 
-  if (convectionActive) drawConvectionArcs(ctx, row, centerX, centerY, radiusScale);
+  if (luminosityShellsVisible) drawConvectionArcs(ctx, row, centerX, centerY, radiusScale);
   ctx.restore();
 }
 

@@ -136,6 +136,7 @@ function svgElement(svg: string): SVGSVGElement {
 
 function normalizedSvg(result: PaperRenderResult): string {
   const root = svgElement(result.svg);
+  normalizeTextBaselines(root);
   const existingViewBox = root.getAttribute("viewBox")?.trim().split(/[\s,]+/).map(Number);
   const hasValidViewBox = existingViewBox?.length === 4
     && existingViewBox.every(Number.isFinite)
@@ -185,6 +186,35 @@ function normalizedSvg(result: PaperRenderResult): string {
     defs.appendChild(style);
   }
   return new XMLSerializer().serializeToString(root);
+}
+
+function normalizeTextBaselines(root: SVGSVGElement): void {
+  // svgcanvas emits dominant-baseline, which svg2pdf does not implement.
+  // Resolve Canvas baselines to explicit alphabetic coordinates before either
+  // PDF conversion or SVG/PNG output, using the same embedded font metrics.
+  const context = document.createElement("canvas").getContext("2d");
+  if (!context) throw new Error("Text-metric canvas unavailable");
+  const baselines: Record<string, CanvasTextBaseline> = {
+    "text-before-edge": "top", "text-after-edge": "bottom",
+    central: "middle", middle: "middle", hanging: "hanging",
+    ideographic: "ideographic", alphabetic: "alphabetic"
+  };
+  root.querySelectorAll("text").forEach((text) => {
+    const baseline = baselines[text.getAttribute("dominant-baseline") ?? "alphabetic"] ?? "alphabetic";
+    const content = text.textContent ?? "";
+    if (baseline !== "alphabetic" && content) {
+      context.font = `${text.getAttribute("font-style") ?? "normal"} ${text.getAttribute("font-weight") ?? "400"} ${text.getAttribute("font-size") ?? "12px"} ${PDF_FONT_FAMILY}`;
+      context.textBaseline = "alphabetic";
+      const alphabeticAscent = context.measureText(content).actualBoundingBoxAscent;
+      context.textBaseline = baseline;
+      const offset = alphabeticAscent - context.measureText(content).actualBoundingBoxAscent;
+      const y = Number(text.getAttribute("y") ?? 0);
+      if (!Number.isFinite(y + offset)) throw new Error("Invalid exported text baseline");
+      text.setAttribute("y", String(y + offset));
+    }
+    text.setAttribute("dominant-baseline", "alphabetic");
+    text.setAttribute("alignment-baseline", "alphabetic");
+  });
 }
 
 function pdfSvgElement(svg: string): SVGSVGElement {
